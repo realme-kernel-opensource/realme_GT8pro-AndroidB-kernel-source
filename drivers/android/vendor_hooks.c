@@ -39,6 +39,7 @@
 #include <trace/hooks/gic_v3.h>
 #include <trace/hooks/remoteproc.h>
 #include <trace/hooks/timer.h>
+#include <trace/hooks/topology.h>
 #include <trace/hooks/hung_task.h>
 
 /*
@@ -116,3 +117,4 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_cpufreq_transition);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_gic_v3_set_affinity);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_alter_mutex_list_add);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_mutex_unlock_slowpath);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_arch_set_freq_scale);
