@@ -450,4 +450,14 @@ config VIRTIO_CLK
           Say Y if you want to use pass through peripheral devices such as UART,
           SPI, I2C, USB etc.
 
+config SC_GCC_7280
+	tristate "SC7280 Global Clock Controller"
+	select QCOM_GDSC
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc.
+	  SC7280 devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI,
+	  I2C, USB, UFS, SDCC, PCIe etc.
+
 endif
