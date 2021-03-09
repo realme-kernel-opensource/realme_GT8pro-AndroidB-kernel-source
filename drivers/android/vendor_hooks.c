@@ -15,6 +15,7 @@
 #include <trace/hooks/mpam.h>
 #include <trace/hooks/wqlockup.h>
 #include <trace/hooks/debug.h>
+#include <trace/hooks/dtask.h>
 #include <trace/hooks/sysrqcrash.h>
 #include <trace/hooks/printk.h>
 #include <trace/hooks/epoch.h>
@@ -113,3 +114,5 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_check_uninterruptible_tasks);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_check_uninterruptible_tasks_dn);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_cpufreq_transition);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_gic_v3_set_affinity);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_alter_mutex_list_add);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_mutex_unlock_slowpath);
