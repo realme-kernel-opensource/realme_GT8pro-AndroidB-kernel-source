@@ -64,6 +64,22 @@ unsigned int sched_capacity_margin_down[WALT_NR_CPUS] = {
 			[0 ... WALT_NR_CPUS-1] = 1205 /* ~15% margin */
 };
 
+unsigned int sched_capacity_cgroup_margin_up[ANDROID_CGROUPS][WALT_NR_CPUS] = {
+			/* ~5% margin */
+			{[0 ... WALT_NR_CPUS-1] = 1078},
+			{[0 ... WALT_NR_CPUS-1] = 1078},
+			{[0 ... WALT_NR_CPUS-1] = 1078},
+			{[0 ... WALT_NR_CPUS-1] = 1078}
+
+};
+unsigned int sched_capacity_cgroup_margin_down[ANDROID_CGROUPS][WALT_NR_CPUS] = {
+			/* ~15% margin */
+			{[0 ... WALT_NR_CPUS-1] = 1205},
+			{[0 ... WALT_NR_CPUS-1] = 1205},
+			{[0 ... WALT_NR_CPUS-1] = 1205},
+			{[0 ... WALT_NR_CPUS-1] = 1205}
+};
+
 /* Migration margins for topapp */
 unsigned int sched_capacity_margin_early_up[WALT_NR_CPUS] = {
 			[0 ... WALT_NR_CPUS-1] = 1078 /* ~5% margin */

@@ -1736,30 +1736,33 @@ TRACE_EVENT(ipc_update,
 
 TRACE_EVENT(sched_update_updown_migrate_values,
 
-	TP_PROTO(bool up, int cluster),
+	TP_PROTO(unsigned int cluster, unsigned int cgroup_id),
 
-	TP_ARGS(up, cluster),
-
+	TP_ARGS(cluster, cgroup_id),
 
 	TP_STRUCT__entry(
-		__field(bool, up)
-		__field(int, cluster)
+		__field(unsigned int, cluster)
+		__array(char, cgroup_name, TASK_COMM_LEN)
 		__field(unsigned int, cluster_up)
 		__field(unsigned int, cluster_down)
 	),
 
 	TP_fast_assign(
-		__entry->up		= up;
 		__entry->cluster	= cluster;
-		__entry->cluster_up	= sched_capacity_margin_up[cluster_first_cpu(
-						sched_cluster[cluster])];
-		__entry->cluster_down	= sched_capacity_margin_down[cluster_first_cpu(
-						sched_cluster[cluster])];
+		memcpy(__entry->cgroup_name, cgroup_names[cgroup_id], TASK_COMM_LEN);
+		__entry->cluster_up	= use_cgroup_margin ?
+					sched_capacity_cgroup_margin_up[cgroup_id][
+					cluster_first_cpu(sched_cluster[cluster])] :
+					sched_capacity_margin_up[cluster];
+		__entry->cluster_down	= use_cgroup_margin ?
+					sched_capacity_cgroup_margin_down[cgroup_id][
+					cluster_first_cpu(sched_cluster[cluster])] :
+					sched_capacity_margin_down[cluster];
 	),
 
-	TP_printk("up=%d cluster=%d cluster_up=%u cluster_down=%u",
-			__entry->up, __entry->cluster,
-			__entry->cluster_up, __entry->cluster_down)
+	TP_printk("cluster=%d cluster_up=%u cluster_down=%u cgroup=%s",
+			__entry->cluster, __entry->cluster_up, __entry->cluster_down,
+			__entry->cgroup_name)
 );
 
 TRACE_EVENT(sched_update_updown_early_migrate_values,

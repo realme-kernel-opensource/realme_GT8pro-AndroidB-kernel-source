@@ -299,6 +299,10 @@ void walt_rq_dump(int cpu)
 	walt_task_dump(tsk);
 	SCHED_PRINT(sched_capacity_margin_up[cpu]);
 	SCHED_PRINT(sched_capacity_margin_down[cpu]);
+	for (i = 0; i < ANDROID_CGROUPS; i++) {
+		SCHED_PRINT(sched_capacity_cgroup_margin_up[i][cpu]);
+		SCHED_PRINT(sched_capacity_cgroup_margin_down[i][cpu]);
+	}
 }
 
 void walt_dump(void)
@@ -3663,6 +3667,8 @@ static void walt_update_tg_pointer(struct cgroup_subsys_state *css)
 		walt_init_topapp_tg(css_tg(css));
 	else if (!strcmp(css->cgroup->kn->name, "foreground"))
 		walt_init_foreground_tg(css_tg(css));
+	else if (!strcmp(css->cgroup->kn->name, "background"))
+		walt_init_background_tg(css_tg(css));
 	else
 		walt_init_tg(css_tg(css));
 }
