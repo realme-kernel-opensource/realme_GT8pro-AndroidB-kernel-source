@@ -43,6 +43,11 @@ module_param_named(metacopy, ovl_metacopy_def, bool, 0644);
 MODULE_PARM_DESC(metacopy,
 		 "Default to on or off for the metadata only copy up feature");
 
+static bool __read_mostly ovl_override_creds_def = true;
+module_param_named(override_creds, ovl_override_creds_def, bool, 0644);
+MODULE_PARM_DESC(ovl_override_creds_def,
+                 "Use mounter's credentials for accesses");
+
 enum ovl_opt {
 	Opt_lowerdir,
 	Opt_lowerdir_add,
@@ -59,6 +64,7 @@ enum ovl_opt {
 	Opt_metacopy,
 	Opt_verity,
 	Opt_volatile,
+	Opt_override_creds,
 };
 
 static const struct constant_table ovl_parameter_bool[] = {
@@ -155,6 +161,7 @@ const struct fs_parameter_spec ovl_parameter_spec[] = {
 	fsparam_enum("metacopy",            Opt_metacopy, ovl_parameter_bool),
 	fsparam_enum("verity",              Opt_verity, ovl_parameter_verity),
 	fsparam_flag("volatile",            Opt_volatile),
+	fsparam_enum("override_creds",      Opt_override_creds, ovl_parameter_bool),
 	{}
 };
 
@@ -623,6 +630,9 @@ static int ovl_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	case Opt_userxattr:
 		config->userxattr = true;
 		break;
+	case Opt_override_creds:
+		config->override_creds = result.uint_32;
+		break;
 	default:
 		pr_err("unrecognized mount option \"%s\" or missing value\n",
 		       param->key);
@@ -729,6 +739,7 @@ int ovl_init_fs_context(struct fs_context *fc)
 	ofs->config.nfs_export		= ovl_nfs_export_def;
 	ofs->config.xino		= ovl_xino_def();
 	ofs->config.metacopy		= ovl_metacopy_def;
+	ofs->config.override_creds	= ovl_override_creds_def;
 
 	fc->s_fs_info		= ofs;
 	fc->fs_private		= ctx;
@@ -1004,5 +1015,8 @@ int ovl_show_options(struct seq_file *m, struct dentry *dentry)
 	if (ofs->config.verity_mode != ovl_verity_mode_def())
 		seq_printf(m, ",verity=%s",
 			   ovl_verity_mode(&ofs->config));
+	if (ofs->config.override_creds != ovl_override_creds_def)
+		seq_show_option(m, "override_creds",
+				ofs->config.override_creds ? "on" : "off");
 	return 0;
 }
