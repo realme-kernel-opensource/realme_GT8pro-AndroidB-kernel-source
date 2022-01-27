@@ -690,6 +690,7 @@ static int gpi_start_chan(struct gpii_chan *gpii_chan);
 static void gpi_free_chan_desc(struct gpii_chan *gpii_chan);
 static void gpi_noop_tre(struct gpii_chan *gpii_chan);
 static u32 gpi_read_ch_state(struct gpii_chan *gpii_chan);
+static int gpi_deep_sleep_exit_config(struct dma_chan *chan);
 
 static inline struct gpii_chan *to_gpii_chan(struct dma_chan *dma_chan)
 {
@@ -3537,6 +3538,8 @@ static int gpi_resume(struct dma_chan *chan)
 {
 	struct gpii_chan *gpii_chan = to_gpii_chan(chan);
 	struct gpii *gpii = gpii_chan->gpii;
+	struct msm_gpi_ctrl *gpi_ctrl = chan->private;
+	int ret;
 
 	GPII_INFO(gpii, gpii_chan->chid, "enter\n");
 
@@ -3555,10 +3558,19 @@ static int gpi_resume(struct dma_chan *chan)
 	 * to the gsi hw.
 	 */
 	gpii->is_resumed = true;
+	/* For deep sleep restore the configuration similar to the probe.*/
+	if (gpi_ctrl->cmd == MSM_GPI_DEEP_SLEEP_INIT) {
+		GPII_INFO(gpii, gpii_chan->chid, "deep sleep config\n");
+		ret = gpi_deep_sleep_exit_config(chan);
+		if (ret) {
+			GPII_ERR(gpii, gpii_chan->chid, "Err deep sleep config, ret:%d\n", ret);
+			mutex_unlock(&gpii->ctrl_lock);
+			return ret;
+		}
+	}
 
 	if (gpii->pm_state == ACTIVE_STATE) {
-		GPII_INFO(gpii, gpii_chan->chid,
-			  "channel is already active\n");
+		GPII_INFO(gpii, gpii_chan->chid, "channel is already active\n");
 		mutex_unlock(&gpii->ctrl_lock);
 		return 0;
 	}
@@ -3709,6 +3721,76 @@ static void gpi_issue_pending(struct dma_chan *chan)
 	gpi_desc = to_gpi_desc(vd);
 	gpi_write_ch_db(gpii_chan, gpii_chan->ch_ring, gpi_desc->db);
 	read_unlock_irqrestore(&gpii->pm_lock, pm_lock_flags);
+}
+
+/**
+ * gpi_deep_sleep_exit_config - Reinitialize GPII DMA resources after deep sleep
+ * @chan: DMA channel pointer
+ *
+ * This function is responsible for restoring the GPII
+ * DMA channel configuration after the system exits from deep sleep. It performs the following:
+ * - Configures GPII interrupts with default settings.
+ * - Allocates event rings required for DMA operations.
+ * - Allocates and starts all GPII channels.
+ * - Handles cleanup in case of failure during any step.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+static int gpi_deep_sleep_exit_config(struct dma_chan *chan)
+{
+	struct gpii_chan *gpii_chan = to_gpii_chan(chan);
+	struct gpii *gpii = gpii_chan->gpii;
+	int chid;
+	int ret;
+
+	GPII_INFO(gpii, gpii_chan->chid, "enter\n");
+
+	ret = gpi_config_interrupts(gpii, DEFAULT_IRQ_SETTINGS, 0);
+	if (ret) {
+		GPII_ERR(gpii, gpii_chan->chid, "error config. interrupts, ret:%d\n", ret);
+		return ret;
+	}
+
+	/* allocate event rings */
+	ret = gpi_alloc_ev_chan(gpii);
+	if (ret) {
+		GPII_ERR(gpii, gpii_chan->chid, "error alloc_ev_chan:%d\n", ret);
+		goto error_alloc_ev_ring;
+	}
+
+	/* Allocate all channels */
+	for (chid = 0; chid < MAX_CHANNELS_PER_GPII; chid++) {
+		ret = gpi_alloc_chan(&gpii->gpii_chan[chid], true);
+		if (ret) {
+			GPII_ERR(gpii, gpii->gpii_chan[chid].chid,
+				 "Error allocating chan:%d\n", ret);
+			goto error_alloc_chan;
+		}
+	}
+
+	/* start channels  */
+	for (chid = 0; chid < MAX_CHANNELS_PER_GPII; chid++) {
+		ret = gpi_start_chan(&gpii->gpii_chan[chid]);
+		if (ret) {
+			GPII_ERR(gpii, gpii->gpii_chan[chid].chid, "Error start chan:%d\n", ret);
+			goto error_start_chan;
+		}
+	}
+
+	return ret;
+
+error_start_chan:
+	for (chid = chid - 1; chid >= 0; chid++) {
+		gpi_send_cmd(gpii, gpii_chan, GPI_CH_CMD_STOP);
+		gpi_send_cmd(gpii, gpii_chan, GPI_CH_CMD_RESET);
+	}
+	chid = 2;
+error_alloc_chan:
+	for (chid = chid - 1; chid >= 0; chid--)
+		gpi_reset_chan(gpii_chan, GPI_CH_CMD_DE_ALLOC);
+error_alloc_ev_ring:
+	gpi_disable_interrupts(gpii);
+	return ret;
 }
 
 /* configure or issue async command */
@@ -4367,6 +4449,7 @@ static int gpi_probe(struct platform_device *pdev)
 		struct gpii *gpii = &gpi_dev->gpiis[i];
 		int chan;
 
+		gpii->is_resumed = true;
 		gpii->gpii_chan[0].ch_ring = dmam_alloc_coherent(gpi_dev->dev,
 								 sizeof(struct gpi_ring),
 								 &gpii->gpii_chan[0].gpii_chan_dma,
@@ -4390,8 +4473,6 @@ static int gpi_probe(struct platform_device *pdev)
 			GPI_LOG(gpi_dev, "could not allocate for gpii->ev_ring\n");
 			return -ENOMEM;
 		}
-
-		gpii->is_resumed = true;
 
 		if (!(((1 << i) & gpi_dev->gpii_mask)  ||
 				((1 << i) & gpi_dev->static_gpii_mask)))
