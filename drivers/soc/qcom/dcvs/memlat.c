@@ -1751,10 +1751,13 @@ static int memlat_dev_probe(struct platform_device *pdev)
 			ret = qcom_pmu_event_supported(event_id, cpu);
 			if (!ret)
 				continue;
-			if (ret != -EPROBE_DEFER)
-				dev_err(dev, "ev=%d not found on cpu%d: %d\n",
+			if (ret != -EPROBE_DEFER) {
+				dev_err(dev, "ev=%u not found on cpu%d: %d\n",
 						event_id, cpu, ret);
-			return ret;
+				if (event_id == INST_EV || event_id == CYC_EV)
+					return ret;
+			} else
+				return ret;
 		}
 	}
 
