@@ -82,6 +82,11 @@ struct virtio_mem {
 	uint64_t addr;
 	/* Maximum region size in bytes. */
 	uint64_t region_size;
+	/*
+	 * When memmap_on_memory is enabled, the maximum usable size is less
+	 * than the region_size.
+	 */
+	uint64_t max_pluggable_size;
 
 	/* The parent resource for all memory added via this device. */
 	struct resource *parent_resource;
@@ -104,6 +109,13 @@ struct virtio_mem {
 
 	/* If set, the driver is in SBM, otherwise in BBM. */
 	bool in_sbm;
+
+	/*
+	 * The first group of pages in a memory_block are used for memmap.
+	 * If sbm mode is used, sb_size must equal memmap size, and sb_id == 0
+	 * is located at offset sb_size in a memory_block.
+	 */
+	bool memmap_on_memory;
 
 	/*
 	 * Indicates the virtio_mem driver should enable memory encryption on

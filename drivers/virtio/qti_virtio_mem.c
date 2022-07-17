@@ -60,7 +60,7 @@ static int virtio_mem_update_config_size(s64 size, bool sync)
 	else
 		size = ALIGN(size, vm->bbm.bb_size);
 
-	if (size < 0 || size > vm->region_size)
+	if (size < 0 || size > vm->max_pluggable_size)
 		return -EINVAL;
 
 	vm->requested_size = size;
@@ -270,7 +270,7 @@ static ssize_t max_plugin_threshold_show(struct device *dev,
 	if (!virtio_mem_dev)
 		return -ENODEV;
 
-	return scnprintf(buf, PAGE_SIZE, "%lld\n", virtio_mem_dev->region_size);
+	return scnprintf(buf, PAGE_SIZE, "%lld\n", virtio_mem_dev->max_pluggable_size);
 }
 
 static ssize_t device_block_plugged_show(struct device *dev,
@@ -355,9 +355,12 @@ static int qvm_oom_notify(struct notifier_block *self,
 	free_pages = get_zone_free_pages(ZONE_MOVABLE);
 
 	/* add a block only if movable zone is exhausted */
-	if ((free_pages > high_wmark_pages(z) + device_block_size / PAGE_SIZE) ||
-	    (qvm_hint_total >= virtio_mem_dev->region_size))
+	if (free_pages > high_wmark_pages(z) + device_block_size / PAGE_SIZE)
 		return NOTIFY_OK;
+	if (qvm_hint_total >= virtio_mem_dev->max_pluggable_size) {
+		pr_err_ratelimited("Out of pluggable memory\n");
+		return NOTIFY_OK;
+	}
 
 	pr_info("comm: %s totalram_pages: %lu Normal free_pages: %lu Movable free_pages: %lu\n",
 			current->comm, totalram_pages(), get_zone_free_pages(ZONE_NORMAL),
