@@ -117,6 +117,7 @@ vienna_perf_config = {
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB_DEBUG": "m",
     "CONFIG_QCOM_TZMEM": "m",
+    "CONFIG_QTI_PMIC_LPM": "m",
     "CONFIG_VIRT_DRIVERS": "y",
     "CONFIG_NOP_USB_XCEIV": "m",
     "CONFIG_USB_DWC3_MSM": "m",
