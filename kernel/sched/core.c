@@ -5193,10 +5193,11 @@ static inline struct balance_callback *splice_balance_callbacks(struct rq *rq)
 	return __splice_balance_callbacks(rq, true);
 }
 
-static void __balance_callbacks(struct rq *rq)
+void __balance_callbacks(struct rq *rq)
 {
 	do_balance_callbacks(rq, __splice_balance_callbacks(rq, false));
 }
+EXPORT_SYMBOL_GPL(__balance_callbacks);
 
 static inline void balance_callbacks(struct rq *rq, struct balance_callback *head)
 {
