@@ -135,6 +135,14 @@ config PHY_QCOM_UFS_V4
 	  This is required to enable UFS on QCOM chipset.
 	  To compile this driver as a module, choose M here.
 
+config PHY_QCOM_UFS_V4_GEN3AUTO
+	tristate "Qualcomm Technologies, Inc. UFS gen3auto Phy Driver"
+	depends on PHY_QCOM_UFS
+	help
+	  Support for 7nm UFS QMP phy present on QCOM chipsets.
+	  This is required to enable UFS on QCOM chipset.
+	  To compile this driver as a module, choose M here.
+
 config PHY_QCOM_UFS_QRBTC_SDM845
 	tristate "Qualcomm Technologies, Inc. UFS Presil Phy Driver"
 	depends on PHY_QCOM_UFS && REGULATOR_STUB
