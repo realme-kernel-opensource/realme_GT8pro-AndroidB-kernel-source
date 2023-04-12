@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /*
@@ -101,6 +102,7 @@
 
 #define SMMU_STATS_OFFSET		0x1000
 #define SMMU_STATS_START		0x80
+#define SMMU_STATS_NS_OFFSET		0x500
 #define SMMU_STATS_MTLB_LOOKUP_CNTR		0x88
 #define SMMU_STATS_WC1_LOOKUP_CNTR		0x90
 #define SMMU_STATS_WC2_LOOKUP_CNTR		0x94
@@ -138,6 +140,7 @@ struct smmu_pmu {
 	struct platform_device *pdev;
 	void __iomem *reg_base;
 	void __iomem *tcu_base;
+	void __iomem *tcu_base_ns;
 	u64 counter_present_mask;
 	u64 counter_mask;
 	bool reg_size_32;
@@ -283,7 +286,8 @@ static void smmu_pmu_event_update(struct perf_event *event)
 	do {
 		prev = local64_read(&hwc->prev_count);
 		if (event_id >= SMMU_STATS_START)
-			now = readl_relaxed((void *)(smmu_pmu->tcu_base + event_id));
+			now = readl_relaxed((void *)(smmu_pmu->tcu_base_ns + event_id +
+						     SMMU_STATS_NS_OFFSET));
 		else
 			now = smmu_pmu_counter_get_value(smmu_pmu, idx);
 	} while (local64_cmpxchg(&hwc->prev_count, prev, now) != prev);
@@ -311,7 +315,8 @@ static void smmu_pmu_set_period(struct smmu_pmu *smmu_pmu,
 	event_id = get_event(event);
 	new = SMMU_COUNTER_RELOAD;
 	if (event_id >= SMMU_STATS_START) {
-		new = readl_relaxed((void *)(smmu_pmu->tcu_base + event_id));
+		new = readl_relaxed((void *)(smmu_pmu->tcu_base_ns + event_id +
+					     SMMU_STATS_NS_OFFSET));
 		local64_set(&hwc->prev_count, new);
 		return;
 	}
@@ -722,8 +727,8 @@ static int smmu_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
 static int smmu_pmu_probe(struct platform_device *pdev)
 {
 	struct smmu_pmu *smmu_pmu;
-	struct resource *mem_resource_0;
-	void __iomem *mem_map_0;
+	struct resource *mem_resource_0, *mem_resource_1;
+	void __iomem *mem_map_0, *mem_map_1;
 	unsigned int reg_size;
 	int err;
 	int irq, i;
@@ -760,8 +765,21 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 		return PTR_ERR(mem_map_0);
 	}
 
+	mem_resource_1 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	size = resource_size(mem_resource_1);
+
+	mem_map_1 = devm_ioremap(&pdev->dev, mem_resource_1->start, size);
+	if (!mem_map_1) {
+		dev_err(&pdev->dev, "Can't map SMMU PMU TCU NS @%pa\n",
+			&mem_resource_1->start);
+		return PTR_ERR(mem_map_1);
+	}
+
+	dev_err(&pdev->dev, "SMMU PMU TCU NS @%pa\n", &mem_resource_1->start);
+
 	smmu_pmu->reg_base = mem_map_0;
 	smmu_pmu->tcu_base = mem_map_0 + SMMU_STATS_OFFSET;
+	smmu_pmu->tcu_base_ns = mem_map_1;
 	smmu_pmu->pmu.name =
 		devm_kasprintf(&pdev->dev, GFP_KERNEL, "smmu_0_%llx",
 			       (mem_resource_0->start) >> SMMU_PA_SHIFT);
