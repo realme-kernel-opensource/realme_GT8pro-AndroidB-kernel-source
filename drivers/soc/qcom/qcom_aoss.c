@@ -94,6 +94,7 @@ struct qmp {
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	struct dentry *debugfs_root;
 	struct dentry *debugfs_files[QMP_DEBUGFS_FILES];
+	struct dentry *debugfs_file;
 #endif /* CONFIG_DEBUG_FS */
 };
 
@@ -592,6 +593,30 @@ static void qmp_debugfs_create(struct qmp *qmp)
 							    &qmp_debugfs_fops);
 	}
 }
+
+static ssize_t aoss_dbg_write(struct file *file, const char __user *userstr,
+			      size_t len, loff_t *pos)
+{
+	struct qmp *qmp = file->private_data;
+	char buf[QMP_MSG_LEN] = {};
+	int ret;
+
+	if (!len || len >= QMP_MSG_LEN)
+		return -EINVAL;
+
+	ret = copy_from_user(buf, userstr, len);
+	if (ret)
+		return -EFAULT;
+
+	ret = qmp_send(qmp, strim(buf), QMP_MSG_LEN);
+
+	return ret ? ret : len;
+}
+
+static const struct file_operations aoss_dbg_fops = {
+	.open = simple_open,
+	.write = aoss_dbg_write,
+};
 #endif /* CONFIG_DEBUG_FS */
 
 static int qmp_probe(struct platform_device *pdev)
@@ -646,6 +671,8 @@ static int qmp_probe(struct platform_device *pdev)
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	qmp_debugfs_create(qmp);
+	qmp->debugfs_file = debugfs_create_file("aoss_send_message", 0220, NULL,
+						qmp, &aoss_dbg_fops);
 #endif /* CONFIG_DEBUG_FS */
 
 	return 0;
@@ -664,6 +691,7 @@ static void qmp_remove(struct platform_device *pdev)
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	debugfs_remove_recursive(qmp->debugfs_root);
+	debugfs_remove(qmp->debugfs_file);
 #endif /* CONFIG_DEBUG_FS */
 
 	qmp_qdss_clk_remove(qmp);
