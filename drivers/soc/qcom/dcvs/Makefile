@@ -13,3 +13,4 @@ obj-$(CONFIG_QTI_C1DCVS_SCMI_V2) += c1dcvs_scmi_v2.o
 obj-$(CONFIG_QTI_MPAM) += mpam.o
 obj-$(CONFIG_QTI_CPUFREQ_STATS_SCMI_V2) += cpufreq_stats_scmi_v2.o
 obj-$(CONFIG_QTI_CPUFREQ_STATS_SCMI_V3) += cpufreq_stats_scmi_v3.o
+obj-$(CONFIG_QTI_DYNPF_SCMI)		+= dynpf_scmi.o
