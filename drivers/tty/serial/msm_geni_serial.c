@@ -157,6 +157,7 @@ static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENAB
 #define IPC_LOG_MISC_PAGES	(30)
 #define IPC_LOG_TX_RX_PAGES	(30)
 #define DATA_BYTES_PER_LINE	(32)
+#define MAX_LEN			(20)
 
 #define M_IRQ_BITS		(M_RX_FIFO_WATERMARK_EN | M_RX_FIFO_LAST_EN |\
 				M_CMD_CANCEL_EN | M_CMD_ABORT_EN |\
@@ -4930,20 +4931,11 @@ static void msm_geni_serial_init_gsi(struct uart_port *uport)
 	}
 }
 
-static int msm_geni_serial_get_ver_info(struct uart_port *uport)
+static int msm_geni_se_clks_on_off(struct msm_geni_serial_port *msm_port, bool clk_on)
 {
-	u32 hw_ver = 0x0;
 	int ret = 0;
-	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
-	int len = (sizeof(struct msm_geni_serial_ver_info) * 2);
-	char fwver[20];
-	int invalid_fw_err = 0;
 
-	/* clks_on/off only for HSUART, as console remains actve */
-	if (!msm_port->is_console) {
-		/* By default Enable clk divider value */
-		msm_port->ser_clk_cfg = 0x21;
-
+	if (clk_on) {
 		ret = geni_icc_enable(&msm_port->se);
 		if (ret) {
 			UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
@@ -4960,15 +4952,41 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 
 		geni_se_common_clks_on(msm_port->serial_rsc.se_clk,
 			msm_port->serial_rsc.m_ahb_clk, msm_port->serial_rsc.s_ahb_clk);
+		msm_geni_enable_disable_se_clk(&msm_port->uport, true);
+	} else {
+		msm_geni_enable_disable_se_clk(&msm_port->uport, false);
+		geni_se_common_clks_off(msm_port->serial_rsc.se_clk,
+					msm_port->serial_rsc.m_ahb_clk,
+					msm_port->serial_rsc.s_ahb_clk);
 
-		msm_geni_enable_disable_se_clk(uport, true);
+		ret = geni_icc_disable(&msm_port->se);
+		if (ret)
+			UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+				     "%s: Error %d geni_icc_disable failed\n", __func__, ret);
+	}
+	return ret;
+}
+
+static int msm_geni_serial_get_ver_info(struct uart_port *uport)
+{
+	u32 hw_ver;
+	int ret = 0;
+	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
+	int len = (sizeof(struct msm_geni_serial_ver_info) * 2);
+	char fwver[MAX_LEN];
+
+	/* clks_on/off only for HSUART, as console remains actve */
+	if (!msm_port->is_console) {
+		/* By default Enable clk divider value */
+		msm_port->ser_clk_cfg = 0x21;
+		msm_geni_se_clks_on_off(msm_port, true);
 	}
 
 	/* Basic HW and FW info */
 	if (unlikely(geni_se_common_get_proto(uport->membase) != GENI_SE_UART)) {
 		dev_err(uport->dev, "%s: Invalid FW %d loaded.\n",
 			 __func__, geni_se_common_get_proto(uport->membase));
-		invalid_fw_err = -ENXIO;
+		ret = -ENXIO;
 		goto exit_ver_info;
 	}
 
@@ -4976,13 +4994,11 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 	msm_port->ver_info.m_fw_ver = geni_se_common_get_m_fw(uport->membase);
 	msm_port->ver_info.s_fw_ver = geni_se_common_get_s_fw(uport->membase);
 	scnprintf(fwver, len, "FW Ver:0x%x%x", msm_port->ver_info.m_fw_ver,
-			msm_port->ver_info.s_fw_ver);
-	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
-		"%s: FW Ver: %s\n", __func__, fwver);
+		  msm_port->ver_info.s_fw_ver);
 
 	hw_ver = geni_se_get_qup_hw_version(&msm_port->se);
-	UART_LOG_DBG(msm_port->ipc_log_misc,
-			uport->dev, "%s: HW Ver: 0x%x\n", __func__, hw_ver);
+	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
+		     "%s: FW Ver: %s HW Ver: 0x%x\n", __func__, fwver, hw_ver);
 
 	geni_se_common_get_major_minor_num(hw_ver,
 		&msm_port->ver_info.hw_major_ver,
@@ -4992,20 +5008,10 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 	msm_geni_serial_enable_interrupts(uport);
 
 exit_ver_info:
-	if (!msm_port->is_console) {
-		msm_geni_enable_disable_se_clk(uport, false);
-		geni_se_common_clks_off(msm_port->serial_rsc.se_clk,
-			msm_port->serial_rsc.m_ahb_clk, msm_port->serial_rsc.s_ahb_clk);
+	if (!msm_port->is_console)
+		msm_geni_se_clks_on_off(msm_port, false);
 
-		ret = geni_icc_disable(&msm_port->se);
-		if (ret) {
-			UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
-				"%s: Error %d geni_icc_disable failed\n", __func__, ret);
-			return ret;
-		}
-	}
-
-	return invalid_fw_err ? invalid_fw_err : ret;
+	return ret;
 }
 
 static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
@@ -5496,7 +5502,11 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	if (ret)
 		dev_err(&pdev->dev, "Failed to register uart_port: %d\n", ret);
 
-	msm_geni_check_stop_engine(uport);
+	if (!dev_port->is_console) {
+		msm_geni_se_clks_on_off(dev_port, true);
+		msm_geni_check_stop_engine(uport);
+		msm_geni_se_clks_on_off(dev_port, false);
+	}
 
 	/* Ignore dependencies on children by runtime PM framework */
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,suspend-ignore-children"))
