@@ -30,6 +30,7 @@
 #include <clocksource/arm_arch_timer.h>
 #include <soc/qcom/cmd-db.h>
 #include <soc/qcom/tcs.h>
+#include <soc/qcom/crm.h>
 #include <dt-bindings/soc/qcom,rpmh-rsc.h>
 
 #include "rpmh-internal.h"
@@ -71,6 +72,8 @@ enum {
 	/* DRV channel Registers */
 	RSC_DRV_CHN_TCS_TRIGGER,
 	RSC_DRV_CHN_TCS_COMPLETE,
+	RSC_DRV_CHN_SEQ_BUSY,
+	RSC_DRV_CHN_SEQ_PC,
 	RSC_DRV_CHN_UPDATE,
 	RSC_DRV_CHN_BUSY,
 	RSC_DRV_CHN_EN,
@@ -212,11 +215,13 @@ static u32 rpmh_rsc_reg_offset_ver_2_7[] = {
 	[RSC_DRV_CMD_DATA]		= 0x38,
 	[RSC_DRV_CMD_STATUS]		= 0x3C,
 	[RSC_DRV_CMD_RESP_DATA]		= 0x40,
-	[RSC_DRV_CHN_TCS_TRIGGER]	=	0x0,
-	[RSC_DRV_CHN_TCS_COMPLETE]	=	0x0,
-	[RSC_DRV_CHN_UPDATE]		=	0x0,
-	[RSC_DRV_CHN_BUSY]		=	0x0,
-	[RSC_DRV_CHN_EN]		=	0x0,
+	[RSC_DRV_CHN_SEQ_BUSY]		= 0x0,
+	[RSC_DRV_CHN_SEQ_PC]		= 0x0,
+	[RSC_DRV_CHN_TCS_TRIGGER]	= 0x0,
+	[RSC_DRV_CHN_TCS_COMPLETE]	= 0x0,
+	[RSC_DRV_CHN_UPDATE]		= 0x0,
+	[RSC_DRV_CHN_BUSY]		= 0x0,
+	[RSC_DRV_CHN_EN]		= 0x0,
 };
 
 static u32 rpmh_rsc_reg_offset_ver_3_0[] = {
@@ -236,35 +241,39 @@ static u32 rpmh_rsc_reg_offset_ver_3_0[] = {
 	[RSC_DRV_CMD_DATA]		= 0x3C,
 	[RSC_DRV_CMD_STATUS]		= 0x40,
 	[RSC_DRV_CMD_RESP_DATA]		= 0x44,
-	[RSC_DRV_CHN_TCS_TRIGGER]	=	0x490,
-	[RSC_DRV_CHN_TCS_COMPLETE]	=	0x494,
-	[RSC_DRV_CHN_UPDATE]		=	0x498,
-	[RSC_DRV_CHN_BUSY]		=	0x49C,
-	[RSC_DRV_CHN_EN]		=	0x4A0,
+	[RSC_DRV_CHN_SEQ_BUSY]		= 0x464,
+	[RSC_DRV_CHN_SEQ_PC]		= 0x468,
+	[RSC_DRV_CHN_TCS_TRIGGER]	= 0x490,
+	[RSC_DRV_CHN_TCS_COMPLETE]	= 0x494,
+	[RSC_DRV_CHN_UPDATE]		= 0x498,
+	[RSC_DRV_CHN_BUSY]		= 0x49C,
+	[RSC_DRV_CHN_EN]		= 0x4A0,
 };
 
-static u32 rpmh_rsc_reg_offsets_ver_3_0_hw_channel[] = {
-	[RSC_DRV_TCS_OFFSET]		=	336,
-	[RSC_DRV_CMD_OFFSET]		=	24,
-	[DRV_SOLVER_CONFIG]		=	0x04,
-	[DRV_PRNT_CHLD_CONFIG]		=	0x0C,
-	[RSC_DRV_IRQ_ENABLE]		=	0x00,
-	[RSC_DRV_IRQ_STATUS]		=	0x04,
-	[RSC_DRV_IRQ_CLEAR]		=	0x08,
-	[RSC_DRV_CMD_WAIT_FOR_CMPL]	=	0x20,
-	[RSC_DRV_CONTROL]		=	0x24,
-	[RSC_DRV_STATUS]		=	0x28,
-	[RSC_DRV_CMD_ENABLE]		=	0x2C,
-	[RSC_DRV_CMD_MSGID]		=	0x34,
-	[RSC_DRV_CMD_ADDR]		=	0x38,
-	[RSC_DRV_CMD_DATA]		=	0x3C,
-	[RSC_DRV_CMD_STATUS]		=	0x40,
-	[RSC_DRV_CMD_RESP_DATA]		=	0x44,
-	[RSC_DRV_CHN_TCS_TRIGGER]	=	0x490,
-	[RSC_DRV_CHN_TCS_COMPLETE]	=	0x494,
-	[RSC_DRV_CHN_UPDATE]		=	0x498,
-	[RSC_DRV_CHN_BUSY]		=	0x49C,
-	[RSC_DRV_CHN_EN]		=	0x4A0,
+static u32 rpmh_rsc_reg_offset_ver_3_0_hw_channel[] = {
+	[RSC_DRV_TCS_OFFSET]		= 336,
+	[RSC_DRV_CMD_OFFSET]		= 24,
+	[DRV_SOLVER_CONFIG]		= 0x04,
+	[DRV_PRNT_CHLD_CONFIG]		= 0x0C,
+	[RSC_DRV_IRQ_ENABLE]		= 0x00,
+	[RSC_DRV_IRQ_STATUS]		= 0x04,
+	[RSC_DRV_IRQ_CLEAR]		= 0x08,
+	[RSC_DRV_CMD_WAIT_FOR_CMPL]	= 0x20,
+	[RSC_DRV_CONTROL]		= 0x24,
+	[RSC_DRV_STATUS]		= 0x28,
+	[RSC_DRV_CMD_ENABLE]		= 0x2C,
+	[RSC_DRV_CMD_MSGID]		= 0x34,
+	[RSC_DRV_CMD_ADDR]		= 0x38,
+	[RSC_DRV_CMD_DATA]		= 0x3C,
+	[RSC_DRV_CMD_STATUS]		= 0x40,
+	[RSC_DRV_CMD_RESP_DATA]		= 0x44,
+	[RSC_DRV_CHN_SEQ_BUSY]		= 0x464,
+	[RSC_DRV_CHN_SEQ_PC]		= 0x468,
+	[RSC_DRV_CHN_TCS_TRIGGER]	= 0x490,
+	[RSC_DRV_CHN_TCS_COMPLETE]	= 0x494,
+	[RSC_DRV_CHN_UPDATE]		= 0x498,
+	[RSC_DRV_CHN_BUSY]		= 0x49C,
+	[RSC_DRV_CHN_EN]		= 0x4A0,
 };
 
 static inline void __iomem *
@@ -970,6 +979,30 @@ print_tcs_data:
 		if (!(sts & CMD_STATUS_COMPL))
 			*accl |= BIT(ACCL_TYPE(addr));
 	}
+}
+
+void rpmh_rsc_debug_channel_busy(struct rsc_drv *drv)
+{
+	u32 event_sts, ctrl_sts;
+	u32 chn_update, chn_busy, chn_en;
+	u32 seq_busy, seq_pc;
+
+	pr_err("RSC:%s\n", drv->name);
+
+	event_sts = readl_relaxed(drv->base + drv->regs[RSC_DRV_CHN_TCS_COMPLETE]);
+	ctrl_sts = readl_relaxed(drv->base + drv->regs[RSC_DRV_CHN_TCS_TRIGGER]);
+	chn_update = readl_relaxed(drv->base + drv->regs[RSC_DRV_CHN_UPDATE]);
+	chn_busy = readl_relaxed(drv->base + drv->regs[RSC_DRV_CHN_BUSY]);
+	chn_en = readl_relaxed(drv->base + drv->regs[RSC_DRV_CHN_EN]);
+	seq_busy = readl_relaxed(drv->base + drv->regs[RSC_DRV_CHN_SEQ_BUSY]);
+	seq_pc = readl_relaxed(drv->base + drv->regs[RSC_DRV_CHN_SEQ_PC]);
+
+	pr_err("event sts: 0x%x ctrl_sts: 0x%x\n", event_sts, ctrl_sts);
+	pr_err("chn_update: 0x%x chn_busy: 0x%x chn_en: 0x%x\n", chn_update, chn_busy, chn_en);
+	pr_err("seq_busy: 0x%x seq_pc: 0x%x\n", seq_busy, seq_pc);
+
+	crm_dump_regs("cam_crm");
+	crm_dump_drv_regs("cam_crm", drv->id);
 }
 
 void rpmh_rsc_debug(struct rsc_drv *drv, struct completion *compl)
@@ -1796,7 +1829,7 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 			drv[i].client.flags = SOLVER_PRESENT | HW_CHANNEL_PRESENT;
 			drv[i].client.in_solver_mode = true;
 			drv[i].in_solver_mode = true;
-			drv[i].regs = rpmh_rsc_reg_offsets_ver_3_0_hw_channel;
+			drv[i].regs = rpmh_rsc_reg_offset_ver_3_0_hw_channel;
 		}
 
 		spin_lock_init(&drv[i].lock);
