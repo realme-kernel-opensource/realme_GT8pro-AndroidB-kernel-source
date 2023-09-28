@@ -523,7 +523,7 @@ static int crm_get_channel(struct crm_drv *drv, enum channel_type ch_type, u32 *
 int crm_channel_switch_complete(const struct crm_drv *drv, u32 ch)
 {
 	u32 sts;
-	int retry = 50, ret = 0;
+	int retry = 100, ret = 0;
 
 	do {
 		sts = read_crm_channel(drv, CHN_BUSY);
@@ -600,6 +600,128 @@ static u32 crm_get_pwr_state_reg(int pwr_state)
 	return reg;
 }
 
+static int _crm_dump_drv_regs(struct crm_drv *drv, struct crm_drv_top *crm)
+{
+	struct crm_vcd *vcd;
+	u32 chn, reg;
+	u32 phy_base, data, offset;
+	int m, j, k;
+	int ret = 0;
+
+	phy_base = get_crm_phy_addr(drv->base);
+	pr_warn("HW DRV%d Regs\n", drv->drv_id);
+
+	spin_lock(&drv->cache_lock);
+	ret = crm_get_channel(drv, CHN_IN_USE, &chn);
+	if (ret) {
+		spin_unlock(&drv->cache_lock);
+		return ret;
+	}
+
+	for (m = 0; m < MAX_VCD_TYPE; m++) {
+		if (!(crm->desc->crm_capability & BIT(m)))
+			continue;
+
+		vcd = &drv->vcd[m];
+		for (k = 0; k < vcd->num_resources; k++) {
+			for (j = 0; j < vcd->num_pwr_states; j++) {
+				reg = crm_get_pwr_state_reg(j);
+
+				offset = crm_get_offset(drv, reg, chn, m, k);
+				data = readl_relaxed(drv->base + offset);
+				crm_print_hw_reg(drv->drv_id, chn, m, k,
+						reg-PWR_ST0, phy_base + offset, data);
+			}
+		}
+	}
+
+	vcd = &drv->vcd[PERF_OL_VCD];
+	pr_warn("DRV%d HW PERF_OL Status\n", drv->drv_id);
+	for (k = 0; k < vcd->num_resources; k++) {
+
+		offset = crm_get_offset(drv, PERF_OL_STATUS, 0, PERF_OL_VCD, k);
+		data = readl_relaxed(drv->base + offset);
+		crm_print_reg(phy_base + offset, data);
+	}
+
+	pr_warn("DRV%d HW BW Status\n", drv->drv_id);
+	offset = crm_get_offset(drv, PWR_IDX_STATUS, 0, BW_VOTE_VCD, 0);
+	data = readl_relaxed(drv->base + offset);
+	crm_print_reg(phy_base + offset, data);
+
+	offset = crm_get_channel_offset(drv, CHN_BUSY);
+	data = readl_relaxed(drv->base + offset);
+	crm_print_reg(phy_base + offset, data);
+
+	spin_unlock(&drv->cache_lock);
+
+	return ret;
+}
+
+
+static int _crm_dump_regs(const struct device *dev)
+{
+	struct crm_drv_top *crm;
+	u32 phy_base, data, offset;
+	int i, ret = 0;
+
+	crm = dev_get_drvdata(dev);
+	pr_warn("CRMB Regs\n");
+	phy_base = get_crm_phy_addr(crm->crmb_mgr.base) +
+					((unsigned long) crm->crmb_mgr.base & VPAGE_SHIFT_BITS);
+
+	pr_warn("CRMB: num_of_resources:%d\n", crm->crmb_mgr.num_resources);
+	for (i = 0; i < crm->crmb_mgr.num_resources; i++) {
+		data = read_crmb_mgr_reg(&crm->crmb_mgr, &offset, STATUS_BE, i);
+		crm_print_reg(phy_base + offset, data);
+
+		data = read_crmb_mgr_reg(&crm->crmb_mgr, &offset, STATUS_FE, i);
+		crm_print_reg(phy_base + offset, data);
+	}
+
+	pr_warn("CRMC Regs\n");
+	phy_base = get_crm_phy_addr(crm->crmc_mgr.base) +
+					((unsigned long) crm->crmc_mgr.base & VPAGE_SHIFT_BITS);
+	pr_warn("CRMC: num_of_resources:%d\n", crm->crmc_mgr.num_resources);
+	for (i = 0; i < crm->crmc_mgr.num_resources; i++) {
+		data = read_crmc_mgr_reg(&crm->crmc_mgr, &offset, AGGR_PERF_OL, i);
+		crm_print_reg(phy_base + offset, data);
+	}
+
+	pr_warn("crmc_base: 0x%x\n", phy_base);
+	for (i = 0; i < (crm->crmc_mgr.num_resources + crm->crmb_mgr.num_resources); i++) {
+		data = read_crmc_mgr_reg(&crm->crmc_mgr, &offset, CURR_PERF_OL, i);
+		crm_print_reg(phy_base + offset, data);
+
+		data = read_crmc_mgr_reg(&crm->crmc_mgr, &offset, SEQ_STATUS, i);
+		crm_print_reg(phy_base + offset, data);
+	}
+
+	pr_warn("CRMV Regs\n");
+	phy_base = get_crm_phy_addr(crm->crmv_mgr.base) +
+					((unsigned long) crm->crmv_mgr.base & VPAGE_SHIFT_BITS);
+
+	pr_warn("CRMV: num_of_resources:%d\n", crm->crmv_mgr.num_resources);
+	for (i = 0; i < crm->crmv_mgr.num_resources; i++) {
+		data = read_crmv_mgr_reg(&crm->crmv_mgr, &offset, AGGR_VOL_STS, i);
+		crm_print_reg(phy_base + offset, data);
+
+		data = read_crmv_mgr_reg(&crm->crmv_mgr, &offset, SEQ_VOL_STS, i);
+		crm_print_reg(phy_base + offset, data);
+
+		data = read_crmv_mgr_reg(&crm->crmv_mgr, &offset, CURR_VOL_STS, i);
+		crm_print_reg(phy_base + offset, data);
+
+		data = read_crmv_mgr_reg(&crm->crmv_mgr, &offset, RAIL_FSM_STS, i);
+		crm_print_reg(phy_base + offset, data);
+
+		data = read_crmv_mgr_reg(&crm->crmv_mgr, &offset, RAIL_TCS_STS, i);
+		crm_print_reg(phy_base + offset, data);
+	}
+
+	return ret;
+}
+
 static void crm_flush_cache(struct crm_drv *drv, struct crm_vcd *vcd, u32 ch, u32 vcd_type)
 {
 	int i, j;
@@ -667,9 +789,16 @@ int crm_write_pwr_states(const struct device *dev, u32 drv_id)
 exit:
 	spin_unlock(&drv->cache_lock);
 
+	/* Dump CRM registers for debug */
+	if (ret) {
+		_crm_dump_drv_regs(drv, crm);
+		_crm_dump_regs(dev);
+		BUG_ON(1);
+	}
+
 	return ret;
 }
-EXPORT_SYMBOL(crm_write_pwr_states);
+EXPORT_SYMBOL_GPL(crm_write_pwr_states);
 
 /**
  * crm_dump_drv_regs() - Dump CRM DRV registers for debug purposes.
@@ -684,12 +813,7 @@ int crm_dump_drv_regs(const char *name, u32 drv_id)
 {
 	struct crm_drv_top *crm;
 	struct crm_drv *drv;
-	struct crm_vcd *vcd;
 	const struct device *dev;
-	u32 chn, reg;
-	u32 phy_base, data, offset;
-	int m, j, k;
-	int ret = 0;
 
 	dev = crm_get_device(name);
 	if (IS_ERR(dev))
@@ -700,54 +824,7 @@ int crm_dump_drv_regs(const char *name, u32 drv_id)
 	if (!drv)
 		return -EINVAL;
 
-	phy_base = get_crm_phy_addr(drv->base);
-	pr_warn("HW DRV%d Regs\n", drv->drv_id);
-
-	spin_lock(&drv->cache_lock);
-	ret = crm_get_channel(drv, CHN_IN_USE, &chn);
-	if (ret) {
-		spin_unlock(&drv->cache_lock);
-		return ret;
-	}
-
-	for (m = 0; m < MAX_VCD_TYPE; m++) {
-		if (!(crm->desc->crm_capability & BIT(m)))
-			continue;
-
-		vcd = &drv->vcd[m];
-		for (k = 0; k < vcd->num_resources; k++) {
-			for (j = 0; j < vcd->num_pwr_states; j++) {
-				reg = crm_get_pwr_state_reg(j);
-
-				offset = crm_get_offset(drv, reg, chn, m, k);
-				data = readl_relaxed(drv->base + offset);
-				crm_print_hw_reg(drv->drv_id, chn, m, k,
-						reg-PWR_ST0, phy_base + offset, data);
-			}
-		}
-	}
-
-	vcd = &drv->vcd[PERF_OL_VCD];
-	pr_warn("DRV%d HW PERF_OL Status\n", drv->drv_id);
-	for (k = 0; k < vcd->num_resources; k++) {
-
-		offset = crm_get_offset(drv, PERF_OL_STATUS, 0, PERF_OL_VCD, k);
-		data = readl_relaxed(drv->base + offset);
-		crm_print_reg(phy_base + offset, data);
-	}
-
-	pr_warn("DRV%d HW BW Status\n", drv->drv_id);
-	offset = crm_get_offset(drv, PWR_IDX_STATUS, 0, BW_VOTE_VCD, 0);
-	data = readl_relaxed(drv->base + offset);
-	crm_print_reg(phy_base + offset, data);
-
-	offset = crm_get_channel_offset(drv, CHN_BUSY);
-	data = readl_relaxed(drv->base + offset);
-	crm_print_reg(phy_base + offset, data);
-
-	spin_unlock(&drv->cache_lock);
-
-	return ret;
+	return _crm_dump_drv_regs(drv, crm);
 }
 EXPORT_SYMBOL_GPL(crm_dump_drv_regs);
 
@@ -761,75 +838,18 @@ EXPORT_SYMBOL_GPL(crm_dump_drv_regs);
  */
 int crm_dump_regs(const char *name)
 {
-	struct crm_drv_top *crm;
 	const struct device *dev;
-	u32 phy_base, data, offset;
-	int i, ret = 0;
 
 	dev = crm_get_device(name);
 	if (IS_ERR(dev))
 		return -EINVAL;
 
-	crm = dev_get_drvdata(dev);
-	pr_warn("CRMB Regs\n");
-	phy_base = get_crm_phy_addr(crm->crmb_mgr.base) +
-					((unsigned long) crm->crmb_mgr.base & VPAGE_SHIFT_BITS);
-
-	pr_warn("CRMB: num_of_resources:%d\n", crm->crmb_mgr.num_resources);
-	for (i = 0; i < crm->crmb_mgr.num_resources; i++) {
-		data = read_crmb_mgr_reg(&crm->crmb_mgr, &offset, STATUS_BE, i);
-		crm_print_reg(phy_base + offset, data);
-
-		data = read_crmb_mgr_reg(&crm->crmb_mgr, &offset, STATUS_FE, i);
-		crm_print_reg(phy_base + offset, data);
-	}
-
-	pr_warn("CRMC Regs\n");
-	phy_base = get_crm_phy_addr(crm->crmc_mgr.base) +
-					((unsigned long) crm->crmc_mgr.base & VPAGE_SHIFT_BITS);
-	pr_warn("CRMC: num_of_resources:%d\n", crm->crmc_mgr.num_resources);
-	for (i = 0; i < crm->crmc_mgr.num_resources; i++) {
-		data = read_crmc_mgr_reg(&crm->crmc_mgr, &offset, AGGR_PERF_OL, i);
-		crm_print_reg(phy_base + offset, data);
-	}
-
-	pr_warn("crmc_base: 0x%x\n", phy_base);
-	for (i = 0; i < (crm->crmc_mgr.num_resources + crm->crmb_mgr.num_resources); i++) {
-		data = read_crmc_mgr_reg(&crm->crmc_mgr, &offset, CURR_PERF_OL, i);
-		crm_print_reg(phy_base + offset, data);
-
-		data = read_crmc_mgr_reg(&crm->crmc_mgr, &offset, SEQ_STATUS, i);
-		crm_print_reg(phy_base + offset, data);
-	}
-
-	pr_warn("CRMV Regs\n");
-	phy_base = get_crm_phy_addr(crm->crmv_mgr.base) +
-					((unsigned long) crm->crmv_mgr.base & VPAGE_SHIFT_BITS);
-
-	pr_warn("CRMV: num_of_resources:%d\n", crm->crmv_mgr.num_resources);
-	for (i = 0; i < crm->crmv_mgr.num_resources; i++) {
-		data = read_crmv_mgr_reg(&crm->crmv_mgr, &offset, AGGR_VOL_STS, i);
-		crm_print_reg(phy_base + offset, data);
-
-		data = read_crmv_mgr_reg(&crm->crmv_mgr, &offset, SEQ_VOL_STS, i);
-		crm_print_reg(phy_base + offset, data);
-
-		data = read_crmv_mgr_reg(&crm->crmv_mgr, &offset, CURR_VOL_STS, i);
-		crm_print_reg(phy_base + offset, data);
-
-		data = read_crmv_mgr_reg(&crm->crmv_mgr, &offset, RAIL_FSM_STS, i);
-		crm_print_reg(phy_base + offset, data);
-
-		data = read_crmv_mgr_reg(&crm->crmv_mgr, &offset, RAIL_TCS_STS, i);
-		crm_print_reg(phy_base + offset, data);
-	}
-
-	return ret;
+	return _crm_dump_regs(dev);
 }
 EXPORT_SYMBOL_GPL(crm_dump_regs);
 
 /**
- * crm_dump_regs() - Dump CRM registers for debug purposes.
+ * crm_read_curr_perf_ol() - Read current performance level.
  * @name:      The name of the crm device to dump for.
  * @vcd_idx:   The VCD index to read from.
  * @data:      Read CURR_PERF_OL register value into this.
@@ -1122,7 +1142,7 @@ int crm_write_perf_ol(const struct device *dev, enum crm_drv_type drv_type,
 
 	return 0;
 }
-EXPORT_SYMBOL(crm_write_perf_ol);
+EXPORT_SYMBOL_GPL(crm_write_perf_ol);
 
 /**
  * crm_write_bw_vote() - Write a bw vote for a resource
@@ -1167,7 +1187,7 @@ int crm_write_bw_vote(const struct device *dev, enum crm_drv_type drv_type,
 
 	return 0;
 }
-EXPORT_SYMBOL(crm_write_bw_vote);
+EXPORT_SYMBOL_GPL(crm_write_bw_vote);
 
 /**
  * crm_write_bw_pt_vote() - Write a bw vote for a resource
@@ -1212,7 +1232,7 @@ int crm_write_bw_pt_vote(const struct device *dev, enum crm_drv_type drv_type,
 
 	return 0;
 }
-EXPORT_SYMBOL(crm_write_bw_pt_vote);
+EXPORT_SYMBOL_GPL(crm_write_bw_pt_vote);
 
 /**
  * crm_get_device() - Returns a CRM device handle.
@@ -1237,7 +1257,7 @@ const struct device *crm_get_device(const char *name)
 
 	return ERR_PTR(-ENODEV);
 }
-EXPORT_SYMBOL(crm_get_device);
+EXPORT_SYMBOL_GPL(crm_get_device);
 
 static void crm_set_chn_behave(struct crm_drv_top *crm)
 {
