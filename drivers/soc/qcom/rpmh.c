@@ -496,6 +496,7 @@ int rpmh_flush(struct rpmh_ctrlr *ctrlr, int ch)
 {
 	struct cache_req *p;
 	int ret = 0;
+	unsigned long flags;
 
 	if (rpmh_standalone)
 		return 0;
@@ -513,13 +514,8 @@ int rpmh_flush(struct rpmh_ctrlr *ctrlr, int ch)
 	 */
 	if (!(ctrlr->flags & SOLVER_PRESENT))
 		lockdep_assert_irqs_disabled();
-	/*
-	 * Currently rpmh_flush() is only called when we think we're running
-	 * on the last processor.  If the lock is busy it means another
-	 * processor is up and it's better to abort than spin.
-	 */
-	if (!spin_trylock(&ctrlr->cache_lock))
-		return -EBUSY;
+
+	spin_lock_irqsave(&ctrlr->cache_lock, flags);
 
 	if (!ctrlr->dirty) {
 		pr_debug("Skipping flush, TCS has latest data.\n");
@@ -555,7 +551,7 @@ int rpmh_flush(struct rpmh_ctrlr *ctrlr, int ch)
 write_next_wakeup:
 	rpmh_rsc_write_next_wakeup(ctrlr_to_drv(ctrlr));
 exit:
-	spin_unlock(&ctrlr->cache_lock);
+	spin_unlock_irqrestore(&ctrlr->cache_lock, flags);
 	return ret;
 }
 
