@@ -21,6 +21,8 @@
 #include <linux/list.h>
 #include <linux/fs.h>
 #include <linux/of.h>
+#include <linux/mm.h>
+#include <soc/qcom/secure_buffer.h>
 
 #include "gh_private.h"
 #include "gh_secure_vm_virtio_backend.h"
@@ -212,10 +214,32 @@ static int gh_vm_loader_sec_load(struct gh_sec_vm_dev *vm_dev,
 	vm->is_secure_vm = true;
 
 	ret = gh_vm_configure(GH_VM_AUTH_PIL_ELF, metadata_offset,
-				metadata_size, 0, 0, vm_dev->pas_id,
-				vm_dev->vm_name, vm);
-	if (ret)
+				metadata_size, 0, 0, vm_dev->pas_id, vm);
+	if (ret) {
 		dev_err(dev, "Configuring secure VM %s to memory failed %d\n",
+					vm_dev->vm_name, ret);
+		goto release_fw;
+	}
+
+	if (vm->memory_mapping) {
+		ret = gh_rm_vm_set_debug(vm->vmid);
+		if (ret) {
+			pr_err("VM_SET_DEBUG failed for VM:%d %d\n",
+						vm->vmid, ret);
+			goto release_fw;
+		}
+
+		ret = gh_provide_user_mem(vm->vmid, vm->memory_mapping);
+		if (ret) {
+			dev_err(dev, "Failed to provide user memory for %s, %d\n",
+							vm_dev->vm_name, ret);
+			goto release_fw;
+		}
+	}
+
+	ret = gh_vm_init(vm_dev->vm_name, vm);
+	if (ret)
+		dev_err(dev, "Init secure VM %s to memory failed %d\n",
 					vm_dev->vm_name, ret);
 
 release_fw:
@@ -270,6 +294,154 @@ static int gh_sec_vm_loader_load_fw(struct gh_sec_vm_dev *vm_dev,
 		return ret;
 	}
 
+	return ret;
+}
+
+long gh_vm_ioctl_get_reserved_memory_size(struct gh_vm *vm, unsigned long arg)
+{
+	struct gh_sec_vm_dev *sec_vm_dev;
+	struct gh_fw_name vm_fw_name;
+
+	if (copy_from_user(&vm_fw_name, (void __user *)arg, sizeof(vm_fw_name)))
+		return -EFAULT;
+
+	vm_fw_name.name[GH_VM_FW_NAME_MAX - 1] = '\0';
+	sec_vm_dev = get_sec_vm_dev_by_name(vm_fw_name.name);
+	if (!sec_vm_dev) {
+		pr_err("Requested Secure VM %s not supported\n",
+							vm_fw_name.name);
+		return -EINVAL;
+	}
+
+	return sec_vm_dev->fw_size;
+}
+
+static bool pages_are_mergeable(struct page *a, struct page *b)
+{
+	return page_to_pfn(a) + 1 == page_to_pfn(b);
+}
+
+long gh_vm_ioctl_set_user_mem_region(struct gh_vm *vm, unsigned long arg)
+{
+	struct gh_userspace_memory_region region;
+	struct page *curr_page, *prev_page;
+	struct gh_sec_vm_dev *sec_vm_dev;
+	struct gh_vm_user_mem *mapping;
+	unsigned int gup_flags;
+	size_t entry_size;
+	long ret = -EINVAL;
+	int i, j, pinned;
+
+	if (copy_from_user(&region, (void __user *)arg, sizeof(region)))
+		return -EFAULT;
+
+	if (!region.memory_size || !PAGE_ALIGNED(region.memory_size) ||
+			!PAGE_ALIGNED(region.userspace_addr))
+		return -EINVAL;
+
+	mutex_lock(&vm->vm_lock);
+	if (vm->memory_mapping) {
+		ret = -EEXIST;
+		goto unlock;
+	}
+
+	if (vm->status.vm_status != GH_RM_VM_STATUS_NO_STATE) {
+		ret = -EPERM;
+		goto unlock;
+	}
+
+	sec_vm_dev = get_sec_vm_dev_by_name(region.fw_name.name);
+	if (!sec_vm_dev) {
+		pr_err("Requested Secure VM %s not supported\n",
+							region.fw_name.name);
+		ret =  -EINVAL;
+		goto unlock;
+	}
+
+	if (sec_vm_dev->system_vm) {
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	vm->memory_mapping = kzalloc(sizeof(*vm->memory_mapping),
+									GFP_KERNEL_ACCOUNT);
+	if (!vm->memory_mapping) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
+
+	mapping = vm->memory_mapping;
+	mapping->npages = region.memory_size >> PAGE_SHIFT;
+	ret = account_locked_vm(vm->mm, mapping->npages, true);
+	if (ret)
+		goto free_mapping;
+
+	mapping->pages = kcalloc(mapping->npages, sizeof(*mapping->pages),
+								GFP_KERNEL_ACCOUNT);
+	if (!mapping->pages) {
+		ret = -ENOMEM;
+		goto unlock_pages;
+	}
+
+	gup_flags = FOLL_LONGTERM | FOLL_WRITE;
+	pinned = pin_user_pages_fast(region.userspace_addr, mapping->npages,
+					gup_flags, mapping->pages);
+	if (pinned < 0) {
+		ret = pinned;
+		goto free_pages;
+	} else if (pinned != mapping->npages) {
+		ret = -EFAULT;
+		goto unpin_pages;
+	}
+
+	mapping->n_sgl_entries = 1;
+	for (i = 1; i < mapping->npages; i++) {
+		if (!pages_are_mergeable(mapping->pages[i - 1], mapping->pages[i]))
+			mapping->n_sgl_entries++;
+	}
+
+	mapping->sgl_entries = kcalloc(mapping->n_sgl_entries,
+					sizeof(mapping->sgl_entries[0]), GFP_KERNEL_ACCOUNT);
+	if (!mapping->sgl_entries) {
+		ret = -ENOMEM;
+		goto unpin_pages;
+	}
+
+	/* reduce number of entries by combining contiguous pages into single memory entry */
+	prev_page = mapping->pages[0];
+	mapping->sgl_entries[0].ipa_base = cpu_to_le64(page_to_phys(prev_page));
+	entry_size = PAGE_SIZE;
+
+	for (i = 1, j = 0; i < mapping->npages; i++) {
+		curr_page = mapping->pages[i];
+		if (pages_are_mergeable(prev_page, curr_page)) {
+			entry_size += PAGE_SIZE;
+		} else {
+			mapping->sgl_entries[j].size = cpu_to_le64(entry_size);
+			j++;
+			mapping->sgl_entries[j].ipa_base =
+				cpu_to_le64(page_to_phys(curr_page));
+			entry_size = PAGE_SIZE;
+		}
+
+		prev_page = curr_page;
+	}
+	mapping->sgl_entries[j].size = cpu_to_le64(entry_size);
+	mutex_unlock(&vm->vm_lock);
+	return 0;
+
+unpin_pages:
+	unpin_user_pages(mapping->pages, pinned);
+free_pages:
+	kfree(mapping->pages);
+unlock_pages:
+	account_locked_vm(vm->mm, mapping->npages, false);
+	mapping->npages = 0;
+free_mapping:
+	kfree(vm->memory_mapping);
+	vm->memory_mapping = NULL;
+unlock:
+	mutex_unlock(&vm->vm_lock);
 	return ret;
 }
 
@@ -350,6 +522,8 @@ int gh_secure_vm_loader_reclaim_fw(struct gh_vm *vm)
 	}
 
 	dev = sec_vm_dev->dev;
+	if (!sec_vm_dev->system_vm)
+		gh_reclaim_user_mem(vm);
 
 	ret = gh_reclaim_mem(vm, sec_vm_dev->fw_phys,
 			sec_vm_dev->fw_size, sec_vm_dev->system_vm);

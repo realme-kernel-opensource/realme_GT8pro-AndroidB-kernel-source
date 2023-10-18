@@ -438,6 +438,9 @@ int gh_rm_ipa_reserve(u64 size, u64 align, struct range limits, u32 generic_cons
 /* API to set time base */
 int gh_rm_vm_set_time_base(gh_vmid_t vmid);
 
+/* API to set debug */
+int gh_rm_vm_set_debug(gh_vmid_t vmid);
+
 /* API for minidump support */
 int gh_rm_minidump_get_info(void);
 int gh_rm_minidump_register_range(phys_addr_t base_ipa, size_t region_size,
@@ -736,6 +739,12 @@ static inline int gh_rm_all_res_populated_cb(gh_all_res_populated_cb_t fnptr)
 
 /* API to set time base */
 static inline int gh_rm_vm_set_time_base(gh_vmid_t vmid)
+{
+	return -EINVAL;
+}
+
+/* API to set debug */
+static inline int gh_rm_vm_set_debug(gh_vmid_t vmid)
 {
 	return -EINVAL;
 }

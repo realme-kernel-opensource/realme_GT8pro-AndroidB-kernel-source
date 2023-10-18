@@ -96,6 +96,9 @@ struct gh_vm_property {
 /* Message IDs: vRTC Configuration */
 #define GH_RM_RPC_MSG_ID_CALL_VM_SET_TIME_BASE		0x56000030
 
+/* Message IDs: VM Set Debug */
+#define GH_RM_RPC_MSG_ID_CALL_VM_SET_DEBUG		0x56000035
+
 /* Message IDs: Minidump */
 #define GH_RM_RPC_MSG_ID_CALL_VM_MINIDUMP_GET_INFO		0x56000040
 #define GH_RM_RPC_MSG_ID_CALL_VM_MINIDUMP_REGISTER_RANGE	0x56000041
@@ -316,6 +319,13 @@ struct gh_vm_set_time_base_req_payload {
 	u32 time_base_high;
 	u32 arch_timer_ref_low;
 	u32 arch_timer_ref_high;
+} __packed;
+
+/* Call: VM_SET_DEBUG */
+struct gh_vm_set_debug_req_payload {
+	gh_vmid_t vmid;
+	u8 reserved;
+	u8 debug_enabled;
 } __packed;
 
 /* Call: VM_IRQ_ACCEPT */

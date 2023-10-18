@@ -465,6 +465,47 @@ int gh_reclaim_mem(struct gh_vm *vm, phys_addr_t phys,
 	return ret;
 }
 
+int gh_reclaim_user_mem(struct gh_vm *vm)
+{
+	struct gh_vm_user_mem *mapping;
+	int src_vmid = vm->vmid;
+	int dest_vmid = VMID_HLOS;
+	int dest_perms = PERM_READ | PERM_WRITE | PERM_EXEC;
+	int ret = 0;
+
+	if (!vm->memory_mapping) {
+		ret = -EINVAL;
+		goto drop_mm;
+	}
+
+	mapping = vm->memory_mapping;
+	ret = ghd_rm_mem_reclaim(mapping->mem_handle, 0);
+	if (ret)
+		pr_err("Failed to reclaim user memory for %d, %d\n",
+			vm->vmid, ret);
+
+	ret = hyp_assign_table(mapping->sgt, &src_vmid, 1,
+							&dest_vmid, &dest_perms, 1);
+	if (ret) {
+		pr_err("failed hyp_assign_table for - subsys VMid %d rc:%d\n",
+			src_vmid, ret);
+		return ret;
+	}
+
+	sg_free_table(mapping->sgt);
+	kfree(mapping->sgt);
+	kfree(mapping->sgl_entries);
+	unpin_user_pages(mapping->pages, mapping->npages);
+	kfree(mapping->pages);
+	account_locked_vm(vm->mm, mapping->npages, false);
+	kfree(mapping);
+
+drop_mm:
+	mmdrop(vm->mm);
+
+	return ret;
+}
+
 int gh_provide_mem(struct gh_vm *vm, phys_addr_t phys,
 					ssize_t size, bool is_system_vm)
 {
@@ -536,13 +577,89 @@ err_hyp_assign:
 	return ret;
 }
 
+int gh_provide_user_mem(gh_vmid_t vmid, struct gh_vm_user_mem *mapping)
+{
+	struct gh_acl_desc *acl_desc;
+	struct gh_sgl_desc *sgl_desc;
+	int src_vmid = VMID_HLOS;
+	int dest_vmid = vmid;
+	int dest_perms = PERM_READ | PERM_WRITE | PERM_EXEC;
+	int ret = 0, rc;
+	int i;
+
+	if (!mapping)
+		return -EINVAL;
+
+	mapping->sgt = kzalloc(sizeof(*mapping->sgt), GFP_KERNEL);
+	if (!mapping->sgt)
+		return -ENOMEM;
+
+	ret = sg_alloc_table_from_pages(mapping->sgt, mapping->pages, mapping->npages,
+					0, mapping->npages << PAGE_SHIFT, GFP_KERNEL);
+	if (ret) {
+		pr_err("failed sg_alloc_table_from_pages for - subsys VMid %d rc:%d\n",
+			   dest_vmid, ret);
+		goto free_sgt;
+	}
+
+	ret = hyp_assign_table(mapping->sgt, &src_vmid, 1, &dest_vmid, &dest_perms, 1);
+	if (ret) {
+		pr_err("failed hyp_assign_table for - subsys VMid %d rc:%d\n",
+			   dest_vmid, ret);
+		goto free_table;
+	}
+
+	acl_desc = kzalloc(offsetof(struct gh_acl_desc, acl_entries[1]),
+			GFP_KERNEL);
+	if (!acl_desc) {
+		ret = -ENOMEM;
+		goto assign_table;
+	}
+
+	acl_desc->n_acl_entries = 1;
+	acl_desc->acl_entries[0].vmid = vmid;
+	acl_desc->acl_entries[0].perms =
+				GH_RM_ACL_X | GH_RM_ACL_R | GH_RM_ACL_W;
+
+	sgl_desc = kzalloc(offsetof(struct gh_sgl_desc, sgl_entries[mapping->n_sgl_entries]),
+							GFP_KERNEL);
+	if (!sgl_desc) {
+		ret = -ENOMEM;
+		goto free_acl;
+	}
+
+	sgl_desc->n_sgl_entries = mapping->n_sgl_entries;
+	for (i = 0; i < mapping->n_sgl_entries; i++)  {
+		sgl_desc->sgl_entries[i].ipa_base = mapping->sgl_entries[i].ipa_base;
+		sgl_desc->sgl_entries[i].size = mapping->sgl_entries[i].size;
+	}
+
+	ret = ghd_rm_mem_lend(GH_RM_MEM_TYPE_NORMAL, 0, 0, acl_desc,
+			sgl_desc, NULL, &mapping->mem_handle);
+
+	kfree(sgl_desc);
+free_acl:
+	kfree(acl_desc);
+	if (!ret)
+		return ret;
+assign_table:
+	rc = hyp_assign_table(mapping->sgt, &dest_vmid, 1, &src_vmid, &dest_perms, 1);
+	if (rc)
+		pr_err("failed hyp_assign_table for - subsys VMid %d rc:%d\n",
+			src_vmid, rc);
+free_table:
+	sg_free_table(mapping->sgt);
+free_sgt:
+	kfree(mapping->sgt);
+	return ret;
+}
+
 long gh_vm_configure(u16 auth_mech, u64 image_offset,
 			u64 image_size, u64 dtb_offset, u64 dtb_size,
-			u32 pas_id, const char *fw_name, struct gh_vm *vm)
+			u32 pas_id, struct gh_vm *vm)
 {
 	struct gh_vm_auth_param_entry entry;
 	long ret = -EINVAL;
-	int nr_vcpus = 0;
 
 	switch (auth_mech) {
 	case GH_VM_AUTH_PIL_ELF:
@@ -573,8 +690,15 @@ long gh_vm_configure(u16 auth_mech, u64 image_offset,
 		break;
 	default:
 		pr_err("Invalid auth mechanism for VM\n");
-		return ret;
 	}
+
+	return ret;
+}
+
+long gh_vm_init(const char *fw_name, struct gh_vm *vm)
+{
+	long ret = -EINVAL;
+	int nr_vcpus = 0;
 
 	ret = ghd_rm_vm_init(vm->vmid);
 	if (ret) {
@@ -629,6 +753,12 @@ static long gh_vm_ioctl(struct file *filp,
 	case GH_VM_GET_VCPU_COUNT:
 		ret = gh_vm_ioctl_get_vcpu_count(vm);
 		break;
+	case GH_VM_GET_RESV_MEMORY_SIZE:
+		ret = gh_vm_ioctl_get_reserved_memory_size(vm, arg);
+		break;
+	case GH_VM_SET_USER_MEM_REGION:
+		ret = gh_vm_ioctl_set_user_mem_region(vm, arg);
+		break;
 	default:
 		ret = gh_virtio_backend_ioctl(vm->fw_name, cmd, arg);
 		break;
@@ -680,6 +810,9 @@ static struct gh_vm *gh_create_vm(void)
 		kfree(vm);
 		return ERR_PTR(ret);
 	}
+
+	mmgrab(current->mm);
+	vm->mm = current->mm;
 	refcount_set(&vm->users_count, 1);
 	init_waitqueue_head(&vm->vm_status_wait);
 	vm->status.vm_status = GH_RM_VM_STATUS_NO_STATE;

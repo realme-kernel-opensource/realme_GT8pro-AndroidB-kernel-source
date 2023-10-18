@@ -2754,3 +2754,41 @@ int gh_rm_ipa_reserve(u64 size, u64 align, struct range limits, u32 generic_cons
 	return 0;
 }
 EXPORT_SYMBOL_GPL(gh_rm_ipa_reserve);
+
+/**
+ * gh_rm_vm_set_debug: Request to set debug for the VM
+ * @vmid: The vmid of the vm who need to be set debug.
+ *
+ * The function returns 0 on success and a negative error code
+ * upon failure.
+ */
+int gh_rm_vm_set_debug(gh_vmid_t vmid)
+{
+	struct gh_vm_set_debug_req_payload req_payload = {
+		.vmid = vmid,
+		.debug_enabled = 1,
+	};
+	size_t resp_payload_size;
+	int ret = 0;
+	void *resp;
+
+	ret = gh_rm_call(rm, GH_RM_RPC_MSG_ID_CALL_VM_SET_DEBUG,
+				&req_payload, sizeof(req_payload),
+				&resp, &resp_payload_size);
+
+	if (ret) {
+		pr_err("%s: VM_SET_DEBUG failed with err: %d\n",
+			__func__, ret);
+		return ret;
+	}
+
+	if (resp_payload_size) {
+		pr_err("%s: Invalid size received for VM_SET_DEBUG: %zu\n",
+			__func__, resp_payload_size);
+		kfree(resp);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(gh_rm_vm_set_debug);
