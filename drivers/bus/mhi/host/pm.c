@@ -883,6 +883,24 @@ static bool mhi_in_rddm(struct mhi_controller *mhi_cntrl)
 	return false;
 }
 
+static void mhi_flush_events(struct mhi_controller *mhi_cntrl)
+{
+	struct mhi_event *mhi_event;
+	int i;
+
+	mhi_event = mhi_cntrl->mhi_event;
+	for (i = 0; i < mhi_cntrl->total_ev_rings; i++, mhi_event++) {
+
+		if (mhi_event->offload_ev)
+			continue;
+
+		if (mhi_event->priority == MHI_ER_PRIORITY_HI_SLEEP)
+			flush_work(&mhi_event->work);
+		else
+			tasklet_unlock_wait(&mhi_event->task);
+	}
+}
+
 int mhi_pm_suspend(struct mhi_controller *mhi_cntrl)
 {
 	struct mhi_chan *itr, *tmp;
@@ -901,6 +919,9 @@ int mhi_pm_suspend(struct mhi_controller *mhi_cntrl)
 	    atomic_read(&mhi_cntrl->pending_pkts))
 		return -EBUSY;
 
+	/* Synchronise and wait for any mhi event to complete before suspend */
+	mhi_flush_events(mhi_cntrl);
+
 	/* Take MHI out of M2 state */
 	read_lock_bh(&mhi_cntrl->pm_lock);
 	mhi_cntrl->wake_get(mhi_cntrl, false);
@@ -911,6 +932,9 @@ int mhi_pm_suspend(struct mhi_controller *mhi_cntrl)
 				 mhi_cntrl->dev_state == MHI_STATE_M1 ||
 				 MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state),
 				 msecs_to_jiffies(mhi_cntrl->timeout_ms));
+
+	/* Synchronise and wait for any mhi event to complete before suspend */
+	mhi_flush_events(mhi_cntrl);
 
 	read_lock_bh(&mhi_cntrl->pm_lock);
 	mhi_cntrl->wake_put(mhi_cntrl, false);
