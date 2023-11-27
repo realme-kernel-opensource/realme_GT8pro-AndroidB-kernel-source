@@ -161,7 +161,6 @@ struct qcom_adsp {
 };
 
 static bool recovery_set_cb;
-bool timeout_disabled;
 
 static ssize_t txn_id_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -650,7 +649,7 @@ static int adsp_start(struct rproc *rproc)
 		panic("Panicking, auth and reset failed for remoteproc %s\n", rproc->name);
 	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_auth_reset", "exit");
 
-	if (!timeout_disabled) {
+	if (!qcom_pil_timeouts_disabled()) {
 		ret = qcom_q6v5_wait_for_start(&adsp->q6v5, msecs_to_jiffies(5000));
 		if (rproc->recovery_disabled && ret)
 			panic("Panicking, remoteproc %s failed to bootup.\n", adsp->rproc->name);
@@ -1359,8 +1358,6 @@ static int adsp_probe(struct platform_device *pdev)
 	adsp->sysmon = qcom_add_sysmon_subdev(rproc,
 					      desc->sysmon_name,
 					      desc->ssctl_id);
-	timeout_disabled = qcom_pil_timeouts_disabled();
-
 	if (IS_ERR(adsp->sysmon)) {
 		ret = PTR_ERR(adsp->sysmon);
 		goto detach_proxy_pds;
