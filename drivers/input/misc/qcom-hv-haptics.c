@@ -238,6 +238,28 @@
 #define CURRENT_SEL_VAL_125MA			0
 #define CURRENT_SEL_VAL_250MA			1
 
+/* Only for HAP530 */
+#define HAP_CFG_ICOMP_AVG_CTL1_REG		0xC0
+#define ICOMP_THRESH_MASK			GENMASK(6, 0)
+#define ICOMP_THRESH_STEP_NA			7812500
+
+#define HAP_CFG_ICOMP_AVG_CTL2_REG		0xC1
+
+#define HAP_CFG_RSENSE_MEAS_LSB_REG		0xC4
+#define LRA_IMPEDANCE_VISENSE_MOHMS		25
+#define HAP_CFG_RSENSE_MEAS_MSB_MASK		GENMASK(3, 0)
+
+#define HAP_CFG_VISENSE_PEAK_DET_CTL_REG	0xC7
+#define VISENSE_PEAK_DET_EN_BIT			BIT(7)
+#define VISENSE_PEAK_DET_MODE			BIT(6)
+#define VISENSE_INST_DET_EN_BIT			BIT(4)
+
+#define HAP_CFG_VSENSE_PEAK_LSB_REG		0xC8
+#define HAP_CFG_VSENSE_PEAK_MSB_MASK		GENMASK(5, 0)
+
+#define HAP_CFG_ISENSE_PEAK_LSB_REG		0xCA
+#define HAP_CFG_ISENSE_PEAK_MSB_MASK		GENMASK(4, 0)
+
 /* version register definitions for HAPTICS_PATTERN module */
 #define HAP_PTN_REVISION2_REG			0x01
 #define HAP_PTN_V1				0x1
@@ -701,6 +723,7 @@ struct haptics_chip {
 	bool				is_hv_haptics;
 	bool				hboost_enabled;
 	bool				visense_enabled;
+	ktime_t				pattern_start_time;
 };
 
 struct haptics_reg_info {
@@ -2891,9 +2914,85 @@ static int haptics_playback(struct input_dev *dev, int effect_id, int val)
 	struct haptics_chip *chip = input_get_drvdata(dev);
 
 	dev_dbg(chip->dev, "playback val = %d\n", val);
-	if (!!val)
-		return haptics_enable_play(chip, true);
+	if (!!val) {
+		if (chip->config.measure_lra_impedance && chip->visense_enabled)
+			chip->pattern_start_time = ktime_get_boottime();
 
+		return haptics_enable_play(chip, true);
+	}
+
+	return 0;
+}
+
+#define AVG_RSENSE_MEAS_PER_CYCLE		4
+static int haptics_measure_visense_lra_impedance(struct haptics_chip *chip, int pattern_run_time)
+{
+	u32 avg_rsense_meas, icomp_thresh_na, r_typical_ohm, vmax_mv;
+	u32 i_peak_ma, rsense_mohm, v_peak_mv;
+	u32 play_rsense_meas;
+	u8 val[2];
+	int rc;
+
+	rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_ICOMP_AVG_CTL1_REG, val, 1);
+	if (rc < 0)
+		return rc;
+	icomp_thresh_na = (val[0] & ICOMP_THRESH_MASK) * ICOMP_THRESH_STEP_NA;
+
+	rc = haptics_get_lra_nominal_impedance(chip, &r_typical_ohm);
+	if (rc < 0)
+		return rc;
+
+	rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_VMAX_REG, val, 1);
+	if (rc < 0)
+		return rc;
+	vmax_mv = val[0] * ((chip->is_hv_haptics) ? VMAX_HV_STEP_MV : VMAX_MV_STEP_MV);
+
+	rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_ICOMP_AVG_CTL2_REG, val, 1);
+	if (rc < 0)
+		return rc;
+	avg_rsense_meas = 1 << val[0];
+
+	play_rsense_meas = (pattern_run_time * AVG_RSENSE_MEAS_PER_CYCLE) / chip->config.t_lra_us;
+
+	/*
+	 * If vmax is higher than ICOMP_THRESH * R_typical and play length is
+	 * longer than #N of measurement time use rsense directly otherwise use
+	 * v_peak and i_peak to calculate rsense
+	 */
+	if ((u64)vmax_mv * 1000000 > (u64)icomp_thresh_na * r_typical_ohm &&
+	    play_rsense_meas >= avg_rsense_meas) {
+		/* LRA Resistance = RSENSE_MEAS * 0.025 Ohms */
+		rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_RSENSE_MEAS_LSB_REG, val, 2);
+		if (rc < 0)
+			return rc;
+		rsense_mohm = ((val[1] & HAP_CFG_RSENSE_MEAS_MSB_MASK) << 8) | val[0];
+
+		dev_dbg(chip->dev, "measured rsense: %#x mohm\n", rsense_mohm);
+
+		chip->config.lra_measured_mohms = rsense_mohm * LRA_IMPEDANCE_VISENSE_MOHMS;
+	} else {
+		/* Measured Voltage Peak = VSENSE_MEAS * 50mV/2^6 */
+		rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_VSENSE_PEAK_LSB_REG, val, 2);
+		if (rc < 0)
+			return rc;
+		v_peak_mv = ((val[1] & HAP_CFG_VSENSE_PEAK_MSB_MASK) << 8) | val[0];
+		v_peak_mv = (v_peak_mv * 50) / 64;
+
+		/* Measured Current Peak = ISENSE_MEAS * 1A/2^12 */
+		rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_ISENSE_PEAK_LSB_REG, val, 2);
+		if (rc < 0)
+			return rc;
+		i_peak_ma = ((val[1] & HAP_CFG_ISENSE_PEAK_MSB_MASK) << 8) | val[0];
+		i_peak_ma = (i_peak_ma * 1000) / 4096;
+
+		dev_dbg(chip->dev, "measured voltage peak: %#x mv, current peak = %#x ma\n",
+			v_peak_mv, i_peak_ma);
+
+		/* LRA Resistance = VPEAK / IPEAK */
+		chip->config.lra_measured_mohms = (v_peak_mv * 1000) / i_peak_ma;
+	}
+
+	dev_dbg(chip->dev, "measured LRA impedance: %u mohm\n", chip->config.lra_measured_mohms);
 	return 0;
 }
 
@@ -2901,12 +3000,14 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 {
 	struct haptics_chip *chip = input_get_drvdata(dev);
 	struct haptics_play_info *play = &chip->play;
+	ktime_t pattern_run_time;
 	int rc;
 
 	dev_dbg(chip->dev, "erase effect, really stop play\n");
 	cancel_work_sync(&chip->set_gain_work);
 	mutex_lock(&play->lock);
 	cancel_delayed_work_sync(&chip->stop_work);
+	pattern_run_time = ktime_us_delta(ktime_get_boottime(), chip->pattern_start_time);
 	if ((play->pattern_src == FIFO) &&
 			atomic_read(&play->fifo_status.is_busy)) {
 		if (atomic_read(&play->fifo_status.written_done) == 0) {
@@ -2934,6 +3035,12 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 	rc = haptics_enable_hpwr_vreg(chip, false);
 	if (rc < 0)
 		dev_err(chip->dev, "disable hpwr_vreg failed, rc=%d\n", rc);
+
+	if (chip->config.measure_lra_impedance && chip->visense_enabled) {
+		rc = haptics_measure_visense_lra_impedance(chip, pattern_run_time);
+		if (rc < 0)
+			dev_err(chip->dev, "visense lra impedance measurement failed, rc=%d\n", rc);
+	}
 
 	return rc;
 }
@@ -3484,7 +3591,7 @@ static int haptics_config_wa(struct haptics_chip *chip)
 static int haptics_init_visense_config(struct haptics_chip *chip)
 {
 	int rc;
-	u8 val;
+	u8 val, mask;
 
 	if (chip->hw_type < HAP530_HV)
 		return 0;
@@ -3500,6 +3607,16 @@ static int haptics_init_visense_config(struct haptics_chip *chip)
 			return rc;
 
 		rc = haptics_write(chip, chip->ptn_addr_base, HAP_PTN_ISENSE_ADC_CTL_REG, &val, 1);
+		if (rc < 0)
+			return rc;
+
+		if (chip->config.measure_lra_impedance) {
+			mask = VISENSE_PEAK_DET_EN_BIT | VISENSE_PEAK_DET_MODE |
+				VISENSE_INST_DET_EN_BIT;
+			val = VISENSE_PEAK_DET_EN_BIT | VISENSE_PEAK_DET_MODE;
+			rc = haptics_masked_write(chip, chip->cfg_addr_base,
+				HAP_CFG_VISENSE_PEAK_DET_CTL_REG, mask, val);
+		}
 	}
 
 	return rc;
