@@ -53,6 +53,38 @@
 #define ARM_LPAE_TCR_PS_48_BIT		0x5ULL
 #define ARM_LPAE_TCR_PS_52_BIT		0x6ULL
 
+/*
+ * CONTIG HINT SUPPORT TABLE
+ *
+ *---------------------------------------------------
+ *| Page Size | CONT PTE |  PMD  | CONT PMD |  PUD  |
+ *---------------------------------------------------
+ *|     4K    |   64K    |   2M  |    32M   |   1G  |
+ *|    16K    |    2M    |  32M  |     1G   |       |
+ *|    64K    |    2M    | 512M  |    16G   |       |
+ *---------------------------------------------------
+ */
+
+/* PTE Contiguous Bit */
+#define ARM_LPAE_PTE_CONT		(((arm_lpae_iopte)1) << 52)
+
+/*
+ * Contiguous page definitions.
+ */
+#define ARM_CONT_PTES(size)	\
+	((size) == SZ_4K ? 16 : \
+	 (size) == SZ_16K ? 128 : \
+	 (size) == SZ_64K ? 32 : 1)
+
+#define ARM_CONT_PTE_SIZE(size) (ARM_CONT_PTES(size) * size)
+
+#define ARM_CONT_PMDS(size)	\
+	((size) == SZ_2M ? 16 : \
+	 (size) == SZ_32M ? 32 : \
+	 (size) == SZ_512M ? 32 : 1)
+
+#define ARM_CONT_PMD_SIZE(size) (ARM_CONT_PMDS(size) * size)
+
 /* Struct accessors */
 #define io_pgtable_to_data(x)						\
 	container_of((x), struct arm_lpae_io_pgtable, iop)
@@ -207,6 +239,74 @@ typedef u64 arm_lpae_iopte;
 #define IOPTE_RESERVED_MASK (TOP_IGNORED_MASK | BOTTOM_IGNORED_MASK)
 #define BOTTOM_VAL_BITS GENMASK(9, 0)
 #define TOP_VAL_BITS GENMASK(12, 10)
+
+#ifdef CONFIG_IOMMU_IO_PGTABLE_CONTIG_HINT
+static unsigned long arm_get_cont_sizes(struct io_pgtable_cfg *cfg)
+{
+	unsigned long pg_size, pmd_size;
+	int pg_shift, bits_per_level;
+
+	pg_shift = __ffs(cfg->pgsize_bitmap);
+	bits_per_level = pg_shift - ilog2(sizeof(arm_lpae_iopte));
+	pg_size = (1 << pg_shift);
+	pmd_size = (pg_size << bits_per_level);
+
+	return (ARM_CONT_PTE_SIZE(pg_size) | ARM_CONT_PMD_SIZE(pmd_size));
+}
+
+static u32 arm_find_num_cont(struct arm_lpae_io_pgtable *data, int lvl)
+{
+	if (lvl == ARM_LPAE_MAX_LEVELS - 2)
+		return ARM_CONT_PMDS(ARM_LPAE_BLOCK_SIZE(lvl, data));
+	else if (lvl == ARM_LPAE_MAX_LEVELS - 1)
+		return ARM_CONT_PTES(ARM_LPAE_BLOCK_SIZE(lvl, data));
+	else
+		return 1;
+}
+
+static u32 arm_check_and_set_num_cont(struct arm_lpae_io_pgtable *data, size_t size, int lvl)
+{
+	int num_cont;
+
+	num_cont = arm_find_num_cont(data, lvl);
+	if (size == num_cont *  ARM_LPAE_BLOCK_SIZE(lvl, data))
+		return num_cont;
+	else
+		return 1;
+}
+
+static bool arm_pte_is_contiguous_range(struct arm_lpae_io_pgtable *data,
+					unsigned long size,
+					int lvl, u32 *arm_lpae_num_cont)
+{
+	unsigned long block_size;
+
+	*arm_lpae_num_cont = arm_find_num_cont(data, lvl);
+	block_size = ARM_LPAE_BLOCK_SIZE(lvl, data);
+
+	return (size == ((*arm_lpae_num_cont) * block_size));
+}
+#else
+static unsigned long arm_get_cont_sizes(struct io_pgtable_cfg *cfg)
+{
+	return 0;
+}
+static u32 arm_find_num_cont(struct arm_lpae_io_pgtable *data, int lvl)
+{
+	return 1;
+}
+static u32 arm_check_and_set_num_cont(struct arm_lpae_io_pgtable *data, size_t size, int lvl)
+{
+	return 1;
+}
+static bool arm_pte_is_contiguous_range(struct arm_lpae_io_pgtable *data,
+					     unsigned long size,
+					     unsigned long block_size,
+					     u32 *arm_lpae_num_cont)
+{
+	return false;
+}
+#endif
 
 static arm_lpae_iopte iopte_val(arm_lpae_iopte table_pte)
 {
@@ -480,6 +580,7 @@ static int __arm_lpae_map(struct arm_lpae_io_pgtable *data, unsigned long iova,
 	void *cookie = data->iop.cookie;
 	arm_lpae_iopte *pgtable = ptep;
 	int ret = 0, num_entries, max_entries, map_idx_start;
+	u32 arm_lpae_num_cont = 1;
 
 	/* Find our entry at the current level */
 	map_idx_start = ARM_LPAE_LVL_IDX(iova, lvl, data);
@@ -575,6 +676,25 @@ static int __arm_lpae_map(struct arm_lpae_io_pgtable *data, unsigned long iova,
 		/* We require an unmap first */
 		WARN_ON(!selftest_running);
 		return -EEXIST;
+	}
+
+	if (arm_pte_is_contiguous_range(data, size, lvl + 1, &arm_lpae_num_cont)) {
+		size_t ct_size = ARM_LPAE_BLOCK_SIZE(lvl+1, data);
+
+		/*set cont bit*/
+		prot |= ARM_LPAE_PTE_CONT;
+
+		/*
+		 * Since, size here would be of CONT_PTE or CONT_PMD for eg: SZ_64K/SZ_32M in
+		 * case of 4K PAGE_SIZE, but actual mappings would be in multiples of SZ_4K/SZ_2M.
+		 * so, call __arm_lpae_map with this size (ct_size) and update pgcount accordingly
+		 * by arm_lpae_num_cont * pgcount.
+		 */
+
+		ret = __arm_lpae_map(data, iova, paddr, ct_size, arm_lpae_num_cont * pgcount,
+				 prot, lvl+1, cptep, ptep, ms, gfp, flags, mapped);
+
+		return ret;
 	}
 
 	/* Rinse, repeat */
@@ -889,6 +1009,40 @@ static void arm_lpae_free_pgtable(struct io_pgtable *iop)
 	kfree(data);
 }
 
+#ifdef CONFIG_IOMMU_IO_PGTABLE_CONTIG_HINT
+static void arm_lpae_cont_unmap(struct arm_lpae_io_pgtable *data,
+				unsigned long iova, int lvl,
+				arm_lpae_iopte *ptep, size_t num_entries)
+{
+	struct io_pgtable_cfg *cfg = &data->iop.cfg;
+	u32 arm_lpae_num_cont = arm_find_num_cont(data, lvl);
+	int itr;
+
+	arm_lpae_iopte *cont_ptep = ptep - ARM_LPAE_LVL_IDX(iova, lvl, data);
+	unsigned long cont_iova = round_down(iova,
+				(ARM_LPAE_BLOCK_SIZE(lvl, data) * arm_lpae_num_cont));
+	arm_lpae_iopte *cont_ptep_start;
+
+	cont_ptep += ARM_LPAE_LVL_IDX(cont_iova, lvl, data);
+	cont_ptep_start = cont_ptep;
+	num_entries = round_up(num_entries, arm_lpae_num_cont);
+
+	for (itr = 0; itr < num_entries; itr++) {
+		*cont_ptep = (READ_ONCE(*cont_ptep) & ~ARM_LPAE_PTE_CONT);
+		cont_ptep++;
+	}
+
+	if (!cfg->coherent_walk)
+		__arm_lpae_sync_pte(ptep, num_entries, cfg);
+}
+#else
+static void arm_lpae_cont_unmap(struct arm_lpae_io_pgtable *data,
+				unsigned long iova, int lvl,
+				arm_lpae_iopte *ptep,  size_t num_entries)
+{
+}
+#endif
+
 static size_t arm_lpae_split_blk_unmap(struct arm_lpae_io_pgtable *data,
 				       struct iommu_iotlb_gather *gather,
 				       unsigned long iova, size_t size,
@@ -968,7 +1122,7 @@ static size_t __arm_lpae_unmap(struct arm_lpae_io_pgtable *data,
 	arm_lpae_iopte pte;
 	struct io_pgtable *iop = &data->iop;
 	int ptes_per_table = ARM_LPAE_PTES_PER_TABLE(data);
-	int i = 0, num_entries, max_entries, unmap_idx_start;
+	int i = 0, num_cont = 1, num_entries, max_entries, unmap_idx_start;
 
 	/* Something went horribly wrong and we ran out of page table */
 	if (WARN_ON(lvl == ARM_LPAE_MAX_LEVELS))
@@ -981,14 +1135,21 @@ static size_t __arm_lpae_unmap(struct arm_lpae_io_pgtable *data,
 		return 0;
 
 	/* If the size matches this level, we're in the right place */
-	if (size == ARM_LPAE_BLOCK_SIZE(lvl, data)) {
+	if (size == ARM_LPAE_BLOCK_SIZE(lvl, data) ||
+			(size == arm_find_num_cont(data, lvl) *
+				 ARM_LPAE_BLOCK_SIZE(lvl, data))) {
 		max_entries = ptes_per_table - unmap_idx_start;
-		num_entries = min_t(int, pgcount, max_entries);
+
+		num_cont = arm_check_and_set_num_cont(data, size, lvl);
+		num_entries = min_t(int, num_cont * pgcount, max_entries);
 
 		while (i < num_entries) {
 			pte = READ_ONCE(*ptep);
 			if (WARN_ON(!pte))
 				break;
+
+			if (pte & ARM_LPAE_PTE_CONT)
+				arm_lpae_cont_unmap(data, iova, lvl, ptep, pgcount);
 
 			__arm_lpae_set_pte(ptep, 0, 1, &iop->cfg);
 
@@ -1008,7 +1169,7 @@ static size_t __arm_lpae_unmap(struct arm_lpae_io_pgtable *data,
 			i++;
 		}
 
-		return i * size;
+		return i * (size / num_cont);
 	} else if ((lvl == ARM_LPAE_MAX_LEVELS - 2) && !iopte_leaf(pte, lvl,
 								   iop->fmt)) {
 		arm_lpae_iopte *table;
@@ -1019,7 +1180,12 @@ static size_t __arm_lpae_unmap(struct arm_lpae_io_pgtable *data,
 		entry = table + unmap_idx_start;
 
 		max_entries = ptes_per_table - unmap_idx_start;
-		num_entries = min_t(int, pgcount, max_entries);
+		num_cont = arm_check_and_set_num_cont(data, size, lvl + 1);
+		num_entries = min_t(int, num_cont * pgcount, max_entries);
+
+		if (READ_ONCE(*entry) & ARM_LPAE_PTE_CONT)
+			arm_lpae_cont_unmap(data, iova, lvl + 1, entry, num_entries);
+
 		__arm_lpae_set_pte(entry, 0, num_entries, &iop->cfg);
 
 		iopte_tblcnt_sub(ptep, num_entries);
@@ -1039,14 +1205,19 @@ static size_t __arm_lpae_unmap(struct arm_lpae_io_pgtable *data,
 				block_size);
 		}
 
-		return num_entries * size;
+		return num_entries * (size / num_cont);
 	} else if (iopte_leaf(pte, lvl, iop->fmt)) {
 		/*
 		 * Insert a table at the next level to map the old region,
 		 * minus the part we want to unmap
 		 */
-		return arm_lpae_split_blk_unmap(data, gather, iova, size, pte,
-						lvl + 1, ptep, pgcount, flags);
+		num_cont = arm_check_and_set_num_cont(data, size, lvl + 1);
+
+		if (pte & ARM_LPAE_PTE_CONT)
+			arm_lpae_cont_unmap(data, iova, lvl, ptep, arm_find_num_cont(data, lvl));
+
+		return arm_lpae_split_blk_unmap(data, gather, iova, (size / num_cont), pte,
+						lvl + 1, ptep, num_cont * pgcount, flags);
 	}
 
 	/* Keep on walkin' */
@@ -1163,6 +1334,7 @@ static void arm_lpae_restrict_pgsizes(struct io_pgtable_cfg *cfg)
 	}
 
 	cfg->pgsize_bitmap &= page_sizes;
+	cfg->pgsize_bitmap |= arm_get_cont_sizes(cfg);
 	cfg->ias = min(cfg->ias, max_addr_bits);
 	cfg->oas = min(cfg->oas, max_addr_bits);
 }
