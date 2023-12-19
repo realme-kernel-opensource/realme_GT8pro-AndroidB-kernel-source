@@ -171,6 +171,9 @@ module_param_array(key_modules, charp, &n_modump, 0644);
 #endif	/* CONFIG_MODULES */
 #endif
 
+static bool stack_dump;
+module_param(stack_dump, bool, 0644);
+
 #define FREQ_LOG_MAX	10
 
 static int register_stack_entry(struct md_region *ksp_entry, u64 sp, u64 size)
@@ -273,7 +276,7 @@ void dump_stack_minidump(u64 sp)
 	struct vm_struct *stack_vm_area;
 	unsigned int i, copy_pages;
 
-	if (IS_ENABLED(CONFIG_QCOM_DYN_MINIDUMP_STACK))
+	if (IS_ENABLED(CONFIG_QCOM_DYN_MINIDUMP_STACK) || !stack_dump)
 		return;
 
 	if (is_idle_task(current))
@@ -1102,6 +1105,7 @@ static void md_ipi_stop(void *unused, struct pt_regs *regs)
 	unsigned int cpu = smp_processor_id();
 
 	per_cpu(regs_before_stop, cpu) = *regs;
+	dump_stack_minidump(regs->sp);
 }
 #endif
 
@@ -1145,6 +1149,7 @@ dump_rq:
 	if (md_dma_buf_procs_addr)
 		md_dma_buf_procs(md_dma_buf_procs_addr, md_dma_buf_procs_size);
 #endif
+	dump_stack_minidump(0);
 	md_in_oops_handler = false;
 }
 EXPORT_SYMBOL_GPL(md_dump_process);
