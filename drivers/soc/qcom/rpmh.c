@@ -321,6 +321,7 @@ int rpmh_write_batch(const struct device *dev, enum rpmh_state state,
 	DEFINE_RPMH_MSG_ONSTACK(dev, state, &compl, rpm_msg);
 	struct rpmh_ctrlr *ctrlr = get_rpmh_ctrlr(dev);
 	int ret, ch;
+	unsigned long flags;
 
 	if (rpmh_standalone)
 		return 0;
@@ -334,16 +335,13 @@ int rpmh_write_batch(const struct device *dev, enum rpmh_state state,
 		if (ret)
 			return ret;
 	} else {
+		spin_lock_irqsave(&ctrlr->cache_lock, flags);
 		memset(&ctrlr->batch_cache[state], 0, sizeof(struct rpmh_request));
 		ret = __fill_rpmh_msg(&ctrlr->batch_cache[state], state, cmd, *n);
-		if (ret)
-			return ret;
-
-		spin_lock(&ctrlr->cache_lock);
 		ctrlr->dirty = true;
-		spin_unlock(&ctrlr->cache_lock);
+		spin_unlock_irqrestore(&ctrlr->cache_lock, flags);
 
-		return 0;
+		return ret;
 	}
 
 	ch = rpmh_rsc_get_channel(ctrlr_to_drv(ctrlr));
