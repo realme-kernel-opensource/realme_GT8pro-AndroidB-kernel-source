@@ -294,15 +294,10 @@ def _define_image_build(
         ],
     )
 
-    if "consolidate" in target:
-        system_dlkm_img_file = "system_dlkm.img"
-    else:
-        system_dlkm_img_file = "system_dlkm.ext4.img"
-
     native.filegroup(
         name = "{}_system_dlkm_image_file".format(target),
         srcs = ["{}_images".format(base_kernel)],
-        output_group = system_dlkm_img_file,
+        output_group = "system_dlkm.flatten.ext4.img",
     )
 
     native.filegroup(
