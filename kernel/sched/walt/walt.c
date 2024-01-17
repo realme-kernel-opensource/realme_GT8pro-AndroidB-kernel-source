@@ -3872,7 +3872,7 @@ bool find_heaviest_topapp(u64 window_start)
 
 	/* lazy enabling disabling until 100mS for colocation or heavy_nr change */
 	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
-	if (!grp || !grp->skip_min || !sched_heavy_nr) {
+	if (!grp || !sched_heavy_nr) {
 		if (have_heavy_list) {
 			raw_spin_lock_irqsave(&heavy_lock, flags);
 			for (i = 0; i < WALT_NR_CPUS; i++) {
@@ -4071,7 +4071,6 @@ static inline bool is_prime_worthy(struct walt_task_struct *wts)
 
 void rearrange_heavy(u64 window_start, bool force)
 {
-	struct walt_related_thread_group *grp;
 	struct walt_task_struct *prime_wts = NULL;
 	struct walt_task_struct *other_wts = NULL;
 	unsigned long flags;
@@ -4104,12 +4103,6 @@ void rearrange_heavy(u64 window_start, bool force)
 	if (sysctl_sched_heavy_nr <= 2)
 		return;
 
-	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
-	if (!grp)
-		return;
-	if (!grp->skip_min)
-		return;
-
 	if (delay_rearrange(window_start, AUTO_PIPELINE, force))
 		return;
 
@@ -4125,7 +4118,6 @@ void rearrange_heavy(u64 window_start, bool force)
 
 void rearrange_pipeline_preferred_cpus(u64 window_start)
 {
-	struct walt_related_thread_group *grp;
 	unsigned long flags;
 	struct walt_task_struct *wts;
 	bool found_pipeline = false;
@@ -4142,11 +4134,6 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 	if (num_sched_clusters < 2)
 		return;
 
-	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
-	if (!grp)
-		goto out;
-	if (!grp->skip_min)
-		goto out;
 	if (delay_rearrange(window_start, MANUAL_PIPELINE, false))
 		goto out;
 
