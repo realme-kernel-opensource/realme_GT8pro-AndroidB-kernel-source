@@ -27,6 +27,7 @@ def define_sun():
         "drivers/clk/qcom/gpucc-sun.ko",
         "drivers/clk/qcom/tcsrcc-sun.ko",
         "drivers/clk/qcom/videocc-sun.ko",
+        "drivers/cpufreq/qcom-cpufreq-thermal.ko",
         "drivers/cpuidle/governors/qcom_lpm.ko",
         "drivers/devfreq/governor_gpubw_mon.ko",
         "drivers/devfreq/governor_msm_adreno_tz.ko",

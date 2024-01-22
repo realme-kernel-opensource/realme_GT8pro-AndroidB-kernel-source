@@ -93,5 +93,6 @@ videocc-sun.ko
 clk-rpmh.ko
 crm-v2.ko
 qcom_wdt_core.ko
+qcom-cpufreq-thermal.ko
 gh_virt_wdt.ko
 bcl_pmic5.ko
