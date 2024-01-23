@@ -1829,7 +1829,7 @@ struct crm_desc cam_crm_desc_v2 = {
 
 struct crm_desc disp_crm_desc_v2 = {
 	.set_chn_behave = false,
-	.set_hw_chn_switch_ctrl = false,
+	.set_hw_chn_switch_ctrl = true,
 	.crm_capability = PERF_OL_VOTING_FLAG | BW_VOTING_FLAG | BW_PT_VOTING_FLAG,
 	.chn_regs = {
 		[CHN_BUSY]			 = 0xA0,
