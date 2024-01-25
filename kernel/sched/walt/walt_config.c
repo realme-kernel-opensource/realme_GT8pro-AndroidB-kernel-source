@@ -11,6 +11,7 @@ unsigned long __read_mostly soc_flags;
 unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 cpumask_t asym_cap_sibling_cpus;
 cpumask_t pipeline_sync_cpus;
+int oscillate_period_ns;
 
 void walt_config(void)
 {
@@ -91,6 +92,7 @@ void walt_config(void)
 		trailblazer_floor_freq[0] = 1000000;
 		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
+		oscillate_period_ns = 8000000;
 
 		/*G + P*/
 		cpumask_copy(&pipeline_sync_cpus, cpu_possible_mask);

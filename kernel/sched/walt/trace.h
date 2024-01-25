@@ -815,15 +815,17 @@ TRACE_EVENT(waltgov_next_freq,
 
 TRACE_EVENT(walt_active_load_balance,
 
-	TP_PROTO(struct task_struct *p, int prev_cpu, int new_cpu, struct walt_task_struct *wts),
+	TP_PROTO(struct task_struct *p, int prev_cpu, int new_cpu, struct walt_task_struct *wts,
+		int oscillate_cpu),
 
-	TP_ARGS(p, prev_cpu, new_cpu, wts),
+	TP_ARGS(p, prev_cpu, new_cpu, wts, oscillate_cpu),
 
 	TP_STRUCT__entry(
 		__field(pid_t, pid)
 		__field(bool, misfit)
 		__field(int, prev_cpu)
 		__field(int, new_cpu)
+		__field(int, oscillate_cpu)
 	),
 
 	TP_fast_assign(
@@ -831,11 +833,12 @@ TRACE_EVENT(walt_active_load_balance,
 		__entry->misfit		= wts->misfit;
 		__entry->prev_cpu	= prev_cpu;
 		__entry->new_cpu	= new_cpu;
+		__entry->oscillate_cpu	= oscillate_cpu;
 	),
 
-	TP_printk("pid=%d misfit=%d prev_cpu=%d new_cpu=%d\n",
+	TP_printk("pid=%d misfit=%d prev_cpu=%d new_cpu=%d oscillate_cpu=%d\n",
 			__entry->pid, __entry->misfit, __entry->prev_cpu,
-			__entry->new_cpu)
+			__entry->new_cpu, __entry->oscillate_cpu)
 );
 
 TRACE_EVENT(walt_find_busiest_queue,

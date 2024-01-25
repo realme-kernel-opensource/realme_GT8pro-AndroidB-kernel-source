@@ -215,6 +215,9 @@ static inline void update_busy_hyst_end_time(int cpu, int enq,
 	bool hyst_trigger, coloc_trigger;
 	bool dequeue = (enq < 0);
 
+	if (is_max_possible_cluster_cpu(cpu) && is_obet)
+		return;
+
 	if (!per_cpu(hyst_time, cpu) && !per_cpu(coloc_hyst_time, cpu) &&
 	    !per_cpu(util_hyst_time, cpu))
 		return;

@@ -84,6 +84,7 @@ enum freq_caps {
 #define	SOC_ENABLE_SW_CYCLE_COUNTER_BIT			BIT(6)
 #define SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT	BIT(7)
 #define SOC_ENABLE_FT_BOOST_TO_ALL			BIT(8)
+#define SOC_ENABLE_OSCILLATE_ON_THERMALS		BIT(9)
 
 #define WALT_FEAT_TRAILBLAZER_BIT	BIT_ULL(0)
 extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
@@ -1233,6 +1234,10 @@ void inc_rq_walt_stats(struct rq *rq, struct task_struct *p);
 void dec_rq_walt_stats(struct rq *rq, struct task_struct *p);
 
 extern bool is_obet;
+extern int oscillate_cpu;
+extern int oscillate_period_ns;
+extern enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt);
+extern bool should_oscillate(void);
 
 enum WALT_DEBUG_FEAT {
 	WALT_BUG_UPSTREAM,
