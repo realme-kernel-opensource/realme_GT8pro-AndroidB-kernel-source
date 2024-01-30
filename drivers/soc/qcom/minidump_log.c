@@ -159,6 +159,9 @@ size_t md_dma_buf_procs_size = SZ_256K;
 char *md_dma_buf_procs_addr;
 #endif
 
+#define MD_KTASK_STACK_PAGES	64
+static struct seq_buf *md_ktask_stack_buf;
+
 /* Modules information */
 #ifdef CONFIG_MODULES
 #define MD_MODULE_PAGES	  8
@@ -1109,6 +1112,35 @@ static void md_ipi_stop(void *unused, struct pt_regs *regs)
 }
 #endif
 
+static bool dump_trace(void *arg, unsigned long where)
+{
+	seq_buf_printf(md_ktask_stack_buf, "%pSb\n", (void *)where);
+	return true;
+}
+
+static void md_dump_ktask_stack(void)
+{
+	struct task_struct *g, *t;
+	unsigned int state;
+
+	if (!md_ktask_stack_buf)
+		return;
+
+	for_each_process_thread(g, t) {
+		state = READ_ONCE(t->__state);
+		if ((state & TASK_UNINTERRUPTIBLE) && !(state & TASK_WAKEKILL)
+					&& !(state & TASK_NOLOAD))
+			seq_buf_printf(md_ktask_stack_buf,
+					"Task blocked for %ld seconds!",
+					(jiffies - t->last_switch_time) / HZ);
+		seq_buf_printf(md_ktask_stack_buf, "%d [%s]\n",
+				task_pid_nr(t), t->comm);
+		arch_stack_walk(dump_trace, NULL, t, NULL);
+		seq_buf_printf(md_ktask_stack_buf, "\n");
+	}
+	seq_buf_printf(md_ktask_stack_buf, "---ktask stack end---\n");
+}
+
 void md_dump_process(void)
 {
 	if (md_in_oops_handler)
@@ -1126,6 +1158,7 @@ dump_rq:
 #endif
 	md_dump_next_event();
 	md_dump_runqueues();
+	md_dump_ktask_stack();
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_MEMORY_INFO
 	if (md_meminfo_seq_buf)
 		md_dump_meminfo(md_meminfo_seq_buf);
@@ -1263,6 +1296,8 @@ static void md_register_panic_data(void)
 #endif
 	md_register_panic_entries(MD_RUNQUEUE_PAGES, "KRUNQUEUE",
 				  &md_runq_seq_buf);
+	md_register_panic_entries(MD_KTASK_STACK_PAGES, "KTASK_STACK",
+				  &md_ktask_stack_buf);
 }
 
 static int register_vmap_mem(const char *name, void *virual_addr, size_t dump_len)
