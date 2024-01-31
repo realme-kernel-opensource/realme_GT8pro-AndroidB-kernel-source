@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#define pr_fmt(fmt) "tvm_heap: %s"  fmt, __func__
+#define pr_fmt(fmt) "tvm_heap: %s: "  fmt, __func__
 
 #include <linux/genalloc.h>
 #include <linux/dma-heap.h>
@@ -81,7 +81,7 @@ static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_da
 	pgmap->range.end = base + size - 1;
 	kva = memremap_pages(pgmap, 0);
 	if (IS_ERR(kva)) {
-		pr_err("memremap_pages failed\n");
+		pr_err("memremap_pages failed with %ld\n", PTR_ERR(kva));
 		ret = PTR_ERR(kva);
 		goto err_memremap;
 	}
