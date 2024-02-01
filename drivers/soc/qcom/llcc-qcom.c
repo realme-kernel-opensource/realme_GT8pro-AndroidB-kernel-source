@@ -58,7 +58,9 @@
 #define LLCC_TRP_STAL_ATTR1_CFGn(n)   (0x10 + SZ_4K * n)
 #define NOTIFCN_BASED_INVDTN_EN_SHIFT 12
 #define STALING_ENABLE_MASK           0x1001
-#define STALING_NUM_FRAMES_MASK       GENMASK(6, 4)
+#define FRAME_DISTANCE_SHIFT          4
+#define STALING_NUM_FRAMES_MASK       GENMASK(2 + FRAME_DISTANCE_SHIFT,\
+					FRAME_DISTANCE_SHIFT)
 
 #define LLCC_TRP_ATTR0_CFGn(n)        (0x21000 + SZ_8 * n)
 #define LLCC_TRP_ATTR1_CFGn(n)        (0x21004 + SZ_8 * n)
@@ -1217,7 +1219,7 @@ static int llcc_staling_conf_notify(u32 sid, struct llcc_staling_mode_params *p)
 	if (ret)
 		return ret;
 
-	staling_distance = p->notify_params.staling_distance;
+	staling_distance = p->notify_params.staling_distance << FRAME_DISTANCE_SHIFT;
 
 	return regmap_update_bits(drv_data->bcast_regmap, notif_staling_reg,
 				  STALING_NUM_FRAMES_MASK, staling_distance);
