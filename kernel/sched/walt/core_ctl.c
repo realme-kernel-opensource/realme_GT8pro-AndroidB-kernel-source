@@ -1295,8 +1295,10 @@ static bool core_ctl_check_masks_set(void)
 	return all_masks_set;
 }
 
+#define SBT_LIMIT 10
 /* is the system in a single-big-thread case? */
-static inline bool is_sbt(bool prev_is_sbt, int prev_is_sbt_windows)
+static inline bool core_ctl_is_sbt(bool prev_is_sbt,
+		int prev_is_sbt_windows, u32 prime_wakeup_ctr_sum)
 {
 	struct cluster_data *cluster = &cluster_state[num_sched_clusters - 1];
 	bool ret = false;
@@ -1308,6 +1310,9 @@ static inline bool is_sbt(bool prev_is_sbt, int prev_is_sbt_windows)
 		goto out;
 
 	if (cluster->nr_big != 1)
+		goto out;
+
+	if (prime_wakeup_ctr_sum > SBT_LIMIT)
 		goto out;
 
 	ret = true;
@@ -1328,11 +1333,12 @@ out:
  * note: depends on update_running_average
  * note: must be called every window rollover
  */
-void sbt_ctl_check(void)
+void sbt_ctl_check(u32 prime_wakeup_ctr_sum)
 {
 	static bool prev_is_sbt;
 	static int prev_is_sbt_windows;
-	bool now_is_sbt = is_sbt(prev_is_sbt, prev_is_sbt_windows);
+	bool now_is_sbt = core_ctl_is_sbt(prev_is_sbt, prev_is_sbt_windows,
+			prime_wakeup_ctr_sum);
 	cpumask_t local_cpus;
 
 	/* if there are cpus to adjust */
@@ -1369,7 +1375,8 @@ void sbt_ctl_check(void)
  * window based. Therefore core_ctl_check must only be called from
  * window rollover, or walt_irq_work for not migration.
  */
-void core_ctl_check(u64 window_start, u32 wakeup_ctr_sum)
+void core_ctl_check(u64 window_start, u32 wakeup_ctr_sum,
+		u32 prime_wakeup_ctr_sum)
 {
 	int cpu;
 	struct cpu_data *c;
@@ -1414,7 +1421,7 @@ void core_ctl_check(u64 window_start, u32 wakeup_ctr_sum)
 	core_ctl_call_notifier();
 
 	/* independent check from eval_need */
-	sbt_ctl_check();
+	sbt_ctl_check(prime_wakeup_ctr_sum);
 }
 
 /* must be called with state_lock held */
