@@ -892,7 +892,7 @@ static irqreturn_t crm_vote_complete_irq(int irq, void *p)
 
 		spin_lock(&drv->lock);
 		for (j = 0; j < MAX_VCD_TYPE; j++) {
-			if (!(crm->desc->crm_capability & BIT(i)))
+			if (!(crm->desc->crm_capability & BIT(j)))
 				continue;
 			vcd = &drv->vcd[j];
 
@@ -1361,7 +1361,7 @@ static int crm_probe_set_vcd_caches(struct crm_drv_top *crm, u32 crm_cfg, u32 cr
 
 		drv->drv_type = CRM_HW_DRV;
 		for (j = 0; j < MAX_VCD_TYPE; j++) {
-			if (!(crm->desc->crm_capability & BIT(i)))
+			if (!(crm->desc->crm_capability & BIT(j)))
 				continue;
 			vcd = &drv->vcd[j];
 
@@ -1393,7 +1393,7 @@ static int crm_probe_set_vcd_caches(struct crm_drv_top *crm, u32 crm_cfg, u32 cr
 
 		drv->drv_type = CRM_SW_DRV;
 		for (j = 0; j < MAX_VCD_TYPE; j++) {
-			if (!(crm->desc->crm_capability & BIT(i)))
+			if (!(crm->desc->crm_capability & BIT(j)))
 				continue;
 			vcd = &drv->vcd[j];
 
