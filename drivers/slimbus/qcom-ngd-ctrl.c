@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
 // Copyright (c) 2018, Linaro Limited
-// Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/irq.h>
 #include <linux/kernel.h>
@@ -23,6 +23,7 @@
 #include <linux/soc/qcom/pdr.h>
 #include <net/sock.h>
 #include "slimbus.h"
+#include <trace/events/rproc_qcom.h>
 
 /* NGD (Non-ported Generic Device) registers */
 #define	NGD_CFG			0x0
@@ -1820,6 +1821,8 @@ static int qcom_slim_ngd_ssr_pdr_notify(struct qcom_slim_ngd_ctrl *ctrl,
 	case QCOM_SSR_BEFORE_SHUTDOWN:
 	case SERVREG_SERVICE_STATE_DOWN:
 		SLIM_INFO(ctrl, "SLIM SSR Before Shutdown\n");
+		trace_rproc_qcom_event(dev_name(ctrl->dev),
+			"QCOM_SSR_BEFORE_SHUTDOWN", "slim_ngd_ssr_pdr-enter");
 		if (ctrl->state != QCOM_SLIM_NGD_CTRL_DOWN) {
 			/* Make sure the last dma xfer is finished */
 			mutex_lock(&ctrl->suspend_resume_lock);
@@ -1850,6 +1853,8 @@ static int qcom_slim_ngd_ssr_pdr_notify(struct qcom_slim_ngd_ctrl *ctrl,
 		break;
 	case QCOM_SSR_AFTER_POWERUP:
 	case SERVREG_SERVICE_STATE_UP:
+		trace_rproc_qcom_event(dev_name(ctrl->dev),
+			"QCOM_SSR_AFTER_POWERUP", "slim_ngd_ssr_pdr-enter");
 		if (ctrl->r_mem.is_r_mem) {
 			ctrl->r_mem.r_vbase = ctrl->r_mem.r_vsbase;
 			ctrl->r_mem.r_res->start = ctrl->r_mem.r_pbase;
@@ -1866,6 +1871,7 @@ static int qcom_slim_ngd_ssr_pdr_notify(struct qcom_slim_ngd_ctrl *ctrl,
 		break;
 	}
 
+	trace_rproc_qcom_event(dev_name(ctrl->dev), "slim_ngd_ssr_pdr", "exit");
 	return NOTIFY_OK;
 }
 
