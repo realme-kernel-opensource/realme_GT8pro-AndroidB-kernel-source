@@ -76,7 +76,6 @@ struct adsp_data {
 	int region_assign_count;
 	bool region_assign_shared;
 	int region_assign_vmid;
-	int region_multiple_vmid;
 	bool dma_phys_below_32b;
 	bool check_status;
 };
@@ -131,7 +130,6 @@ struct qcom_adsp {
 	int region_assign_count;
 	bool region_assign_shared;
 	int region_assign_vmid;
-	int region_multiple_vmid;
 	u64 region_assign_perms[MAX_ASSIGN_COUNT];
 
 	bool dma_phys_below_32b;
@@ -485,7 +483,7 @@ static void add_mpss_dsm_mem_ssr_dump(struct qcom_adsp *adsp)
 
 static int adsp_assign_memory_region(struct qcom_adsp *adsp)
 {
-	struct qcom_scm_vmperm perm[3];
+	struct qcom_scm_vmperm perm[2];
 	unsigned int perm_size = 1;
 	struct device_node *node;
 	struct resource r;
@@ -513,11 +511,6 @@ static int adsp_assign_memory_region(struct qcom_adsp *adsp)
 			perm[1].vmid = adsp->region_assign_vmid;
 			perm[1].perm = QCOM_SCM_PERM_RW;
 			perm_size = 2;
-			if (adsp->region_multiple_vmid) {
-				perm[2].vmid = adsp->region_multiple_vmid;
-				perm[2].perm = QCOM_SCM_PERM_RW;
-				perm_size = 3;
-			}
 		} else {
 			perm[0].vmid = adsp->region_assign_vmid;
 			perm[0].perm = QCOM_SCM_PERM_RW;
@@ -1844,7 +1837,6 @@ static const struct adsp_data sun_cdsp_resource = {
 	.region_assign_count = 1,
 	.region_assign_shared = true,
 	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
-	.region_multiple_vmid = QCOM_SCM_VMID_SOCCP,
 	.auto_boot = true,
 };
 
