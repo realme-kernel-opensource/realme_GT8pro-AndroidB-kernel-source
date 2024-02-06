@@ -615,6 +615,7 @@ static int adsp_start(struct rproc *rproc)
 		goto disable_px_supply;
 
 	if (adsp->dtb_pas_id) {
+		trace_rproc_qcom_event(dev_name(adsp->dev), "dtb_auth_reset", "enter");
 		ret = qcom_scm_pas_auth_and_reset(adsp->dtb_pas_id);
 		if (ret)
 			panic("Panicking, auth and reset failed for remoteproc %s dtb\n",
@@ -623,6 +624,7 @@ static int adsp_start(struct rproc *rproc)
 
 	ret = qcom_mdt_pas_init(adsp->dev, adsp->firmware, rproc->firmware, adsp->pas_id,
 				adsp->mem_phys, &adsp->pas_metadata, adsp->dma_phys_below_32b);
+	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_firmware_loading", "enter");
 	if (ret)
 		goto disable_px_supply;
 
@@ -634,9 +636,12 @@ static int adsp_start(struct rproc *rproc)
 
 	qcom_pil_info_store(adsp->info_name, adsp->mem_phys, adsp->mem_size);
 
+	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_auth_reset", "enter");
+
 	ret = qcom_scm_pas_auth_and_reset(adsp->pas_id);
 	if (ret)
 		panic("Panicking, auth and reset failed for remoteproc %s\n", rproc->name);
+	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_auth_reset", "exit");
 
 	if (!timeout_disabled) {
 		ret = qcom_q6v5_wait_for_start(&adsp->q6v5, msecs_to_jiffies(5000));
