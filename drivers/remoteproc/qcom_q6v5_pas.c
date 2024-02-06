@@ -34,6 +34,7 @@
 #include <trace/hooks/remoteproc.h>
 #include <linux/iopoll.h>
 #include <linux/refcount.h>
+#include <trace/events/rproc_qcom.h>
 
 #include "qcom_common.h"
 #include "qcom_pil_info.h"
@@ -236,11 +237,16 @@ static void adsp_minidump(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = rproc->priv;
 
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_minidump", "enter");
+
 	if (rproc->dump_conf == RPROC_COREDUMP_DISABLED)
-		return;
+		goto exit;
 
 	qcom_minidump(rproc, adsp->minidump_dev, adsp->minidump_id, adsp_segment_dump,
 			adsp->both_dumps);
+
+exit:
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_minidump", "exit");
 }
 
 static void disable_regulators(struct qcom_adsp *adsp)
@@ -390,6 +396,7 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 	if (adsp->dma_phys_below_32b)
 		dev = adsp->dev;
 
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_load", "enter");
 	rproc_coredump_cleanup(adsp->rproc);
 
 	/* Store firmware handle to be used in adsp_start() */
@@ -426,6 +433,8 @@ release_dtb_metadata:
 
 release_dtb_firmware:
 	release_firmware(adsp->dtb_firmware);
+
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_load", "exit");
 
 	return ret;
 }
@@ -563,6 +572,7 @@ static int adsp_start(struct rproc *rproc)
 
 	if (adsp->dma_phys_below_32b)
 		dev = adsp->dev;
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_start", "enter");
 
 	ret = qcom_q6v5_prepare(&adsp->q6v5);
 	if (ret)
@@ -671,6 +681,7 @@ disable_irqs:
 	/* Remove pointer to the loaded firmware, only valid in adsp_load() & adsp_start() */
 	adsp->firmware = NULL;
 
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_start", "exit");
 	return ret;
 }
 
@@ -887,6 +898,7 @@ static int adsp_stop(struct rproc *rproc)
 	int handover;
 	int ret;
 
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_stop", "enter");
 	if (adsp->check_status) {
 		dev_info(adsp->dev, "wakeup: waking subsystem from shutdown path\n");
 		ret = rproc_set_state(rproc, true);
@@ -927,6 +939,7 @@ static int adsp_stop(struct rproc *rproc)
 		if (ret)
 			dev_err(adsp->dev, "sleep: state did not changed during shutdown\n");
 	}
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_stop", "exit");
 
 	return ret;
 }
