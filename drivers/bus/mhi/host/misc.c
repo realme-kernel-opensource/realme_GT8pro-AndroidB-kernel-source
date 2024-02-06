@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -1354,9 +1354,17 @@ int mhi_process_misc_tsync_ev_ring(struct mhi_controller *mhi_cntrl,
 	u32 sequence;
 	u64 remote_time;
 	int ret = 0;
+	dma_addr_t ptr;
 
 	spin_lock_bh(&mhi_event->lock);
-	dev_rp = mhi_misc_to_virtual(ev_ring, er_ctxt->rp);
+	ptr = le64_to_cpu(er_ctxt->rp);
+	if (!is_valid_ring_ptr(ev_ring, ptr)) {
+		MHI_ERR(dev, "tsync event ring pointer is invalid rp: %llx\n", ptr);
+		spin_unlock_bh(&mhi_event->lock);
+		goto exit_tsync_process;
+	}
+
+	dev_rp = mhi_misc_to_virtual(ev_ring, ptr);
 	if (ev_ring->rp == dev_rp) {
 		spin_unlock_bh(&mhi_event->lock);
 		goto exit_tsync_process;
@@ -1456,12 +1464,20 @@ int mhi_process_misc_bw_ev_ring(struct mhi_controller *mhi_cntrl,
 	struct mhi_private *mhi_priv = dev_get_drvdata(dev);
 	enum mhi_bw_scale_req_status result = MHI_BW_SCALE_NACK;
 	int ret = -EINVAL;
+	dma_addr_t ptr;
 
 	if (!MHI_IN_MISSION_MODE(mhi_cntrl->ee))
 		goto exit_bw_scale_process;
 
 	spin_lock_bh(&mhi_event->lock);
-	dev_rp = mhi_misc_to_virtual(ev_ring, er_ctxt->rp);
+	ptr = le64_to_cpu(er_ctxt->rp);
+	if (!is_valid_ring_ptr(ev_ring, ptr)) {
+		MHI_ERR(dev, "bw event ring pointer is invalid rp: %llx\n", ptr);
+		spin_unlock_bh(&mhi_event->lock);
+		goto exit_bw_scale_process;
+	}
+
+	dev_rp = mhi_misc_to_virtual(ev_ring, ptr);
 
 	/**
 	 * Check the ev ring local pointer is same as ctxt pointer
