@@ -28,6 +28,24 @@
 #include "../../../mm/slab.h"
 #include "../mm/internal.h"
 
+/* Meminfo */
+static struct seq_buf *md_meminfo_seq_buf;
+
+/* Slabinfo */
+static struct seq_buf *md_slabinfo_seq_buf;
+
+static size_t md_pageowner_dump_size = SZ_2M;
+static char *md_pageowner_dump_addr;
+
+static size_t md_slabowner_dump_size = SZ_2M;
+static char *md_slabowner_dump_addr;
+
+static size_t md_dma_buf_info_size = SZ_256K;
+static char *md_dma_buf_info_addr;
+
+static size_t md_dma_buf_procs_size = SZ_256K;
+static char *md_dma_buf_procs_addr;
+
 static unsigned long *md_debug_totalcma_pages;
 static struct list_head *md_debug_slab_caches;
 static struct mutex *md_debug_slab_mutex;
@@ -58,7 +76,7 @@ static void show_val_kb(struct seq_buf *m, const char *s, unsigned long num)
 	seq_buf_printf(m, "%s : %ld KB\n", s, num << (PAGE_SHIFT - 10));
 }
 
-void md_dump_meminfo(struct seq_buf *m)
+static void md_dump_meminfo(struct seq_buf *m)
 {
 	struct sysinfo i;
 	long cached;
@@ -194,7 +212,7 @@ static void slabinfo_stats(struct seq_buf *m, struct kmem_cache *cachep)
 #endif
 }
 
-void md_dump_slabinfo(struct seq_buf *m)
+static void md_dump_slabinfo(struct seq_buf *m)
 {
 	struct kmem_cache *s;
 	struct slabinfo sinfo;
@@ -241,7 +259,9 @@ void md_dump_slabinfo(struct seq_buf *m)
 	}
 	mutex_unlock(md_debug_slab_mutex);
 }
-#endif
+#else
+static inline void md_dump_slabinfo(void) {}
+#endif /* CONFIG_SLUB_DEBUG */
 
 bool md_register_memory_dump(int size, char *name)
 {
@@ -495,7 +515,7 @@ err:
 	return ret;
 }
 
-void md_dump_pageowner(char *addr, size_t dump_size)
+static void md_dump_pageowner(char *addr, size_t dump_size)
 {
 	unsigned long pfn;
 	struct page *page;
@@ -759,7 +779,7 @@ static const struct file_operations proc_page_owner_call_site_ops = {
 	.read	= page_owner_call_site_read,
 };
 
-void md_debugfs_pageowner(struct dentry *minidump_dir)
+static void md_debugfs_pageowner(struct dentry *minidump_dir)
 {
 	debugfs_create_file("page_owner_dump_size_mb", 0400, minidump_dir, NULL,
 			&proc_page_owner_dump_size_ops);
@@ -770,7 +790,14 @@ void md_debugfs_pageowner(struct dentry *minidump_dir)
 	debugfs_create_file("page_owner_call_sites", 0400, minidump_dir, NULL,
 			&proc_page_owner_call_site_ops);
 }
-#endif
+#else
+static inline bool is_page_owner_enabled(void)
+{
+	return false;
+}
+static inline void md_debugfs_pageowner(struct dentry *minidump_dir) {}
+static inline void md_dump_pageowner(char *addr, size_t dump_size);
+#endif /* CONFIG_PAGE_OWNER */
 
 #ifdef CONFIG_SLUB_DEBUG
 #define STACK_HASH_SEED 0x9747b28c
@@ -778,7 +805,7 @@ void md_debugfs_pageowner(struct dentry *minidump_dir)
 static unsigned long slab_owner_filter;
 static unsigned long slab_owner_handles_size = SZ_16K;
 
-bool is_slub_debug_enabled(void)
+static bool is_slub_debug_enabled(void)
 {
 	if (md_debug_slub_debug_enabled &&
 		atomic_read(&md_debug_slub_debug_enabled->enabled))
@@ -842,7 +869,7 @@ err:
 	return ret;
 }
 
-void md_dump_slabowner(char *m, size_t dump_size)
+static void md_dump_slabowner(char *m, size_t dump_size)
 {
 	struct kmem_cache *s;
 	int node;
@@ -1011,7 +1038,7 @@ static const struct file_operations proc_slab_owner_handle_ops = {
 	.read	= slab_owner_handle_read,
 };
 
-void md_debugfs_slabowner(struct dentry *minidump_dir)
+static void md_debugfs_slabowner(struct dentry *minidump_dir)
 {
 	int i;
 
@@ -1026,6 +1053,13 @@ void md_debugfs_slabowner(struct dentry *minidump_dir)
 			set_bit(i, &slab_owner_filter);
 	}
 }
+#else
+static inline bool is_slub_debug_enabled(void)
+{
+	return false;
+}
+static inline void md_dump_slabowner(char *m, size_t dump_size) {}
+static inline void md_debugfs_slabowner(struct dentry *minidump_dir) {}
 #endif	/* CONFIG_SLUB_DEBUG */
 
 static int dump_bufinfo(const struct dma_buf *buf_obj, void *private)
@@ -1110,7 +1144,7 @@ err:
 	return -ENOSPC;
 }
 
-void md_dma_buf_info(char *m, size_t dump_size)
+static void md_dma_buf_info(char *m, size_t dump_size)
 {
 	int ret;
 	struct dma_buf_priv dma_buf_priv;
@@ -1169,7 +1203,7 @@ static const struct file_operations proc_dma_buf_info_size_ops = {
 	.read	= dma_buf_info_size_read,
 };
 
-void md_debugfs_dmabufinfo(struct dentry *minidump_dir)
+static void md_debugfs_dmabufinfo(struct dentry *minidump_dir)
 {
 	debugfs_create_file("dma_buf_info_size_mb", 0400, minidump_dir, NULL,
 			    &proc_dma_buf_info_size_ops);
@@ -1226,7 +1260,7 @@ static int get_dma_info(const void *data, struct file *file, unsigned int n)
 	return 0;
 }
 
-void md_dma_buf_procs(char *m, size_t dump_size)
+static void md_dma_buf_procs(char *m, size_t dump_size)
 {
 	struct task_struct *task, *thread;
 	struct files_struct *files;
@@ -1307,10 +1341,31 @@ static const struct file_operations proc_dma_buf_procs_size_ops = {
 	.read	= dma_buf_procs_size_read,
 };
 
-void md_debugfs_dmabufprocs(struct dentry *minidump_dir)
+static void md_debugfs_dmabufprocs(struct dentry *minidump_dir)
 {
 	debugfs_create_file("dma_buf_procs_size_mb", 0400, minidump_dir, NULL,
 			&proc_dma_buf_procs_size_ops);
+}
+
+void md_dump_memory(void)
+{
+	if (md_meminfo_seq_buf)
+		md_dump_meminfo(md_meminfo_seq_buf);
+
+	if (md_slabinfo_seq_buf)
+		md_dump_slabinfo(md_slabinfo_seq_buf);
+
+	if (md_pageowner_dump_addr)
+		md_dump_pageowner(md_pageowner_dump_addr, md_pageowner_dump_size);
+
+	if (md_slabowner_dump_addr)
+		md_dump_slabowner(md_slabowner_dump_addr, md_slabowner_dump_size);
+
+	if (md_dma_buf_info_addr)
+		md_dma_buf_info(md_dma_buf_info_addr, md_dma_buf_info_size);
+	if (md_dma_buf_procs_addr)
+		md_dma_buf_procs(md_dma_buf_procs_addr, md_dma_buf_procs_size);
+
 }
 
 #define MD_DEBUG_LOOKUP(_var, type) \
@@ -1325,6 +1380,7 @@ void md_debugfs_dmabufprocs(struct dentry *minidump_dir)
 int md_minidump_memory_init(void)
 {
 	int error = 0;
+	struct dentry *minidump_dir = NULL;
 
 	MD_DEBUG_LOOKUP(totalcma_pages, unsigned long);
 	MD_DEBUG_LOOKUP(slab_caches, struct list_head);
@@ -1333,6 +1389,34 @@ int md_minidump_memory_init(void)
 	MD_DEBUG_LOOKUP(slub_debug_enabled, struct static_key);
 	MD_DEBUG_LOOKUP(min_low_pfn, unsigned long);
 	MD_DEBUG_LOOKUP(max_pfn, unsigned long);
+
+	/* error set by MD_DEBUG_LOOKUP */
+	if (error)
+		return error;
+
+	minidump_dir = debugfs_create_dir("minidump", NULL);
+
+	md_register_panic_entries(MD_MEMINFO_PAGES, "MEMINFO",
+				  &md_meminfo_seq_buf);
+#ifdef CONFIG_SLUB_DEBUG
+	md_register_panic_entries(MD_SLABINFO_PAGES, "SLABINFO",
+				  &md_slabinfo_seq_buf);
+#endif
+
+	if (is_page_owner_enabled()) {
+		md_register_memory_dump(md_pageowner_dump_size, "PAGEOWNER");
+		md_debugfs_pageowner(minidump_dir);
+	}
+
+	if (is_slub_debug_enabled()) {
+		md_register_memory_dump(md_slabowner_dump_size, "SLABOWNER");
+		md_debugfs_slabowner(minidump_dir);
+	}
+
+	md_register_memory_dump(md_dma_buf_info_size, "DMA_INFO");
+	md_debugfs_dmabufinfo(minidump_dir);
+	md_register_memory_dump(md_dma_buf_procs_size, "DMA_PROC");
+	md_debugfs_dmabufprocs(minidump_dir);
 
 	return error;
 }

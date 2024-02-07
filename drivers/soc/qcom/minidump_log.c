@@ -133,32 +133,6 @@ static struct seq_buf *md_cntxt_seq_buf;
 static DEFINE_PER_CPU(struct pt_regs, regs_before_stop);
 #endif
 
-/* Meminfo */
-#ifdef CONFIG_QCOM_MINIDUMP_PANIC_MEMORY_INFO
-static struct seq_buf *md_meminfo_seq_buf;
-
-/* Slabinfo */
-#ifdef CONFIG_SLUB_DEBUG
-static struct seq_buf *md_slabinfo_seq_buf;
-#endif
-
-#ifdef CONFIG_PAGE_OWNER
-size_t md_pageowner_dump_size = SZ_2M;
-char *md_pageowner_dump_addr;
-#endif
-
-#ifdef CONFIG_SLUB_DEBUG
-size_t md_slabowner_dump_size = SZ_2M;
-char *md_slabowner_dump_addr;
-#endif
-
-size_t md_dma_buf_info_size = SZ_256K;
-char *md_dma_buf_info_addr;
-
-size_t md_dma_buf_procs_size = SZ_256K;
-char *md_dma_buf_procs_addr;
-#endif
-
 #define MD_KTASK_STACK_PAGES	64
 static struct seq_buf *md_ktask_stack_buf;
 
@@ -1152,29 +1126,7 @@ dump_rq:
 	md_dump_next_event();
 	md_dump_runqueues();
 	md_dump_ktask_stack();
-#ifdef CONFIG_QCOM_MINIDUMP_PANIC_MEMORY_INFO
-	if (md_meminfo_seq_buf)
-		md_dump_meminfo(md_meminfo_seq_buf);
-
-#ifdef CONFIG_SLUB_DEBUG
-	if (md_slabinfo_seq_buf)
-		md_dump_slabinfo(md_slabinfo_seq_buf);
-#endif
-
-#ifdef CONFIG_PAGE_OWNER
-	if (md_pageowner_dump_addr)
-		md_dump_pageowner(md_pageowner_dump_addr, md_pageowner_dump_size);
-#endif
-
-#ifdef CONFIG_SLUB_DEBUG
-	if (md_slabowner_dump_addr)
-		md_dump_slabowner(md_slabowner_dump_addr, md_slabowner_dump_size);
-#endif
-	if (md_dma_buf_info_addr)
-		md_dma_buf_info(md_dma_buf_info_addr, md_dma_buf_info_size);
-	if (md_dma_buf_procs_addr)
-		md_dma_buf_procs(md_dma_buf_procs_addr, md_dma_buf_procs_size);
-#endif
+	md_dump_memory();
 	dump_stack_minidump(0);
 	md_in_oops_handler = false;
 }
@@ -1208,7 +1160,7 @@ static int md_register_minidump_entry(char *name, u64 virt_addr,
 	return ret;
 }
 
-static int md_register_panic_entries(int num_pages, char *name,
+int md_register_panic_entries(int num_pages, char *name,
 				      struct seq_buf **global_buf)
 {
 	char *buf;
@@ -1247,8 +1199,6 @@ err_seq_buf:
 
 static void md_register_panic_data(void)
 {
-#ifdef CONFIG_QCOM_MINIDUMP_PANIC_MEMORY_INFO
-	struct dentry *minidump_dir = NULL;
 	int ret;
 
 	ret = md_minidump_memory_init();
@@ -1257,31 +1207,6 @@ static void md_register_panic_data(void)
 		return;
 	}
 
-	md_register_panic_entries(MD_MEMINFO_PAGES, "MEMINFO",
-				  &md_meminfo_seq_buf);
-#ifdef CONFIG_SLUB_DEBUG
-	md_register_panic_entries(MD_SLABINFO_PAGES, "SLABINFO",
-				  &md_slabinfo_seq_buf);
-#endif
-	if (!minidump_dir)
-		minidump_dir = debugfs_create_dir("minidump", NULL);
-#ifdef CONFIG_PAGE_OWNER
-	if (is_page_owner_enabled()) {
-		md_register_memory_dump(md_pageowner_dump_size, "PAGEOWNER");
-		md_debugfs_pageowner(minidump_dir);
-	}
-#endif
-#ifdef CONFIG_SLUB_DEBUG
-	if (is_slub_debug_enabled()) {
-		md_register_memory_dump(md_slabowner_dump_size, "SLABOWNER");
-		md_debugfs_slabowner(minidump_dir);
-	}
-#endif
-	md_register_memory_dump(md_dma_buf_info_size, "DMA_INFO");
-	md_debugfs_dmabufinfo(minidump_dir);
-	md_register_memory_dump(md_dma_buf_procs_size, "DMA_PROC");
-	md_debugfs_dmabufprocs(minidump_dir);
-#endif
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_CPU_CONTEXT
 	md_register_panic_entries(MD_CPU_CNTXT_PAGES, "KCNTXT",
 				  &md_cntxt_seq_buf);
