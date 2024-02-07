@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/align.h>
@@ -55,7 +55,7 @@ struct dma_buf_priv {
 
 static void show_val_kb(struct seq_buf *m, const char *s, unsigned long num)
 {
-	seq_buf_printf(m, "%s : %lld KB\n", s, num << (PAGE_SHIFT - 10));
+	seq_buf_printf(m, "%s : %ld KB\n", s, num << (PAGE_SHIFT - 10));
 }
 
 void md_dump_meminfo(struct seq_buf *m)
@@ -596,7 +596,7 @@ static ssize_t page_owner_dump_size_read(struct file *file, char __user *ubuf,
 {
 	char buf[100];
 
-	snprintf(buf, sizeof(buf), "%llu MB\n",
+	snprintf(buf, sizeof(buf), "%zu MB\n",
 			md_pageowner_dump_size / SZ_1M);
 	return simple_read_from_buffer(ubuf, count, offset, buf, strlen(buf));
 }
@@ -817,7 +817,7 @@ static int dump_tracking(const struct kmem_cache *s,
 				slab_owner_handles_size,
 				&nr_slab_owner_handles)) {
 
-			ret = scnprintf(buf, size, "%p %p %u\n",
+			ret = scnprintf(buf, size, "%p %u %u\n",
 				object, t->handle, nr_entries);
 			if (ret == size - 1)
 				goto err;
@@ -829,7 +829,7 @@ static int dump_tracking(const struct kmem_cache *s,
 					goto err;
 			}
 		} else {
-			ret = scnprintf(buf, size, "%p %p %u\n",
+			ret = scnprintf(buf, size, "%p %u %u\n",
 					object, t->handle, 0);
 		}
 	}
@@ -920,7 +920,7 @@ static ssize_t slab_owner_dump_size_read(struct file *file, char __user *ubuf,
 {
 	char buf[100];
 
-	snprintf(buf, sizeof(buf), "%llu MB\n", md_slabowner_dump_size/SZ_1M);
+	snprintf(buf, sizeof(buf), "%zu MB\n", md_slabowner_dump_size/SZ_1M);
 	return simple_read_from_buffer(ubuf, count, offset, buf, strlen(buf));
 }
 
@@ -1159,7 +1159,7 @@ static ssize_t dma_buf_info_size_read(struct file *file, char __user *ubuf,
 {
 	char buf[100];
 
-	snprintf(buf, sizeof(buf), "%llu MB\n", md_dma_buf_info_size/SZ_1M);
+	snprintf(buf, sizeof(buf), "%zu MB\n", md_dma_buf_info_size/SZ_1M);
 	return simple_read_from_buffer(ubuf, count, offset, buf, strlen(buf));
 }
 
@@ -1297,7 +1297,7 @@ static ssize_t dma_buf_procs_size_read(struct file *file, char __user *ubuf,
 {
 	char buf[100];
 
-	snprintf(buf, sizeof(buf), "%llu MB\n", md_dma_buf_procs_size/SZ_1M);
+	snprintf(buf, sizeof(buf), "%zu MB\n", md_dma_buf_procs_size/SZ_1M);
 	return simple_read_from_buffer(ubuf, count, offset, buf, strlen(buf));
 }
 
