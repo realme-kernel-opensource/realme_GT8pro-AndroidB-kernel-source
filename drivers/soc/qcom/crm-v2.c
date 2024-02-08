@@ -1273,7 +1273,7 @@ static int crm_probe_get_irqs(struct crm_drv_top *crm)
 			return irq;
 
 		ret = devm_request_irq(crm->dev, irq, crm_vote_complete_irq,
-					   IRQF_TRIGGER_RISING, crm->name, crm);
+					   IRQF_TRIGGER_RISING, drvs[i].name, crm);
 		if (ret)
 			return ret;
 
