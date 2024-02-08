@@ -770,6 +770,15 @@ config QCOM_MINIDUMP_PANIC_MEMORY_INFO
 	  This enables memory info collection in minidump table,
 	  on panic.
 
+config QCOM_MINIDUMP_PANIC_CPUFREQ_INFO
+	bool "QCOM Minidump Panic dumps Cpufreq Info"
+	depends on QCOM_MINIDUMP_PANIC_DUMP
+	help
+	  This enables cpufreq info collection in minidump table,
+	  on panic. This includes a log of cpu frequency vs time
+	  for each cluster.
+	  Say N if unsure or cpufreq vendor hooks undefined.
+
 config QCOM_MINIDUMP_PSTORE
 	bool "QCOM Minidump Pstore dumps Support"
 	depends on ARM64 && QCOM_MINIDUMP
