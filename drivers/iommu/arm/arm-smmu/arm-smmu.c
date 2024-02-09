@@ -14,7 +14,7 @@
  *	- Context fault reporting
  *	- Extended Stream ID (16 bit)
  *
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "arm-smmu: " fmt
@@ -3727,11 +3727,7 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 	 * can serve as an ideal proxy for that decision. So, conditionally
 	 * enable pm_runtime.
 	 */
-	/*
-	 * QCOM's nonupstream gdsc driver doesn't support pm_domains.
-	 * So check for presence of gdsc instead.
-	 */
-	if (smmu->pwr->num_gdscs) {
+	if (smmu->pwr->num_gdscs || dev->pm_domain) {
 		pm_runtime_set_active(dev);
 		pm_runtime_enable(dev);
 	}

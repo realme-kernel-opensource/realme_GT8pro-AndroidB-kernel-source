@@ -6,7 +6,7 @@
  *
  * Author: Will Deacon <will.deacon@arm.com>
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _ARM_SMMU_H
@@ -312,6 +312,8 @@ enum arm_smmu_implementation {
  * Describes resources required for on/off power operation.
  * Separate reference count is provided for atomic/nonatomic
  * operations.
+ * gdscs - on kernel 6.6, power domains are used instead. This
+ * field can be removed once no legacy targets using it remain.
  */
 struct arm_smmu_power_resources {
 	struct device			*dev;
