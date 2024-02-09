@@ -44,6 +44,7 @@
 
 extern bool walt_disabled;
 extern bool waltgov_disabled;
+extern bool trailblazer_state;
 
 enum task_event {
 	PUT_PREV_TASK	= 0,
@@ -84,6 +85,7 @@ enum soc_tunables {
 	SOC_ENABLE_SW_CYCLE_COUNTER,
 	SOC_AVAILABLE,
 };
+extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 
 /*
  * enumeration to set the flags variable
@@ -109,6 +111,7 @@ struct walt_cpu_load {
 	bool		rtgb_active;
 	u64		ws;
 	bool		ed_active;
+	bool		trailblazer_state;
 };
 
 #define DECLARE_BITMAP_ARRAY(name, nr, bits) \
@@ -219,6 +222,7 @@ extern cpumask_t __read_mostly **cpu_array;
 extern int cpu_l2_sibling[WALT_NR_CPUS];
 extern void sched_update_nr_prod(int cpu, int enq);
 extern unsigned int walt_big_tasks(int cpu);
+extern int walt_trailblazer_tasks(int cpu);
 extern void walt_rotation_checkpoint(int nr_big);
 extern void fmax_uncap_checkpoint(int nr_big, u64 window_start, u32 wakeup_ctr_sum);
 extern void walt_fill_ta_data(struct core_ctl_notif_data *data);
@@ -423,6 +427,7 @@ extern cpumask_t cpus_for_pipeline;
 #define CPUFREQ_REASON_SMART_FMAX_CAP	0x1000
 #define CPUFREQ_REASON_HIGH_PERF_CAP	0x2000
 #define CPUFREQ_REASON_PARTIAL_HALT_CAP	0x4000
+#define CPUFREQ_REASON_TRAILBLAZER	0x8000
 
 enum sched_boost_policy {
 	SCHED_BOOST_NONE,

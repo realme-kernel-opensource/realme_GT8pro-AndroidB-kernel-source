@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #undef TRACE_SYSTEM
@@ -642,10 +642,9 @@ TRACE_EVENT(core_ctl_sbt,
  * Tracepoint for sched_get_nr_running_avg
  */
 TRACE_EVENT(sched_get_nr_running_avg,
+	TP_PROTO(int cpu, int nr, int nr_misfit, int nr_max, int nr_scaled, int nr_trailblazer),
 
-	TP_PROTO(int cpu, int nr, int nr_misfit, int nr_max, int nr_scaled),
-
-	TP_ARGS(cpu, nr, nr_misfit, nr_max, nr_scaled),
+	TP_ARGS(cpu, nr, nr_misfit, nr_max, nr_scaled, nr_trailblazer),
 
 	TP_STRUCT__entry(
 		__field(int, cpu)
@@ -653,6 +652,7 @@ TRACE_EVENT(sched_get_nr_running_avg,
 		__field(int, nr_misfit)
 		__field(int, nr_max)
 		__field(int, nr_scaled)
+		__field(int, nr_trailblazer)
 	),
 
 	TP_fast_assign(
@@ -661,11 +661,12 @@ TRACE_EVENT(sched_get_nr_running_avg,
 		__entry->nr_misfit	= nr_misfit;
 		__entry->nr_max		= nr_max;
 		__entry->nr_scaled	= nr_scaled;
+		__entry->nr_trailblazer	= nr_trailblazer;
 	),
 
-	TP_printk("cpu=%d nr=%d nr_misfit=%d nr_max=%d nr_scaled=%d",
+	TP_printk("cpu=%d nr=%d nr_misfit=%d nr_max=%d nr_scaled=%d nr_trailblazer=%d",
 		__entry->cpu, __entry->nr, __entry->nr_misfit, __entry->nr_max,
-		__entry->nr_scaled)
+		__entry->nr_scaled, __entry->nr_trailblazer)
 );
 
 TRACE_EVENT(sched_busy_hyst_time,

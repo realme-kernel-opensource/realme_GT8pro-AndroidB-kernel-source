@@ -5,7 +5,7 @@
  *
  * Copyright (C) 2016, Intel Corporation
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -298,6 +298,11 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	if (cpumask_intersects(&cluster->cpus, cpu_partial_halt_mask) &&
 			is_state1())
 		skip = true;
+
+	if (wg_cpu->walt_load.trailblazer_state && freq < trailblazer_floor_freq[cluster->id]) {
+		freq = trailblazer_floor_freq[cluster->id];
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_TRAILBLAZER;
+	}
 
 	if (wg_policy->tunables->adaptive_high_freq && !skip) {
 		if (raw_freq < get_adaptive_low_freq(wg_policy)) {

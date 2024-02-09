@@ -8,6 +8,7 @@
 #include <soc/qcom/socinfo.h>
 
 unsigned long __read_mostly soc_flags;
+unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 
 void walt_config(void)
 {
@@ -60,6 +61,7 @@ void walt_config(void)
 		high_perf_cluster_freq_cap[i] = FREQ_QOS_MAX_DEFAULT_VALUE;
 		sysctl_sched_idle_enough_clust[i] = SCHED_IDLE_ENOUGH_DEFAULT;
 		sysctl_sched_cluster_util_thres_pct_clust[i] = SCHED_CLUSTER_UTIL_THRES_PCT_DEFAULT;
+		trailblazer_floor_freq[i] = 0;
 	}
 
 	for (i = 0; i < MAX_FREQ_CAP; i++) {
@@ -83,6 +85,7 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG);
 		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED);
 		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID);
+		trailblazer_floor_freq[0] = 1000000;
 	} else if (!strcmp(name, "PINEAPPLE")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD);
 		soc_feat_set(SOC_ENABLE_ASYM_SIBLINGS);

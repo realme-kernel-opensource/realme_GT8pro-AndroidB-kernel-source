@@ -527,6 +527,13 @@ unsigned int walt_big_tasks(int cpu)
 	return wrq->walt_stats.nr_big_tasks;
 }
 
+int walt_trailblazer_tasks(int cpu)
+{
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
+
+	return wrq->walt_stats.nr_trailblazer_tasks;
+}
+
 static void clear_walt_request(int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
@@ -678,6 +685,7 @@ __cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *rea
 			walt_load->ed_active = true;
 		else
 			walt_load->ed_active = false;
+		walt_load->trailblazer_state = trailblazer_state;
 	}
 
 	return (util >= capacity) ? capacity : util;
@@ -2034,7 +2042,14 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 		walt_flag_set(p, WALT_TRAILBLAZER, 0);
 	}
 
+	/*
+	 * In the event that a trailblazer task is detected (or an existing trailblazer task
+	 * no longer matches the criteria) and is already enqueued on the cpu, ensure to
+	 * close the prod-sum accounts for this task before the next update takes place.
+	 */
 	if (task_on_rq_queued(p)) {
+		if (is_prev_trailblazer != walt_flag_test(p, WALT_TRAILBLAZER))
+			sched_update_nr_prod(rq->cpu, 0);
 		if (is_prev_trailblazer && !walt_flag_test(p, WALT_TRAILBLAZER))
 			wrq->walt_stats.nr_trailblazer_tasks--;
 		else if (!is_prev_trailblazer && walt_flag_test(p, WALT_TRAILBLAZER))
