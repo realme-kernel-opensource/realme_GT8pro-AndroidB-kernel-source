@@ -3,7 +3,7 @@
  * Copied from drivers/hwtracing/stm.p-sys-t.c as of commit d69d5e83110f
  * ("stm class: Add MIPI SyS-T protocol support").
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2020 The Linux Foundation. All rights reserved.
  * Copyright (c) 2018, Intel Corporation.
  *
@@ -163,6 +163,7 @@ static ssize_t notrace ost_write(struct stm_data *data,
 static const struct stm_protocol_driver ost_pdrv = {
 	.owner	= THIS_MODULE,
 	.name	= "p_ost",
+	.priv_sz		= sizeof(struct ost_t_policy_node),
 	.write	= ost_write,
 	.policy_attr		= ost_t_policy_attrs,
 	.output_open		= ost_t_output_open,
