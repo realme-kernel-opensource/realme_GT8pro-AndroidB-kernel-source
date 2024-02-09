@@ -39,6 +39,11 @@
 #define BEAC_MC_RD_BEAT_FIL1		38
 #define BEAC_MC_WR_BEAT_FIL1		39
 
+#define RD_CMD_SENT_TO_MC_COUNT_SCALED_0	(163)
+#define RD_CMD_SENT_TO_MC_COUNT_SCALED_1	(165)
+#define RD_CMD_SENT_TO_LCP_COUNT_SCALED_0	(164)
+#define RD_CMD_SENT_TO_LCP_COUNT_SCALED_1	(166)
+
 #define MCPROF_FEAC_FLTR_0		0
 #define MCPROF_FEAC_FLTR_1		1
 #define MCPROF_BEAC_FLTR_0		2
@@ -1190,6 +1195,49 @@ static bool feac_event_config(struct llcc_perfmon_private *llcc_priv, unsigned i
 		filter_sel = llcc_priv->configured[*counter_num].filter_sel;
 	}
 
+	if (llcc_priv->version >= LLCC_VERSION_6) {
+		if ((event_type == RD_CMD_SENT_TO_MC_COUNT_SCALED_0) ||
+				(event_type == RD_CMD_SENT_TO_MC_COUNT_SCALED_1)) {
+			/* Due to RTL bug, only FEAC_LLCC2MC_PROF_CFG_0 got used for
+			 * LLCC2MC_PROFTAG and FEAC_LLCC2MC_PROF_CFG_1 used for LCP2MC_PROFTAG.
+			 * Use RD_TX andRD_GRANULE for filtering multiple traffic.
+			 */
+			mask_val = LLCC2MC_PROFTAG_MASK_MASK | LLCC2MC_PROFTAG_MATCH_MASK;
+			offset = FEAC_LLCC2MC_PROF_CFG_0(llcc_priv->version);
+			llcc_bcast_read(llcc_priv, offset, &val);
+			if (val & mask_val) {
+				pr_err("Event configured already, reusing same.\n");
+				return false;
+			}
+
+			val = 1 << filter_sel;
+			val = (val << LLCC2MC_PROFTAG_MATCH_SHIFT) |
+				(val << LLCC2MC_PROFTAG_MASK_SHIFT);
+			llcc_bcast_modify(llcc_priv, offset, val, mask_val);
+		}
+
+		if ((event_type == RD_CMD_SENT_TO_LCP_COUNT_SCALED_0) ||
+				(event_type == RD_CMD_SENT_TO_LCP_COUNT_SCALED_1)) {
+			/* Due to RTL bug, only FEAC_LLCC2LCP_PROF_CFG_0 got used for
+			 * LLCC2MC_PROFTAG and FEAC_LLCC2LCP_PROF_CFG_1 used for LCP2MC_PROFTAG.
+			 * Use RD_TX andRD_GRANULE for filtering multiple traffic.
+			 */
+			mask_val = LLCC2LCP_PROFTAG_MASK_MASK | LLCC2LCP_PROFTAG_MATCH_MASK;
+			offset = FEAC_LLCC2MC_PROF_CFG_1(llcc_priv->version);
+			llcc_bcast_read(llcc_priv, offset, &val);
+			if (val & mask_val) {
+				pr_err("Event configured already, reusing same.\n");
+				return false;
+			}
+
+			val = 1 << filter_sel;
+			val = (val << LLCC2LCP_PROFTAG_MATCH_SHIFT) |
+				(val << LLCC2LCP_PROFTAG_MASK_SHIFT);
+			llcc_bcast_modify(llcc_priv, offset, val, mask_val);
+		}
+	}
+
+	val = 0;
 	mask_val = EVENT_SEL_MASK;
 
 	if (llcc_priv->version >= LLCC_VERSION_2) {
