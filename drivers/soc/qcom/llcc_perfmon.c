@@ -1253,29 +1253,24 @@ static void feac_event_enable(struct llcc_perfmon_private *llcc_priv, bool enabl
 				FEAC_WR_BYTE_FILTER_SEL_MASK | FEAC_WR_BYTE_FILTER_EN_MASK |
 				FEAC_RD_BEAT_FILTER_SEL_MASK | FEAC_RD_BEAT_FILTER_EN_MASK |
 				FEAC_RD_BYTE_FILTER_SEL_MASK | FEAC_RD_BYTE_FILTER_EN_MASK;
-			val |= FEAC_WR_BEAT_FILTER_EN | FEAC_WR_BYTE_FILTER_EN |
-				FEAC_RD_BEAT_FILTER_EN | FEAC_RD_BYTE_FILTER_EN;
 
-			if (prof_cfg_filter && prof_cfg1_filter1) {
-				val_cfg1 = val;
+			val_cfg1 = val;
+			if (prof_cfg_filter) {
+				val |= FEAC_WR_BEAT_FILTER_EN | FEAC_WR_BYTE_FILTER_EN |
+					FEAC_RD_BEAT_FILTER_EN | FEAC_RD_BYTE_FILTER_EN;
 				val |= (FILTER_0 << FEAC_WR_BEAT_FILTER_SEL_SHIFT) |
 					(FILTER_0 << FEAC_WR_BYTE_FILTER_SEL_SHIFT) |
 					(FILTER_0 << FEAC_RD_BEAT_FILTER_SEL_SHIFT) |
 					(FILTER_0 << FEAC_RD_BYTE_FILTER_SEL_SHIFT);
+			}
+
+			if (prof_cfg1_filter1) {
+				val_cfg1 |= FEAC_WR_BEAT_FILTER_EN | FEAC_WR_BYTE_FILTER_EN |
+					FEAC_RD_BEAT_FILTER_EN | FEAC_RD_BYTE_FILTER_EN;
 				val_cfg1 |= (FILTER_1 << FEAC_WR_BEAT_FILTER_SEL_SHIFT) |
 					(FILTER_1 << FEAC_WR_BYTE_FILTER_SEL_SHIFT) |
 					(FILTER_1 << FEAC_RD_BEAT_FILTER_SEL_SHIFT) |
 					(FILTER_1 << FEAC_RD_BYTE_FILTER_SEL_SHIFT);
-			} else if (prof_cfg1_filter1) {
-				val |= (FILTER_1 << FEAC_WR_BEAT_FILTER_SEL_SHIFT) |
-					(FILTER_1 << FEAC_WR_BYTE_FILTER_SEL_SHIFT) |
-					(FILTER_1 << FEAC_RD_BEAT_FILTER_SEL_SHIFT) |
-					(FILTER_1 << FEAC_RD_BYTE_FILTER_SEL_SHIFT);
-			} else if (prof_cfg_filter) {
-				val |= (FILTER_0 << FEAC_WR_BEAT_FILTER_SEL_SHIFT) |
-					(FILTER_0 << FEAC_WR_BYTE_FILTER_SEL_SHIFT) |
-					(FILTER_0 << FEAC_RD_BEAT_FILTER_SEL_SHIFT) |
-					(FILTER_0 << FEAC_RD_BYTE_FILTER_SEL_SHIFT);
 			}
 		}
 	}
@@ -1291,7 +1286,7 @@ static void feac_event_enable(struct llcc_perfmon_private *llcc_priv, bool enabl
 	 * filter0 & 1 can be applied on PROF_CFG and PROG_CFG1 respectively. Otherwise for a
 	 * single applied filter only PROF_CFG will be used for either filter 0 or 1
 	 */
-	if (llcc_priv->version >= LLCC_VERSION_2_1 && (prof_cfg_filter && prof_cfg1_filter1)) {
+	if (llcc_priv->version >= LLCC_VERSION_2_1 && (prof_cfg_filter || prof_cfg1_filter1)) {
 		offset = FEAC_PROF_CFG(llcc_priv->version);
 		llcc_bcast_modify(llcc_priv, offset, val, mask_val);
 		mask_val &= ~PROF_CFG_EN_MASK;
@@ -1836,19 +1831,24 @@ static bool ewb_event_config(struct llcc_perfmon_private *llcc_priv, unsigned in
 
 	cfg_val = (BEAT_SCALING << EWB_BEAT_SCALING_FACTOR_0_SHIFT) |
 		(BEAT_SCALING << EWB_BEAT_SCALING_FACTOR_1_SHIFT);
-	mask_val = EWB_EVENT_SEL_MASK;
 	cfg_mask = EWB_BEAT_SCALING_FACTOR_0_MASK | EWB_BEAT_SCALING_FACTOR_1_MASK;
-	if (filter_en)
-		cfg_mask |= EWB_BEAT_FILTER_SEL_1_MASK | EWB_BEAT_FILTER_EN_1_MASK |
-			EWB_BEAT_FILTER_SEL_0_MASK | EWB_BEAT_FILTER_EN_0_MASK;
+	if (filter_en) {
+		if (filter_sel == FILTER_0)
+			cfg_mask |= EWB_BEAT_FILTER_SEL_0_MASK | EWB_BEAT_FILTER_EN_0_MASK;
 
+		if (filter_sel == FILTER_1)
+			cfg_mask |= EWB_BEAT_FILTER_SEL_1_MASK | EWB_BEAT_FILTER_EN_1_MASK;
+	}
+
+	mask_val = EWB_EVENT_SEL_MASK;
 	if (enable) {
 		val = (event_type << EWB_EVENT_SEL_SHIFT) & EWB_EVENT_SEL_MASK;
 		if (filter_en) {
 			if (filter_sel == FILTER_1)
 				cfg_val |= (FILTER_1 << EWB_BEAT_FILTER_SEL_1_SHIFT) |
 					EWB_BEAT_FILTER_EN_1_EN;
-			else
+
+			if (filter_sel == FILTER_0)
 				cfg_val |= (FILTER_0 << EWB_BEAT_FILTER_SEL_0_SHIFT) |
 					EWB_BEAT_FILTER_EN_0_EN;
 		}
