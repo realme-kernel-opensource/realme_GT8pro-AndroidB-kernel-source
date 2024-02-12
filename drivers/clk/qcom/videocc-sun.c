@@ -430,9 +430,35 @@ static struct qcom_cc_desc video_cc_sun_desc = {
 
 static const struct of_device_id video_cc_sun_match_table[] = {
 	{ .compatible = "qcom,sun-videocc" },
+	{ .compatible = "qcom,sun-videocc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, video_cc_sun_match_table);
+
+static void video_cc_sun_fixup_sunv1(struct regmap *regmap)
+{
+	/*
+	 * HW defaults this divider to div-2, but set it to div-3 so the mvs0c
+	 * and mvs0 clocks have the same rates. Needed to fix infrequent video
+	 * hangs on v1.
+	 */
+	regmap_write(regmap, video_cc_mvs0c_div2_div_clk_src.reg, 2);
+}
+
+static int video_cc_sun_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,sun-videocc"))
+		video_cc_sun_fixup_sunv1(regmap);
+
+	return 0;
+}
 
 static int video_cc_sun_probe(struct platform_device *pdev)
 {
@@ -457,6 +483,10 @@ static int video_cc_sun_probe(struct platform_device *pdev)
 	/* Change DLY_ACCU_RED_SHIFTER_DONE to 0xF for mvs0, mvs0c */
 	regmap_update_bits(regmap, 0x8074, dly_accu_mask, dly_accu_mask);
 	regmap_update_bits(regmap, 0x8040, dly_accu_mask, dly_accu_mask);
+
+	ret = video_cc_sun_fixup(pdev, regmap);
+	if (ret)
+		return ret;
 
 	/*
 	 * Keep clocks always enabled:
