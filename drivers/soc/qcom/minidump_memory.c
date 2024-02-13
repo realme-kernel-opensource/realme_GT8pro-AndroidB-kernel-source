@@ -894,14 +894,14 @@ static void md_dump_slabowner(char *m, size_t dump_size)
 		buf.buf += ret;
 		for_each_kmem_cache_node(s, node, n) {
 			unsigned long flags;
-			struct page *page;
+			struct slab *slab;
 
 			if (!atomic_long_read(&n->nr_slabs))
 				continue;
 
 			spin_lock_irqsave(&n->list_lock, flags);
-			list_for_each_entry(page, &n->partial, lru) {
-				ret  = get_each_object_track(s, page, TRACK_ALLOC,
+			list_for_each_entry(slab, &n->partial, slab_list) {
+				ret  = get_each_object_track(s, slab, TRACK_ALLOC,
 						dump_tracking, &buf);
 				if (buf.offset == buf.size - 1) {
 					spin_unlock_irqrestore(&n->list_lock, flags);
@@ -909,8 +909,8 @@ static void md_dump_slabowner(char *m, size_t dump_size)
 					return;
 				}
 			}
-			list_for_each_entry(page, &n->full, lru) {
-				ret  = get_each_object_track(s, page, TRACK_ALLOC,
+			list_for_each_entry(slab, &n->full, slab_list) {
+				ret  = get_each_object_track(s, slab, TRACK_ALLOC,
 						dump_tracking, &buf);
 				if (buf.offset == buf.size - 1) {
 					spin_unlock_irqrestore(&n->list_lock, flags);
