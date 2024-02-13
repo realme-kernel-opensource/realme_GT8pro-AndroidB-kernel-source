@@ -23,6 +23,8 @@ mem_buf_msgq.ko
 msm_dma_iommu_mapping.ko
 secure_buffer.ko
 arm_smmu.ko
+debug_symbol.ko
+minidump.ko
 pinctrl-msm.ko
 pinctrl-pineapple.ko
 sched-walt.ko
