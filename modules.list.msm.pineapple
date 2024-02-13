@@ -76,3 +76,4 @@ qcom_ipc_logging.ko
 qrtr.ko
 qcom_aoss.ko
 msm_qmp.ko
+qcom-dload-mode.ko
