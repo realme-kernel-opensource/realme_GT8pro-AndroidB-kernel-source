@@ -135,6 +135,15 @@ config QCOM_CPUCP
          the subsystems.
          If unsure, say n.
 
+config QCOM_CPUCP_FAST
+        tristate "Qualcomm Technologies, Inc. CPUCP FAST driver"
+        depends on QCOM_CPUCP
+        help
+	 Qualcomm Technologies, Inc. CPUCP Firmware Assisted System Tuning driver
+	 for MSM devices. This driver gets hints from CPUCP firmware through mailbox
+	 and informs to scheduler.
+         If unsure, say n.
+
 config QTI_CPUCP_LOG
         tristate "Qualcomm Technologies Inc. HW CPUCP Logging"
         depends on QCOM_CPUCP
