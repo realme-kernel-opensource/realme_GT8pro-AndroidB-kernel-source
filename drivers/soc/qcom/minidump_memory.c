@@ -888,10 +888,10 @@ static void md_dump_slabowner(char *m, size_t dump_size)
 		s = kmalloc_caches[KMALLOC_NORMAL][i];
 		if (!s)
 			continue;
-		ret = scnprintf(buf.buf, buf.size, "%s\n", s->name);
-		if (ret == buf.size - 1)
+		buf.offset += scnprintf(buf.buf + buf.offset, buf.size - buf.offset,
+					"%s\n", s->name);
+		if (buf.offset == buf.size - 1)
 			return;
-		buf.buf += ret;
 		for_each_kmem_cache_node(s, node, n) {
 			unsigned long flags;
 			struct slab *slab;
@@ -920,10 +920,9 @@ static void md_dump_slabowner(char *m, size_t dump_size)
 			}
 			spin_unlock_irqrestore(&n->list_lock, flags);
 		}
-		ret = scnprintf(buf.buf, buf.size, "\n");
-		if (ret == buf.size - 1)
+		buf.offset += scnprintf(buf.buf + buf.offset, buf.size - buf.offset, "\n");
+		if (buf.offset == buf.size - 1)
 			return;
-		buf.buf += ret;
 	}
 }
 
