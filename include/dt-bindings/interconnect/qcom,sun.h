@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __DT_BINDINGS_INTERCONNECT_QCOM_SUN_H
@@ -219,6 +219,13 @@
 #define SLAVE_EBI1_DISP_CRM_HW_5				11512
 #define SLAVE_LLCC_DISP_CRM_HW_5				11513
 #define SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_5				11514
+#define MASTER_LLCC_DISP_CRM_SW_0				12000
+#define MASTER_MDP_DISP_CRM_SW_0				12001
+#define MASTER_MNOC_HF_MEM_NOC_DISP_CRM_SW_0				12002
+#define MASTER_ANOC_PCIE_GEM_NOC_DISP_CRM_SW_0				12003
+#define SLAVE_EBI1_DISP_CRM_SW_0				12512
+#define SLAVE_LLCC_DISP_CRM_SW_0				12513
+#define SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_SW_0				12514
 
 #define MASTER_UBWC						MASTER_UBWC_P
 #define MASTER_PCIE_3						MASTER_PCIE_0
