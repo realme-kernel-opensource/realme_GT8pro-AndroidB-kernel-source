@@ -1473,7 +1473,7 @@ static void register_cpufreq_log(void)
 static void register_pstore_info(void)
 {
 	int ret;
-	struct device_node *node;
+	struct device_node *node, *tmp_node;
 	struct resource resource;
 	struct reserved_mem *rmem = NULL;
 	unsigned int size;
@@ -1481,20 +1481,29 @@ static void register_pstore_info(void)
 	unsigned long total_size;
 	struct md_region md_entry;
 
-	node = of_find_compatible_node(NULL, NULL, "ramoops");
-	if (IS_ERR_OR_NULL(node)) {
-		pr_err("Failed to get pstore node\n");
-		return;
+	node = tmp_node = of_find_compatible_node(NULL, NULL, "ramoops");
+	if (IS_ERR_OR_NULL(tmp_node)) {
+		node = of_find_compatible_node(NULL, NULL, "qcom,ramoops");
+		if (IS_ERR_OR_NULL(node)) {
+			pr_err("Failed to get ramoops node\n");
+			return;
+		}
+
+		tmp_node = of_parse_phandle(node, "memory-region", 0);
+		if (!tmp_node) {
+			pr_err("Failed to parse ramoops memory-region\n");
+			return;
+		}
 	}
 
-	ret = of_address_to_resource(node, 0, &resource);
+	ret = of_address_to_resource(tmp_node, 0, &resource);
 	if (ret) {
-		rmem = of_reserved_mem_lookup(node);
+		rmem = of_reserved_mem_lookup(tmp_node);
 		if (rmem) {
 			paddr = rmem->base;
 			total_size = rmem->size;
 		} else {
-			pr_err("Failed to get pstore mem\n");
+			pr_err("Failed to get ramoops mem\n");
 			return;
 		}
 	} else {
