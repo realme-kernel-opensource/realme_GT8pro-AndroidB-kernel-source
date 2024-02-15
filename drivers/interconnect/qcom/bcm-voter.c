@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <asm/div64.h>
@@ -567,7 +567,10 @@ static int qcom_icc_bcm_voter_probe(struct platform_device *pdev)
 			return PTR_ERR(crm->dev);
 		}
 
-		crm->client_type = CRM_HW_DRV;
+		if (of_property_read_bool(np, "qcom,crm-sw-client"))
+			crm->client_type = CRM_SW_DRV;
+		else
+			crm->client_type = CRM_HW_DRV;
 
 		ret = of_property_read_u32(np, "qcom,crm-client-idx", &crm->client_idx);
 		if (ret) {
