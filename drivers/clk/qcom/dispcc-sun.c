@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -38,6 +38,7 @@ static struct clk_vdd_class *disp_cc_sun_regulators[] = {
 
 static struct clk_crm disp_crm = {
 	.name = "disp_crm",
+	.num_perf_ol = 10,
 	.regs = {
 		.cfg_rcgr = 0xd8,
 		.l_val = 0xdc,
