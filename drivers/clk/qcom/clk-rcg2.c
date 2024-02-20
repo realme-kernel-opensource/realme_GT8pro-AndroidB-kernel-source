@@ -63,7 +63,6 @@
 
 /* Cesta configuration*/
 #define MAX_VCD_PER_CRM	9
-#define MAX_PERF_LEVEL_PER_VCD	8
 #define MAX_PERF_OL_PER_VCD	4
 #define MAX_CRM_SW_DRV_STATE	3
 
@@ -1795,11 +1794,12 @@ static int clk_rcg2_crmc_populate_freq(struct clk_hw *hw, unsigned int l,
 int clk_rcg2_crmc_populate_freq_table(struct clk_rcg2 *rcg)
 {
 	struct freq_tbl *freq_tbl, *curr_freq_tbl;
+	struct clk_crm *crm = rcg->clkr.crm;
 	u32 prev_freq = 0;
 	int i, ret;
 
 	/* Allocate space for 1 extra since table is NULL terminated */
-	freq_tbl = kcalloc(MAX_PERF_LEVEL_PER_VCD + 1, sizeof(*freq_tbl), GFP_KERNEL);
+	freq_tbl = kcalloc(crm->num_perf_ol + 1, sizeof(*freq_tbl), GFP_KERNEL);
 	if (!freq_tbl)
 		return -ENOMEM;
 
@@ -1808,7 +1808,7 @@ int clk_rcg2_crmc_populate_freq_table(struct clk_rcg2 *rcg)
 	/*
 	 * Skipping first LUT entry as first entry is used to disable RCG
 	 */
-	for (i = 0; i < MAX_PERF_LEVEL_PER_VCD; i++) {
+	for (i = 0; i < crm->num_perf_ol; i++) {
 		ret = clk_rcg2_crmc_populate_freq(&rcg->clkr.hw, i + 1,
 						  freq_tbl + i);
 		if (ret)
@@ -1879,7 +1879,7 @@ static int clk_rcg2_vote_perf_level(struct clk_hw *hw, unsigned long rate)
 	}
 
 	perf_index = qcom_find_crm_freq_index(rcg->freq_tbl, rate);
-	if (perf_index < 0 || perf_index >= MAX_PERF_LEVEL_PER_VCD) {
+	if (perf_index < 0 || perf_index >= crm->num_perf_ol) {
 		pr_err("%s rcg name %s perf_index=%d\n", __func__,
 		       qcom_clk_hw_get_name(hw), perf_index);
 		return -EINVAL;
@@ -1966,7 +1966,7 @@ unsigned long clk_rcg2_crmc_hw_set_rate(struct clk_hw *hw,
 	int ret, perf_index;
 
 	perf_index = qcom_find_crm_freq_index(rcg->freq_tbl, rate);
-	if (perf_index < 0 || perf_index >= MAX_PERF_LEVEL_PER_VCD) {
+	if (perf_index < 0 || perf_index >= crm->num_perf_ol) {
 		pr_err("%s rcg name %s perf_index=%d\n", __func__,
 		       qcom_clk_hw_get_name(hw), perf_index);
 		return -EINVAL;

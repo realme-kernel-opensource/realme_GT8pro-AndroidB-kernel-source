@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2014, 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/export.h>
@@ -63,6 +63,13 @@ int qcom_clk_crm_init(struct device *dev, struct clk_crm *crm)
 				return PTR_ERR(crm->dev);
 			}
 		}
+
+		/*
+		 * Until all targets and instances have updated to explicitly
+		 * specify this, use the most common default value by default.
+		 */
+		if (!crm->num_perf_ol)
+			crm->num_perf_ol = 8;
 
 		crm->initialized = true;
 	}
