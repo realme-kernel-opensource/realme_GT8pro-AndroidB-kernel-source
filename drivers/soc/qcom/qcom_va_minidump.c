@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "va-minidump: %s: " fmt, __func__
@@ -596,12 +596,12 @@ static int qcom_va_md_calc_size(unsigned int shdr_cnt)
 	len = strlen(arr[shdr_cnt].entry.owner);
 	size += (sizeof(struct elf_shdr) + sizeof(struct elf_phdr) +
 		arr[shdr_cnt].entry.size + len + 1);
-	tot_size += size;
-	if (tot_size > va_md_data.total_mem_size) {
+	if (tot_size  > va_md_data.total_mem_size - size) {
 		pr_err("Total CMA consumed, no space left\n");
 		return -ENOSPC;
 	}
 
+	tot_size += size;
 	if (!shdr_cnt) {
 		va_md_data.elf.ehdr = va_md_data.elf_mem + (sizeof(struct va_md_tree_node)
 					* va_md_data.num_sections);
@@ -632,6 +632,13 @@ static int qcom_va_md_calc_elf_size(void)
 	pr_debug("Num sections:%u\n", va_md_data.num_sections);
 	for (i = 0; i < va_md_data.num_sections; i++) {
 		ret = qcom_va_md_calc_size(i);
+		/*
+		 * Collect the region till we have to consume
+		 * within va-minidump memory region
+		 */
+		if (ret == -ENOSPC)
+			return 0;
+
 		if (ret < 0)
 			break;
 	}
