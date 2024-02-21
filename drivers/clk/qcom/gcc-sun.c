@@ -1774,7 +1774,7 @@ static struct clk_branch gcc_camera_sf_axi_clk = {
 
 static struct clk_branch gcc_cfg_noc_pcie_anoc_ahb_clk = {
 	.halt_reg = 0x10050,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.hwcg_reg = 0x10050,
 	.hwcg_bit = 1,
 	.clkr = {
