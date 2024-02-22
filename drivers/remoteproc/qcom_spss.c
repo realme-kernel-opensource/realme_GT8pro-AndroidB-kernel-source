@@ -845,7 +845,7 @@ static int qcom_spss_remove(struct platform_device *pdev)
 }
 
 static const struct spss_data spss_resource_init = {
-		.firmware_name = "spss.mdt",
+		.firmware_name = "spss1t.mdt",
 		.pas_id = 14,
 		.ssr_name = "spss",
 		.auto_boot = false,
