@@ -1799,6 +1799,7 @@ int xhci_alloc_erst(struct xhci_hcd *xhci,
 static void
 xhci_remove_interrupter(struct xhci_hcd *xhci, struct xhci_interrupter *ir)
 {
+	u64 tmp64;
 	u32 tmp;
 
 	if (!ir)
@@ -1814,7 +1815,9 @@ xhci_remove_interrupter(struct xhci_hcd *xhci, struct xhci_interrupter *ir)
 		tmp &= ERST_SIZE_MASK;
 		writel(tmp, &ir->ir_set->erst_size);
 
-		xhci_update_erst_dequeue(xhci, ir, ir->event_ring->first_seg->trbs, true);
+		tmp64 = xhci_read_64(xhci, &ir->ir_set->erst_dequeue);
+		tmp64 &= (u64) ERST_PTR_MASK;
+		xhci_write_64(xhci, tmp64, &ir->ir_set->erst_dequeue);
 	}
 }
 
@@ -1852,12 +1855,11 @@ void xhci_remove_secondary_interrupter(struct usb_hcd *hcd, struct xhci_interrup
 	if (!ir || !ir->intr_num || ir->intr_num >= xhci->max_interrupters)
 		xhci_dbg(xhci, "Invalid secondary interrupter, can't remove\n");
 
+	/* fixme, should we check xhci->interrupter[intr_num] == ir */
+	/* fixme locking */
+
 	spin_lock_irq(&xhci->lock);
-	/*
-	 * Cleanup secondary interrupter to ensure there are no pending events.
-	 * This also updates event ring dequeue pointer back to the start.
-	 */
-	xhci_skip_sec_intr_events(xhci, ir->event_ring, ir);
+
 	intr_num = ir->intr_num;
 
 	xhci_remove_interrupter(xhci, ir);
