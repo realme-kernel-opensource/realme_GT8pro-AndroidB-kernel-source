@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -2160,6 +2160,31 @@ static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return rc;
 }
 
+static int qrtr_shutdown(struct socket *sock, int mode)
+{
+	struct sock *sk;
+
+	/* This maps:
+	 * SHUT_RD   (0) -> RCV_SHUTDOWN  (1)
+	 * SHUT_WR   (1) -> SEND_SHUTDOWN (2)
+	 * SHUT_RDWR (2) -> SHUTDOWN_MASK (3)
+	 */
+	mode++;
+	if ((mode & ~SHUTDOWN_MASK) || !mode)
+		return -EINVAL;
+
+	sk = sock->sk;
+
+	lock_sock(sk);
+	if (mode) {
+		sk->sk_shutdown |= mode;
+		sk->sk_state_change(sk);
+	}
+	release_sock(sk);
+
+	return 0;
+}
+
 static int qrtr_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
@@ -2216,7 +2241,7 @@ static const struct proto_ops qrtr_proto_ops = {
 	.ioctl		= qrtr_ioctl,
 	.gettstamp	= sock_gettstamp,
 	.poll		= datagram_poll,
-	.shutdown	= sock_no_shutdown,
+	.shutdown	= qrtr_shutdown,
 	.release	= qrtr_release,
 	.mmap		= sock_no_mmap,
 };
