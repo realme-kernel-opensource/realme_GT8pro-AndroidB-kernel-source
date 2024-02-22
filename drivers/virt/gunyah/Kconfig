@@ -35,6 +35,15 @@ config GUNYAH_IRQFD
 
 	  Say Y/M here if unsure and you want to support Gunyah VMMs.
 
+config GUNYAH_IOEVENTFD
+	tristate "Gunyah ioeventfd interface"
+	depends on GUNYAH
+	help
+	  Enable kernel support for creating ioeventfds which can alert userspace
+	  when a Gunyah virtual machine accesses a memory address.
+
+	  Say Y/M here if unsure and you want to support Gunyah VMMs.
+
 menuconfig GUNYAH_DRIVERS
 	bool "Gunyah Vendor Virtualization drivers"
 	depends on ARM64
