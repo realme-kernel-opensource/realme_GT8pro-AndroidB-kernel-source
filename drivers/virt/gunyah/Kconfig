@@ -3,12 +3,16 @@
 config GUNYAH
 	tristate "Gunyah Virtualization drivers"
 	depends on ARM64
+	select GUNYAH_PLATFORM_HOOKS
 	help
 	  The Gunyah drivers are the helper interfaces that run in a guest VM
 	  such as basic inter-VM IPC and signaling mechanisms, and higher level
 	  services such as memory/device sharing, IRQ sharing, and so on.
 	  Say Y/M here to enable the drivers needed to interact in a Gunyah
 	  virtual environment.
+
+config GUNYAH_PLATFORM_HOOKS
+	tristate
 
 menuconfig GUNYAH_DRIVERS
 	bool "Gunyah Vendor Virtualization drivers"
@@ -150,3 +154,4 @@ config GH_RES_REQUEST
 	  and release resource to primary virtual machine.
 
 endif
+
