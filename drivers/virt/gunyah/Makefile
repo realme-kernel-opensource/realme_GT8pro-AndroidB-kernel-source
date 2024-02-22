@@ -15,4 +15,5 @@ gunyah_loader-$(CONFIG_GH_PROXY_SCHED)		+= gh_proxy_sched.o
 CFLAGS_gh_secure_vm_virtio_backend.o = -DDYNAMIC_DEBUG_MODULE
 obj-$(CONFIG_GH_PANIC_NOTIFIER) += gh_panic_notifier.o
 obj-$(CONFIG_GH_RES_REQUEST) += gh_res_request.o
+obj-$(CONFIG_GUNYAH) += gunyah.o
 
