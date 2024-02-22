@@ -16,6 +16,6 @@ CFLAGS_gh_secure_vm_virtio_backend.o = -DDYNAMIC_DEBUG_MODULE
 obj-$(CONFIG_GH_PANIC_NOTIFIER) += gh_panic_notifier.o
 obj-$(CONFIG_GH_RES_REQUEST) += gh_res_request.o
 
-gunyah_rsc_mgr-y += rsc_mgr.o vm_mgr.o
+gunyah_rsc_mgr-y += rsc_mgr.o rsc_mgr_rpc.o vm_mgr.o
 
 obj-$(CONFIG_GUNYAH) += gunyah.o gunyah_rsc_mgr.o
