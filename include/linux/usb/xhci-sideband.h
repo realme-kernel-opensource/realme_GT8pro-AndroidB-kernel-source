@@ -54,8 +54,7 @@ struct sg_table *
 xhci_sideband_get_event_buffer(struct xhci_sideband *sb);
 
 int
-xhci_sideband_create_interrupter(struct xhci_sideband *sb,
-				 int intr_num);
+xhci_sideband_create_interrupter(struct xhci_sideband *sb);
 
 void
 xhci_sideband_remove_interrupter(struct xhci_sideband *sb);

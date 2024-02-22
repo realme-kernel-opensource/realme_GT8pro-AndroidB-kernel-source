@@ -2119,8 +2119,7 @@ struct xhci_container_ctx *xhci_alloc_container_ctx(struct xhci_hcd *xhci,
 		int type, gfp_t flags);
 void xhci_free_container_ctx(struct xhci_hcd *xhci,
 		struct xhci_container_ctx *ctx);
-struct xhci_interrupter *xhci_create_secondary_interrupter(struct usb_hcd *hcd,
-		int intr_num);
+struct xhci_interrupter *xhci_create_secondary_interrupter(struct usb_hcd *hcd);
 void xhci_remove_secondary_interrupter(struct usb_hcd
 				       *hcd, struct xhci_interrupter *ir);
 void xhci_skip_sec_intr_events(struct xhci_hcd *xhci,

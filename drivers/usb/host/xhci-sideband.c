@@ -242,13 +242,12 @@ EXPORT_SYMBOL_GPL(xhci_sideband_get_event_buffer);
  * Returns 0 on success, negative error otherwise
  */
 int
-xhci_sideband_create_interrupter(struct xhci_sideband *sb, int intr_num)
+xhci_sideband_create_interrupter(struct xhci_sideband *sb)
 {
 	if (sb->ir)
 		return -EBUSY;
 
-	sb->ir = xhci_create_secondary_interrupter(xhci_to_hcd(sb->xhci),
-			intr_num);
+	sb->ir = xhci_create_secondary_interrupter(xhci_to_hcd(sb->xhci));
 	if (!sb->ir)
 		return -ENOMEM;
 
