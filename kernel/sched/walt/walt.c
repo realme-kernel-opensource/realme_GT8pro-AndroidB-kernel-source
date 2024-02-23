@@ -2022,7 +2022,7 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 
-	if ((*demand == runtime) && (wts->high_util_history >= TRAILBLAZER_THRES)) {
+	if ((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) {
 		*trailblazer_demand = 1 << SCHED_CAPACITY_SHIFT;
 		*demand = scale_util_to_time(*trailblazer_demand);
 	}
