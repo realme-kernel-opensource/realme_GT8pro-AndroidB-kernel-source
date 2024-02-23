@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -5829,9 +5829,7 @@ static int dwc3_msm_parse_core_params(struct dwc3_msm *mdwc, struct device_node 
 	}
 
 	/* Populate USB repeater version for TD 9.23 WA */
-	ret = dwc3_msm_get_repeater_ver(mdwc);
-	if (ret < 0)
-		dev_info(mdwc->dev, "Unable to read USB repeater version\n");
+	dwc3_msm_get_repeater_ver(mdwc);
 
 	return ret;
 }
