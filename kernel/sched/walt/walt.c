@@ -644,6 +644,11 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason)
 		*reason = CPUFREQ_REASON_BTR;
 	}
 
+	if (walt_trailblazer_tasks(cpu_of(rq))) {
+		load = sched_ravg_window;
+		*reason = CPUFREQ_REASON_TRAILBLAZER_CPU;
+	}
+
 	trace_sched_load_to_gov(rq, aggr_grp_load, tt_load, sched_freq_aggr_en,
 				load, 0, walt_rotation_enabled,
 				sysctl_sched_user_hint, wrq, *reason);
@@ -4983,8 +4988,12 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 	if (!double_enqueue)
 		walt_inc_cumulative_runnable_avg(rq, p);
 
-	if ((flags & ENQUEUE_WAKEUP) && do_pl_notif(rq))
-		waltgov_run_callback(rq, WALT_CPUFREQ_PL);
+	if ((flags & ENQUEUE_WAKEUP)) {
+		if (walt_flag_test(p, WALT_TRAILBLAZER))
+			waltgov_run_callback(rq, WALT_CPUFREQ_TRAILBLAZER);
+		else if (do_pl_notif(rq))
+			waltgov_run_callback(rq, WALT_CPUFREQ_PL);
+	}
 
 	trace_sched_enq_deq_task(p, 1, cpumask_bits(p->cpus_ptr)[0], is_mvp(wts));
 }

@@ -301,7 +301,7 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 
 	if (wg_cpu->walt_load.trailblazer_state && freq < trailblazer_floor_freq[cluster->id]) {
 		freq = trailblazer_floor_freq[cluster->id];
-		wg_driv_cpu->reasons |= CPUFREQ_REASON_TRAILBLAZER;
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_TRAILBLAZER_STATE;
 	}
 
 	if (wg_policy->tunables->adaptive_high_freq && !skip) {
