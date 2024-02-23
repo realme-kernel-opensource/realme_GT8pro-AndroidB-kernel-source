@@ -389,6 +389,10 @@ static int glink_subdev_start(struct rproc_subdev *subdev)
 	struct qcom_rproc_glink *glink = to_glink_subdev(subdev);
 
 	glink->edge = qcom_glink_smem_register(glink->dev, glink->node);
+	if (IS_ERR(glink->edge)) {
+		dev_err(glink->dev, "Failed to register glink smem\n");
+		return PTR_ERR_OR_ZERO(glink->edge);
+	}
 
 	glink->nb.notifier_call = glink_early_ssr_notifier_event;
 
