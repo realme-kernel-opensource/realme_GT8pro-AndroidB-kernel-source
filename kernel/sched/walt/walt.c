@@ -2022,11 +2022,23 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 		u32 runtime, u16 runtime_scaled, u32 *demand, u16 *trailblazer_demand)
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
+	bool is_prev_trailblazer = walt_flag_test(p, WALT_TRAILBLAZER);
 
 	if (((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
 			wts->high_util_history >= TRAILBLAZER_BYPASS) {
 		*trailblazer_demand = 1 << SCHED_CAPACITY_SHIFT;
 		*demand = scale_util_to_time(*trailblazer_demand);
+		walt_flag_set(p, WALT_TRAILBLAZER, 1);
+	} else {
+		walt_flag_set(p, WALT_TRAILBLAZER, 0);
+	}
+
+	if (task_on_rq_queued(p)) {
+		if (is_prev_trailblazer && !walt_flag_test(p, WALT_TRAILBLAZER))
+			wrq->walt_stats.nr_trailblazer_tasks--;
+		else if (!is_prev_trailblazer && walt_flag_test(p, WALT_TRAILBLAZER))
+			wrq->walt_stats.nr_trailblazer_tasks++;
 	}
 
 	if (runtime_scaled >= FINAL_BUCKET_DEMAND) {
@@ -2481,6 +2493,7 @@ static void init_new_task_load(struct task_struct *p)
 	wts->high_util_history = 0;
 	__sched_fork_init(p);
 	walt_flag_set(p, WALT_INIT, 1);
+	walt_flag_set(p, WALT_TRAILBLAZER, 0);
 }
 
 int remove_heavy(struct walt_task_struct *wts);
@@ -4700,6 +4713,7 @@ static void walt_sched_init_rq(struct rq *rq)
 	wrq->prev_window_size = sched_ravg_window;
 	wrq->window_start = 0;
 	wrq->walt_stats.nr_big_tasks = 0;
+	wrq->walt_stats.nr_trailblazer_tasks = 0;
 	wrq->walt_flags = 0;
 	wrq->avg_irqload = 0;
 	wrq->prev_irq_time = 0;
@@ -4778,6 +4792,9 @@ static void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
 	wts->rtg_high_prio = task_rtg_high_prio(p);
 	if (wts->rtg_high_prio)
 		wrq->walt_stats.nr_rtg_high_prio_tasks++;
+
+	if (walt_flag_test(p, WALT_TRAILBLAZER))
+		wrq->walt_stats.nr_trailblazer_tasks++;
 }
 
 static void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
@@ -4791,7 +4808,11 @@ static void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
 	if (wts->rtg_high_prio)
 		wrq->walt_stats.nr_rtg_high_prio_tasks--;
 
+	if (walt_flag_test(p, WALT_TRAILBLAZER))
+		wrq->walt_stats.nr_trailblazer_tasks--;
+
 	BUG_ON(wrq->walt_stats.nr_big_tasks < 0);
+	BUG_ON(wrq->walt_stats.nr_trailblazer_tasks < 0);
 }
 
 static void android_rvh_wake_up_new_task(void *unused, struct task_struct *new)

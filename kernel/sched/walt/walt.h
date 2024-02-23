@@ -85,6 +85,17 @@ enum soc_tunables {
 	SOC_AVAILABLE,
 };
 
+/*
+ * enumeration to set the flags variable
+ * each index below represents an offset into
+ * wts->flags
+ */
+enum walt_flags {
+	WALT_INIT,
+	WALT_TRAILBLAZER,
+	MAX_WALT_FLAGS
+};
+
 #define WALT_LOW_LATENCY_PROCFS		BIT(0)
 #define WALT_LOW_LATENCY_BINDER		BIT(1)
 #define WALT_LOW_LATENCY_PIPELINE	BIT(2)
@@ -105,6 +116,7 @@ struct walt_cpu_load {
 
 struct walt_sched_stats {
 	int		nr_big_tasks;
+	int		nr_trailblazer_tasks;
 	u64		cumulative_runnable_avg_scaled;
 	u64		pred_demands_sum_scaled;
 	unsigned int	nr_rtg_high_prio_tasks;

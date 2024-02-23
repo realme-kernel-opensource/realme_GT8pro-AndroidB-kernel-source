@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _LINUX_SCHED_WALT_H
@@ -155,16 +155,6 @@ struct walt_task_struct {
 	cpumask_t			reduce_mask;
 	u64				mark_start_birth_ts;
 	u8				high_util_history;
-};
-
-/*
- * enumeration to set the flags variable
- * each index below represents an offset into
- * wts->flags
- */
-enum walt_flags {
-	WALT_INIT,
-	MAX_WALT_FLAGS
 };
 
 #define wts_to_ts(wts) ({ \
