@@ -29,7 +29,6 @@ load(":msm_abl.bzl", "define_abl_dist")
 load(":avb_boot_img.bzl", "avb_sign_boot_image")
 load(":image_opts.bzl", "boot_image_opts")
 load(":target_variants.bzl", "la_variants")
-load(":modules.bzl", "COMMON_GKI_MODULES_LIST")
 
 def _define_build_config(
         msm_target,
@@ -163,7 +162,6 @@ def _define_kernel_build(
     kernel_build(
         name = target,
         module_outs = in_tree_module_list,
-        module_implicit_outs = COMMON_GKI_MODULES_LIST,
         outs = out_list,
         build_config = ":{}_build_config".format(target),
         dtstree = dtstree,
