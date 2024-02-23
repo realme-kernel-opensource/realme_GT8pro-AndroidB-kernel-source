@@ -2007,6 +2007,7 @@ account_busy_for_task_demand(struct rq *rq, struct task_struct *p, int event)
 }
 
 #define TRAILBLAZER_THRES 230
+#define TRAILBLAZER_BYPASS 243
 #define FINAL_BUCKET_DEMAND ((NUM_BUSY_BUCKETS - 2) << \
 		(SCHED_CAPACITY_SHIFT - NUM_BUSY_BUCKETS_SHIFT))
 #define FINAL_BUCKET_STEP_UP 8
@@ -2022,7 +2023,8 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 
-	if ((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) {
+	if (((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
+			wts->high_util_history >= TRAILBLAZER_BYPASS) {
 		*trailblazer_demand = 1 << SCHED_CAPACITY_SHIFT;
 		*demand = scale_util_to_time(*trailblazer_demand);
 	}
