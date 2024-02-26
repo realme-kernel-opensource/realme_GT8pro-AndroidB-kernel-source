@@ -914,16 +914,6 @@ config QCOM_DEBUG_SYMBOL
 	  driver allows other modules to get symbol addresses by traversing
 	  kallsyms table for debug usage.
 
-config MSM_SYSTEM_HEALTH_MONITOR
-    tristate "System Health Monitor"
-	help
-	  System Health Monitor (SHM) passively monitors the health of the
-	  peripherals connected to the application processor. Software
-	  components in the application processor that experience
-	  communication failure can request the SHM to perform a system-wide
-	  health check. If any failures are detected during the health-check,
-	  then a subsystem restart will be triggered for the failed subsystem.
-
 config MSM_PERFORMANCE
         tristate "msm performance driver to support userspace fmin/fmax request"
         help
