@@ -55,7 +55,7 @@ TRACE_EVENT(sched_update_pred_demand,
 		__entry->final		= final;
 	),
 
-	TP_printk("%d (%s): runtime %u cpu %d pred_demand_scaled %u start %d first %d final %d (buckets: %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u)",
+	TP_printk("pid=%d comm=%s runtime=%u cpu=%d pred_demand_scaled=%u start=%d first=%d final=%d (buckets: %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u)",
 		__entry->pid, __entry->comm,
 		__entry->runtime, __entry->cpu,
 		__entry->pred_demand_scaled, __entry->start, __entry->first, __entry->final,
@@ -71,9 +71,9 @@ TRACE_EVENT(sched_update_history,
 
 	TP_PROTO(struct rq *rq, struct task_struct *p, u32 runtime, int samples,
 			enum task_event evt, struct walt_rq *wrq, struct walt_task_struct *wts,
-			u16 ramp_up_demand),
+			u16 trailblazer_demand),
 
-	TP_ARGS(rq, p, runtime, samples, evt, wrq, wts, ramp_up_demand),
+	TP_ARGS(rq, p, runtime, samples, evt, wrq, wts, trailblazer_demand),
 
 	TP_STRUCT__entry(
 		__array(char,			comm, TASK_COMM_LEN)
@@ -88,7 +88,7 @@ TRACE_EVENT(sched_update_history,
 		__array(u16,			hist_util, RAVG_HIST_SIZE)
 		__field(unsigned int,		nr_big_tasks)
 		__field(int,			cpu)
-		__field(u16,			ramp_up_demand)
+		__field(u16,			trailblazer_demand)
 		__field(u8,			high_util_history)
 	),
 
@@ -107,11 +107,11 @@ TRACE_EVENT(sched_update_history,
 					RAVG_HIST_SIZE * sizeof(u16));
 		__entry->nr_big_tasks	= wrq->walt_stats.nr_big_tasks;
 		__entry->cpu		= rq->cpu;
-		__entry->ramp_up_demand = ramp_up_demand;
+		__entry->trailblazer_demand = trailblazer_demand;
 		__entry->high_util_history = wts->high_util_history;
 	),
 
-	TP_printk("%d (%s): runtime %u samples %d event %s demand %u (hist: %u %u %u %u %u) (hist_util: %u %u %u %u %u) coloc_demand %u pred_demand_scaled %u cpu %d nr_big %u ramp_up_demand %u high_util_history %u",
+	TP_printk("pid=%d comm=%s runtime=%u samples=%d event=%s demand=%u (hist: %u %u %u %u %u) (hist_util: %u %u %u %u %u) coloc_demand=%u pred_demand_scaled=%u cpu=%d nr_big=%u trailblazer_demand=%u high_util_history=%u",
 		__entry->pid, __entry->comm,
 		__entry->runtime, __entry->samples,
 		task_event_names[__entry->evt],
@@ -123,7 +123,7 @@ TRACE_EVENT(sched_update_history,
 		__entry->hist_util[2], __entry->hist_util[3],
 		__entry->hist_util[4],
 		__entry->coloc_demand, __entry->pred_demand_scaled,
-		__entry->cpu, __entry->nr_big_tasks, __entry->ramp_up_demand,
+		__entry->cpu, __entry->nr_big_tasks, __entry->trailblazer_demand,
 		__entry->high_util_history)
 );
 
