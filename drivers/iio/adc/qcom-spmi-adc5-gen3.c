@@ -329,7 +329,7 @@ static void adc5_gen3_dump_register(struct regmap *regmap, unsigned int offset)
 			pr_err("debug register dump failed with rc=%d\n", rc);
 			return;
 		}
-		pr_err("%#04x: %*ph\n", offset, sizeof(buf), buf);
+		pr_err("%#04x: %*ph\n", offset, (int)(sizeof(buf)), buf);
 		offset += NUM_BYTES;
 	}
 	pr_err("\n");
