@@ -2006,7 +2006,7 @@ account_busy_for_task_demand(struct rq *rq, struct task_struct *p, int event)
 	return 1;
 }
 
-#define RAMP_UP_THRES 230
+#define TRAILBLAZER_THRES 230
 #define FINAL_BUCKET_DEMAND ((NUM_BUSY_BUCKETS - 2) << \
 		(SCHED_CAPACITY_SHIFT - NUM_BUSY_BUCKETS_SHIFT))
 #define FINAL_BUCKET_STEP_UP 8
@@ -2017,9 +2017,15 @@ static inline u32 scale_util_to_time(u16 util)
 	return util * walt_scale_demand_divisor;
 }
 
-static void update_high_util_history(struct task_struct *p, u16 runtime_scaled)
+static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
+		u32 runtime, u16 runtime_scaled, u32 *demand, u16 *trailblazer_demand)
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+
+	if ((*demand == runtime) && (wts->high_util_history >= TRAILBLAZER_THRES)) {
+		*trailblazer_demand = 1 << SCHED_CAPACITY_SHIFT;
+		*demand = scale_util_to_time(*trailblazer_demand);
+	}
 
 	if (runtime_scaled >= FINAL_BUCKET_DEMAND) {
 		if (wts->high_util_history > U8_MAX - FINAL_BUCKET_STEP_UP)
@@ -2047,7 +2053,7 @@ static void update_history(struct rq *rq, struct task_struct *p,
 	u32 max = 0, avg, demand;
 	u64 sum = 0;
 	u16 demand_scaled, pred_demand_scaled, runtime_scaled;
-	u16 ramp_up_demand = 0;
+	u16 trailblazer_demand = 0;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
 	/* Ignore windows where task had no activity */
@@ -2086,11 +2092,7 @@ static void update_history(struct rq *rq, struct task_struct *p,
 		demand = max(avg, runtime);
 	}
 
-	if ((demand == runtime) && (wts->high_util_history >= RAMP_UP_THRES)) {
-		ramp_up_demand = 1 << SCHED_CAPACITY_SHIFT;
-		demand = scale_util_to_time(ramp_up_demand);
-	}
-
+	update_trailblazer_accounting(p, rq, runtime, runtime_scaled, &demand, &trailblazer_demand);
 	pred_demand_scaled = predict_and_update_buckets(p, runtime_scaled);
 	demand_scaled = scale_time_to_util(demand);
 
@@ -2120,9 +2122,8 @@ static void update_history(struct rq *rq, struct task_struct *p,
 		if (wts->unfilter)
 			wts->unfilter = max_t(int, 0,
 				wts->unfilter - wrq->prev_window_size);
-	update_high_util_history(p, runtime_scaled);
 done:
-	trace_sched_update_history(rq, p, runtime, samples, event, wrq, wts, ramp_up_demand);
+	trace_sched_update_history(rq, p, runtime, samples, event, wrq, wts, trailblazer_demand);
 }
 
 static u64 add_to_task_demand(struct rq *rq, struct task_struct *p, u64 delta)
