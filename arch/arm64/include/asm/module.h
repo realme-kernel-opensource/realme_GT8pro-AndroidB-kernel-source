@@ -7,9 +7,6 @@
 
 #include <asm-generic/module.h>
 
-extern u64 module_direct_base;
-extern u64 module_plt_base;
-
 struct mod_plt_sec {
 	int			plt_shndx;
 	int			plt_num_entries;
