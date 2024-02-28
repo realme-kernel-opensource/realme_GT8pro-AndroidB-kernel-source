@@ -957,7 +957,7 @@ int security_capable(const struct cred *cred,
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_quotactl(int cmds, int type, int id, struct super_block *sb)
+int security_quotactl(int cmds, int type, int id, const struct super_block *sb)
 {
 	return call_int_hook(quotactl, 0, cmds, type, id, sb);
 }
@@ -1079,7 +1079,7 @@ int security_bprm_creds_for_exec(struct linux_binprm *bprm)
  *
  * Return: Returns 0 if the hook is successful and permission is granted.
  */
-int security_bprm_creds_from_file(struct linux_binprm *bprm, struct file *file)
+int security_bprm_creds_from_file(struct linux_binprm *bprm, const struct file *file)
 {
 	return call_int_hook(bprm_creds_from_file, 0, bprm, file);
 }
@@ -1118,7 +1118,7 @@ int security_bprm_check(struct linux_binprm *bprm)
  * open file descriptors to which access will no longer be granted when the
  * attributes are changed.  This is called immediately before commit_creds().
  */
-void security_bprm_committing_creds(struct linux_binprm *bprm)
+void security_bprm_committing_creds(const struct linux_binprm *bprm)
 {
 	call_void_hook(bprm_committing_creds, bprm);
 }
@@ -1134,7 +1134,7 @@ void security_bprm_committing_creds(struct linux_binprm *bprm)
  * process such as clearing out non-inheritable signal state.  This is called
  * immediately after commit_creds().
  */
-void security_bprm_committed_creds(struct linux_binprm *bprm)
+void security_bprm_committed_creds(const struct linux_binprm *bprm)
 {
 	call_void_hook(bprm_committed_creds, bprm);
 }
@@ -1319,7 +1319,7 @@ EXPORT_SYMBOL(security_sb_remount);
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_sb_kern_mount(struct super_block *sb)
+int security_sb_kern_mount(const struct super_block *sb)
 {
 	return call_int_hook(sb_kern_mount, 0, sb);
 }
@@ -2580,13 +2580,7 @@ int security_kernfs_init_security(struct kernfs_node *kn_dir,
  */
 int security_file_permission(struct file *file, int mask)
 {
-	int ret;
-
-	ret = call_int_hook(file_permission, 0, file, mask);
-	if (ret)
-		return ret;
-
-	return fsnotify_perm(file, mask);
+	return call_int_hook(file_permission, 0, file, mask);
 }
 
 /**
@@ -2837,7 +2831,7 @@ int security_file_open(struct file *file)
 	if (ret)
 		return ret;
 
-	return fsnotify_perm(file, MAY_OPEN);
+	return fsnotify_open_perm(file);
 }
 
 /**
@@ -3957,7 +3951,7 @@ void security_inode_invalidate_secctx(struct inode *inode)
 EXPORT_SYMBOL(security_inode_invalidate_secctx);
 
 /**
- * security_inode_notifysecctx() - Nofify the LSM of an inode's security label
+ * security_inode_notifysecctx() - Notify the LSM of an inode's security label
  * @inode: inode
  * @ctx: secctx
  * @ctxlen: length of secctx

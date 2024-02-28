@@ -15,24 +15,34 @@ struct fuse_aio_req {
 	struct kiocb *iocb_fuse;
 };
 
+static inline rwf_t fuse_iocb_to_rw_flags(int ifl, int iocb_mask)
+{
+	return ifl & iocb_mask;
+}
+
 static void fuse_file_accessed(struct file *dst_file, struct file *src_file)
 {
 	struct inode *dst_inode;
 	struct inode *src_inode;
-	struct timespec64 dst_ts;
-	struct timespec64 src_ts;
+	struct timespec64 dst_ctime_ts;
+	struct timespec64 src_ctime_ts;
+	struct timespec64 dst_mtime_ts;
+	struct timespec64 src_mtime_ts;
 
 	if (dst_file->f_flags & O_NOATIME)
 		return;
 
 	dst_inode = file_inode(dst_file);
 	src_inode = file_inode(src_file);
-	dst_ts = inode_get_ctime(dst_inode);
-	src_ts = inode_get_ctime(src_inode);
+	dst_ctime_ts = inode_get_ctime(dst_inode);
+	src_ctime_ts = inode_get_ctime(src_inode);
+	dst_mtime_ts = inode_get_mtime(dst_inode);
+	src_mtime_ts = inode_get_mtime(src_inode);
 
-	if ((!timespec64_equal(&dst_inode->i_mtime, &src_inode->i_mtime) ||
-	     !timespec64_equal(&dst_ts, &src_ts))) {
-		dst_inode->i_mtime = src_inode->i_mtime;
+
+	if ((!timespec64_equal(&dst_mtime_ts, &src_mtime_ts) ||
+	     !timespec64_equal(&dst_ctime_ts, &src_ctime_ts))) {
+		inode_set_mtime_to_ts(dst_inode, inode_get_mtime(src_inode));
 		inode_set_ctime_to_ts(dst_inode, inode_get_ctime(src_inode));
 	}
 
@@ -44,8 +54,8 @@ static void fuse_copyattr(struct file *dst_file, struct file *src_file)
 	struct inode *dst = file_inode(dst_file);
 	struct inode *src = file_inode(src_file);
 
-	dst->i_atime = src->i_atime;
-	dst->i_mtime = src->i_mtime;
+	inode_set_atime_to_ts(dst, inode_get_atime(src));
+	inode_set_mtime_to_ts(dst, inode_get_mtime(src));
 	inode_set_ctime_to_ts(dst, inode_get_ctime(src));
 	i_size_write(dst, i_size_read(src));
 }
@@ -90,9 +100,10 @@ ssize_t fuse_passthrough_read_iter(struct kiocb *iocb_fuse,
 
 	old_cred = override_creds(ff->passthrough.cred);
 	if (is_sync_kiocb(iocb_fuse)) {
-		ret = vfs_iter_read(passthrough_filp, iter, &iocb_fuse->ki_pos,
-				    iocb_to_rw_flags(iocb_fuse->ki_flags,
-						     PASSTHROUGH_IOCB_MASK));
+		ret = vfs_iter_read(
+			passthrough_filp, iter, &iocb_fuse->ki_pos,
+			fuse_iocb_to_rw_flags(iocb_fuse->ki_flags,
+					      PASSTHROUGH_IOCB_MASK));
 	} else {
 		struct fuse_aio_req *aio_req;
 
@@ -138,9 +149,10 @@ ssize_t fuse_passthrough_write_iter(struct kiocb *iocb_fuse,
 	old_cred = override_creds(ff->passthrough.cred);
 	if (is_sync_kiocb(iocb_fuse)) {
 		file_start_write(passthrough_filp);
-		ret = vfs_iter_write(passthrough_filp, iter, &iocb_fuse->ki_pos,
-				     iocb_to_rw_flags(iocb_fuse->ki_flags,
-						      PASSTHROUGH_IOCB_MASK));
+		ret = vfs_iter_write(
+			passthrough_filp, iter, &iocb_fuse->ki_pos,
+			fuse_iocb_to_rw_flags(iocb_fuse->ki_flags,
+					      PASSTHROUGH_IOCB_MASK));
 		file_end_write(passthrough_filp);
 		if (ret > 0)
 			fuse_copyattr(fuse_filp, passthrough_filp);
