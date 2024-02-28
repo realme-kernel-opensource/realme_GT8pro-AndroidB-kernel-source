@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"BATTERY_CHG: %s: " fmt, __func__
@@ -257,6 +257,7 @@ struct battery_chg_dev {
 	int				fake_soc;
 	bool				block_tx;
 	bool				ship_mode_en;
+	bool				ship_mode_immediate;
 	bool				debug_battery_detected;
 	bool				wls_fw_update_reqd;
 	u32				wls_fw_version;
@@ -2102,15 +2103,39 @@ static ssize_t soh_show(const struct class *c,
 }
 static CLASS_ATTR_RO(soh);
 
+static int battery_chg_ship_mode(struct battery_chg_dev *bcdev)
+{
+	struct battery_charger_ship_mode_req_msg msg = { { 0 } };
+	int rc;
+
+	msg.hdr.owner = MSG_OWNER_BC;
+	msg.hdr.type = MSG_TYPE_REQ_RESP;
+	msg.hdr.opcode = BC_SHIP_MODE_REQ_SET;
+	msg.ship_mode_type = SHIP_MODE_PMIC;
+
+	rc = battery_chg_write(bcdev, &msg, sizeof(msg));
+	if (rc < 0)
+		pr_emerg("Failed to write ship mode: %d\n", rc);
+
+	return rc;
+}
+
 static ssize_t ship_mode_en_store(const struct class *c,
 				const struct class_attribute *attr,
 				const char *buf, size_t count)
 {
 	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
 						battery_class);
+	int rc;
 
 	if (kstrtobool(buf, &bcdev->ship_mode_en))
 		return -EINVAL;
+
+	if (bcdev->ship_mode_en && bcdev->ship_mode_immediate) {
+		rc = battery_chg_ship_mode(bcdev);
+		if (rc < 0)
+			return rc;
+	}
 
 	return count;
 }
@@ -2182,6 +2207,7 @@ static int battery_chg_parse_dt(struct battery_chg_dev *bcdev)
 	of_property_read_u32(node, "qcom,shutdown-voltage",
 				&bcdev->shutdown_volt_mv);
 
+	bcdev->ship_mode_immediate = of_property_read_bool(node, "qcom,ship-mode-immediate");
 
 	rc = read_property_id(bcdev, pst, BATT_CHG_CTRL_LIM_MAX);
 	if (rc < 0) {
@@ -2262,11 +2288,10 @@ static int battery_chg_parse_dt(struct battery_chg_dev *bcdev)
 	return 0;
 }
 
-static int battery_chg_ship_mode(struct notifier_block *nb, unsigned long code,
+static int battery_chg_reboot_notify(struct notifier_block *nb, unsigned long code,
 		void *unused)
 {
 	struct battery_charger_notify_msg msg_notify = { { 0 } };
-	struct battery_charger_ship_mode_req_msg msg = { { 0 } };
 	struct battery_chg_dev *bcdev = container_of(nb, struct battery_chg_dev,
 						     reboot_notifier);
 	int rc;
@@ -2282,16 +2307,8 @@ static int battery_chg_ship_mode(struct notifier_block *nb, unsigned long code,
 	if (!bcdev->ship_mode_en)
 		return NOTIFY_DONE;
 
-	msg.hdr.owner = MSG_OWNER_BC;
-	msg.hdr.type = MSG_TYPE_REQ_RESP;
-	msg.hdr.opcode = BC_SHIP_MODE_REQ_SET;
-	msg.ship_mode_type = SHIP_MODE_PMIC;
-
-	if (code == SYS_POWER_OFF) {
-		rc = battery_chg_write(bcdev, &msg, sizeof(msg));
-		if (rc < 0)
-			pr_emerg("Failed to write ship mode: %d\n", rc);
-	}
+	if (code == SYS_POWER_OFF && !bcdev->ship_mode_immediate)
+		battery_chg_ship_mode(bcdev);
 
 	return NOTIFY_DONE;
 }
@@ -2484,7 +2501,7 @@ static int battery_chg_probe(struct platform_device *pdev)
 	bcdev->initialized = true;
 	up_write(&bcdev->state_sem);
 
-	bcdev->reboot_notifier.notifier_call = battery_chg_ship_mode;
+	bcdev->reboot_notifier.notifier_call = battery_chg_reboot_notify;
 	bcdev->reboot_notifier.priority = 255;
 	register_reboot_notifier(&bcdev->reboot_notifier);
 
