@@ -2,7 +2,7 @@
 /*
  * Qualcomm Technologies, Inc. Peripheral Image Loader helpers
  *
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021 The Linux Foundation. All rights reserved.
  */
 
 #define CREATE_TRACE_POINTS
