@@ -395,12 +395,13 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 {
 	struct qcom_adsp *adsp = rproc->priv;
 	struct device *dev = NULL;
-	int ret;
+	int ret = 0;
+
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_load", "enter");
 
 	if (adsp->dma_phys_below_32b)
 		dev = adsp->dev;
 
-	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_load", "enter");
 	rproc_coredump_cleanup(adsp->rproc);
 
 	/* Store firmware handle to be used in adsp_start() */
@@ -411,7 +412,7 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 		if (ret) {
 			dev_err(adsp->dev, "request_firmware failed for %s: %d\n",
 				adsp->dtb_firmware_name, ret);
-			return ret;
+			goto exit_load;
 		}
 
 		ret = qcom_mdt_pas_init(adsp->dev, adsp->dtb_firmware, adsp->dtb_firmware_name,
@@ -430,7 +431,7 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 
 	adsp_add_coredump_segments(adsp, fw);
 
-	return 0;
+	goto exit_load;
 
 release_dtb_metadata:
 	qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
@@ -438,6 +439,7 @@ release_dtb_metadata:
 release_dtb_firmware:
 	release_firmware(adsp->dtb_firmware);
 
+exit_load:
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_load", "exit");
 
 	return ret;
@@ -574,13 +576,14 @@ static int adsp_start(struct rproc *rproc)
 	struct device *dev = NULL;
 	int ret;
 
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_start", "enter");
+
 	if (adsp->dma_phys_below_32b)
 		dev = adsp->dev;
-	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_start", "enter");
 
 	ret = qcom_q6v5_prepare(&adsp->q6v5);
 	if (ret)
-		return ret;
+		goto exit_start;
 
 	if (!adsp->region_assign_shared ||
 			(adsp->region_assign_shared && !adsp->region_assigned)) {
@@ -666,7 +669,7 @@ static int adsp_start(struct rproc *rproc)
 	/* Remove pointer to the loaded firmware, only valid in adsp_load() & adsp_start() */
 	adsp->firmware = NULL;
 
-	return 0;
+	goto exit_start;
 
 release_pas_metadata:
 	qcom_scm_pas_metadata_release(&adsp->pas_metadata, dev);
@@ -689,7 +692,7 @@ disable_irqs:
 
 	/* Remove pointer to the loaded firmware, only valid in adsp_load() & adsp_start() */
 	adsp->firmware = NULL;
-
+exit_start:
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_start", "exit");
 	return ret;
 }
@@ -907,7 +910,7 @@ static int adsp_stop(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = rproc->priv;
 	int handover;
-	int ret;
+	int ret = 0;
 
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_stop", "enter");
 
