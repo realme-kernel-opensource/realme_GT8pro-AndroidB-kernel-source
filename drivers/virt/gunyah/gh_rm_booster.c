@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -18,6 +18,8 @@ struct gh_rm_booster_dev {
 	u32 boost_cnt;
 	int vmid;
 	int orig_cpu;
+	u64 orig_cpu_mpidr;
+	u64 target_cpu_mpidr;
 	struct device *dev;
 	struct freq_qos_request gh_rm_boost_req;
 	struct notifier_block gh_rm_boost_nb;
@@ -26,6 +28,22 @@ struct gh_rm_booster_dev {
 };
 static struct gh_rm_booster_dev *rm_status;
 static DEFINE_MUTEX(rm_booster_lock);
+
+static void gh_rm_booster_mpidr(void *arg)
+{
+	u64 *mpidr = arg;
+
+	*mpidr = read_cpuid_mpidr();
+}
+
+static u64 gh_rm_booster_get_mpidr(int cpu)
+{
+	u64 mpidr = cpu;
+
+	smp_call_function_single(cpu, gh_rm_booster_mpidr, &mpidr, 1);
+
+	return mpidr;
+}
 
 static int rm_boost_target_cpu_set(const char *val, const struct kernel_param *kp)
 {
@@ -36,10 +54,15 @@ static int rm_boost_target_cpu_set(const char *val, const struct kernel_param *k
 	if (ret)
 		return ret;
 
-	if (cpu < num_possible_cpus())
-		return param_set_int(val, kp);
-	else
-		return -EINVAL;
+	if (cpu < num_possible_cpus()) {
+		ret = param_set_int(val, kp);
+		if (!ret)
+			rm_status->target_cpu_mpidr = gh_rm_booster_get_mpidr(cpu);
+
+		return ret;
+	}
+
+	return -EINVAL;
 }
 
 static const struct kernel_param_ops target_cpu_ops = {
@@ -50,16 +73,32 @@ static unsigned int target_cpu = UINT_MAX;
 module_param_cb(target_cpu, &target_cpu_ops, &target_cpu, 0644);
 MODULE_PARM_DESC(target_cpu, "Choose the target core for Resource Manager");
 
-static int gh_set_rm_affinity(int cpu)
+static int _gh_set_rm_affinity(int cpu, u64 mpidr)
 {
 	int ret = -EINVAL;
 
-	ret = gh_hcall_change_rm_affinity(rm_status->vcpu_cap_id, cpu);
+	ret = gh_hcall_change_rm_affinity_mpidr(rm_status->vcpu_cap_id, mpidr);
+	if (ret == GH_ERROR_ARG_INVAL) {
+		dev_dbg(rm_status->dev,
+			"MPIDR based CPU identification not supported by Gunyah\n");
+		ret = gh_hcall_change_rm_affinity(rm_status->vcpu_cap_id, cpu);
+	}
+
 	if (ret == GH_ERROR_OK)
 		return 0;
 
 	dev_err(rm_status->dev, "gh set RM affinity fail\n");
 	return ret;
+}
+
+static int gh_set_rm_affinity(void)
+{
+	return _gh_set_rm_affinity(target_cpu, rm_status->target_cpu_mpidr);
+}
+
+static int gh_restore_rm_affinity(void)
+{
+	return _gh_set_rm_affinity(rm_status->orig_cpu, rm_status->orig_cpu_mpidr);
 }
 
 static void gh_boost_rmfreq(int cpu)
@@ -93,7 +132,7 @@ static void gh_resume_rm_status(void)
 	if (rm_status->vcpu_cap_id == GH_CAPID_INVAL)
 		return;
 
-	ret = gh_set_rm_affinity(rm_status->orig_cpu);
+	ret = gh_restore_rm_affinity();
 	if (ret)
 		dev_err(rm_status->dev, "Failed to resume RM affinity\n");
 }
@@ -120,7 +159,7 @@ static void gh_configure_rm(struct gh_rm_notif_vm_status_payload *status)
 		dest_cpu = target_cpu;
 		if (dest_cpu != rm_status->orig_cpu) {
 			if (rm_status->vcpu_cap_id == GH_CAPID_INVAL ||
-			    gh_set_rm_affinity(dest_cpu)) {
+			    gh_set_rm_affinity()) {
 				dest_cpu = rm_status->orig_cpu;
 				dev_info(rm_status->dev,
 					 "Fallback to boost the frequency of RM current cpu - CPU%d\n",
@@ -237,6 +276,10 @@ static int gh_rm_booster_probe(struct platform_device *pdev)
 		goto out_free;
 	}
 
+	rm_status->orig_cpu_mpidr = gh_rm_booster_get_mpidr(rm_status->orig_cpu);
+	dev_dbg(rm_status->dev, "orig_cpu: %d mpidr: %llu\n",
+		rm_status->orig_cpu, rm_status->orig_cpu_mpidr);
+
 	rm_status->dev = &pdev->dev;
 	platform_set_drvdata(pdev, rm_status);
 
@@ -248,6 +291,10 @@ static int gh_rm_booster_probe(struct platform_device *pdev)
 	 */
 	if (target_cpu >= num_possible_cpus())
 		target_cpu = num_possible_cpus() - 1;
+
+	rm_status->target_cpu_mpidr = gh_rm_booster_get_mpidr(target_cpu);
+	dev_dbg(rm_status->dev, "target_cpu: %d mpidr: %llu\n",
+		target_cpu, rm_status->target_cpu_mpidr);
 
 	rm_status->boost_cnt = 0;
 	rm_status->vcpu_cap_id = GH_CAPID_INVAL;
