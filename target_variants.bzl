@@ -1,7 +1,6 @@
 targets = [
     # keep sorted
-    "pineapple",
-    "sun",
+    "canoe",
 ]
 
 la_variants = [
@@ -12,30 +11,22 @@ la_variants = [
 
 le_targets = [
     # keep sorted
-    "sun-allyes",
 ]
 
 le_variants = [
     # keep sorted
-    "perf-defconfig",
 ]
 
 vm_types = [
-    "tuivm",
-    "oemvm",
 ]
 
 vm_target_bases = [
-    "pineapple",
-    "sun",
 ]
 
 vm_targets = ["{}-{}".format(t, vt) for t in vm_target_bases for vt in vm_types]
 
 vm_variants = [
     # keep sorted
-    "debug-defconfig",
-    "defconfig",
 ]
 
 def get_all_la_variants():
