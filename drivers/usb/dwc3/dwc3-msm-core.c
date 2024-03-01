@@ -65,6 +65,9 @@
 /* time out to wait for USB cable status notification (in ms)*/
 #define SM_INIT_TIMEOUT 30000
 
+#define DWC3_GUCTL5	0xc638
+#define DWC3_GUCTL5_ESSINACT_RXDET_TIMER BIT(29)
+
 #define DWC3_GUCTL1_IP_GAP_ADD_ON(n)	((n) << 21)
 #define DWC3_GUCTL1_IP_GAP_ADD_ON_MASK	DWC3_GUCTL1_IP_GAP_ADD_ON(7)
 #define DWC3_GUCTL1_L1_SUSP_THRLD_EN_FOR_HOST	BIT(8)
@@ -4046,25 +4049,14 @@ disable_xo_clk:
 	return ret;
 }
 
-static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
+static int dwc3_msm_check_suspend(struct dwc3_msm *mdwc)
 {
-	int ret;
 	struct dwc3 *dwc = NULL;
 	struct dwc3_event_buffer *evt;
-	struct usb_irq *uirq;
-	bool can_suspend_ssphy, no_active_ss;
 
 	if (mdwc->dwc3)
 		dwc = platform_get_drvdata(mdwc->dwc3);
 
-	mutex_lock(&mdwc->suspend_resume_mutex);
-	if (atomic_read(&mdwc->in_lpm)) {
-		dev_dbg(mdwc->dev, "%s: Already suspended\n", __func__);
-		mutex_unlock(&mdwc->suspend_resume_mutex);
-		return 0;
-	}
-
-	msm_dwc3_perf_vote_enable(mdwc, false);
 	if (dwc) {
 		if (!mdwc->in_host_mode) {
 			evt = dwc->ev_buf;
@@ -4072,7 +4064,6 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 				dev_dbg(mdwc->dev,
 					"%s: %d device events pending, abort suspend\n",
 					__func__, evt->count / 4);
-				mutex_unlock(&mdwc->suspend_resume_mutex);
 				return -EBUSY;
 			}
 		}
@@ -4088,7 +4079,6 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 			pr_err("%s(): Trying to go in LPM with state:%d\n",
 						__func__, dwc->gadget->state);
 			pr_err("%s(): LPM is not performed.\n", __func__);
-			mutex_unlock(&mdwc->suspend_resume_mutex);
 			return -EBUSY;
 		}
 	}
@@ -4107,11 +4097,36 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 		dev_dbg(mdwc->dev,
 			"%s: cable disconnected while not in idle otg state\n",
 			__func__);
-		mutex_unlock(&mdwc->suspend_resume_mutex);
 		return -EBUSY;
 	}
 
+	return 0;
+}
 
+static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
+{
+	int ret;
+	struct usb_irq *uirq;
+	struct dwc3 *dwc = NULL;
+	bool can_suspend_ssphy, no_active_ss;
+
+	mutex_lock(&mdwc->suspend_resume_mutex);
+	if (atomic_read(&mdwc->in_lpm)) {
+		dev_dbg(mdwc->dev, "%s: Already suspended\n", __func__);
+		mutex_unlock(&mdwc->suspend_resume_mutex);
+		return 0;
+	}
+
+	if (mdwc->dwc3)
+		dwc = platform_get_drvdata(mdwc->dwc3);
+
+	msm_dwc3_perf_vote_enable(mdwc, false);
+
+	ret = dwc3_msm_check_suspend(mdwc);
+	if (ret < 0) {
+		mutex_unlock(&mdwc->suspend_resume_mutex);
+		return ret;
+	}
 
 	ret = dwc3_msm_prepare_suspend(mdwc, force_power_collapse);
 	if (ret) {
@@ -4147,6 +4162,18 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 			reg |= DWC3_GUSB3PIPECTL_DISRXDETU3;
 			dwc3_msm_write_reg(mdwc->base, DWC3_GUSB3PIPECTL(0),
 					reg);
+
+			/*
+			 * As specified in the USB HPG, in order to disable RX
+			 * detect properly during LPM, we need to also set the
+			 * csr_no_incr_ESSInact_u2u3_rxdet_timer bit during
+			 * suspend.
+			 */
+			if (dwc && !DWC3_VER_IS_WITHIN(DWC31, ANY, 190A)) {
+				reg = dwc3_msm_read_reg(mdwc->base, DWC3_GUCTL5);
+				reg |= DWC3_GUCTL5_ESSINACT_RXDET_TIMER;
+				dwc3_msm_write_reg(mdwc->base, DWC3_GUCTL5, reg);
+			}
 		}
 		/* indicate phy about SS mode */
 		if (dwc3_msm_is_superspeed(mdwc))
@@ -4306,6 +4333,18 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 			reg &= ~DWC3_GUSB3PIPECTL_DISRXDETU3;
 			dwc3_msm_write_reg(mdwc->base, DWC3_GUSB3PIPECTL(0),
 					reg);
+
+			/*
+			 * As specified in the USB HPG, in order to disable RX
+			 * detect properly during LPM, we need to also set the
+			 * csr_no_incr_ESSInact_u2u3_rxdet_timer bit during
+			 * suspend.  This reverses the operation done in suspend.
+			 */
+			if (dwc && !DWC3_VER_IS_WITHIN(DWC31, ANY, 190A)) {
+				reg = dwc3_msm_read_reg(mdwc->base, DWC3_GUCTL5);
+				reg &= ~DWC3_GUCTL5_ESSINACT_RXDET_TIMER;
+				dwc3_msm_write_reg(mdwc->base, DWC3_GUCTL5, reg);
+			}
 		}
 	}
 
