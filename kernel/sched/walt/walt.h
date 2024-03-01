@@ -324,6 +324,8 @@ extern unsigned int sysctl_max_freq_partial_halt;
 extern unsigned int sysctl_fmax_cap[MAX_CLUSTERS];
 extern unsigned int high_perf_cluster_freq_cap[MAX_CLUSTERS];
 extern unsigned int fmax_cap[MAX_FREQ_CAP][MAX_CLUSTERS];
+extern unsigned int debugfs_walt_features;
+#define walt_feat(feat)		(debugfs_walt_features & feat)
 extern int sched_dynamic_tp_handler(struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos);
 
@@ -383,6 +385,7 @@ extern unsigned int sysctl_sched_skip_sp_newly_idle_lb;
 extern unsigned int sysctl_sched_asymcap_boost;
 
 extern void walt_register_sysctl(void);
+extern void walt_register_debugfs(void);
 
 extern void walt_config(void);
 extern void walt_update_group_thresholds(void);

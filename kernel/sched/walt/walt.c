@@ -5465,6 +5465,7 @@ static void walt_init(struct work_struct *work)
 			 rd->pd);
 
 	walt_register_sysctl();
+	walt_register_debugfs();
 
 	input_boost_init();
 	core_ctl_init();
