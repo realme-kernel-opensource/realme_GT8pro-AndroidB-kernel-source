@@ -68,6 +68,7 @@
 #define DWC3_GUCTL1_IP_GAP_ADD_ON(n)	((n) << 21)
 #define DWC3_GUCTL1_IP_GAP_ADD_ON_MASK	DWC3_GUCTL1_IP_GAP_ADD_ON(7)
 #define DWC3_GUCTL1_L1_SUSP_THRLD_EN_FOR_HOST	BIT(8)
+#define DWC3_GUCTL1_RESUME_OPMODE_HS_HOST	BIT(10)
 #define DWC3_GUCTL3_USB20_RETRY_DISABLE	BIT(16)
 #define DWC3_GUSB3PIPECTL_DISRXDETU3	BIT(22)
 
@@ -6576,6 +6577,15 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 			dwc3_msm_write_reg_field(mdwc->base, DWC3_GUCTL3,
 				DWC3_GUCTL3_USB20_RETRY_DISABLE, 1);
 		}
+
+		/*
+		 * USB3 HPG suggests to set DWC3 GUCTL1[10] to 1 if using a non-SNPS
+		 * based, or M31 PHY.  Check for the USB PHY label to determine what
+		 * is being registered to the hs_phy before modifying the registers.
+		 */
+		if (mdwc->hs_phy->label && !strcmp(mdwc->hs_phy->label, "M31 eUSB2"))
+			dwc3_msm_write_reg_field(mdwc->base, DWC3_GUCTL1,
+						DWC3_GUCTL1_RESUME_OPMODE_HS_HOST, 1);
 
 		usb_role_switch_set_role(mdwc->dwc3_drd_sw, USB_ROLE_HOST);
 		if (dwc->dr_mode == USB_DR_MODE_OTG)
