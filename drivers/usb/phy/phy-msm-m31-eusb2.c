@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/err.h>
@@ -510,6 +510,9 @@ static void msm_m31_eusb2_ref_clk_init(struct usb_phy *uphy)
 static int msm_m31_eusb2_repeater_reset_and_init(struct m31_eusb2_phy *phy)
 {
 	int ret;
+
+	if (phy->ur)
+		phy->ur->flags = phy->phy.flags;
 
 	ret = usb_repeater_powerup(phy->ur);
 	if (ret)
