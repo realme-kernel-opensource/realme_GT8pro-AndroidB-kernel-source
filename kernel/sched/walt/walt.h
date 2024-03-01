@@ -85,6 +85,8 @@ enum soc_tunables {
 	SOC_ENABLE_SW_CYCLE_COUNTER,
 	SOC_AVAILABLE,
 };
+
+#define WALT_FEAT_TRAILBLAZER_BIT	BIT_ULL(0)
 extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 
 /*

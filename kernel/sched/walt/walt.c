@@ -644,7 +644,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason)
 		*reason = CPUFREQ_REASON_BTR;
 	}
 
-	if (walt_trailblazer_tasks(cpu_of(rq))) {
+	if (walt_trailblazer_tasks(cpu_of(rq)) && walt_feat(WALT_FEAT_TRAILBLAZER_BIT)) {
 		load = sched_ravg_window;
 		*reason = CPUFREQ_REASON_TRAILBLAZER_CPU;
 	}
@@ -2038,8 +2038,9 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	bool is_prev_trailblazer = walt_flag_test(p, WALT_TRAILBLAZER);
 
-	if (((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
-			wts->high_util_history >= TRAILBLAZER_BYPASS) {
+	if (walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
+			(((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
+			wts->high_util_history >= TRAILBLAZER_BYPASS)) {
 		*trailblazer_demand = 1 << SCHED_CAPACITY_SHIFT;
 		*demand = scale_util_to_time(*trailblazer_demand);
 		walt_flag_set(p, WALT_TRAILBLAZER, 1);
