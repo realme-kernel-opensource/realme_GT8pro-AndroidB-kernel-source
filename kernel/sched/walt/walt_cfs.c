@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/seq_file.h>
@@ -201,7 +201,7 @@ static void walt_get_indicies(struct task_struct *p, int *order_index,
 		walt_task_skip_min_cpu(p)) {
 		*energy_eval_needed = false;
 		*order_index = 1;
-		if (soc_feat(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER))
+		if (soc_feat(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT))
 			*end_index = 1;
 
 		if (sysctl_sched_asymcap_boost) {
@@ -864,7 +864,7 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 
 	wts = (struct walt_task_struct *) p->android_vendor_data1;
 	pipeline_cpu = wts->pipeline_cpu;
-	if ((wts->low_latency & WALT_LOW_LATENCY_MASK) &&
+	if ((wts->low_latency & WALT_LOW_LATENCY_BIT_MASK) &&
 			(pipeline_cpu != -1) &&
 			walt_task_skip_min_cpu(p) &&
 			cpumask_test_cpu(pipeline_cpu, p->cpus_ptr) &&
@@ -1063,18 +1063,18 @@ static void walt_binder_low_latency_set(void *unused, struct task_struct *task,
 			task->group_leader->prio < MAX_RT_PRIO) ||
 			(current->group_leader->prio < MAX_RT_PRIO &&
 			task_in_related_thread_group(task))))
-		wts->low_latency |= WALT_LOW_LATENCY_BINDER;
+		wts->low_latency |= WALT_LOW_LATENCY_BINDER_BIT;
 	else
 		/*
 		 * Clear low_latency flag if criterion above is not met, this
-		 * will handle usecase where for a binder thread WALT_LOW_LATENCY_BINDER
+		 * will handle usecase where for a binder thread WALT_LOW_LATENCY_BINDER_BIT
 		 * is set by one task and before WALT clears this flag after timer expiry
 		 * some other task tries to use same binder thread.
 		 *
 		 * The only gets cleared when binder transaction is initiated
 		 * and the above condition to set flasg is nto satisfied.
 		 */
-		wts->low_latency &= ~WALT_LOW_LATENCY_BINDER;
+		wts->low_latency &= ~WALT_LOW_LATENCY_BINDER_BIT;
 
 }
 

@@ -605,7 +605,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason)
 
 	if (sched_freq_aggr_en) {
 		load = wrq->prev_runnable_sum + aggr_grp_load;
-		*reason = CPUFREQ_REASON_FREQ_AGR;
+		*reason = CPUFREQ_REASON_FREQ_AGR_BIT;
 	} else {
 		load = wrq->prev_runnable_sum +
 					wrq->grp_time.prev_runnable_sum;
@@ -615,14 +615,14 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason)
 		kload = task_load(cpu_ksoftirqd);
 		if (kload > load) {
 			load = kload;
-			*reason = CPUFREQ_REASON_KSOFTIRQD;
+			*reason = CPUFREQ_REASON_KSOFTIRQD_BIT;
 		}
 	}
 
 	tt_load = top_task_load(rq);
 	if (tt_load > load) {
 		load = tt_load;
-		*reason = CPUFREQ_REASON_TT_LOAD;
+		*reason = CPUFREQ_REASON_TT_LOAD_BIT;
 	}
 
 	if (should_apply_suh_freq_boost(cluster)) {
@@ -631,22 +631,22 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason)
 		else
 			load = div64_u64(load * sysctl_sched_user_hint,
 					 (u64)100);
-		*reason = CPUFREQ_REASON_SUH;
+		*reason = CPUFREQ_REASON_SUH_BIT;
 	}
 
 	if (wrq->ed_task) {
 		load = mult_frac(load, 100 + sysctl_ed_boost_pct, 100);
-		*reason = CPUFREQ_REASON_EARLY_DET;
+		*reason = CPUFREQ_REASON_EARLY_DET_BIT;
 	}
 
 	if (walt_rotation_enabled) {
 		load = sched_ravg_window;
-		*reason = CPUFREQ_REASON_BTR;
+		*reason = CPUFREQ_REASON_BTR_BIT;
 	}
 
 	if (walt_trailblazer_tasks(cpu_of(rq)) && walt_feat(WALT_FEAT_TRAILBLAZER_BIT)) {
 		load = sched_ravg_window;
-		*reason = CPUFREQ_REASON_TRAILBLAZER_CPU;
+		*reason = CPUFREQ_REASON_TRAILBLAZER_CPU_BIT;
 	}
 
 	trace_sched_load_to_gov(rq, aggr_grp_load, tt_load, sched_freq_aggr_en,
@@ -2036,16 +2036,16 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	bool is_prev_trailblazer = walt_flag_test(p, WALT_TRAILBLAZER);
+	bool is_prev_trailblazer = walt_flag_test(p, WALT_TRAILBLAZER_BIT);
 
 	if (walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
 			(((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
 			wts->high_util_history >= TRAILBLAZER_BYPASS)) {
 		*trailblazer_demand = 1 << SCHED_CAPACITY_SHIFT;
 		*demand = scale_util_to_time(*trailblazer_demand);
-		walt_flag_set(p, WALT_TRAILBLAZER, 1);
+		walt_flag_set(p, WALT_TRAILBLAZER_BIT, 1);
 	} else {
-		walt_flag_set(p, WALT_TRAILBLAZER, 0);
+		walt_flag_set(p, WALT_TRAILBLAZER_BIT, 0);
 	}
 
 	/*
@@ -2054,11 +2054,11 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 	 * close the prod-sum accounts for this task before the next update takes place.
 	 */
 	if (task_on_rq_queued(p)) {
-		if (is_prev_trailblazer != walt_flag_test(p, WALT_TRAILBLAZER))
+		if (is_prev_trailblazer != walt_flag_test(p, WALT_TRAILBLAZER_BIT))
 			sched_update_nr_prod(rq->cpu, 0);
-		if (is_prev_trailblazer && !walt_flag_test(p, WALT_TRAILBLAZER))
+		if (is_prev_trailblazer && !walt_flag_test(p, WALT_TRAILBLAZER_BIT))
 			wrq->walt_stats.nr_trailblazer_tasks--;
-		else if (!is_prev_trailblazer && walt_flag_test(p, WALT_TRAILBLAZER))
+		else if (!is_prev_trailblazer && walt_flag_test(p, WALT_TRAILBLAZER_BIT))
 			wrq->walt_stats.nr_trailblazer_tasks++;
 	}
 
@@ -2513,8 +2513,8 @@ static void init_new_task_load(struct task_struct *p)
 	wts->mark_start_birth_ts = 0;
 	wts->high_util_history = 0;
 	__sched_fork_init(p);
-	walt_flag_set(p, WALT_INIT, 1);
-	walt_flag_set(p, WALT_TRAILBLAZER, 0);
+	walt_flag_set(p, WALT_INIT_BIT, 1);
+	walt_flag_set(p, WALT_TRAILBLAZER_BIT, 0);
 }
 
 int remove_heavy(struct walt_task_struct *wts);
@@ -2524,10 +2524,10 @@ static void walt_task_dead(struct task_struct *p)
 
 	sched_set_group_id(p, 0);
 
-	if (wts->low_latency & WALT_LOW_LATENCY_PIPELINE)
+	if (wts->low_latency & WALT_LOW_LATENCY_PIPELINE_BIT)
 		remove_pipeline(wts);
 
-	if (wts->low_latency & WALT_LOW_LATENCY_HEAVY)
+	if (wts->low_latency & WALT_LOW_LATENCY_HEAVY_BIT)
 		remove_heavy(wts);
 }
 
@@ -2941,7 +2941,7 @@ static void walt_update_cluster_topology(void)
 		for (i = 1; i < num_sched_clusters; i++)
 			nr_big_cpus += cpumask_weight(&sched_cluster[i]->cpus);
 
-	if (soc_feat(SOC_ENABLE_ASYM_SIBLINGS)) {
+	if (soc_feat(SOC_ENABLE_ASYM_SIBLINGS_BIT)) {
 		cluster = NULL;
 		cpumask_clear(&asym_cap_sibling_cpus);
 		cpumask_clear(&shared_rail_sibling_cpus);
@@ -2970,7 +2970,7 @@ static void walt_init_cycle_counter(void)
 	char *walt_cycle_cntr_path = "/soc/walt";
 	struct device_node *np = NULL;
 
-	if (soc_feat(SOC_ENABLE_SW_CYCLE_COUNTER)) {
+	if (soc_feat(SOC_ENABLE_SW_CYCLE_COUNTER_BIT)) {
 		walt_cycle_counter_init();
 	} else {
 		np = of_find_node_by_path(walt_cycle_cntr_path);
@@ -3300,7 +3300,7 @@ static int __sched_set_group_id(struct task_struct *p, unsigned int group_id)
 	if (group_id >= MAX_NUM_CGROUP_COLOC_ID)
 		return -EINVAL;
 
-	if (unlikely(!walt_flag_test(p, WALT_INIT)))
+	if (unlikely(!walt_flag_test(p, WALT_INIT_BIT)))
 		return -EINVAL;
 
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
@@ -3790,7 +3790,7 @@ int remove_heavy(struct walt_task_struct *wts)
 	/* assume only one entry of wts exists in the lists */
 	for (i = 0; i < WALT_NR_CPUS; i++) {
 		if (wts == heavy_wts[i]) {
-			wts->low_latency &= ~WALT_LOW_LATENCY_HEAVY;
+			wts->low_latency &= ~WALT_LOW_LATENCY_HEAVY_BIT;
 			heavy_wts[i] = NULL;
 			goto out;
 		}
@@ -3877,7 +3877,7 @@ bool find_heaviest_topapp(u64 window_start)
 			raw_spin_lock_irqsave(&heavy_lock, flags);
 			for (i = 0; i < WALT_NR_CPUS; i++) {
 				if (heavy_wts[i]) {
-					heavy_wts[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY;
+					heavy_wts[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY_BIT;
 					heavy_wts[i]->pipeline_cpu = -1;
 					heavy_wts[i] = NULL;
 				}
@@ -3937,7 +3937,7 @@ bool find_heaviest_topapp(u64 window_start)
 			}
 		}
 		if (reset) {
-			heavy_wts_to_drop[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY;
+			heavy_wts_to_drop[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY_BIT;
 			heavy_wts_to_drop[i]->pipeline_cpu = -1;
 		}
 	}
@@ -3972,11 +3972,11 @@ bool find_heaviest_topapp(u64 window_start)
 			wts->pipeline_cpu = cpumask_first(&last_available_big_cpus);
 			if (wts->pipeline_cpu >= nr_cpu_ids) {
 				/* drop from heavy if it can't be assigned */
-				heavy_wts[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY;
+				heavy_wts[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY_BIT;
 				heavy_wts[i]->pipeline_cpu = -1;
 				heavy_wts[i] = NULL;
 			} else {
-				wts->low_latency |= WALT_LOW_LATENCY_HEAVY;
+				wts->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
 				cpumask_clear_cpu(wts->pipeline_cpu, &last_available_big_cpus);
 			}
 		}
@@ -4332,21 +4332,21 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 			if (is_migration) {
 				if (wrq->notif_pending) {
 					wrq->notif_pending = false;
-					wflag |= WALT_CPUFREQ_IC_MIGRATION;
+					wflag |= WALT_CPUFREQ_IC_MIGRATION_BIT;
 				}
 				if (is_asym_migration)
-					wflag |= WALT_CPUFREQ_ASYM_FIXUP;
+					wflag |= WALT_CPUFREQ_ASYM_FIXUP_BIT;
 				if (is_shared_rail_migration)
-					wflag |= WALT_CPUFREQ_SHARED_RAIL;
+					wflag |= WALT_CPUFREQ_SHARED_RAIL_BIT;
 			} else {
-				wflag |= WALT_CPUFREQ_ROLLOVER;
+				wflag |= WALT_CPUFREQ_ROLLOVER_BIT;
 			}
 
 			if (i == num_cpus)
 				waltgov_run_callback(cpu_rq(cpu), wflag);
 			else
 				waltgov_run_callback(cpu_rq(cpu), wflag |
-							WALT_CPUFREQ_CONTINUE);
+							WALT_CPUFREQ_CONTINUE_BIT);
 			i++;
 
 			if (!is_migration)
@@ -4814,7 +4814,7 @@ static void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
 	if (wts->rtg_high_prio)
 		wrq->walt_stats.nr_rtg_high_prio_tasks++;
 
-	if (walt_flag_test(p, WALT_TRAILBLAZER))
+	if (walt_flag_test(p, WALT_TRAILBLAZER_BIT))
 		wrq->walt_stats.nr_trailblazer_tasks++;
 }
 
@@ -4829,7 +4829,7 @@ static void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
 	if (wts->rtg_high_prio)
 		wrq->walt_stats.nr_rtg_high_prio_tasks--;
 
-	if (walt_flag_test(p, WALT_TRAILBLAZER))
+	if (walt_flag_test(p, WALT_TRAILBLAZER_BIT))
 		wrq->walt_stats.nr_trailblazer_tasks--;
 
 	BUG_ON(wrq->walt_stats.nr_big_tasks < 0);
@@ -4990,10 +4990,10 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 		walt_inc_cumulative_runnable_avg(rq, p);
 
 	if ((flags & ENQUEUE_WAKEUP)) {
-		if (walt_flag_test(p, WALT_TRAILBLAZER))
-			waltgov_run_callback(rq, WALT_CPUFREQ_TRAILBLAZER);
+		if (walt_flag_test(p, WALT_TRAILBLAZER_BIT))
+			waltgov_run_callback(rq, WALT_CPUFREQ_TRAILBLAZER_BIT);
 		else if (do_pl_notif(rq))
-			waltgov_run_callback(rq, WALT_CPUFREQ_PL);
+			waltgov_run_callback(rq, WALT_CPUFREQ_PL_BIT);
 	}
 
 	trace_sched_enq_deq_task(p, 1, cpumask_bits(p->cpus_ptr)[0], is_mvp(wts));
@@ -5017,7 +5017,7 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 	 * an invalid failure.
 	 */
 	if (wts->prev_on_rq_cpu >= 0 && wts->prev_on_rq_cpu != cpu_of(rq) &&
-			walt_flag_test(p, WALT_INIT))
+			walt_flag_test(p, WALT_INIT_BIT))
 		WALT_BUG(WALT_BUG_UPSTREAM, p, "dequeue cpu %d not same as enqueue %d\n",
 			 cpu_of(rq), wts->prev_on_rq_cpu);
 
@@ -5130,7 +5130,7 @@ static void android_rvh_tick_entry(void *unused, struct rq *rq)
 	walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
 
 	if (is_ed_task_present(rq, wallclock, NULL))
-		waltgov_run_callback(rq, WALT_CPUFREQ_EARLY_DET);
+		waltgov_run_callback(rq, WALT_CPUFREQ_EARLY_DET_BIT);
 }
 
 static void android_vh_scheduler_tick(void *unused, struct rq *rq)

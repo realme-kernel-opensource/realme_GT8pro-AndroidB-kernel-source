@@ -302,30 +302,30 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	if (wg_cpu->walt_load.trailblazer_state && freq < trailblazer_floor_freq[cluster->id] &&
 		walt_feat(WALT_FEAT_TRAILBLAZER_BIT)) {
 		freq = trailblazer_floor_freq[cluster->id];
-		wg_driv_cpu->reasons |= CPUFREQ_REASON_TRAILBLAZER_STATE;
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_TRAILBLAZER_STATE_BIT;
 	}
 
 	if (wg_policy->tunables->adaptive_high_freq && !skip) {
 		if (raw_freq < get_adaptive_low_freq(wg_policy)) {
 			freq = get_adaptive_low_freq(wg_policy);
-			wg_driv_cpu->reasons = CPUFREQ_REASON_ADAPTIVE_LOW;
+			wg_driv_cpu->reasons |= CPUFREQ_REASON_ADAPTIVE_LOW_BIT;
 		} else if (raw_freq <= get_adaptive_high_freq(wg_policy)) {
 			freq = get_adaptive_high_freq(wg_policy);
-			wg_driv_cpu->reasons = CPUFREQ_REASON_ADAPTIVE_HIGH;
+			wg_driv_cpu->reasons |= CPUFREQ_REASON_ADAPTIVE_HIGH_BIT;
 		}
 	}
 
 	if (freq > fmax_cap[SMART_FMAX_CAP][cluster->id]) {
 		freq = fmax_cap[SMART_FMAX_CAP][cluster->id];
-		wg_driv_cpu->reasons |= CPUFREQ_REASON_SMART_FMAX_CAP;
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_SMART_FMAX_CAP_BIT;
 	}
 	if (freq > fmax_cap[HIGH_PERF_CAP][cluster->id]) {
 		freq = fmax_cap[HIGH_PERF_CAP][cluster->id];
-		wg_driv_cpu->reasons |= CPUFREQ_REASON_HIGH_PERF_CAP;
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_HIGH_PERF_CAP_BIT;
 	}
 	if (freq > fmax_cap[PARTIAL_HALT_CAP][cluster->id]) {
 		freq = fmax_cap[PARTIAL_HALT_CAP][cluster->id];
-		wg_driv_cpu->reasons |= CPUFREQ_REASON_PARTIAL_HALT_CAP;
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_PARTIAL_HALT_CAP_BIT;
 	}
 
 	if (wg_policy->cached_raw_freq && freq == wg_policy->cached_raw_freq &&
@@ -386,7 +386,7 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 				unsigned long *max)
 {
 	struct waltgov_policy *wg_policy = wg_cpu->wg_policy;
-	bool is_migration = wg_cpu->flags & WALT_CPUFREQ_IC_MIGRATION;
+	bool is_migration = wg_cpu->flags & WALT_CPUFREQ_IC_MIGRATION_BIT;
 	bool is_rtg_boost = wg_cpu->walt_load.rtgb_active;
 	bool is_hiload;
 	bool employ_ed_boost = wg_cpu->walt_load.ed_active && sysctl_ed_boost_pct;
@@ -394,7 +394,8 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 
 	if (is_rtg_boost && (!cpumask_test_cpu(wg_cpu->cpu, cpu_partial_halt_mask) ||
 				!is_state1()))
-		max_and_reason(util, wg_policy->rtg_boost_util, wg_cpu, CPUFREQ_REASON_RTG_BOOST);
+		max_and_reason(util, wg_policy->rtg_boost_util, wg_cpu,
+				CPUFREQ_REASON_RTG_BOOST_BIT);
 
 	is_hiload = (cpu_util >= mult_frac(wg_policy->avg_cap,
 					   wg_policy->tunables->hispeed_load,
@@ -405,19 +406,19 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 		is_hiload = false;
 
 	if (is_hiload && !is_migration)
-		max_and_reason(util, wg_policy->hispeed_util, wg_cpu, CPUFREQ_REASON_HISPEED);
+		max_and_reason(util, wg_policy->hispeed_util, wg_cpu, CPUFREQ_REASON_HISPEED_BIT);
 
 	if (is_hiload && nl >= mult_frac(cpu_util, NL_RATIO, 100))
-		max_and_reason(util, *max, wg_cpu, CPUFREQ_REASON_NWD);
+		max_and_reason(util, *max, wg_cpu, CPUFREQ_REASON_NWD_BIT);
 
 	if (wg_policy->tunables->pl) {
 		if (sysctl_sched_conservative_pl)
 			pl = mult_frac(pl, TARGET_LOAD, 100);
-		max_and_reason(util, pl, wg_cpu, CPUFREQ_REASON_PL);
+		max_and_reason(util, pl, wg_cpu, CPUFREQ_REASON_PL_BIT);
 	}
 
 	if (employ_ed_boost)
-		wg_cpu->reasons |= CPUFREQ_REASON_EARLY_DET;
+		wg_cpu->reasons |= CPUFREQ_REASON_EARLY_DET_BIT;
 }
 
 static inline unsigned long target_util(struct waltgov_policy *wg_policy,
@@ -483,7 +484,7 @@ static void waltgov_update_freq(struct waltgov_callback *cb, u64 time,
 	unsigned long hs_util, rtg_boost_util;
 	unsigned int next_f;
 
-	if (!wg_policy->tunables->pl && flags & WALT_CPUFREQ_PL)
+	if (!wg_policy->tunables->pl && flags & WALT_CPUFREQ_PL_BIT)
 		return;
 
 	wg_cpu->util = waltgov_get_util(wg_cpu);
@@ -510,7 +511,7 @@ static void waltgov_update_freq(struct waltgov_callback *cb, u64 time,
 				wg_cpu->walt_load.rtgb_active, flags);
 
 	if (waltgov_should_update_freq(wg_policy, time) &&
-	    !(flags & WALT_CPUFREQ_CONTINUE)) {
+	    !(flags & WALT_CPUFREQ_CONTINUE_BIT)) {
 		next_f = waltgov_next_freq_shared(wg_cpu, time);
 
 		if (!next_f)
@@ -752,7 +753,7 @@ static ssize_t boost_store(struct gov_attr_set *attr_set, const char *buf,
 		unsigned long flags;
 
 		raw_spin_lock_irqsave(&rq->__lock, flags);
-		waltgov_run_callback(rq, WALT_CPUFREQ_BOOST_UPDATE);
+		waltgov_run_callback(rq, WALT_CPUFREQ_BOOST_UPDATE_BIT);
 		raw_spin_unlock_irqrestore(&rq->__lock, flags);
 	}
 	return count;

@@ -69,26 +69,26 @@ void walt_config(void)
 			fmax_cap[i][j] = FREQ_QOS_MAX_DEFAULT_VALUE;
 	}
 
-	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP);
-	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_FG);
-	soc_feat_set(SOC_ENABLE_UCLAMP_BOOSTED);
-	soc_feat_set(SOC_ENABLE_PER_TASK_BOOST_ON_MID);
+	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
+	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
+	soc_feat_set(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
+	soc_feat_set(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
 
 	/* return if socinfo is not available */
 	if (!name)
 		return;
 
-	soc_feat_set(SOC_AVAILABLE);
+	soc_feat_set(SOC_AVAILABLE_BIT);
 	if (!strcmp(name, "SUN")) {
 		sysctl_sched_suppress_region2		= 1;
-		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP);
-		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG);
-		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED);
-		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID);
+		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
+		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
+		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
+		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
 		trailblazer_floor_freq[0] = 1000000;
 	} else if (!strcmp(name, "PINEAPPLE")) {
-		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD);
-		soc_feat_set(SOC_ENABLE_ASYM_SIBLINGS);
-		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER);
+		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
+		soc_feat_set(SOC_ENABLE_ASYM_SIBLINGS_BIT);
+		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
 	}
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <trace/hooks/sched.h>
@@ -116,7 +116,7 @@ static void walt_rt_energy_aware_wake_cpu(struct task_struct *task, struct cpuma
 
 	rcu_read_lock();
 
-	if (soc_feat(SOC_ENABLE_SILVER_RT_SPREAD) && order_index == 0)
+	if (soc_feat(SOC_ENABLE_SILVER_RT_SPREAD_BIT) && order_index == 0)
 		end_index = 1;
 
 	for (cluster = 0; cluster < num_sched_clusters; cluster++) {
