@@ -39,6 +39,8 @@ struct qcom_q6v5 {
 	struct completion stop_done;
 
 	int crash_reason;
+	int crash_stack;
+	unsigned int smem_host_id;
 
 	bool running;
 
@@ -47,7 +49,8 @@ struct qcom_q6v5 {
 };
 
 int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
-		   struct rproc *rproc, int crash_reason, const char *load_state,
+		   struct rproc *rproc, int crash_reason, int crash_stack,
+		   unsigned int smem_host_id, const char *load_state,
 		   void (*handover)(struct qcom_q6v5 *q6v5));
 void qcom_q6v5_deinit(struct qcom_q6v5 *q6v5);
 

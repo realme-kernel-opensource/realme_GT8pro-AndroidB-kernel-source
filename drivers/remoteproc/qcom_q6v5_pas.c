@@ -56,6 +56,8 @@
 
 struct adsp_data {
 	int crash_reason_smem;
+	int crash_reason_stack;
+	unsigned int smem_host_id;
 	const char *firmware_name;
 	const char *dtb_firmware_name;
 	int pas_id;
@@ -106,6 +108,8 @@ struct qcom_adsp {
 	unsigned int minidump_id;
 	bool both_dumps;
 	int crash_reason_smem;
+	int crash_reason_stack;
+	unsigned int smem_host_id;
 	bool decrypt_shutdown;
 	const char *info_name;
 
@@ -1314,8 +1318,9 @@ static int adsp_probe(struct platform_device *pdev)
 		goto free_rproc;
 	adsp->proxy_pd_count = ret;
 
-	ret = qcom_q6v5_init(&adsp->q6v5, pdev, rproc, desc->crash_reason_smem, desc->load_state,
-			     qcom_pas_handover);
+	ret = qcom_q6v5_init(&adsp->q6v5, pdev, rproc, desc->crash_reason_smem,
+			     desc->crash_reason_stack, desc->smem_host_id,
+			     desc->load_state, qcom_pas_handover);
 	if (ret)
 		goto detach_proxy_pds;
 
@@ -1825,6 +1830,8 @@ static const struct adsp_data sun_adsp_resource = {
 	.ssctl_id = 0x14,
 	.uses_elf64 = true,
 	.auto_boot = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
 };
 
 static const struct adsp_data sun_cdsp_resource = {
@@ -1844,6 +1851,8 @@ static const struct adsp_data sun_cdsp_resource = {
 	.region_assign_shared = true,
 	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
 	.auto_boot = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
 };
 
 static const struct adsp_data sun_mpss_resource = {

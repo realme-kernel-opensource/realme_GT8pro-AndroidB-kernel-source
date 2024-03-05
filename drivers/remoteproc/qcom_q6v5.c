@@ -148,6 +148,12 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 	else
 		dev_err(q6v5->dev, "watchdog without message\n");
 
+	if (q6v5->crash_stack) {
+		msg = qcom_smem_get(q6v5->smem_host_id, q6v5->crash_stack, &len);
+		if (!IS_ERR(msg) && len > 0 && msg[0])
+			dev_err(q6v5->dev, "%s\n", msg);
+	}
+
 	q6v5->running = false;
 
 	trace_rproc_qcom_event(dev_name(q6v5->dev), "q6v5_wdog", msg);
@@ -181,6 +187,12 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 		dev_err(q6v5->dev, "fatal error received: %s\n", msg);
 	else
 		dev_err(q6v5->dev, "fatal error without message\n");
+
+	if (q6v5->crash_stack) {
+		msg = qcom_smem_get(q6v5->smem_host_id, q6v5->crash_stack, &len);
+		if (!IS_ERR(msg) && len > 0 && msg[0])
+			dev_err(q6v5->dev, "%s\n", msg);
+	}
 
 	q6v5->running = false;
 
@@ -311,7 +323,8 @@ EXPORT_SYMBOL_GPL(qcom_q6v5_panic);
  * Return: 0 on success, negative errno on failure
  */
 int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
-		   struct rproc *rproc, int crash_reason, const char *load_state,
+		   struct rproc *rproc,  int crash_reason, int crash_stack,
+		   unsigned int smem_host_id, const char *load_state,
 		   void (*handover)(struct qcom_q6v5 *q6v5))
 {
 	int ret;
@@ -319,6 +332,8 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 	q6v5->rproc = rproc;
 	q6v5->dev = &pdev->dev;
 	q6v5->crash_reason = crash_reason;
+	q6v5->crash_stack = crash_stack;
+	q6v5->smem_host_id = smem_host_id;
 	q6v5->handover = handover;
 	q6v5->ssr_subdev = NULL;
 
