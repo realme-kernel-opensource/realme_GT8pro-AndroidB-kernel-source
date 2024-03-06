@@ -3980,7 +3980,7 @@ bool find_heaviest_topapp(u64 window_start)
 				cpumask_clear_cpu(wts->pipeline_cpu, &last_available_big_cpus);
 			}
 		}
-		if (wts->pipeline_cpu)
+		if (wts->pipeline_cpu >= 0)
 			have_heavy_list++;
 	}
 
