@@ -1006,7 +1006,7 @@ static int crm_send_cmd(struct crm_drv *drv, u32 vcd_type, const struct crm_cmd 
 #endif
 
 	if (compl && wait) {
-		time_left = CRM_TIMEOUT_MS;
+		time_left = msecs_to_jiffies(CRM_TIMEOUT_MS);
 		time_left = wait_for_completion_timeout(compl, time_left);
 		if (!time_left) {
 			WARN_ON(1);
