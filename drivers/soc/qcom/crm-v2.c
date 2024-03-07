@@ -994,8 +994,11 @@ static int crm_send_cmd(struct crm_drv *drv, u32 vcd_type, const struct crm_cmd 
 	}
 
 	/* Set COMMIT to start aggregating votes */
-	if (pt_trigger)
-		write_crm_reg(drv, CRMB_PT_TRIGGER, 0, vcd_type, resource_idx, BW_PT_VOTE_TRIGGER);
+	if (pt_trigger) {
+		write_crm_reg(drv, CRMB_PT_TRIGGER, 0, vcd_type, 0, BW_PT_VOTE_TRIGGER);
+		udelay(1);
+		write_crm_reg(drv, CRMB_PT_TRIGGER, 0, vcd_type, 0, 0);
+	}
 
 	spin_unlock_irqrestore(&drv->lock, flags);
 	trace_crm_write_vcd_votes(drv->name, vcd_type, resource_idx, pwr_state, data);
