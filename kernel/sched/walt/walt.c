@@ -4065,10 +4065,17 @@ static inline bool is_prime_worthy(struct walt_task_struct *wts)
 	if (wts == NULL)
 		return false;
 
+	if (num_sched_clusters < 2)
+		return true;
+
 	p = wts_to_ts(wts);
 
-	/* assume sched_cluster[1] references gold cpus */
-	return !task_fits_max(p, cpumask_last(&sched_cluster[1]->cpus));
+	/*
+	 * Assume the first row of cpu arrays represents the order of clusters
+	 * in magnitude of capacities, where the last column represents prime,
+	 * and the second to last column represents golds
+	 */
+	return !task_fits_max(p, cpumask_last(&cpu_array[0][num_sched_clusters - 2]));
 }
 
 void rearrange_heavy(u64 window_start, bool force)
@@ -4076,6 +4083,9 @@ void rearrange_heavy(u64 window_start, bool force)
 	struct walt_task_struct *prime_wts = NULL;
 	struct walt_task_struct *other_wts = NULL;
 	unsigned long flags;
+
+	if (num_sched_clusters < 2)
+		return;
 
 	if (have_heavy_list <= 2) {
 		find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
