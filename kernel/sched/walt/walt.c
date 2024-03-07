@@ -3989,7 +3989,8 @@ bool find_heaviest_topapp(u64 window_start)
 	if (trace_sched_pipeline_tasks_enabled()) {
 		for (i = 0; i < WALT_NR_CPUS; i++) {
 			if (heavy_wts[i] != NULL)
-				trace_sched_pipeline_tasks(AUTO_PIPELINE, i, heavy_wts[i]);
+				trace_sched_pipeline_tasks(AUTO_PIPELINE, i, heavy_wts[i],
+						have_heavy_list);
 		}
 	}
 
@@ -4014,6 +4015,7 @@ static inline void swap_pipeline_with_prime_locked(struct walt_task_struct *prim
 		/* if prime preferred died promote gold to prime, assumes 1 prime */
 		other_wts->pipeline_cpu =
 			cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
+		trace_sched_pipeline_swapped(other_wts, prime_wts);
 	}
 }
 
@@ -4212,7 +4214,8 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 	if (trace_sched_pipeline_tasks_enabled()) {
 		for (i = 0; i < WALT_NR_CPUS; i++) {
 			if (pipeline_wts[i] != NULL)
-				trace_sched_pipeline_tasks(MANUAL_PIPELINE, i, pipeline_wts[i]);
+				trace_sched_pipeline_tasks(MANUAL_PIPELINE, i, pipeline_wts[i],
+						pipeline_nr);
 		}
 	}
 

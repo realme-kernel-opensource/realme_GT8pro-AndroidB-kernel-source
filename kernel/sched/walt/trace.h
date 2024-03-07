@@ -1711,9 +1711,9 @@ TRACE_EVENT(sched_update_updown_early_migrate_values,
 
 TRACE_EVENT(sched_pipeline_tasks,
 
-	TP_PROTO(int type, int index, struct walt_task_struct *heavy_wts),
+	TP_PROTO(int type, int index, struct walt_task_struct *heavy_wts, int nr),
 
-	TP_ARGS(type, index, heavy_wts),
+	TP_ARGS(type, index, heavy_wts, nr),
 
 	TP_STRUCT__entry(
 		__field(int, index)
@@ -1724,6 +1724,7 @@ TRACE_EVENT(sched_pipeline_tasks,
 		__field(int, coloc_demand)
 		__field(int, pipeline_cpu)
 		__field(int, low_latency)
+		__field(int, nr)
 	),
 
 	TP_fast_assign(
@@ -1735,12 +1736,13 @@ TRACE_EVENT(sched_pipeline_tasks,
 		__entry->coloc_demand	= heavy_wts->coloc_demand;
 		__entry->pipeline_cpu	= heavy_wts->pipeline_cpu;
 		__entry->low_latency	= heavy_wts->low_latency;
+		__entry->nr		= nr;
 	),
 
-	TP_printk("type=%d index=%d pid=%d comm=(%s) demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x",
+	TP_printk("type=%d index=%d pid=%d comm=(%s) demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d",
 			__entry->type, __entry->index, __entry->pid,
 			__entry->comm, __entry->demand_scaled, __entry->coloc_demand,
-			__entry->pipeline_cpu, __entry->low_latency)
+			__entry->pipeline_cpu, __entry->low_latency, __entry->nr)
 );
 
 TRACE_EVENT(sched_pipeline_swapped,
@@ -1763,26 +1765,41 @@ TRACE_EVENT(sched_pipeline_swapped,
 	),
 
 	TP_fast_assign(
-		memcpy(__entry->other_comm, wts_to_ts(other_wts)->comm, TASK_COMM_LEN);
-		__entry->other_pid		= wts_to_ts(other_wts)->pid;
-		__entry->other_pipeline_cpu	= other_wts->pipeline_cpu;
-		__entry->other_demand_scaled	= other_wts->demand_scaled;
-		__entry->other_coloc_demand	= other_wts->coloc_demand;
-		memcpy(__entry->prime_comm, wts_to_ts(prime_wts)->comm, TASK_COMM_LEN);
-		__entry->prime_pid		= wts_to_ts(prime_wts)->pid;
-		__entry->prime_pipeline_cpu	= prime_wts->pipeline_cpu;
-		__entry->prime_demand_scaled	= prime_wts->demand_scaled;
-		__entry->prime_coloc_demand	= prime_wts->coloc_demand;
+		if (other_wts != NULL) {
+			memcpy(__entry->other_comm, wts_to_ts(other_wts)->comm, TASK_COMM_LEN);
+			__entry->other_pid		= wts_to_ts(other_wts)->pid;
+			__entry->other_pipeline_cpu	= other_wts->pipeline_cpu;
+			__entry->other_demand_scaled	= other_wts->demand_scaled;
+			__entry->other_coloc_demand	= other_wts->coloc_demand;
+		} else {
+			memset(__entry->other_comm, '\0', TASK_COMM_LEN);
+			__entry->other_pid		= -1;
+			__entry->other_pipeline_cpu	= -1;
+			__entry->other_demand_scaled	= -1;
+			__entry->other_coloc_demand	= -1;
+		}
+		if (prime_wts != NULL) {
+			memcpy(__entry->prime_comm, wts_to_ts(prime_wts)->comm, TASK_COMM_LEN);
+			__entry->prime_pid		= wts_to_ts(prime_wts)->pid;
+			__entry->prime_pipeline_cpu	= prime_wts->pipeline_cpu;
+			__entry->prime_demand_scaled	= prime_wts->demand_scaled;
+			__entry->prime_coloc_demand	= prime_wts->coloc_demand;
+		} else {
+			memset(__entry->prime_comm, '\0', TASK_COMM_LEN);
+			__entry->prime_pid		= -1;
+			__entry->prime_pipeline_cpu	= -1;
+			__entry->prime_demand_scaled	= -1;
+			__entry->prime_coloc_demand	= -1;
+		}
 	),
 
-
-	TP_printk("prime_pid=%d prime_comm=(%s) prime_demand=%d prime_coloc=%d prime_pipeline_cpu=%d other_pid=%d other_comm=(%s) other_demand=%d other_coloc=%d other_pipeline_cpu=%d",
-			__entry->prime_pid, __entry->prime_comm,
-			__entry->prime_demand_scaled, __entry->prime_coloc_demand,
-			__entry->prime_pipeline_cpu,
+	TP_printk("other_pid=%d other_comm=(%s) other_demand=%d other_coloc=%d other_new_pipeline_cpu=%d prime_pid=%d prime_comm=(%s) prime_demand=%d prime_coloc=%d prime_new_pipeline_cpu=%d",
 			__entry->other_pid, __entry->other_comm,
 			__entry->other_demand_scaled, __entry->other_coloc_demand,
-			__entry->other_pipeline_cpu)
+			__entry->other_pipeline_cpu,
+			__entry->prime_pid, __entry->prime_comm,
+			__entry->prime_demand_scaled, __entry->prime_coloc_demand,
+			__entry->prime_pipeline_cpu)
 );
 
 #endif /* _TRACE_WALT_H */
