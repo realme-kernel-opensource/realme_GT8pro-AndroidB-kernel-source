@@ -7,9 +7,6 @@
 
 #include <asm-generic/module.h>
 
-extern u64 module_direct_base;
-extern u64 module_plt_base;
-
 struct mod_plt_sec {
 	int			plt_shndx;
 	int			plt_num_entries;
@@ -47,8 +44,7 @@ struct plt_entry {
 
 static inline bool is_forbidden_offset_for_adrp(void *place)
 {
-	return IS_ENABLED(CONFIG_ARM64_ERRATUM_843419) &&
-	       cpus_have_const_cap(ARM64_WORKAROUND_843419) &&
+	return cpus_have_final_cap(ARM64_WORKAROUND_843419) &&
 	       ((u64)place & 0xfff) >= 0xff8;
 }
 

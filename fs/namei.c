@@ -289,7 +289,7 @@ EXPORT_SYMBOL(putname);
  * the vfsmount must be passed through @idmap. This function will then take
  * care to map the inode according to @idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply passs @nop_mnt_idmap.
+ * raw inode simply pass @nop_mnt_idmap.
  */
 static int check_acl(struct mnt_idmap *idmap,
 		     struct inode *inode, int mask)
@@ -334,7 +334,7 @@ static int check_acl(struct mnt_idmap *idmap,
  * the vfsmount must be passed through @idmap. This function will then take
  * care to map the inode according to @idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply passs @nop_mnt_idmap.
+ * raw inode simply pass @nop_mnt_idmap.
  */
 static int acl_permission_check(struct mnt_idmap *idmap,
 				struct inode *inode, int mask)
@@ -395,7 +395,7 @@ static int acl_permission_check(struct mnt_idmap *idmap,
  * the vfsmount must be passed through @idmap. This function will then take
  * care to map the inode according to @idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply passs @nop_mnt_idmap.
+ * raw inode simply pass @nop_mnt_idmap.
  */
 int generic_permission(struct mnt_idmap *idmap, struct inode *inode,
 		       int mask)
@@ -2467,7 +2467,7 @@ static int handle_lookup_down(struct nameidata *nd)
 	return PTR_ERR(step_into(nd, WALK_NOFOLLOW, nd->path.dentry));
 }
 
-/* Returns 0 and nd will be valid on success; Retuns error, otherwise. */
+/* Returns 0 and nd will be valid on success; Returns error, otherwise. */
 static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path)
 {
 	const char *s = path_init(nd, flags);
@@ -2522,7 +2522,7 @@ int filename_lookup(int dfd, struct filename *name, unsigned flags,
 	return retval;
 }
 
-/* Returns 0 and nd will be valid on success; Retuns error, otherwise. */
+/* Returns 0 and nd will be valid on success; Returns error, otherwise. */
 static int path_parentat(struct nameidata *nd, unsigned flags,
 				struct path *parent)
 {
@@ -3105,25 +3105,6 @@ void unlock_rename(struct dentry *p1, struct dentry *p2)
 EXPORT_SYMBOL(unlock_rename);
 
 /**
- * mode_strip_umask - handle vfs umask stripping
- * @dir:	parent directory of the new inode
- * @mode:	mode of the new inode to be created in @dir
- *
- * Umask stripping depends on whether or not the filesystem supports POSIX
- * ACLs. If the filesystem doesn't support it umask stripping is done directly
- * in here. If the filesystem does support POSIX ACLs umask stripping is
- * deferred until the filesystem calls posix_acl_create().
- *
- * Returns: mode
- */
-static inline umode_t mode_strip_umask(const struct inode *dir, umode_t mode)
-{
-	if (!IS_POSIXACL(dir))
-		mode &= ~current_umask();
-	return mode;
-}
-
-/**
  * vfs_prepare_mode - prepare the mode to be used for a new inode
  * @idmap:	idmap of the mount the inode was found from
  * @dir:	parent directory of the new inode
@@ -3177,7 +3158,7 @@ static inline umode_t vfs_prepare_mode(struct mnt_idmap *idmap,
  * the vfsmount must be passed through @idmap. This function will then take
  * care to map the inode according to @idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply passs @nop_mnt_idmap.
+ * raw inode simply pass @nop_mnt_idmap.
  */
 int vfs_create(struct mnt_idmap *idmap, struct inode *dir,
 	       struct dentry *dentry, umode_t mode, bool want_excl)
@@ -3536,7 +3517,8 @@ static const char *open_last_lookups(struct nameidata *nd,
 		if (likely(dentry))
 			goto finish_lookup;
 
-		BUG_ON(nd->flags & LOOKUP_RCU);
+		if (WARN_ON_ONCE(nd->flags & LOOKUP_RCU))
+			return ERR_PTR(-ECHILD);
 	} else {
 		/* create side of things */
 		if (nd->flags & LOOKUP_RCU) {
@@ -3664,7 +3646,7 @@ static int do_open(struct nameidata *nd,
  * the vfsmount must be passed through @idmap. This function will then take
  * care to map the inode according to @idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply passs @nop_mnt_idmap.
+ * raw inode simply pass @nop_mnt_idmap.
  */
 static int vfs_tmpfile(struct mnt_idmap *idmap,
 		       const struct path *parentpath,
@@ -3969,7 +3951,7 @@ EXPORT_SYMBOL(user_path_create);
  * the vfsmount must be passed through @idmap. This function will then take
  * care to map the inode according to @idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply passs @nop_mnt_idmap.
+ * raw inode simply pass @nop_mnt_idmap.
  */
 int vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	      struct dentry *dentry, umode_t mode, dev_t dev)
@@ -4095,7 +4077,7 @@ SYSCALL_DEFINE3(mknod, const char __user *, filename, umode_t, mode, unsigned, d
  * the vfsmount must be passed through @idmap. This function will then take
  * care to map the inode according to @idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply passs @nop_mnt_idmap.
+ * raw inode simply pass @nop_mnt_idmap.
  */
 int vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	      struct dentry *dentry, umode_t mode)
@@ -4176,7 +4158,7 @@ SYSCALL_DEFINE2(mkdir, const char __user *, pathname, umode_t, mode)
  * the vfsmount must be passed through @idmap. This function will then take
  * care to map the inode according to @idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply passs @nop_mnt_idmap.
+ * raw inode simply pass @nop_mnt_idmap.
  */
 int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 		     struct dentry *dentry)
@@ -4305,7 +4287,7 @@ SYSCALL_DEFINE1(rmdir, const char __user *, pathname)
  * the vfsmount must be passed through @idmap. This function will then take
  * care to map the inode according to @idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply passs @nop_mnt_idmap.
+ * raw inode simply pass @nop_mnt_idmap.
  */
 int vfs_unlink(struct mnt_idmap *idmap, struct inode *dir,
 	       struct dentry *dentry, struct inode **delegated_inode)
@@ -4387,11 +4369,9 @@ retry_deleg:
 	if (!IS_ERR(dentry)) {
 
 		/* Why not before? Because we want correct error value */
-		if (last.name[last.len])
+		if (last.name[last.len] || d_is_negative(dentry))
 			goto slashes;
 		inode = dentry->d_inode;
-		if (d_is_negative(dentry))
-			goto slashes;
 		ihold(inode);
 		error = security_path_unlink(&path, dentry);
 		if (error)
@@ -4460,7 +4440,7 @@ SYSCALL_DEFINE1(unlink, const char __user *, pathname)
  * the vfsmount must be passed through @idmap. This function will then take
  * care to map the inode according to @idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply passs @nop_mnt_idmap.
+ * raw inode simply pass @nop_mnt_idmap.
  */
 int vfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 		struct dentry *dentry, const char *oldname)
@@ -4552,7 +4532,7 @@ SYSCALL_DEFINE2(symlink, const char __user *, oldname, const char __user *, newn
  * the vfsmount must be passed through @idmap. This function will then take
  * care to map the inode according to @idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply passs @nop_mnt_idmap.
+ * raw inode simply pass @nop_mnt_idmap.
  */
 int vfs_link(struct dentry *old_dentry, struct mnt_idmap *idmap,
 	     struct inode *dir, struct dentry *new_dentry,

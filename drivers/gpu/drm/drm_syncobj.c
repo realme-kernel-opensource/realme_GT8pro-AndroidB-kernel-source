@@ -1069,7 +1069,8 @@ static signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
 		fence = drm_syncobj_fence_get(syncobjs[i]);
 		if (!fence || dma_fence_chain_find_seqno(&fence, points[i])) {
 			dma_fence_put(fence);
-			if (flags & DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT) {
+			if (flags & (DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT |
+				     DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE)) {
 				continue;
 			} else {
 				timeout = -EINVAL;
@@ -1364,7 +1365,7 @@ static void syncobj_eventfd_entry_fence_func(struct dma_fence *fence,
 	struct syncobj_eventfd_entry *entry =
 		container_of(cb, struct syncobj_eventfd_entry, fence_cb);
 
-	eventfd_signal(entry->ev_fd_ctx, 1);
+	eventfd_signal(entry->ev_fd_ctx);
 	syncobj_eventfd_entry_free(entry);
 }
 
@@ -1387,13 +1388,13 @@ syncobj_eventfd_entry_func(struct drm_syncobj *syncobj,
 	entry->fence = fence;
 
 	if (entry->flags & DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE) {
-		eventfd_signal(entry->ev_fd_ctx, 1);
+		eventfd_signal(entry->ev_fd_ctx);
 		syncobj_eventfd_entry_free(entry);
 	} else {
 		ret = dma_fence_add_callback(fence, &entry->fence_cb,
 					     syncobj_eventfd_entry_fence_func);
 		if (ret == -ENOENT) {
-			eventfd_signal(entry->ev_fd_ctx, 1);
+			eventfd_signal(entry->ev_fd_ctx);
 			syncobj_eventfd_entry_free(entry);
 		}
 	}
