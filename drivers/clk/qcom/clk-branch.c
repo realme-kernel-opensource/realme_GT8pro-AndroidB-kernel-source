@@ -170,16 +170,19 @@ static int clk_branch2_mem_enable(struct clk_hw *hw)
 {
 	struct clk_mem_branch *mem_br = to_clk_mem_branch(hw);
 	struct clk_branch branch = mem_br->branch;
-	u32 val;
+	u32 regval, mem_ctrl;
 	int ret;
 
-	regmap_update_bits(branch.clkr.regmap, mem_br->mem_enable_reg,
-			   mem_br->mem_enable_ack_mask, mem_br->mem_enable_ack_mask);
+	mem_ctrl = mem_br->mem_enable_inverted ? 0 : mem_br->mem_enable_mask;
 
-	ret = regmap_read_poll_timeout(branch.clkr.regmap, mem_br->mem_ack_reg,
-				       val, val & mem_br->mem_enable_ack_mask, 0, 200);
+	regmap_update_bits(branch.clkr.regmap, mem_br->mem_enable_reg,
+			   mem_br->mem_enable_mask, mem_ctrl);
+
+	ret = regmap_read_poll_timeout(branch.clkr.regmap, mem_br->mem_ack_reg, regval,
+				       (regval & mem_br->mem_enable_ack_mask), 0, 200);
 	if (ret) {
-		WARN(1, "%s mem enable failed\n", clk_hw_get_name(&branch.clkr.hw));
+		WARN(1, "%s mem enable failed ret=%d regval=0x%x\n",
+		     clk_hw_get_name(&branch.clkr.hw), ret, regval);
 		return ret;
 	}
 
@@ -189,11 +192,24 @@ static int clk_branch2_mem_enable(struct clk_hw *hw)
 static void clk_branch2_mem_disable(struct clk_hw *hw)
 {
 	struct clk_mem_branch *mem_br = to_clk_mem_branch(hw);
+	struct clk_branch branch = mem_br->branch;
+	u32 regval, mem_ctrl;
+	int ret;
 
-	regmap_update_bits(mem_br->branch.clkr.regmap, mem_br->mem_enable_reg,
-			   mem_br->mem_enable_ack_mask, 0);
+	mem_ctrl = mem_br->mem_enable_inverted ? mem_br->mem_enable_mask : 0;
 
-	return clk_branch2_disable(hw);
+	regmap_update_bits(branch.clkr.regmap, mem_br->mem_enable_reg,
+			   mem_br->mem_enable_mask, mem_ctrl);
+
+	ret = regmap_read_poll_timeout(branch.clkr.regmap, mem_br->mem_ack_reg, regval,
+				       !(regval & mem_br->mem_enable_ack_mask), 0, 200);
+	if (ret) {
+		WARN(1, "%s mem disable failed ret=%d regval=0x%x\n",
+		     clk_hw_get_name(&branch.clkr.hw), ret, regval);
+		return;
+	}
+
+	clk_branch2_disable(hw);
 }
 
 static int clk_branch2_force_off_enable(struct clk_hw *hw)

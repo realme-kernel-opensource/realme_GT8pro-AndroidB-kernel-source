@@ -88,7 +88,9 @@ static inline void qcom_branch_set_sleep(struct regmap *regmap, struct clk_branc
  *
  * @mem_enable_reg: branch clock memory gating register
  * @mem_ack_reg: branch clock memory ack register
+ * @mem_enable_mask: branch clock memory enable mask
  * @mem_enable_ack_mask: branch clock memory enable and ack field in @mem_ack_reg
+ * @mem_enable_inverted: clock memory enable bit inverted
  * @branch: branch clock gating handle
  *
  * Clock which can gate its memories.
@@ -96,7 +98,9 @@ static inline void qcom_branch_set_sleep(struct regmap *regmap, struct clk_branc
 struct clk_mem_branch {
 	u32	mem_enable_reg;
 	u32	mem_ack_reg;
+	u32	mem_enable_mask;
 	u32	mem_enable_ack_mask;
+	u8	mem_enable_inverted;
 	struct clk_branch branch;
 };
 
