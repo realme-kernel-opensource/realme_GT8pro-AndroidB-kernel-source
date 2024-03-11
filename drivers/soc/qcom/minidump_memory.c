@@ -1355,10 +1355,12 @@ void md_dump_memory(void)
 		md_dump_slabinfo(md_slabinfo_seq_buf);
 
 	if (md_pageowner_dump_addr)
-		md_dump_pageowner(md_pageowner_dump_addr, md_pageowner_dump_size);
+		md_dump_pageowner(md_pageowner_dump_addr,
+				  md_pageowner_dump_size - page_owner_handles_size);
 
 	if (md_slabowner_dump_addr)
-		md_dump_slabowner(md_slabowner_dump_addr, md_slabowner_dump_size);
+		md_dump_slabowner(md_slabowner_dump_addr,
+				  md_slabowner_dump_size - slab_owner_handles_size);
 
 	if (md_dma_buf_info_addr)
 		md_dma_buf_info(md_dma_buf_info_addr, md_dma_buf_info_size);
