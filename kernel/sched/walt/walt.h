@@ -83,7 +83,8 @@ enum freq_caps {
 #define	SOC_ENABLE_ASYM_SIBLINGS_BIT			BIT(5)
 #define	SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT		BIT(6)
 #define	SOC_ENABLE_SW_CYCLE_COUNTER_BIT			BIT(7)
-#define	SOC_AVAILABLE_BIT				BIT(8)
+#define SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT	BIT(8)
+#define	SOC_AVAILABLE_BIT				BIT(9)
 
 
 #define WALT_FEAT_TRAILBLAZER_BIT	BIT_ULL(0)
@@ -968,6 +969,9 @@ static inline bool walt_get_rtg_status(struct task_struct *p)
 {
 	struct walt_related_thread_group *grp;
 	bool ret = false;
+
+	if (!soc_feat(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT))
+		return ret;
 
 	rcu_read_lock();
 

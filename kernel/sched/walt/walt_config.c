@@ -73,7 +73,7 @@ void walt_config(void)
 	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
 	soc_feat_set(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
 	soc_feat_set(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
-
+	soc_feat_set(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 	/* return if socinfo is not available */
 	if (!name)
 		return;
@@ -86,6 +86,8 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
 		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
 		trailblazer_floor_freq[0] = 1000000;
+		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
+
 	} else if (!strcmp(name, "PINEAPPLE")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_ASYM_SIBLINGS_BIT);
