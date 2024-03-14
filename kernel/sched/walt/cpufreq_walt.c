@@ -1231,9 +1231,8 @@ static void waltgov_limits(struct cpufreq_policy *policy)
 			 * to do any sort of additional validation here.
 			 */
 			final_freq = cpufreq_driver_resolve_freq(policy, freq);
-
-			if (waltgov_update_next_freq(wg_policy, now, final_freq,
-				final_freq)) {
+			if (wg_policy->next_freq != final_freq) {
+				__waltgov_update_next_freq(wg_policy, now, final_freq, final_freq);
 				waltgov_fast_switch(wg_policy, now, final_freq);
 			}
 		}
