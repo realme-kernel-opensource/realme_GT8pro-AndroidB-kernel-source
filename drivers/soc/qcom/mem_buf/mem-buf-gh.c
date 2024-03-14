@@ -8,12 +8,15 @@
 #include <linux/gunyah/gh_msgq.h>
 #include <linux/kthread.h>
 #include <linux/memory_hotplug.h>
+#include <linux/memory.h>
 #include <linux/module.h>
 #include <linux/qcom_dma_heap.h>
 #include <linux/qcom_tvm_heap.h>
 #include <linux/dma-map-ops.h>
 #include <linux/memremap.h>
 #include <linux/cma.h>
+#include <linux/genalloc.h>
+#include <linux/math.h>
 
 #include "../../../../drivers/dma-buf/heaps/qcom_sg_ops.h"
 #include "mem-buf-gh.h"
@@ -137,10 +140,16 @@ struct mem_buf_xfer_dmaheap_mem {
  * and obtained via mem_buf_retrieve().
  * @buffer: data type expected by qcom_sg_buf_ops
  * @pgmap: Arguments to memremap_pages
+ * @memmap: alternate memmap for the dmabuf if present
+ * @memmap_base: base ipa address of alternate memmap memory
+ * @memmap_size: ipa size of alternate memmap memory
  */
 struct mem_buf_dmabuf_obj {
 	struct qcom_sg_buffer buffer;
 	struct dev_pagemap pgmap;
+	void *memmap;
+	unsigned long memmap_base;
+	size_t memmap_size;
 };
 
 static int mem_buf_alloc_obj_id(void)
@@ -1132,6 +1141,10 @@ static void mem_buf_retrieve_dma_buf_release(struct dma_buf *dmabuf)
 	memunmap_pages(&obj->pgmap);
 	qcom_sg_release(dmabuf);
 	sg_free_table(&buffer->sg_table);
+	if (obj->memmap)
+		mem_buf_free(obj->memmap);
+	if (obj->memmap_base)
+		gen_pool_free(dmabuf_mem_pool, obj->memmap_base, obj->memmap_size);
 	kfree(obj);
 }
 
@@ -1154,6 +1167,167 @@ static struct mem_buf_dma_buf_ops mem_buf_retrieve_dma_buf_ops = {
 	}
 };
 
+/* return true if free base pages are above 'mark'. */
+static bool __check_zone_watermark_ok(struct zone *z, unsigned long mark)
+{
+	long free_pages = zone_page_state(z, NR_FREE_PAGES);
+	long min = mark;
+	long unusable_free;
+
+	unusable_free = z->nr_reserved_highatomic;
+#ifdef CONFIG_CMA
+	unusable_free += zone_page_state(z, NR_FREE_CMA_PAGES);
+#endif
+
+	free_pages -= unusable_free;
+
+	return (free_pages <= min + z->lowmem_reserve[ZONE_NORMAL]) ?
+						true : false;
+}
+
+static bool zone_ok_memmap(unsigned long nr_pages)
+{
+	struct zone *zone;
+	int wm;
+
+	zone = &NODE_DATA(numa_node_id())->node_zones[ZONE_NORMAL];
+	wm = high_wmark_pages(zone);
+	wm += nr_pages;
+
+	return __check_zone_watermark_ok(zone, wm);
+}
+
+/* Fix this with relevant RM - GH call */
+static size_t get_mem_parcel_size(struct mem_buf_retrieve_kernel_arg *arg,
+		struct gh_acl_desc *acl_desc, struct gh_sgl_desc **__sgl_desc)
+{
+	int ret, op;
+	size_t size;
+	struct gh_sgl_desc *sgl_desc;
+
+	op = mem_buf_get_mem_xfer_type_gh(acl_desc, arg->sender_vmid);
+	ret = mem_buf_map_mem_s2(op, &arg->memparcel_hdl, acl_desc, &sgl_desc,
+						arg->sender_vmid);
+	if (ret)
+		return 0;
+
+	size = mem_buf_get_sgl_buf_size(sgl_desc);
+	ret = mem_buf_unmap_mem_s2(arg->memparcel_hdl);
+	if (ret)
+		pr_err("unmapping memparcel_hdl 0x%x failed\n", arg->memparcel_hdl);
+
+	*__sgl_desc = sgl_desc;
+
+	return size;
+}
+
+static void *prepare_memmap_membuf(size_t dmabuf_size, struct gh_sgl_desc *sgl_desc)
+{
+	struct mem_buf_allocation_data alloc_data;
+	int vmids[1];
+	u32 perms[1] = {PERM_READ | PERM_WRITE | PERM_EXEC};
+	void *membuf_memmap;
+	uint64_t memmap_size;
+
+	vmids[0] = mem_buf_current_vmid();
+	memmap_size = sgl_desc->sgl_entries[0].size;
+
+	alloc_data.size = memmap_size;
+	alloc_data.nr_acl_entries = ARRAY_SIZE(vmids);
+	alloc_data.vmids = vmids;
+	alloc_data.perms = perms;
+	alloc_data.trans_type = GH_RM_TRANS_TYPE_LEND;
+	alloc_data.sgl_desc = sgl_desc;
+	alloc_data.src_mem_type = MEM_BUF_BUDDY_MEM_TYPE;
+	alloc_data.src_data = NULL;
+	alloc_data.dst_mem_type = MEM_BUF_BUDDY_MEM_TYPE;
+	alloc_data.dst_data = NULL;
+
+	membuf_memmap = mem_buf_alloc(&alloc_data);
+	if (IS_ERR(membuf_memmap)) {
+		pr_err("%s: mem_buf_alloc for memmap memory failed with %ld\n",
+				__func__, PTR_ERR(membuf_memmap));
+		return NULL;
+	}
+
+	return membuf_memmap;
+}
+
+static size_t determine_memmap_size(size_t dmabuf_size)
+{
+	size_t memmap_size, total_memblock_size;
+	size_t memmap_per_section, remaining_memblock_size;
+
+	memmap_per_section = PAGES_PER_SECTION * sizeof(struct page);
+
+	remaining_memblock_size = memory_block_size_bytes() - memmap_per_section;
+	total_memblock_size = roundup(dmabuf_size, remaining_memblock_size) /
+			remaining_memblock_size * memory_block_size_bytes();
+	memmap_size = (total_memblock_size >> PAGE_SHIFT) * sizeof(struct page);
+
+	return memmap_size;
+}
+
+static int prepare_altmap(struct mem_buf_dmabuf_obj *obj,
+		struct gh_sgl_desc **__sgl_desc, size_t dmabuf_size)
+{
+	struct gh_sgl_desc *gh_sgl;
+	size_t size;
+	size_t ipa_size;
+	phys_addr_t ipa_base;
+	void *membuf_memmap = NULL;
+	struct dev_pagemap *pgmap;
+	phys_addr_t memmap_base;
+	uint64_t memmap_size;
+	struct vmem_altmap *mhp_altmap;
+
+	size = offsetof(struct gh_sgl_desc, sgl_entries[1]);
+	gh_sgl = kzalloc(size, GFP_KERNEL);
+	if (!gh_sgl)
+		return -ENOMEM;
+
+	memmap_size = determine_memmap_size(dmabuf_size);
+
+	/* get ipa space allocated for memmap and dmabuf */
+	ipa_size = memmap_size + dmabuf_size;
+	ipa_base = gen_pool_alloc(dmabuf_mem_pool, ipa_size);
+	if (!ipa_base) {
+		pr_err("gen_pool_alloc failed for size 0x%zx\n", ipa_size);
+		kfree(gh_sgl);
+		return -ENOMEM;
+	}
+
+	memmap_base = ipa_base;
+
+	gh_sgl->sgl_entries[0].size = memmap_size;
+	gh_sgl->sgl_entries[0].ipa_base = ipa_base;
+	gh_sgl->n_sgl_entries = 1;
+
+	membuf_memmap = prepare_memmap_membuf(dmabuf_size, gh_sgl);
+	if (!membuf_memmap) {
+		kfree(gh_sgl);
+		return -EINVAL;
+	}
+
+	pgmap = &obj->pgmap;
+	mhp_altmap = &pgmap->altmap;
+
+	mhp_altmap->base_pfn = PHYS_PFN(memmap_base);
+	mhp_altmap->free = PHYS_PFN(memmap_size);
+	mhp_altmap->alloc = 0;
+	pgmap->flags |= PGMAP_ALTMAP_VALID;
+	obj->memmap = membuf_memmap;
+	obj->memmap_base = ipa_base;
+	obj->memmap_size = ipa_size;
+
+	gh_sgl->sgl_entries[0].size = dmabuf_size;
+	gh_sgl->sgl_entries[0].ipa_base = memmap_base + memmap_size;
+	gh_sgl->n_sgl_entries = 1;
+	*__sgl_desc = gh_sgl;
+
+	return 0;
+}
+
 struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
 {
 	int ret, op;
@@ -1165,6 +1339,9 @@ struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 	struct dma_buf *dmabuf;
 	struct sg_table *sgt;
+	phys_addr_t memmap_base, dmabuf_base;
+	uint64_t memmap_size;
+	size_t dmabuf_size;
 	void *kva;
 
 	if (arg->fd_flags & ~MEM_BUF_VALID_FD_FLAGS)
@@ -1186,8 +1363,35 @@ struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
 	}
 
 	op = mem_buf_get_mem_xfer_type_gh(acl_desc, arg->sender_vmid);
+
+	/*
+	 * get the dmabuf size to determine if its large dmabuf and would require
+	 * alternate memory for memmap.
+	 */
+	dmabuf_size = get_mem_parcel_size(arg, acl_desc, &sgl_desc);
+	dmabuf_base = sgl_desc->sgl_entries[0].ipa_base;
+	memmap_size = determine_memmap_size(dmabuf_size);
+
+	kvfree(sgl_desc);
+	sgl_desc = NULL;
+
+	/*
+	 * if dmabuf is large or default memmap allocation would likely fail,
+	 * request for extra memory from Primary VM for hosting the memmap data
+	 * for this large dmabuf.
+	 */
+	if ((dmabuf_size >= SZ_128M ||
+			!zone_ok_memmap(memmap_size >> PAGE_SHIFT)) &&
+			dmabuf_mem_pool) {
+		ret = prepare_altmap(obj, &sgl_desc, dmabuf_size);
+		memmap_base = PFN_PHYS(obj->pgmap.altmap.base_pfn);
+		if (ret)
+			goto err_altmap;
+	}
+
 	ret = mem_buf_map_mem_s2(op, &arg->memparcel_hdl, acl_desc, &sgl_desc,
 					arg->sender_vmid);
+
 	if (ret)
 		goto err_map_s2;
 
@@ -1199,12 +1403,17 @@ struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
 
 	obj->pgmap.type = MEMORY_DEVICE_GENERIC;
 	obj->pgmap.nr_range = 1;
-	obj->pgmap.range.start = sgl_desc->sgl_entries[0].ipa_base;
+	if (obj->memmap)
+		obj->pgmap.range.start = memmap_base;
+	else
+		obj->pgmap.range.start = sgl_desc->sgl_entries[0].ipa_base;
 	obj->pgmap.range.end = sgl_desc->sgl_entries[0].ipa_base +
 			       sgl_desc->sgl_entries[0].size - 1;
+
 	kva = memremap_pages(&obj->pgmap, 0);
 	if (IS_ERR(kva)) {
 		ret = PTR_ERR(kva);
+		pr_err("memremap_pages failed %d\n", ret);
 		goto err_memremap;
 	}
 
@@ -1247,9 +1456,15 @@ err_export_dma_buf:
 err_dup_sgt:
 	memunmap_pages(&obj->pgmap);
 err_memremap:
-	kvfree(sgl_desc);
 	mem_buf_unmap_mem_s2(arg->memparcel_hdl);
 err_map_s2:
+	if (sgl_desc)
+		kvfree(sgl_desc);
+	if (obj->memmap)
+		mem_buf_free(obj->memmap);
+	if (obj->memmap_base)
+		gen_pool_free(dmabuf_mem_pool, obj->memmap_base, obj->memmap_size);
+err_altmap:
 	kfree(acl_desc);
 err_gh_acl:
 	kfree(obj);

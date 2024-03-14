@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -12,6 +12,9 @@
 #include <linux/uaccess.h>
 #include <linux/of_reserved_mem.h>
 #include <soc/qcom/secure_buffer.h>
+#include <linux/memory_hotplug.h>
+#include <linux/memory.h>
+#include <linux/genalloc.h>
 
 #include <linux/mem-buf.h>
 #include "mem-buf-dev.h"
@@ -22,6 +25,11 @@ EXPORT_SYMBOL_GPL(mem_buf_dev);
 
 unsigned char mem_buf_capability;
 EXPORT_SYMBOL_GPL(mem_buf_capability);
+
+struct gen_pool *dmabuf_mem_pool;
+EXPORT_SYMBOL_GPL(dmabuf_mem_pool);
+
+#define POOL_MIN_ALLOC_ORDER SUBSECTION_SHIFT
 
 int mem_buf_hyp_assign_table(struct sg_table *sgt, u32 *src_vmid, int source_nelems,
 			     int *dest_vmids, int *dest_perms, int dest_nelems)
@@ -97,12 +105,76 @@ int mem_buf_unassign_mem(struct sg_table *sgt, int *src_vmids,
 }
 EXPORT_SYMBOL_GPL(mem_buf_unassign_mem);
 
+#ifdef CONFIG_QCOM_MEM_BUF_IPA_RESERVE
+static int mem_buf_reserve_ipa(struct device *dev)
+{
+	const struct range pluggable_range = mhp_get_pluggable_range(true);
+	struct range range;
+	u32 flags;
+	u64 size, ipa_base;
+	char *propname;
+	int ret;
+
+	/* qcom,ipa-range includes range.start & range.end */
+	propname = "qcom,ipa-range";
+	ret = of_property_read_u64_index(dev->of_node, propname, 0, &range.start);
+	ret |= of_property_read_u64_index(dev->of_node, propname, 1, &range.end);
+	if (ret) {
+		dev_info(dev, "Missing %s. Skipping ipa space reservation\n", propname);
+		return 0;
+	}
+
+	range.start = max(range.start, pluggable_range.start);
+	range.end = min(range.end, pluggable_range.end);
+
+	ret = of_property_read_u64(dev->of_node, "qcom,dmabuf-ipa-size", &size);
+	if (ret) {
+		dev_err(dev, "Failed to parse qcom,dmabuf-ipa-size property %d start 0x%llx end 0x%llx\n",
+				ret, range.start, range.end);
+		return -EINVAL;
+	}
+
+	flags = GH_RM_IPA_RESERVE_NORMAL;
+	ret = gh_rm_ipa_reserve(size, memory_block_size_bytes(), range, flags, 0, &ipa_base);
+	if (ret) {
+		if (ret != -EPROBE_DEFER)
+			dev_err(dev, "Hypervisor ipa reserve not supported %d\n", ret);
+		return ret;
+	}
+
+	dmabuf_mem_pool = gen_pool_create(POOL_MIN_ALLOC_ORDER, -1);
+	if (!dmabuf_mem_pool) {
+		dev_err(dev, "gen_pool_create create failed %d\n", ret);
+		return -ENOMEM;
+	}
+
+	ret = gen_pool_add(dmabuf_mem_pool, ipa_base, size, -1);
+	if (ret) {
+		dev_err(dev, "gen_pool_add create failed %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+#else
+static inline int mem_buf_reserve_ipa(struct device *dev)
+{
+	return -EINVAL;
+}
+#endif /* CONFIG_QCOM_MEM_BUF_IPA_RESERVE */
+
 static int mem_buf_probe(struct platform_device *pdev)
 {
 	int ret, unused;
 	struct device *dev = &pdev->dev;
 	u64 dma_mask = IS_ENABLED(CONFIG_ARM64) ? DMA_BIT_MASK(64) :
 		DMA_BIT_MASK(32);
+
+#ifdef CONFIG_QCOM_MEM_BUF_IPA_RESERVE
+	ret = mem_buf_reserve_ipa(dev);
+	if (ret)
+		return dev_err_probe(dev, ret, "mem_buf_reserve_ipa failed\n");
+#endif
 
 	if (of_property_match_string(dev->of_node, "qcom,mem-buf-capabilities",
 				     "supplier") >= 0)
