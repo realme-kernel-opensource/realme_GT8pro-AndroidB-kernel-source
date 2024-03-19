@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_STATS_H__
@@ -17,6 +17,11 @@ struct ddr_stats_ss_vote_info {
 	u32 ib; /* vote_y */
 };
 
+struct ddr_stats_change_his_info {
+	u32 mc_his; /* mc change history */
+	u32 shub_his; /* shub change history */
+};
+
 struct qcom_stats_cx_vote_info {
 	u8 level; /* CX LEVEL */
 };
@@ -30,6 +35,7 @@ int ddr_stats_get_ss_vote_info(int ss_count,
 int qcom_stats_ddr_freqsync_msg(void);
 int ddr_stats_get_freq_count(void);
 int ddr_stats_get_residency(int freq_count, struct ddr_freq_residency *data);
+int ddr_stats_get_change_his(struct ddr_stats_change_his_info *ddr_his_info);
 
 bool has_system_slept(bool *aoss_debug);
 bool has_subsystem_slept(void);
@@ -50,6 +56,8 @@ static inline int qcom_stats_ddr_freqsync_msg(void)
 static inline int ddr_stats_get_freq_count(void)
 { return -ENODEV; }
 int ddr_stats_get_residency(int freq_count, struct ddr_freq_residency *data)
+{ return -ENODEV; }
+int ddr_stats_get_change_his(struct ddr_stats_change_his_info *ddr_his_info)
 { return -ENODEV; }
 
 bool has_system_slept(void)
