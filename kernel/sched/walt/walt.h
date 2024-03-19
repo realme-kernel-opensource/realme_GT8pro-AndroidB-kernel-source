@@ -300,9 +300,11 @@ extern unsigned int sysctl_em_inflate_pct;
 extern unsigned int sysctl_em_inflate_thres;
 extern unsigned int sysctl_sched_heavy_nr;
 
-extern int cpufreq_walt_set_adaptive_freq(unsigned int cpu, unsigned int adaptive_low_freq,
+extern int cpufreq_walt_set_adaptive_freq(unsigned int cpu, unsigned int adaptive_level_1,
+					  unsigned int adaptive_low_freq,
 					  unsigned int adaptive_high_freq);
-extern int cpufreq_walt_get_adaptive_freq(unsigned int cpu, unsigned int *adaptive_low_freq,
+extern int cpufreq_walt_get_adaptive_freq(unsigned int cpu, unsigned int *adaptive_level_1,
+					  unsigned int *adaptive_low_freq,
 					  unsigned int *adaptive_high_freq);
 extern int cpufreq_walt_reset_adaptive_freq(unsigned int cpu);
 
@@ -431,6 +433,7 @@ extern cpumask_t cpus_for_pipeline;
 #define CPUFREQ_REASON_PARTIAL_HALT_CAP_BIT	BIT(14)
 #define CPUFREQ_REASON_TRAILBLAZER_STATE_BIT	BIT(15)
 #define CPUFREQ_REASON_TRAILBLAZER_CPU_BIT	BIT(16)
+#define CPUFREQ_REASON_ADAPTIVE_LVL_1_BIT	BIT(17)
 
 enum sched_boost_policy {
 	SCHED_BOOST_NONE,

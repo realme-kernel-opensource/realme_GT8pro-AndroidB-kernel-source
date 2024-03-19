@@ -23,8 +23,10 @@ struct waltgov_tunables {
 	unsigned int		hispeed_load;
 	unsigned int		hispeed_freq;
 	unsigned int		rtg_boost_freq;
+	unsigned int		adaptive_level_1;
 	unsigned int		adaptive_low_freq;
 	unsigned int		adaptive_high_freq;
+	unsigned int		adaptive_level_1_kernel;
 	unsigned int		adaptive_low_freq_kernel;
 	unsigned int		adaptive_high_freq_kernel;
 	unsigned int		target_load_thresh;
@@ -246,6 +248,13 @@ static inline unsigned long walt_map_util_freq(unsigned long util,
 	return (fmax + (fmax >> 2)) * util / cap;
 }
 
+static inline unsigned int get_adaptive_level_1(struct waltgov_policy *wg_policy)
+{
+	return(max(wg_policy->tunables->adaptive_level_1,
+		   wg_policy->tunables->adaptive_level_1_kernel));
+}
+
+
 static inline unsigned int get_adaptive_low_freq(struct waltgov_policy *wg_policy)
 {
 	return(max(wg_policy->tunables->adaptive_low_freq,
@@ -306,7 +315,10 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	}
 
 	if (wg_policy->tunables->adaptive_high_freq && !skip) {
-		if (raw_freq < get_adaptive_low_freq(wg_policy)) {
+		if (raw_freq < get_adaptive_level_1(wg_policy)) {
+			freq = get_adaptive_level_1(wg_policy);
+			wg_driv_cpu->reasons |= CPUFREQ_REASON_ADAPTIVE_LVL_1_BIT;
+		} else if (raw_freq < get_adaptive_low_freq(wg_policy)) {
 			freq = get_adaptive_low_freq(wg_policy);
 			wg_driv_cpu->reasons |= CPUFREQ_REASON_ADAPTIVE_LOW_BIT;
 		} else if (raw_freq <= get_adaptive_high_freq(wg_policy)) {
@@ -762,8 +774,9 @@ static ssize_t boost_store(struct gov_attr_set *attr_set, const char *buf,
 /**
  * cpufreq_walt_set_adaptive_freq() - set the waltgov adaptive freq for cpu
  * @cpu:               the cpu for which the values should be set
- * @adaptive_low_freq: low freq
- * @adaptive_high_freq:high_freq
+ * @adaptive_level_1: level 1 freq
+ * @adaptive_low_freq: low freq (i.e. level 2 freq)
+ * @adaptive_high_freq: high_freq (i.e. level 3 freq)
  *
  * Configure the adaptive_low/high_freq for the cpu specified. This will impact all
  * cpus governed by the policy (e.g. all cpus in a cluster). The actual value used
@@ -772,8 +785,10 @@ static ssize_t boost_store(struct gov_attr_set *attr_set, const char *buf,
  *
  * Return: 0 if successful, error otherwise
  */
-int cpufreq_walt_set_adaptive_freq(unsigned int cpu, unsigned int adaptive_low_freq,
-				   unsigned int adaptive_high_freq)
+int cpufreq_walt_set_adaptive_freq(unsigned int cpu,
+				unsigned int adaptive_level_1,
+				unsigned int adaptive_low_freq,
+				unsigned int adaptive_high_freq)
 {
 	struct waltgov_cpu *wg_cpu = &per_cpu(waltgov_cpu, cpu);
 	struct waltgov_policy *wg_policy;
@@ -787,7 +802,19 @@ int cpufreq_walt_set_adaptive_freq(unsigned int cpu, unsigned int adaptive_low_f
 
 	wg_policy = wg_cpu->wg_policy;
 	policy = wg_policy->policy;
-	if (policy->min <= adaptive_low_freq && policy->max >= adaptive_high_freq) {
+
+	/*
+	 * To maintain backwards compatibility, ensure that adaptive_low_freq,
+	 * which is effectively the same thing as adaptive_level_2, is able to be set
+	 * even if adaptive_level_1 is unset. In this case, simply set adaptive_level_1
+	 * to be the same as adaptive_low_freq.
+	 */
+	if (adaptive_low_freq && !adaptive_level_1)
+		adaptive_level_1 = adaptive_low_freq;
+
+	if (policy->min <= adaptive_level_1 && policy->max >= adaptive_high_freq &&
+		adaptive_low_freq >= adaptive_level_1 && adaptive_low_freq <= adaptive_high_freq) {
+		wg_policy->tunables->adaptive_level_1_kernel = adaptive_level_1;
 		wg_policy->tunables->adaptive_low_freq_kernel = adaptive_low_freq;
 		wg_policy->tunables->adaptive_high_freq_kernel = adaptive_high_freq;
 		return 0;
@@ -800,6 +827,7 @@ EXPORT_SYMBOL_GPL(cpufreq_walt_set_adaptive_freq);
 /**
  * cpufreq_walt_get_adaptive_freq() - get the waltgov adaptive freq for cpu
  * @cpu:               the cpu for which the values should be returned
+ * @adaptive_level_1: pointer to write the current kernel adaptive_level_1 freq value
  * @adaptive_low_freq: pointer to write the current kernel adaptive_low_freq value
  * @adaptive_high_freq:pointer to write the current kernel adaptive_high_freq value
  *
@@ -807,8 +835,10 @@ EXPORT_SYMBOL_GPL(cpufreq_walt_set_adaptive_freq);
  *
  * Return: 0 if successful, error otherwise
  */
-int cpufreq_walt_get_adaptive_freq(unsigned int cpu, unsigned int *adaptive_low_freq,
-				   unsigned int *adaptive_high_freq)
+int cpufreq_walt_get_adaptive_freq(unsigned int cpu,
+				unsigned int *adaptive_level_1,
+				unsigned int *adaptive_low_freq,
+				unsigned int *adaptive_high_freq)
 {
 	struct waltgov_cpu *wg_cpu = &per_cpu(waltgov_cpu, cpu);
 	struct waltgov_policy *wg_policy;
@@ -820,7 +850,8 @@ int cpufreq_walt_get_adaptive_freq(unsigned int cpu, unsigned int *adaptive_low_
 		return -EFAULT;
 
 	wg_policy = wg_cpu->wg_policy;
-	if (adaptive_low_freq && adaptive_high_freq) {
+	if (adaptive_level_1 && adaptive_low_freq && adaptive_high_freq) {
+		*adaptive_level_1 = get_adaptive_level_1(wg_policy);
 		*adaptive_low_freq = get_adaptive_low_freq(wg_policy);
 		*adaptive_high_freq = get_adaptive_high_freq(wg_policy);
 		return 0;
@@ -850,6 +881,7 @@ int cpufreq_walt_reset_adaptive_freq(unsigned int cpu)
 		return -EFAULT;
 
 	wg_policy = wg_cpu->wg_policy;
+	wg_policy->tunables->adaptive_level_1_kernel = 0;
 	wg_policy->tunables->adaptive_low_freq_kernel = 0;
 	wg_policy->tunables->adaptive_high_freq_kernel = 0;
 
@@ -880,6 +912,8 @@ static ssize_t store_##name(struct gov_attr_set *attr_set,		\
 	return count;							\
 }									\
 
+show_attr(adaptive_level_1);
+store_attr(adaptive_level_1);
 show_attr(adaptive_low_freq);
 store_attr(adaptive_low_freq);
 show_attr(adaptive_high_freq);
@@ -915,6 +949,7 @@ static struct governor_attr hispeed_freq = __ATTR_RW(hispeed_freq);
 static struct governor_attr rtg_boost_freq = __ATTR_RW(rtg_boost_freq);
 static struct governor_attr pl = __ATTR_RW(pl);
 static struct governor_attr boost = __ATTR_RW(boost);
+WALTGOV_ATTR_RW(adaptive_level_1);
 WALTGOV_ATTR_RW(adaptive_low_freq);
 WALTGOV_ATTR_RW(adaptive_high_freq);
 WALTGOV_ATTR_RW(target_load_thresh);
@@ -928,6 +963,7 @@ static struct attribute *waltgov_attrs[] = {
 	&rtg_boost_freq.attr,
 	&pl.attr,
 	&boost.attr,
+	&adaptive_level_1.attr,
 	&adaptive_low_freq.attr,
 	&adaptive_high_freq.attr,
 	&target_load_thresh.attr,
@@ -1034,8 +1070,10 @@ static void waltgov_tunables_save(struct cpufreq_policy *policy,
 	cached->up_rate_limit_us = tunables->up_rate_limit_us;
 	cached->down_rate_limit_us = tunables->down_rate_limit_us;
 	cached->boost = tunables->boost;
+	cached->adaptive_level_1 = tunables->adaptive_level_1;
 	cached->adaptive_low_freq = tunables->adaptive_low_freq;
 	cached->adaptive_high_freq = tunables->adaptive_high_freq;
+	cached->adaptive_level_1_kernel = tunables->adaptive_level_1_kernel;
 	cached->adaptive_low_freq_kernel = tunables->adaptive_low_freq_kernel;
 	cached->adaptive_high_freq_kernel = tunables->adaptive_high_freq_kernel;
 	cached->target_load_thresh = tunables->target_load_thresh;
@@ -1058,8 +1096,10 @@ static void waltgov_tunables_restore(struct cpufreq_policy *policy)
 	tunables->up_rate_limit_us = cached->up_rate_limit_us;
 	tunables->down_rate_limit_us = cached->down_rate_limit_us;
 	tunables->boost	= cached->boost;
+	tunables->adaptive_level_1 = cached->adaptive_level_1;
 	tunables->adaptive_low_freq = cached->adaptive_low_freq;
 	tunables->adaptive_high_freq = cached->adaptive_high_freq;
+	tunables->adaptive_level_1_kernel = cached->adaptive_level_1_kernel;
 	tunables->adaptive_low_freq_kernel = cached->adaptive_low_freq_kernel;
 	tunables->adaptive_high_freq_kernel = cached->adaptive_high_freq_kernel;
 	tunables->target_load_thresh = cached->target_load_thresh;
