@@ -107,9 +107,37 @@ qcom_reset_deassert(struct reset_controller_dev *rcdev, unsigned long id)
 	return qcom_reset_set(rcdev, id, false);
 }
 
+static int
+qcom_reset_status(struct reset_controller_dev *rcdev, unsigned long id)
+{
+	struct qcom_reset_controller *rst;
+	const struct qcom_reset_map *map;
+	u32 mask, reg;
+	int ret;
+
+	rst = to_qcom_reset_controller(rcdev);
+	map = &rst->reset_map[id];
+	mask = map->bitmask ? map->bitmask : BIT(map->bit);
+
+	ret = qcom_reset_runtime_get(rst);
+	if (ret < 0)
+		return ret;
+
+	ret = regmap_read(rst->regmap, map->reg, &reg);
+	if (ret) {
+		qcom_reset_runtime_put(rst);
+		return ret;
+	}
+
+	qcom_reset_runtime_put(rst);
+
+	return (reg & mask);
+}
+
 const struct reset_control_ops qcom_reset_ops = {
 	.reset = qcom_reset,
 	.assert = qcom_reset_assert,
 	.deassert = qcom_reset_deassert,
+	.status = qcom_reset_status,
 };
 EXPORT_SYMBOL_GPL(qcom_reset_ops);
