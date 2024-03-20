@@ -9001,6 +9001,10 @@ static struct pci_device_id msm_pci_device_id[] = {
 	{PCI_DEVICE(0x17cb, 0x0108)},
 	{PCI_DEVICE(0x17cb, 0x010b)},
 	{PCI_DEVICE(0x17cb, 0x010c)},
+	{PCI_DEVICE(0x17cb, 0x0110)},
+	{PCI_DEVICE(0x17cb, 0x0113)},
+	{PCI_DEVICE(0x17cb, 0x011c)},
+	{PCI_DEVICE(0x17cb, 0x0123)},
 	{0},
 };
 
