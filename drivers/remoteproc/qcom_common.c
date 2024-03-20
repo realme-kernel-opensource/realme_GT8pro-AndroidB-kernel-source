@@ -25,7 +25,6 @@
 #include "remoteproc_elf_helpers.h"
 #include "remoteproc_internal.h"
 #include "qcom_common.h"
-#include "../soc/qcom/minidump_private.h"
 
 #define SSR_NOTIF_TIMEOUT CONFIG_RPROC_SSR_NOTIF_TIMEOUT
 
@@ -195,7 +194,7 @@ static int qcom_add_minidump_segments(struct rproc *rproc, struct minidump_subsy
 			}
 			da = le64_to_cpu(region.address);
 			size = le32_to_cpu(region.size);
-			if (le32_to_cpu(subsystem->encryption_status) != MD_SS_ENCR_DONE) {
+			if (le32_to_cpu(subsystem->encryption_status) != MINIDUMP_SS_ENCR_DONE) {
 				if (!i && len < MAX_REGION_NAME_LENGTH &&
 				    !strcmp(name, dbg_buf_name))
 					rproc_coredump_add_custom_segment(rproc, da, size, dumpfn,
@@ -634,7 +633,6 @@ EXPORT_SYMBOL(qcom_unregister_early_ssr_notifier);
 void qcom_notify_early_ssr_clients(struct rproc_subdev *subdev)
 {
 	struct qcom_rproc_ssr *ssr = to_ssr_subdev(subdev);
-
 
 	srcu_notifier_call_chain(&ssr->info->early_notifier_list, QCOM_SSR_BEFORE_SHUTDOWN, NULL);
 }
