@@ -37,6 +37,7 @@
 #include <linux/workqueue.h>
 #include <linux/suspend.h>
 
+#include <linux/gunyah/gh_errno.h>
 #include <linux/gunyah/gh_rm_drv.h>
 #include <linux/gunyah/gh_vm.h>
 #include "gh_proxy_sched.h"
@@ -856,7 +857,7 @@ int gh_vcpu_run(gh_vmid_t vmid, unsigned int vcpu_id, uint64_t resume_data_0,
 	} while ((ret == GH_ERROR_OK || ret == GH_ERROR_RETRY) && vm->is_active);
 
 	if (ret != -ERESTARTSYS)
-		ret = gh_error_remap(ret);
+		ret = gh_remap_error(ret);
 
 	return ret;
 }

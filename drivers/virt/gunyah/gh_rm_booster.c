@@ -3,10 +3,12 @@
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/gunyah/gh_errno.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/notifier.h>
 #include <linux/cpufreq.h>
+#include <linux/platform_device.h>
 #include <asm/gunyah/hcall.h>
 
 #include "gh_rm_drv_private.h"

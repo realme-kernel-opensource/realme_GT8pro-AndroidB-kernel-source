@@ -9,12 +9,16 @@
 
 #include <linux/types.h>
 
-#include <linux/gunyah/gh_msgq.h>
+#include <linux/gunyah.h>
 #include <linux/gunyah/gh_rm_drv.h>
 #include <linux/gunyah/gh_common.h>
 
+#include "rsc_mgr.h"
+
 extern bool gh_rm_core_initialized;
-extern struct gh_rm *rm;
+extern struct gunyah_rm *rm;
+
+#define gh_rm_call gunyah_rm_call
 
 /* Resource Manager Header */
 struct gh_rm_rpc_hdr {
