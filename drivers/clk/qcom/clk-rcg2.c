@@ -1732,6 +1732,19 @@ static const struct clk_ops clk_rcg2_dfs_ops = {
 };
 
 /* Common APIs to be used for CESTA based RCGR */
+static int clk_rcg2_crm_err_dump(struct clk_hw *hw)
+{
+	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
+	struct clk_crm *crm = rcg->clkr.crm;
+	int ret;
+
+	ret = crm_dump_regs(crm->name);
+	if (ret)
+		pr_err("%s %s failed ret=%d\n", __func__, qcom_clk_hw_get_name(hw), ret);
+
+	return ret;
+}
+
 static int clk_rcg2_crmc_populate_freq(struct clk_hw *hw, unsigned int l,
 				       struct freq_tbl *f)
 {
@@ -1892,9 +1905,13 @@ static int clk_rcg2_vote_perf_level(struct clk_hw *hw, unsigned long rate)
 	for (i = 0; i < MAX_CRM_SW_DRV_STATE; i++) {
 		cmd.pwr_state.sw = i;
 		ret = crm_write_perf_ol(crm->dev, CRM_SW_DRV, 0, &cmd);
-		if (ret)
+		if (ret) {
 			pr_err("%s err write_perf_ol rcg name %s ret=%d\n",
 			       __func__, qcom_clk_hw_get_name(hw), ret);
+
+			if (ret == -ETIMEDOUT)
+				clk_rcg2_crm_err_dump(hw);
+		}
 	}
 
 	return ret;
@@ -1978,9 +1995,13 @@ unsigned long clk_rcg2_crmc_hw_set_rate(struct clk_hw *hw,
 	cmd.pwr_state.hw = pwr_st;
 
 	ret = crm_write_perf_ol(crm->dev, client_type, client_idx, &cmd);
-	if (ret)
+	if (ret) {
 		pr_err("%s err write_perf_ol rcg name %s ret=%d\n",
 		       __func__, qcom_clk_hw_get_name(hw), ret);
+
+		if (ret == -ETIMEDOUT)
+			clk_rcg2_crm_err_dump(hw);
+	}
 
 	return ret;
 }
@@ -2048,9 +2069,13 @@ static int clk_rcg2_vote_bw(struct clk_hw *hw, unsigned long rate)
 	for (i = 0; i < MAX_CRM_SW_DRV_STATE; i++) {
 		cmd.pwr_state.sw = i;
 		ret = crm_write_bw_vote(crm->dev, CRM_SW_DRV, 0, &cmd);
-		if (ret)
+		if (ret) {
 			pr_err("%s err crm_write_bw_vote rcg name %s ret=%d\n",
 			       __func__, qcom_clk_hw_get_name(hw), ret);
+
+			if (ret == -ETIMEDOUT)
+				clk_rcg2_crm_err_dump(hw);
+		}
 	}
 
 	return ret;
@@ -2151,9 +2176,13 @@ unsigned long clk_rcg2_crmb_set_crmb_rate(struct clk_hw *hw,
 	cmd.data = BCM_TCS_CMD(1, 1, ab_rate, ib_rate);
 
 	ret = crm_write_bw_vote(crm->dev, client_type, client_idx, &cmd);
-	if (ret)
+	if (ret) {
 		pr_err("%s err rcg name %s cmd.data=0x%x ret=%d\n",
 		       __func__, qcom_clk_hw_get_name(hw), cmd.data, ret);
+
+		if (ret == -ETIMEDOUT)
+			clk_rcg2_crm_err_dump(hw);
+	}
 
 	return ret;
 }
