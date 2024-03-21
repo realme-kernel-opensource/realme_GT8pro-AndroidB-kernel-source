@@ -749,6 +749,7 @@ int crm_dump_drv_regs(const char *name, u32 drv_id)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(crm_dump_drv_regs);
 
 /**
  * crm_dump_regs() - Dump CRM registers for debug purposes.
