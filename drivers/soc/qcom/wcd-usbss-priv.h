@@ -52,6 +52,8 @@ struct wcd_usbss_ctxt {
 	int runtime_env_counter;
 	struct nvmem_cell *nvmem_cell;
 	bool suspended;
+	bool defer_writes;
+	int req_state;
 };
 
 extern struct regmap *wcd_usbss_regmap_init(struct device *dev,
