@@ -737,7 +737,6 @@ static int qcom_spss_probe(struct platform_device *pdev)
 	struct qcom_spss *spss;
 	struct rproc *rproc;
 	const char *fw_name;
-	bool signal_aop;
 	int ret;
 
 	desc = of_device_get_match_data(&pdev->dev);
@@ -790,13 +789,12 @@ static int qcom_spss_probe(struct platform_device *pdev)
 	if (ret)
 		goto deinit_wakeup_source;
 
-	signal_aop = of_property_read_bool(pdev->dev.of_node,
-			"qcom,signal-aop");
-
-	if (signal_aop) {
-		spss->qmp = qmp_get(spss->dev);
-		if (IS_ERR_OR_NULL(spss->qmp))
-			goto deinit_wakeup_source;
+	spss->qmp = qmp_get(spss->dev);
+	if (IS_ERR(spss->qmp)) {
+		if (PTR_ERR(spss->qmp) != -ENODEV)
+			return dev_err_probe(&pdev->dev, PTR_ERR(spss->qmp),
+					     "failed to acquire load state\n");
+		spss->qmp = NULL;
 	}
 
 	qcom_add_glink_spss_subdev(rproc, &spss->glink_subdev, "spss");
