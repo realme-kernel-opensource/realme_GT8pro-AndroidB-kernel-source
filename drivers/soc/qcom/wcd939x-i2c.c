@@ -14,7 +14,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/nvmem-consumer.h>
 #include "wcd-usbss-priv.h"
-#include "wcd-usbss-registers.h"
 #include "wcd-usbss-reg-masks.h"
 #include "wcd-usbss-reg-shifts.h"
 
@@ -328,6 +327,19 @@ int wcd_usbss_set_linearizer_sw_tap(uint32_t aud_tap, uint32_t gnd_tap)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(wcd_usbss_set_linearizer_sw_tap);
+
+static bool wcd_usbss_readable_register(struct device *dev, unsigned int reg)
+{
+	if (reg <= (WCD_USBSS_BASE + 1))
+		return false;
+
+	if ((wcd_usbss_ctxt_ && wcd_usbss_ctxt_->version == WCD_USBSS_1_X) &&
+			(reg >= WCD_USBSS_EFUSE_CTL &&
+			reg <= WCD_USBSS_ANA_CSR_DBG_CTL))
+		return false;
+
+	return wcd_usbss_reg_access[WCD_USBSS_REG(reg)] & RD_REG;
+}
 
 /*
  * wcd_usbss_register_update() - Write or read multiple USB-SS registers.
@@ -921,6 +933,21 @@ static const char *status_to_str(int status)
 	}
 }
 
+static void wcd_usbss_pd_pu_enable(void)
+{
+	regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_OUT1, 0x20, 0x00);
+	/* Enable D+/D- 1M & 400K PLDN */
+	regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_BIAS_TOP, 0x20, 0x00);
+
+	/* Enable DP/DN 2K PLDN */
+	regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_DP_BIAS, 0x01, 0x01);
+	regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_DN_BIAS, 0x01, 0x01);
+
+	/* Enable SBU1/2 2K PLDN */
+	regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x01);
+	regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x01);
+}
+
 /* to use with DPDM switch selection */
 #define DPDM_SEL_MASK       (WCD_USBSS_SWITCH_SELECT0_DPR_SWITCHES_MASK |\
 					WCD_USBSS_SWITCH_SELECT0_DNL_SWITCHES_MASK)
@@ -1157,6 +1184,7 @@ int wcd_usbss_switch_update(enum wcd_usbss_cable_types ctype,
 	} else if (connect_status == WCD_USBSS_CABLE_CONNECT) {
 		wcd_usbss_ctxt_->cable_status |= BIT(ctype);
 
+		wcd_usbss_pd_pu_enable();
 		wcd_usbss_standby_control_locked(false);
 
 		switch (ctype) {
@@ -1640,7 +1668,6 @@ static int wcd_usbss_probe(struct i2c_client *i2c)
 	priv->runtime_env_counter = 0;
 	mutex_init(&priv->io_lock);
 	mutex_init(&priv->switch_update_lock);
-	mutex_init(&priv->runtime_env_counter_lock);
 	i2c_set_clientdata(i2c, priv);
 
 	pm_runtime_enable(dev);
@@ -1682,6 +1709,7 @@ static int wcd_usbss_probe(struct i2c_client *i2c)
 				__func__);
 		rc = 0;
 	}
+	wcd_usbss_regmap_config.readable_reg = wcd_usbss_readable_register;
 	priv->regmap = wcd_usbss_regmap_init(priv->dev, &wcd_usbss_regmap_config);
 	if (IS_ERR_OR_NULL(priv->regmap)) {
 		rc = PTR_ERR(priv->regmap);
