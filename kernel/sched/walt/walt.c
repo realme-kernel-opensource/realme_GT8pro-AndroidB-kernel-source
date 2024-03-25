@@ -707,15 +707,19 @@ cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *reaso
 	unsigned long capacity = capacity_orig_of(cpu);
 	int i, mpct = PRIME_FACTOR;
 	unsigned long max_nl_other = 0, max_pl_other = 0;
+	unsigned long max_nl_prime = 0, max_pl_prime = 0;
 
 	util =  __cpu_util_freq_walt(cpu, walt_load, reason);
 
 	if (cpumask_test_cpu(cpu, &pipeline_sync_cpus) &&
 			enable_pipeline_boost) {
 		for_each_cpu(i, &pipeline_sync_cpus) {
-			if (i == (num_possible_cpus() - 1))
-				util_prime = __cpu_util_freq_walt(i, &wl_prime, reason);
-			else {
+			if (cpumask_test_cpu(i, &cpu_array[0][num_sched_clusters-1])) {
+				util_prime = max(util_prime,
+						__cpu_util_freq_walt(i, &wl_prime, reason));
+				max_nl_prime = max(max_nl_prime, wl_prime.nl);
+				max_pl_prime = max(max_pl_prime, wl_prime.pl);
+			} else {
 				util_other = max(util_other,
 						__cpu_util_freq_walt(i, &wl_other, reason));
 				max_nl_other = max(max_nl_other, wl_other.nl);
@@ -723,12 +727,12 @@ cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *reaso
 			}
 		}
 
-		if (cpu == (num_possible_cpus() - 1))
+		if (cpumask_test_cpu(cpu, &cpu_array[0][num_sched_clusters-1]))
 			mpct = 100;
 
 		util = ADJUSTED_SHARED_RAIL_UTIL(util_other, util_prime, mpct);
-		walt_load->nl = ADJUSTED_SHARED_RAIL_UTIL(max_nl_other, wl_prime.nl, mpct);
-		walt_load->pl = ADJUSTED_SHARED_RAIL_UTIL(max_pl_other, wl_prime.pl, mpct);
+		walt_load->nl = ADJUSTED_SHARED_RAIL_UTIL(max_nl_other, max_nl_prime, mpct);
+		walt_load->pl = ADJUSTED_SHARED_RAIL_UTIL(max_pl_other, max_pl_prime, mpct);
 	}
 
 	if (!cpumask_test_cpu(cpu, &asym_cap_sibling_cpus))
