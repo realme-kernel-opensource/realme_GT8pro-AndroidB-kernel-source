@@ -2044,7 +2044,7 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 		*trailblazer_demand = 1 << SCHED_CAPACITY_SHIFT;
 		*demand = scale_util_to_time(*trailblazer_demand);
 		walt_flag_set(p, WALT_TRAILBLAZER_BIT, 1);
-	} else {
+	} else if (is_prev_trailblazer) {
 		walt_flag_set(p, WALT_TRAILBLAZER_BIT, 0);
 	}
 
