@@ -1429,6 +1429,40 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 	trace_walt_cfs_mvp_pick_next(mvp, wts, walt_cfs_mvp_task_limit(mvp));
 }
 
+void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
+{
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
+	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+
+	if (wts->misfit)
+		wrq->walt_stats.nr_big_tasks++;
+
+	wts->rtg_high_prio = task_rtg_high_prio(p);
+	if (wts->rtg_high_prio)
+		wrq->walt_stats.nr_rtg_high_prio_tasks++;
+
+	if (walt_flag_test(p, WALT_TRAILBLAZER_BIT))
+		wrq->walt_stats.nr_trailblazer_tasks++;
+}
+
+void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
+{
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
+	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+
+	if (wts->misfit)
+		wrq->walt_stats.nr_big_tasks--;
+
+	if (wts->rtg_high_prio)
+		wrq->walt_stats.nr_rtg_high_prio_tasks--;
+
+	if (walt_flag_test(p, WALT_TRAILBLAZER_BIT))
+		wrq->walt_stats.nr_trailblazer_tasks--;
+
+	BUG_ON(wrq->walt_stats.nr_big_tasks < 0);
+	BUG_ON(wrq->walt_stats.nr_trailblazer_tasks < 0);
+}
+
 void walt_cfs_init(void)
 {
 	register_trace_android_rvh_select_task_rq_fair(walt_select_task_rq_fair, NULL);

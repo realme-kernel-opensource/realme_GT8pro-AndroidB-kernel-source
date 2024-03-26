@@ -1238,6 +1238,9 @@ DECLARE_PER_CPU(u64, rt_task_arrival_time);
 extern int walt_get_mvp_task_prio(struct task_struct *p);
 extern void walt_cfs_deactivate_mvp_task(struct rq *rq, struct task_struct *p);
 
+void inc_rq_walt_stats(struct rq *rq, struct task_struct *p);
+void dec_rq_walt_stats(struct rq *rq, struct task_struct *p);
+
 enum WALT_DEBUG_FEAT {
 	WALT_BUG_UPSTREAM,
 	WALT_BUG_WALT,
