@@ -12,6 +12,7 @@
 #include <linux/pm_runtime.h>
 
 #include "reset.h"
+#include "trace.h"
 
 static int
 qcom_reset_runtime_get(struct qcom_reset_controller *rst)
@@ -76,6 +77,8 @@ qcom_reset_set(struct reset_controller_dev *rcdev,
 	ret = qcom_reset_runtime_get(rst);
 	if (ret < 0)
 		return ret;
+
+	trace_clk_reset(rst, id, assert);
 
 	ret = regmap_update_bits(rst->regmap, map->reg, mask, assert ? mask : 0);
 	if (ret)
