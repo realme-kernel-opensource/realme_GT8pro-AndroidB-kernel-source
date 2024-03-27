@@ -80,10 +80,9 @@ enum freq_caps {
 #define	SOC_ENABLE_UCLAMP_BOOSTED_BIT			BIT(2)
 #define	SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT		BIT(3)
 #define	SOC_ENABLE_SILVER_RT_SPREAD_BIT			BIT(4)
-#define	SOC_ENABLE_ASYM_SIBLINGS_BIT			BIT(5)
-#define	SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT		BIT(6)
-#define	SOC_ENABLE_SW_CYCLE_COUNTER_BIT			BIT(7)
-#define SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT	BIT(8)
+#define	SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT		BIT(5)
+#define	SOC_ENABLE_SW_CYCLE_COUNTER_BIT			BIT(6)
+#define SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT	BIT(7)
 
 
 #define WALT_FEAT_TRAILBLAZER_BIT	BIT_ULL(0)
@@ -213,6 +212,7 @@ extern int nr_big_cpus;
 extern unsigned int sched_capacity_margin_up[WALT_NR_CPUS];
 extern unsigned int sched_capacity_margin_down[WALT_NR_CPUS];
 extern cpumask_t asym_cap_sibling_cpus;
+extern cpumask_t pipeline_sync_cpus;
 extern cpumask_t __read_mostly **cpu_array;
 extern int cpu_l2_sibling[WALT_NR_CPUS];
 extern void sched_update_nr_prod(int cpu, int enq);

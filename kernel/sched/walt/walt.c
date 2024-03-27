@@ -63,8 +63,6 @@ static u64 walt_load_reported_window;
 static struct irq_work walt_cpufreq_irq_work;
 struct irq_work walt_migration_irq_work;
 unsigned int walt_rotation_enabled;
-cpumask_t asym_cap_sibling_cpus = CPU_MASK_NONE;
-cpumask_t shared_rail_sibling_cpus = CPU_MASK_NONE;
 
 unsigned int __read_mostly sched_ravg_window = 20000000;
 int min_possible_cluster_id;
@@ -712,9 +710,9 @@ cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *reaso
 
 	util =  __cpu_util_freq_walt(cpu, walt_load, reason);
 
-	if (cpumask_test_cpu(cpu, &shared_rail_sibling_cpus) &&
+	if (cpumask_test_cpu(cpu, &pipeline_sync_cpus) &&
 			enable_pipeline_boost) {
-		for_each_cpu(i, &shared_rail_sibling_cpus) {
+		for_each_cpu(i, &pipeline_sync_cpus) {
 			if (i == (num_possible_cpus() - 1))
 				util_prime = __cpu_util_freq_walt(i, &wl_prime, reason);
 			else {
@@ -2936,28 +2934,11 @@ static void walt_update_cluster_topology(void)
 	 */
 	move_list(&cluster_head, &new_head, false);
 	update_all_clusters_stats();
-	cluster = NULL;
 
 	if (num_sched_clusters > 1)
 		/* assume sched_cluster[0] are smalls */
 		for (i = 1; i < num_sched_clusters; i++)
 			nr_big_cpus += cpumask_weight(&sched_cluster[i]->cpus);
-
-	if (soc_feat(SOC_ENABLE_ASYM_SIBLINGS_BIT)) {
-		cluster = NULL;
-		cpumask_clear(&asym_cap_sibling_cpus);
-		cpumask_clear(&shared_rail_sibling_cpus);
-		for_each_sched_cluster(cluster) {
-			if (cluster->id != 0 && cluster->id != num_sched_clusters - 1) {
-				cpumask_or(&asym_cap_sibling_cpus,
-					&asym_cap_sibling_cpus, &cluster->cpus);
-			}
-			if (cluster->id == 1 || cluster->id == num_sched_clusters - 1) {
-				cpumask_or(&shared_rail_sibling_cpus,
-					&shared_rail_sibling_cpus, &cluster->cpus);
-			}
-		}
-	}
 
 	init_cpu_array();
 	build_cpu_array();
@@ -4257,7 +4238,7 @@ out:
  * involved in the migration.
  */
 static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migration,
-				bool is_shared_rail_migration, struct cpumask *lock_cpus)
+				bool is_pipeline_sync_migration, struct cpumask *lock_cpus)
 {
 	struct walt_sched_cluster *cluster;
 	struct rq *rq;
@@ -4281,9 +4262,9 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 				/* only update ravg for locked cpus */
 				if (cpumask_intersects(lock_cpus, &cluster->cpus)) {
 					if (unlikely(!raw_spin_is_locked(&rq->__lock))) {
-						printk_deferred("WALT-BUG %s unlocked cpu=%d is_migration=%d is_asym_migration=%d is_shared_rail_migration=%d lock_cpus=%*pbl suspended=%d last_clk=%llu stack[%pS <= %pS <= %pS]\n",
+						printk_deferred("WALT-BUG %s unlocked cpu=%d is_migration=%d is_asym_migration=%d is_pipeline_sync_migration=%d lock_cpus=%*pbl suspended=%d last_clk=%llu stack[%pS <= %pS <= %pS]\n",
 						__func__, rq->cpu, is_migration, is_asym_migration,
-						is_shared_rail_migration,
+						is_pipeline_sync_migration,
 						cpumask_pr_args(lock_cpus), walt_clock_suspended,
 						sched_clock_last, (void *)CALLER_ADDR0,
 						(void *)CALLER_ADDR1, (void *)CALLER_ADDR2);
@@ -4338,7 +4319,7 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 				}
 				if (is_asym_migration)
 					wflag |= WALT_CPUFREQ_ASYM_FIXUP_BIT;
-				if (is_shared_rail_migration)
+				if (is_pipeline_sync_migration)
 					wflag |= WALT_CPUFREQ_SHARED_RAIL_BIT;
 			} else {
 				wflag |= WALT_CPUFREQ_ROLLOVER_BIT;
@@ -4476,7 +4457,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 	struct walt_rq *wrq;
 	int level;
 	int cpu;
-	bool is_migration = false, is_asym_migration = false, is_shared_rail_migration = false;
+	bool is_migration = false, is_asym_migration = false, is_pipeline_sync_migration = false;
 	u32 wakeup_ctr_sum = 0;
 	bool found_topapp = false;
 
@@ -4496,10 +4477,10 @@ static void walt_irq_work(struct irq_work *irq_work)
 		if (cpumask_empty(&lock_cpus))
 			return;
 
-		if (cpumask_intersects(&lock_cpus, &shared_rail_sibling_cpus) &&
+		if (cpumask_intersects(&lock_cpus, &pipeline_sync_cpus) &&
 				enable_pipeline_boost) {
-			cpumask_or(&lock_cpus, &lock_cpus, &shared_rail_sibling_cpus);
-			is_shared_rail_migration = true;
+			cpumask_or(&lock_cpus, &lock_cpus, &pipeline_sync_cpus);
+			is_pipeline_sync_migration = true;
 		}
 		if (!is_state1() &&
 				cpumask_intersects(&lock_cpus, &asym_cap_sibling_cpus)) {
@@ -4518,7 +4499,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 	}
 
 	__walt_irq_work_locked(is_migration, is_asym_migration,
-			is_shared_rail_migration, &lock_cpus);
+			is_pipeline_sync_migration, &lock_cpus);
 
 	if (!is_migration) {
 		for_each_cpu(cpu, cpu_online_mask) {
@@ -5417,6 +5398,7 @@ static void walt_init(struct work_struct *work)
 	}
 
 	walt_update_cluster_topology();
+	walt_config();
 	walt_init_cycle_counter();
 
 	stop_machine(walt_init_stop_handler, NULL, NULL);
@@ -5465,8 +5447,6 @@ static int walt_module_init(void)
 	/* compile time checks for vendor data size */
 	WALT_VENDOR_DATA_SIZE_TEST(struct walt_task_struct, struct task_struct);
 	WALT_VENDOR_DATA_SIZE_TEST(struct walt_task_group, struct task_group);
-
-	walt_config();
 
 	register_trace_android_vh_update_topology_flags_workfn(
 			android_vh_update_topology_flags_workfn, NULL);

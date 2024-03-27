@@ -9,6 +9,8 @@
 
 unsigned long __read_mostly soc_flags;
 unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
+cpumask_t asym_cap_sibling_cpus;
+cpumask_t pipeline_sync_cpus;
 
 void walt_config(void)
 {
@@ -40,6 +42,8 @@ void walt_config(void)
 	sysctl_em_inflate_pct = 100;
 	sysctl_em_inflate_thres = 1024;
 	sysctl_max_freq_partial_halt = FREQ_QOS_MAX_DEFAULT_VALUE;
+	asym_cap_sibling_cpus = CPU_MASK_NONE;
+	pipeline_sync_cpus = CPU_MASK_NONE;
 
 	for (i = 0; i < MAX_MARGIN_LEVELS; i++) {
 		sysctl_sched_capacity_margin_up_pct[i] = 95; /* ~5% margin */
@@ -89,7 +93,25 @@ void walt_config(void)
 
 	} else if (!strcmp(name, "PINEAPPLE")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
-		soc_feat_set(SOC_ENABLE_ASYM_SIBLINGS_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
+
+		/* T + G */
+		cpumask_or(&asym_cap_sibling_cpus,
+			&asym_cap_sibling_cpus, &cpu_array[0][1]);
+		cpumask_or(&asym_cap_sibling_cpus,
+			&asym_cap_sibling_cpus, &cpu_array[0][2]);
+
+		/*
+		 * Treat Golds and Primes as candidates for load sync under pipeline usecase.
+		 * However, it is possible that a single CPU is not present. As prime is the
+		 * only cluster with only one CPU, guard this setting by ensuring 4 clusters
+		 * are present.
+		 */
+		if (num_sched_clusters == 4) {
+			cpumask_or(&pipeline_sync_cpus,
+				&pipeline_sync_cpus, &cpu_array[0][2]);
+			cpumask_or(&pipeline_sync_cpus,
+				&pipeline_sync_cpus, &cpu_array[0][3]);
+		}
 	}
 }
