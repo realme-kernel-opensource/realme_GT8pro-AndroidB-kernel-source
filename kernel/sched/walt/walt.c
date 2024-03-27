@@ -2956,11 +2956,6 @@ static void walt_update_cluster_topology(void)
 	move_list(&cluster_head, &new_head, false);
 	update_all_clusters_stats();
 
-	if (num_sched_clusters > 1)
-		/* assume sched_cluster[0] are smalls */
-		for (i = 1; i < num_sched_clusters; i++)
-			nr_big_cpus += cpumask_weight(&sched_cluster[i]->cpus);
-
 	init_cpu_array();
 	build_cpu_array();
 	find_cache_siblings();
@@ -3715,7 +3710,6 @@ static void walt_update_irqload(struct rq *rq)
 		wrq->high_irqload = false;
 }
 
-__read_mostly int nr_big_cpus;
 static DEFINE_RAW_SPINLOCK(pipeline_lock);
 static struct walt_task_struct *pipeline_wts[WALT_NR_CPUS];
 int pipeline_nr;
@@ -3732,13 +3726,14 @@ int add_pipeline(struct walt_task_struct *wts)
 {
 	int i, pos = -1, ret = -ENOSPC;
 	unsigned long flags;
+	int max_nr_pipeline = cpumask_weight(&cpus_for_pipeline);
 
 	if (unlikely(walt_disabled))
 		return -EAGAIN;
 
 	raw_spin_lock_irqsave(&pipeline_lock, flags);
 
-	for (i = 0; i < nr_big_cpus; i++) {
+	for (i = 0; i < max_nr_pipeline; i++) {
 		if (wts == pipeline_wts[i]) {
 			ret = 0;
 			goto out;

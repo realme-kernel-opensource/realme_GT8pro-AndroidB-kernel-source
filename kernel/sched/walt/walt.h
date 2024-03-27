@@ -207,7 +207,6 @@ extern int walt_cpufreq_cycle_cntr_driver_register(void);
 extern int walt_gclk_cycle_counter_driver_register(void);
 
 extern int num_sched_clusters;
-extern int nr_big_cpus;
 extern unsigned int sched_capacity_margin_up[WALT_NR_CPUS];
 extern unsigned int sched_capacity_margin_down[WALT_NR_CPUS];
 extern cpumask_t asym_cap_sibling_cpus;
