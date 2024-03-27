@@ -92,6 +92,8 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 
+		/*G + P*/
+		cpumask_copy(&pipeline_sync_cpus, cpu_possible_mask);
 	} else if (!strcmp(name, "PINEAPPLE")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
