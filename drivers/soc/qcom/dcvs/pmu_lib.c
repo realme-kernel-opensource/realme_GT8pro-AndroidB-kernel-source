@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "qcom-pmu: " fmt
@@ -916,7 +916,7 @@ int cpucp_pmu_init(struct scmi_device *sdev)
 	int pcpu, ret = 0;
 	uint32_t cpu;
 
-	if (!sdev || !sdev->handle)
+	if (!sdev || !sdev->handle || !pmu_base)
 		return -EINVAL;
 
 #if IS_ENABLED(CONFIG_QTI_SCMI_VENDOR_PROTOCOL)
@@ -1237,7 +1237,7 @@ skip_pmu:
 
 	qcom_pmu_inited = true;
 #if IS_ENABLED(CONFIG_QTI_SCMI_VENDOR_PROTOCOL)
-	if (!IS_ERR(scmi_dev)) {
+	if (!IS_ERR(scmi_dev) && pmu_base) {
 		cpucp_ret = cpucp_pmu_init(scmi_dev);
 		if (cpucp_ret < 0)
 			dev_err(dev, "Err during cpucp_pmu_init ret = %d\n", cpucp_ret);
