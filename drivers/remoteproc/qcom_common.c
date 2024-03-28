@@ -107,6 +107,9 @@ static bool qcom_collect_both_coredumps;
 static LIST_HEAD(qcom_ssr_subsystem_list);
 static DEFINE_MUTEX(qcom_ssr_subsys_lock);
 
+void (*rproc_recovery_set_fn)(struct rproc *rproc) = NULL;
+EXPORT_SYMBOL_GPL(rproc_recovery_set_fn);
+
 static const char * const ssr_timeout_msg = "srcu notifier chain for %s:%s taking too long";
 
 static ssize_t qcom_rproc_shutdown_request_store(struct kobject *kobj, struct kobj_attribute *attr,
@@ -828,6 +831,9 @@ static void rproc_recovery_notifier(void *data, struct rproc *rproc)
 	const char *recovery = rproc->recovery_disabled ? "disabled" : "enabled";
 
 	pr_info("qcom rproc: %s: recovery %s\n", rproc->name, recovery);
+
+	if (rproc_recovery_set_fn)
+		(rproc_recovery_set_fn)(rproc);
 }
 
 static int __init qcom_common_init(void)

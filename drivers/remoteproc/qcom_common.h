@@ -59,6 +59,7 @@ extern bool qcom_device_shutdown_in_progress;
 typedef void (*rproc_dumpfn_t)(struct rproc *rproc, struct rproc_dump_segment *segment,
 			       void *dest, size_t offset, size_t size);
 
+extern void (*rproc_recovery_set_fn)(struct rproc *rproc);
 void qcom_minidump(struct rproc *rproc, struct device *md_dev,
 			unsigned int minidump_id, rproc_dumpfn_t dumpfn, bool both_dumps);
 
