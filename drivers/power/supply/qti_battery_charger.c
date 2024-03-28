@@ -761,8 +761,15 @@ static void battery_chg_update_usb_type_work(struct work_struct *work)
 		return;
 	}
 
+	if (pst->prop[USB_ADAP_TYPE] == POWER_SUPPLY_USB_TYPE_UNKNOWN) {
+		usb_psy_desc.type = POWER_SUPPLY_TYPE_USB;
+		pr_debug("Unknown USB adapter type\n");
+		return;
+	}
+
 	/* Reset usb_icl_ua whenever USB adapter type changes */
 	if (pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_SDP &&
+	    pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_CDP &&
 	    pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_PD)
 		bcdev->usb_icl_ua = 0;
 
@@ -1038,6 +1045,7 @@ static int usb_psy_set_icl(struct battery_chg_dev *bcdev, u32 prop_id, int val)
 	case POWER_SUPPLY_USB_TYPE_CDP:
 		break;
 	default:
+		bcdev->usb_icl_ua = 0;
 		return -EINVAL;
 	}
 
