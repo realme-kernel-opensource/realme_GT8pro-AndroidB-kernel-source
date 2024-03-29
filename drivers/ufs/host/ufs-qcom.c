@@ -1118,7 +1118,15 @@ static int ufs_qcom_hce_enable_notify(struct ufs_hba *hba,
 	return err;
 }
 
-/*
+/**
+ * ufs_qcom_cfg_timers - Configure ufs qcom cfg timers
+ *
+ * @hba: host controller instance
+ * @gear: Current operating gear
+ * @hs: current power mode
+ * @rate: current operating rate (A or B)
+ * @update_link_startup_timer: indicate if link_start ongoing
+ * @is_pre_scale_up: flag to check if pre scale up condition.
  * Return: zero for success and non-zero in case of a failure.
  */
 static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
@@ -1155,15 +1163,15 @@ static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 	 * The Qunipro controller does not use following registers:
 	 * SYS1CLK_1US_REG, TX_SYMBOL_CLK_1US_REG, CLK_NS_REG &
 	 * UFS_REG_PA_LINK_STARTUP_TIMER
-	 * But UTP controller uses SYS1CLK_1US_REG register for Interrupt
+	 * However UTP controller uses SYS1CLK_1US_REG register for Interrupt
 	 * Aggregation logic / Auto hibern8 logic.
 	 * It is mandatory to write SYS1CLK_1US_REG register on UFS host
 	 * controller V4.0.0 onwards.
 	*/
-	if (ufs_qcom_cap_qunipro(host) &&
-	    (!(ufshcd_is_intr_aggr_allowed(hba) ||
-	       ufshcd_is_auto_hibern8_supported(hba) ||
-	       host->hw_ver.major >= 4)))
+	if (host->hw_ver.major < 4 &&
+		ufs_qcom_cap_qunipro(host) &&
+	    !ufshcd_is_intr_aggr_allowed(hba) &&
+		!ufshcd_is_auto_hibern8_supported(hba))
 		return 0;
 
 	if (gear == 0) {
@@ -1177,6 +1185,7 @@ static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 				core_clk_rate = clki->max_freq;
 			else
 				core_clk_rate = clk_get_rate(clki->clk);
+			break;
 		}
 	}
 
@@ -1448,8 +1457,8 @@ static int ufs_qcom_link_startup_notify(struct ufs_hba *hba,
 				strcmp(android_boot_dev, dev_name(dev)))
 			return -ENODEV;
 
-		if (ufs_qcom_cfg_timers(hba, UFS_PWM_G1, SLOWAUTO_MODE,
-					0, true)) {
+		if (__ufs_qcom_cfg_timers(hba, UFS_PWM_G1, SLOWAUTO_MODE,
+					0, true, false)) {
 			dev_err(hba->dev, "%s: ufs_qcom_cfg_timers() failed\n",
 				__func__);
 			err = -EINVAL;
@@ -2320,6 +2329,14 @@ static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 			goto out;
 		}
 
+		/*
+		 * Update phy_gear only when the gears are scaled to a higher value. This is
+		 * because, the PHY gear settings are backwards compatible and we only need to
+		 * change the PHY gear settings while scaling to higher gears.
+		 */
+		if (dev_req_params->gear_tx > host->phy_gear)
+			host->phy_gear = dev_req_params->gear_tx;
+
 		/* enable the device ref clock before changing to HS mode */
 		if (!ufshcd_is_hs_mode(&hba->pwr_info) &&
 			ufshcd_is_hs_mode(dev_req_params))
@@ -2344,9 +2361,9 @@ static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 
 		break;
 	case POST_CHANGE:
-		if (ufs_qcom_cfg_timers(hba, dev_req_params->gear_rx,
+		if (__ufs_qcom_cfg_timers(hba, dev_req_params->gear_rx,
 					dev_req_params->pwr_rx,
-					dev_req_params->hs_rate, false)) {
+					dev_req_params->hs_rate, false, false)) {
 			dev_err(hba->dev, "%s: ufs_qcom_cfg_timers() failed\n",
 				__func__);
 			/*
@@ -3980,9 +3997,12 @@ static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba)
 	if (!ufs_qcom_cap_qunipro(host))
 		goto out;
 
-	if (attr)
-		__ufs_qcom_cfg_timers(hba, attr->gear_rx, attr->pwr_rx,
-				      attr->hs_rate, false, true);
+	err = __ufs_qcom_cfg_timers(hba, attr->gear_rx, attr->pwr_rx,
+				  attr->hs_rate, false, true);
+	if (err) {
+		dev_err(hba->dev, "%s ufs cfg timer failed\n", __func__);
+		return err;
+	}
 
 	err = ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(hba);
 out:
@@ -3996,7 +4016,6 @@ static int ufs_qcom_clk_scale_up_post_change(struct ufs_hba *hba)
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	hba->clk_gating.delay_ms = UFS_QCOM_CLK_GATING_DELAY_MS_PERF;
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
-
 	return 0;
 }
 
@@ -4103,8 +4122,11 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 			err = ufs_qcom_clk_scale_down_pre_change(hba);
 			cancel_dwork_unvote_cpufreq(hba);
 		}
-		if (err)
+
+		if (err) {
 			ufshcd_uic_hibern8_exit(hba);
+			return err;
+		}
 	} else {
 		if (scale_up)
 			err = ufs_qcom_clk_scale_up_post_change(hba);
@@ -4116,6 +4138,7 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 			ufshcd_uic_hibern8_exit(hba);
 			goto out;
 		}
+
 		ufs_qcom_cfg_timers(hba,
 				    dev_req_params->gear_rx,
 				    dev_req_params->pwr_rx,
@@ -5842,7 +5865,7 @@ static int ufs_qcom_probe(struct platform_device *pdev)
  *
  * Always returns 0
  */
-static int ufs_qcom_remove(struct platform_device *pdev)
+static void ufs_qcom_remove(struct platform_device *pdev)
 {
 	struct ufs_hba *hba;
 	struct ufs_qcom_host *host;
@@ -5852,7 +5875,7 @@ static int ufs_qcom_remove(struct platform_device *pdev)
 
 	if (!is_bootdevice_ufs) {
 		dev_info(&pdev->dev, "UFS is not boot dev.\n");
-		return 0;
+		return;
 	}
 
 	hba =  platform_get_drvdata(pdev);
@@ -5870,7 +5893,6 @@ static int ufs_qcom_remove(struct platform_device *pdev)
 
 	ufshcd_remove(hba);
 	platform_msi_domain_free_irqs(hba->dev);
-	return 0;
 }
 
 static void ufs_qcom_shutdown(struct platform_device *pdev)
@@ -6001,7 +6023,7 @@ static const struct dev_pm_ops ufs_qcom_pm_ops = {
 
 static struct platform_driver ufs_qcom_pltform = {
 	.probe	= ufs_qcom_probe,
-	.remove	= ufs_qcom_remove,
+	.remove_new	= ufs_qcom_remove,
 	.shutdown = ufs_qcom_shutdown,
 	.driver	= {
 		.name	= "ufshcd-qcom",

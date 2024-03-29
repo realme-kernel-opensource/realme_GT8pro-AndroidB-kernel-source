@@ -24,7 +24,7 @@ static int gh_write_ioeventfd(struct gh_vm_io_handler *io_dev, u64 addr, u32 len
 {
 	struct gh_ioeventfd *iofd = container_of(io_dev, struct gh_ioeventfd, io_handler);
 
-	eventfd_signal(iofd->ctx, 1);
+	eventfd_signal(iofd->ctx);
 	return 0;
 }
 

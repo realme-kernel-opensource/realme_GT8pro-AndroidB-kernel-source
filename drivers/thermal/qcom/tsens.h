@@ -610,7 +610,7 @@ struct tsens_priv {
 	void				*ipc_log;
 	void				*ipc_log1;
 
-	struct tsens_sensor		sensor[];
+	struct tsens_sensor		sensor[] __counted_by(num_sensors);
 };
 
 /**
