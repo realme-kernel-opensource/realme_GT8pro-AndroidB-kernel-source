@@ -698,6 +698,26 @@ __cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *rea
 	(max(orig, mult_frac(prime, x, 100)))
 #define PRIME_FACTOR 90
 
+static bool enable_load_sync(int cpu)
+{
+	if (!cpumask_test_cpu(cpu, &pipeline_sync_cpus))
+		return false;
+
+	if (!enable_pipeline_boost)
+		return false;
+
+	/*
+	 * Under manual pipeline, only load sync between the pipeline_sync_cpus, if at least one
+	 * of the CPUs userspace has allocated for pipeline tasks corresponds to the
+	 * pipeline_sync_cpus
+	 */
+	if (!sysctl_sched_heavy_nr &&
+			!cpumask_intersects(&pipeline_sync_cpus, &cpus_for_pipeline))
+		return false;
+
+	return true;
+}
+
 unsigned long
 cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *reason)
 {
@@ -711,8 +731,7 @@ cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *reaso
 
 	util =  __cpu_util_freq_walt(cpu, walt_load, reason);
 
-	if (cpumask_test_cpu(cpu, &pipeline_sync_cpus) &&
-			enable_pipeline_boost) {
+	if (enable_load_sync(cpu)) {
 		for_each_cpu(i, &pipeline_sync_cpus) {
 			if (cpumask_test_cpu(i, &cpu_array[0][num_sched_clusters-1])) {
 				util_prime = max(util_prime,
