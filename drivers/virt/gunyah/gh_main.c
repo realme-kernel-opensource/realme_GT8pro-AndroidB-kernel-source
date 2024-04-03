@@ -68,13 +68,28 @@ static void gh_notif_vm_status(struct gh_vm *vm,
 		return;
 
 	/* Wake up the waiters only if there's a change in any of the states */
-	if (status->vm_status != vm->status.vm_status &&
-	   (status->vm_status == GH_RM_VM_STATUS_RESET ||
-	   status->vm_status == GH_RM_VM_STATUS_READY)) {
-		pr_info("VM: %d status %d complete\n", vm->vmid,
+	if (status->vm_status != vm->status.vm_status) {
+		switch (status->vm_status) {
+		case GH_RM_VM_STATUS_RESET:
+		case GH_RM_VM_STATUS_READY:
+			pr_info("VM: %d status %d complete\n", vm->vmid,
 							status->vm_status);
-		vm->status.vm_status = status->vm_status;
-		wake_up(&vm->vm_status_wait);
+			vm->status.vm_status = status->vm_status;
+			wake_up(&vm->vm_status_wait);
+			break;
+		case GH_RM_VM_STATUS_RESET_FAILED:
+			pr_err("VM %d RESET failed with status %d\n",
+					vm->vmid, status->vm_status);
+			/*
+			 * Forcibly set the vm_status to RESET so that
+			 * the VM can be destroyed and the next start
+			 * of the VM will be unsuccessful and userspace
+			 * can make the right decision.
+			 */
+			vm->status.vm_status = GH_RM_VM_STATUS_RESET;
+			wake_up(&vm->vm_status_wait);
+			break;
+		}
 	}
 }
 
