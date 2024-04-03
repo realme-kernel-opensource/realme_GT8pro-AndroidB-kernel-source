@@ -509,7 +509,7 @@ EXPORT_SYMBOL_GPL(qcom_cc_probe_by_index);
 
 void qcom_cc_sync_state(struct device *dev, const struct qcom_cc_desc *desc)
 {
-	dev_info(dev, "sync-state\n");
+	dev_info(dev, "sync_state\n");
 	clk_sync_state(dev);
 
 	clk_vdd_proxy_unvote(dev, desc);
