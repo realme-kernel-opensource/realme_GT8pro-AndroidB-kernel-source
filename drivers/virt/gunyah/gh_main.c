@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -315,6 +315,10 @@ static int gh_vcpu_ioctl_run(struct gh_vcpu *vcpu)
 	}
 
 	gh_notify_clients(vm, GH_VM_BEFORE_POWERUP);
+
+	ret = gh_rm_vm_set_time_base(vm->vmid);
+	if (ret)
+		pr_err("Failed to set time base for VM:%d %d\n", vm->vmid, ret);
 
 	ret = gh_vm_start(vm, GH_RM_VM_STATUS_RUNNING);
 	if (ret) {
