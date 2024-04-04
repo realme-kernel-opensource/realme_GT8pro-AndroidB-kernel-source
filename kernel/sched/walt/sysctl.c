@@ -91,6 +91,7 @@ unsigned int sysctl_sched_sbt_delay_windows;
 unsigned int high_perf_cluster_freq_cap[MAX_CLUSTERS];
 unsigned int sysctl_sched_pipeline_cpus;
 unsigned int fmax_cap[MAX_FREQ_CAP][MAX_CLUSTERS];
+unsigned int sysctl_sched_pipeline_special;
 
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
@@ -252,6 +253,40 @@ unlock:
 	mutex_unlock(&mutex);
 	return ret;
 }
+
+struct task_struct *pipeline_special_task;
+static int sched_pipeline_special_handler(struct ctl_table *table,
+					   int write, void __user *buffer, size_t *lenp,
+					   loff_t *ppos)
+{
+	int ret = 0;
+	static DEFINE_MUTEX(mutex);
+	struct task_struct *pipeline_special_local;
+
+	mutex_lock(&mutex);
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (ret || !write)
+		goto unlock;
+
+	if (!sysctl_sched_pipeline_special) {
+		remove_special_task();
+		goto unlock;
+	}
+
+	pipeline_special_local =
+		get_pid_task(find_vpid(sysctl_sched_pipeline_special), PIDTYPE_PID);
+	if (!pipeline_special_local) {
+		ret = -ENOENT;
+		goto unlock;
+	}
+	put_task_struct(pipeline_special_local);
+	set_special_task(pipeline_special_local);
+unlock:
+	mutex_unlock(&mutex);
+	return ret;
+}
+
 
 static int sched_ravg_window_handler(struct ctl_table *table,
 				int write, void __user *buffer, size_t *lenp,
@@ -1445,6 +1480,13 @@ static struct ctl_table walt_table[] = {
 		.maxlen		= sizeof(unsigned int) * 2,
 		.mode		= 0644,
 		.proc_handler	= sched_task_handler,
+	},
+	{
+		.procname	= "sched_pipeline_special",
+		.data		= &sysctl_sched_pipeline_special,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_pipeline_special_handler,
 	},
 	{ }
 };

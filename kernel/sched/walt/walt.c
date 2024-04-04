@@ -2542,6 +2542,9 @@ static void walt_task_dead(struct task_struct *p)
 
 	if (wts->low_latency & WALT_LOW_LATENCY_HEAVY_BIT)
 		remove_heavy(wts);
+
+	if (p == pipeline_special_task)
+		remove_special_task();
 }
 
 static void mark_task_starting(struct task_struct *p)

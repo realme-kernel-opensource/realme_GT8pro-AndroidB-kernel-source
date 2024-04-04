@@ -1333,4 +1333,8 @@ extern bool enable_load_sync(int cpu);
 extern unsigned int enable_pipeline_boost;
 extern struct walt_related_thread_group *lookup_related_thread_group(unsigned int group_id);
 extern bool prev_is_sbt;
+extern unsigned int sysctl_sched_pipeline_special;
+extern struct task_struct *pipeline_special_task;
+extern void remove_special_task(void);
+extern void set_special_task(struct task_struct *pipeline_special_local);
 #endif /* _WALT_H */

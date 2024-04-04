@@ -97,6 +97,30 @@ out:
 	return ret;
 }
 
+void remove_special_task(void)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&heavy_lock, flags);
+	/*
+	 * Although the pipeline special task designation is removed,
+	 * if the task is not dead (i.e. this function was called from sysctl context)
+	 * the task will continue to enjoy pipeline priveleges until the next update in
+	 * find_heaviest_topapp()
+	 */
+	pipeline_special_task = NULL;
+	raw_spin_unlock_irqrestore(&heavy_lock, flags);
+}
+
+void set_special_task(struct task_struct *pipeline_special_local)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&heavy_lock, flags);
+	pipeline_special_task = pipeline_special_local;
+	raw_spin_unlock_irqrestore(&heavy_lock, flags);
+}
+
 cpumask_t cpus_for_pipeline = { CPU_BITS_NONE };
 
 /* always set boost for max cluster, for pipeline tasks */
@@ -196,7 +220,19 @@ bool find_heaviest_topapp(u64 window_start)
 		heavy_wts[i] = NULL;
 	}
 
-	/* find N top heavy tasks, add to array */
+	/* Assign user specified one (if exists) to slot 0*/
+	if (pipeline_special_task) {
+		heavy_wts[0] = (struct walt_task_struct *)
+					pipeline_special_task->android_vendor_data1;
+		j = 1;
+	} else {
+		j = 0;
+	}
+
+	/*
+	 * Ensure that heavy_wts either contains the top 3 top-app tasks,
+	 * or the user defined heavy task followed by the top 2 top-app tasks
+	 */
 	list_for_each_entry(wts, &grp->tasks, grp_list) {
 		struct walt_task_struct *to_be_placed_wts = wts;
 
@@ -204,7 +240,11 @@ bool find_heaviest_topapp(u64 window_start)
 		if (wts->mark_start < window_start - (sched_ravg_window * 2))
 			continue;
 
-		for (i = 0; i < sched_heavy_nr; i++) {
+		/* skip user defined task as it's already part of the list*/
+		if (pipeline_special_task && (wts == heavy_wts[0]))
+			continue;
+
+		for (i = j; i < sched_heavy_nr; i++) {
 			if (!heavy_wts[i]) {
 				heavy_wts[i] = to_be_placed_wts;
 				break;
