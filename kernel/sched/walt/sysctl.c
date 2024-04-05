@@ -131,10 +131,9 @@ static int walt_proc_group_thresholds_handler(struct ctl_table *table, int write
 	 * which will disable colocation.
 	 */
 	if (data == &sysctl_sched_group_upmigrate_pct) {
-		if (sysctl_sched_group_downmigrate_pct != 0 && val <= 0) {
-			ret = -EINVAL;
-			goto unlock_mutex;
-		} else if (val <= sysctl_sched_group_downmigrate_pct && val != 0) {
+		if (val < 0 ||
+			(sysctl_sched_group_downmigrate_pct != 0 && val == 0) ||
+			(val <= sysctl_sched_group_downmigrate_pct && val != 0)) {
 			ret = -EINVAL;
 			goto unlock_mutex;
 		}
