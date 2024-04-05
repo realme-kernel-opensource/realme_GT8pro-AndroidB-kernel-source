@@ -137,6 +137,19 @@
 #define HAP_CFG_CL_BRAKE_RSET_REG		0x53
 #define HAP_CFG_PWM_CFG_REG			0x5A
 
+/* Only for HAP530_HV */
+
+#define HAP_CFG_CL_BRAKE_RCAL_REG		0x52
+#define CL_BRAKE_RCAL_MASK			GENMASK(5, 0)
+
+/* For HAP_CFG_CL_BRAKE_RSET_REG */
+#define FORCE_RNAT_RCAL_PARAM_MASK		BIT(0)
+
+#define HAP_CFG_CL_BRAKE_RNAT_REG		0x54
+#define CL_BRAKE_RNAT_MASK			GENMASK(5, 0)
+
+/* End HAP530_HV */
+
 #define HAP_CFG_TLRA_OL_HIGH_REG		0x5C
 #define TLRA_OL_MSB_MASK			GENMASK(3, 0)
 #define HAP_CFG_TLRA_OL_LOW_REG			0x5D
@@ -211,6 +224,11 @@
 #define CAL_RC_CLK_DISABLED_VAL			0
 #define CAL_RC_CLK_AUTO_VAL			1
 #define CAL_RC_CLK_MANUAL_VAL			2
+#define BRAKE_CAL_MASK				GENMASK(1, 0)
+#define BRAKE_CAL_NONE				0
+#define BRAKE_CAL_CL_NATURAL			1
+#define BRAKE_CAL_CL_FORCED			2
+#define BRAKE_CAL_CL_RECAL			3
 
 /* For HAP520_MV and HAP525_HV */
 #define HAP_CFG_ISC_CFG2_REG			0x77
@@ -337,10 +355,16 @@
 #define MMAP_PAT3_PAT4_LEN_MASK			GENMASK(4, 0)
 
 /* HAPTICS_PATTERN registers only present in HAP530_HV */
+#define HAP_PTN_FORCE_TWIND_CAL_MSB		0x30
+#define HAP_PTN_TWIND_CAL_MSB_MASK		GENMASK(3, 0)
+
+#define HAP_PTN_FORCE_TWIND_CAL_LSB		0x31
+
 #define HAP_PTN_VISENSE_EN_REG			0x46
 #define HAP_PTN_VISENSE_EN_BIT			BIT(7)
 
 #define HAP_PTN_PATX_MEM_WR_START_ADDR_REG	0x50
+#define HAP_PTN_BRAKE_AMP_0_REG			0x70
 #define HAP_PTN_SPMI_PATX_MEM_START_ADDR_REG	0xA4
 #define HAP_PTN_SPMI_PATX_MEM_LEN_LSB_REG	0xA6
 #define HAP_PTN_PATX_MEM_LEN_HI_MASK		GENMASK(2, 0)
@@ -394,6 +418,22 @@
 #define PBS_TRIG_SET_VAL			0x1
 #define PBS_TRIG_CLR_VAL			0x1
 
+/*
+ * haptics SDAM register offset definitions for HAP530 that overrides some
+ * definitions above.
+ */
+
+#define HAP_AUTO_BRAKE_CAL_CL_BRAKE_RSET_OFFSET	0x52
+#define HAP_AUTO_BRAKE_CAL_BRAKE_AMP0_OFFSET	0x53
+#define HAP_AUTO_BRAKE_RNAT_DEFAULT_OFFSET	0x61
+#define HAP_AUTO_BRAKE_RCAL_DEFAULT_OFFSET	0x62
+#define HAP_AUTO_BRAKE_T_WIND_MSB_DEF_OFFSET	0x63
+#define HAP_AUTO_BRAKE_T_WIND_LSB_DEF_OFFSET	0x64
+#define HAP_AUTO_BRAKE_T_WIND_STS_MSB_OFFSET	0x6E
+#define HAP_AUTO_BRAKE_T_WIND_STS_LSB_OFFSET	0x6F
+#define HAP_AUTO_BRAKE_RNAT_OFFSET		0x78
+#define HAP_AUTO_BRAKE_RCAL_OFFSET		0x79
+
 /* constant parameters */
 #define SAMPLES_PER_PATTERN			8
 #define BRAKE_SAMPLE_COUNT			8
@@ -431,6 +471,7 @@ enum hap_status_sel {
 	BRAKE_CAL_SCALAR = 0x07,
 	CLAMPED_DUTY_CYCLE_STS = 0x8003,
 	FIFO_REAL_TIME_STS = 0x8005,
+	AUTO_BRAKE_CAL_STS = 0x8006,
 };
 
 enum drv_sig_shape {
@@ -1087,6 +1128,8 @@ static int haptics_get_status_data(struct haptics_chip *chip,
 		name = "CLAMPED_DUTY_CYCLE_STS";
 	else if (sel == FIFO_REAL_TIME_STS)
 		name = "FIFO_REAL_TIME_STS";
+	else if (sel == AUTO_BRAKE_CAL_STS)
+		name = "AUTO_BRAKE_CAL_STS";
 
 	dev_dbg(chip->dev, "Get status data[%s] = (%#x, %#x)\n", name, data[0], data[1]);
 	trace_qcom_haptics_status(name, data[0], data[1]);
@@ -3658,6 +3701,8 @@ static int haptics_init_fifo_config(struct haptics_chip *chip)
 	return 0;
 }
 
+static int haptics_auto_brake_manual_config(struct haptics_chip *chip);
+
 static int haptics_hw_init(struct haptics_chip *chip)
 {
 	int rc;
@@ -3696,6 +3741,12 @@ static int haptics_hw_init(struct haptics_chip *chip)
 	rc = haptics_init_visense_config(chip);
 	if (rc < 0)
 		return rc;
+
+	if (chip->visense_enabled) {
+		rc = haptics_auto_brake_manual_config(chip);
+		if (rc < 0)
+			return rc;
+	}
 
 	rc = haptics_init_fifo_config(chip);
 	if (rc < 0)
@@ -5131,6 +5182,118 @@ restore:
 
 	rc = haptics_write(chip, chip->cfg_addr_base,
 			HAP_CFG_DRV_DUTY_CFG_REG, &drv_duty_cfg, 1);
+
+	return rc;
+}
+
+static int haptics_auto_brake_manual_config(struct haptics_chip *chip)
+{
+	bool auto_brake_cal_done = false;
+	unsigned int addr;
+	u8 val[2];
+	int rc;
+
+	rc = nvmem_device_read(chip->hap_cfg_nvmem,
+				HAP_AUTO_BRAKE_CAL_DONE_OFFSET, 1, val);
+	if (rc <= 0) {
+		dev_err(chip->dev, "read AUTO_BRAKE_CAL_DONE failed, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	auto_brake_cal_done = val[0] & AUTO_BRAKE_CAL_DONE;
+	dev_dbg(chip->dev, "auto_brake_cal_done: %u\n", auto_brake_cal_done);
+
+	/* Read RNAT and RCAL values from SDAM and write to HAP_CFG */
+	addr = auto_brake_cal_done ? HAP_AUTO_BRAKE_RNAT_OFFSET :
+		HAP_AUTO_BRAKE_RNAT_DEFAULT_OFFSET;
+	rc = nvmem_device_read(chip->hap_cfg_nvmem, addr, 2, val);
+	if (rc < 0) {
+		dev_err(chip->dev, "Error reading RNAT/RCAL values, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	val[0] &= CL_BRAKE_RNAT_MASK;
+	rc = haptics_write(chip, chip->cfg_addr_base, HAP_CFG_CL_BRAKE_RNAT_REG,
+			&val[0], 1);
+	if (rc < 0)
+		return rc;
+
+	val[1] &= CL_BRAKE_RCAL_MASK;
+	rc = haptics_write(chip, chip->cfg_addr_base, HAP_CFG_CL_BRAKE_RCAL_REG,
+			&val[1], 1);
+	if (rc < 0)
+		return rc;
+
+	/* Read T_WIND_STS values from SDAM and write to HAP_PTN */
+	addr = auto_brake_cal_done ? HAP_AUTO_BRAKE_T_WIND_STS_MSB_OFFSET :
+		HAP_AUTO_BRAKE_T_WIND_MSB_DEF_OFFSET;
+	rc = nvmem_device_read(chip->hap_cfg_nvmem, addr, 2, val);
+	if (rc < 0) {
+		dev_err(chip->dev, "Error reading T_WIND_STS values, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	val[0] &= HAP_PTN_TWIND_CAL_MSB_MASK;
+	rc = haptics_write(chip, chip->ptn_addr_base,
+			HAP_PTN_FORCE_TWIND_CAL_MSB, val, 2);
+	if (rc < 0)
+		return rc;
+
+	/* Read BRAKE_AMP_0 value from SDAM and write to HAP_PTN */
+	rc = nvmem_device_read(chip->hap_cfg_nvmem,
+			HAP_AUTO_BRAKE_CAL_BRAKE_AMP0_OFFSET, 1, val);
+	if (rc < 0) {
+		dev_err(chip->dev, "Error reading BRAKE_AMP0 value, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	rc = haptics_write(chip, chip->ptn_addr_base, HAP_PTN_BRAKE_AMP_0_REG,
+			&val[0], 1);
+	if (rc < 0)
+		return rc;
+
+	/* Read BRAKE_RSET value from SDAM and write to HAP_CFG */
+	rc = nvmem_device_read(chip->hap_cfg_nvmem,
+			HAP_AUTO_BRAKE_CAL_CL_BRAKE_RSET_OFFSET, 1, val);
+	if (rc < 0) {
+		dev_err(chip->dev, "Error reading BRAKE_RSET value, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	val[0] &= FORCE_RNAT_RCAL_PARAM_MASK;
+	rc = haptics_masked_write(chip, chip->cfg_addr_base,
+			HAP_CFG_CL_BRAKE_RSET_REG, FORCE_RNAT_RCAL_PARAM_MASK,
+			val[0]);
+	if (rc < 0)
+		return rc;
+
+	/* Run auto brake re-calibration */
+	val[0] = BRAKE_CAL_CL_RECAL;
+	rc = haptics_masked_write(chip, chip->cfg_addr_base, HAP_CFG_CAL_EN_REG,
+			BRAKE_CAL_MASK, val[0]);
+	if (rc < 0)
+		return rc;
+
+	/* As per HW recommendation, wait for 5 uS before clearing BRAKE_CAL */
+	udelay(5);
+
+	val[0] = BRAKE_CAL_NONE;
+	rc = haptics_masked_write(chip, chip->cfg_addr_base, HAP_CFG_CAL_EN_REG,
+			BRAKE_CAL_MASK, val[0]);
+
+	/*
+	 * Read back whether BRAKE_CAL_DONE is high and the calibration is
+	 * successful or not.
+	 */
+	rc = haptics_get_status_data(chip, AUTO_BRAKE_CAL_STS, val);
+	if (!rc)
+		dev_dbg(chip->dev, "Manual AUTO_BRAKE_CAL_DONE: %#x %s\n",
+			 val[1], val[1] & BIT(2) ? "Success" : "Fail");
 
 	return rc;
 }
