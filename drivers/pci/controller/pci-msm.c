@@ -4193,43 +4193,74 @@ static void msm_pcie_vreg_deinit(struct msm_pcie_dev_t *dev)
 	PCIE_DBG(dev, "RC%d: exit\n", dev->rc_idx);
 }
 
+static int msm_pcie_genpd_gdsc_enable(struct msm_pcie_dev_t *dev,
+						struct device *genpd_dev)
+{
+	int ret = 0;
+	struct generic_pm_domain *genpd;
+
+	if (!genpd_dev)
+		return 0;
+
+	genpd = pd_to_genpd(genpd_dev->pm_domain);
+
+	ret = pm_runtime_get_sync(genpd_dev);
+	if (ret < 0) {
+		PCIE_ERR(dev, "PCIe: failed to enable %s for RC%d (%s)\n",
+				genpd->name, dev->rc_idx, dev->pdev->name);
+		return ret;
+	}
+
+	/*
+	 * Setting the GENPD_FLAG_ALWAYS_ON will prevent the
+	 * gdsc from getting turned off during system suspend.
+	 */
+	genpd->flags |= GENPD_FLAG_ALWAYS_ON;
+
+	return 0;
+}
+
+static int msm_pcie_genpd_gdsc_disable(struct msm_pcie_dev_t *dev,
+						struct device *genpd_dev)
+{
+	int ret = 0;
+	struct generic_pm_domain *genpd;
+
+	if (!genpd_dev)
+		return 0;
+
+	genpd = pd_to_genpd(genpd_dev->pm_domain);
+	genpd->flags &= ~GENPD_FLAG_ALWAYS_ON;
+
+	ret = pm_runtime_put_sync(genpd_dev);
+	if (ret < 0) {
+		PCIE_ERR(dev, "PCIe: failed to disable %s for RC%d (%s)\n",
+				genpd->name, dev->rc_idx, dev->pdev->name);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int msm_pcie_genpd_gdsc_init(struct msm_pcie_dev_t *dev)
 {
 	int rc = 0;
 
 	PCIE_DBG(dev, "RC%d: entry\n", dev->rc_idx);
 
-	if (dev->gdsc_pd_core) {
-		rc = pm_runtime_get_sync(dev->gdsc_pd_core);
-		if (rc) {
-			PCIE_ERR(dev,
-			"PCIe: fail to enable GenPD GDSC-CORE for RC%d (%s)\n",
-					dev->rc_idx, dev->pdev->name);
-			goto out;
-		}
-	}
+	rc = msm_pcie_genpd_gdsc_enable(dev, dev->gdsc_pd_core);
+	if (rc)
+		goto out;
 
-	if (dev->gdsc_pd_phy) {
-		rc = pm_runtime_get_sync(dev->gdsc_pd_phy);
-		if (rc) {
-			PCIE_ERR(dev,
-			"PCIe: fail to enable GenPD GDSC-PHY for RC%d (%s)\n",
-					dev->rc_idx, dev->pdev->name);
-			goto err;
-		}
-	}
+	rc = msm_pcie_genpd_gdsc_enable(dev, dev->gdsc_pd_phy);
+	if (rc)
+		goto err;
 
 out:
 	PCIE_DBG(dev, "RC%d: exit ret %d\n", dev->rc_idx, rc);
 	return rc;
 err:
-	if (dev->gdsc_pd_core) {
-		rc = pm_runtime_put_sync(dev->gdsc_pd_core);
-		if (rc)
-			PCIE_ERR(dev,
-			"PCIe: fail to disable GenPD GDSC-CORE for RC%d (%s)\n",
-					dev->rc_idx, dev->pdev->name);
-	}
+	rc = msm_pcie_genpd_gdsc_disable(dev, dev->gdsc_pd_core);
 
 	PCIE_DBG(dev, "RC%d: exit ret %d\n", dev->rc_idx, rc);
 	return rc;
@@ -4298,23 +4329,11 @@ static int msm_pcie_genpd_gdsc_deinit(struct msm_pcie_dev_t *dev)
 
 	PCIE_DBG(dev, "RC%d: entry\n", dev->rc_idx);
 
-	if (dev->gdsc_pd_core) {
-		rc = pm_runtime_put_sync(dev->gdsc_pd_core);
-		if (rc) {
-			PCIE_ERR(dev,
-			"PCIe:RC%d fail to disable GenPD GDSC-CORE (%s)\n",
-					dev->rc_idx, dev->pdev->name);
-			goto out;
-		}
-	}
+	rc = msm_pcie_genpd_gdsc_disable(dev, dev->gdsc_pd_core);
+	if (rc)
+		goto out;
 
-	if (dev->gdsc_pd_phy) {
-		rc = pm_runtime_put_sync(dev->gdsc_pd_phy);
-		if (rc)
-			PCIE_ERR(dev,
-			"PCIe:RC%d fail to disable GDSC-PHY (%s)\n",
-					dev->rc_idx, dev->pdev->name);
-	}
+	rc = msm_pcie_genpd_gdsc_disable(dev, dev->gdsc_pd_phy);
 
 out:
 	PCIE_DBG(dev, "RC%d: exit ret %d\n", dev->rc_idx, rc);
@@ -9899,15 +9918,18 @@ static int msm_pcie_drv_resume(struct msm_pcie_dev_t *pcie_dev)
 	PCIE_DBG(pcie_dev, "PCIe: RC%d:enable gdsc-core\n", pcie_dev->rc_idx);
 
 	if (!pcie_dev->gdsc_clk_drv_ss_nonvotable) {
-		if (pcie_dev->gdsc_pd_core)
-			ret = pm_runtime_get_sync(pcie_dev->gdsc_pd_core);
-		else if (pcie_dev->gdsc_core)
+		ret = msm_pcie_genpd_gdsc_enable(pcie_dev, pcie_dev->gdsc_pd_core);
+
+		if (pcie_dev->gdsc_core) {
 			ret = regulator_enable(pcie_dev->gdsc_core);
+			if (ret)
+				PCIE_ERR(pcie_dev,
+				"PCIe: RC%d: failed to enable GDSC: ret %d\n",
+				pcie_dev->rc_idx, ret);
+		}
 
 		if (ret)
-			PCIE_ERR(pcie_dev,
-			"PCIe: RC%d: failed to enable GDSC: ret %d\n",
-			pcie_dev->rc_idx, ret);
+			goto out;
 	}
 
 	PCIE_DBG(pcie_dev, "PCIe: RC%d:set ICC path vote\n", pcie_dev->rc_idx);
@@ -10138,9 +10160,9 @@ static int msm_pcie_drv_suspend(struct msm_pcie_dev_t *pcie_dev,
 	}
 
 	if (!pcie_dev->gdsc_clk_drv_ss_nonvotable) {
-		if (pcie_dev->gdsc_pd_core)
-			pm_runtime_put_sync(pcie_dev->gdsc_pd_core);
-		else if (pcie_dev->gdsc_core)
+		msm_pcie_genpd_gdsc_disable(pcie_dev, pcie_dev->gdsc_pd_core);
+
+		if (pcie_dev->gdsc_core)
 			regulator_disable(pcie_dev->gdsc_core);
 	}
 
