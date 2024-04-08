@@ -4610,7 +4610,8 @@ void fmax_uncap_checkpoint(int nr_big, u64 window_start, u32 wakeup_ctr_sum)
 	fmax_uncap_load_detected = (nr_big >= 7 && wakeup_ctr_sum < WAKEUP_CTR_THRESH) ||
 			is_full_throttle_boost() ||
 			is_storage_boost() ||
-			thres_based_uncap(window_start);
+			thres_based_uncap(window_start) ||
+			trailblazer_state;
 
 	if (fmax_uncap_load_detected) {
 		if (!fmax_uncap_timestamp)
