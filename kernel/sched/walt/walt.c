@@ -532,6 +532,18 @@ int walt_trailblazer_tasks(int cpu)
 	return wrq->walt_stats.nr_trailblazer_tasks;
 }
 
+bool trailblazer_on_prime(void)
+{
+	int cpu;
+
+	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
+		if (walt_trailblazer_tasks(cpu))
+			return true;
+	}
+
+	return false;
+}
+
 static void clear_walt_request(int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
@@ -4611,7 +4623,7 @@ void fmax_uncap_checkpoint(int nr_big, u64 window_start, u32 wakeup_ctr_sum)
 			is_full_throttle_boost() ||
 			is_storage_boost() ||
 			thres_based_uncap(window_start) ||
-			trailblazer_state;
+			trailblazer_on_prime();
 
 	if (fmax_uncap_load_detected) {
 		if (!fmax_uncap_timestamp)
