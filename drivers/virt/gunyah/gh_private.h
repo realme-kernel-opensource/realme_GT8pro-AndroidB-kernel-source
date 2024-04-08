@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _GH_PRIVATE_H
@@ -20,7 +20,7 @@ struct gh_vm_user_mem {
 	struct sg_table *sgt;
 	struct page **pages;
 	unsigned long npages;
-	u32 n_sgl_entries;
+	unsigned long n_sgl_entries;
 	struct gh_sgl_entry *sgl_entries;
 	gh_memparcel_handle_t mem_handle;
 };
