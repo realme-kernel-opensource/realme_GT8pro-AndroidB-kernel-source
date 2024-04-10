@@ -105,6 +105,8 @@ static LIST_HEAD(adc_tm_device_list);
 #define ADC5_GEN3_CH7_DATA0			0x6a
 #define ADC5_GEN3_CH7_DATA1			0x6b
 
+#define ADC5_GEN3_CONV_ERROR_STS		0x6e
+
 #define ADC5_GEN3_CONV_REQ			0xe5
 #define ADC5_GEN3_CONV_REQ_REQ			BIT(0)
 
@@ -576,11 +578,25 @@ static int get_sdam_from_irq(struct adc5_chip *adc, int irq)
 	return -ENOENT;
 }
 
+static int adc5_gen3_clear_conv_fault(struct adc5_chip *adc, int sdam_num, u8 val)
+{
+	int ret;
+
+	ret = adc5_write(adc, sdam_num, ADC5_GEN3_CONV_ERR_CLR, &val, 1);
+	if (ret < 0)
+		return ret;
+
+	val = ADC5_GEN3_CONV_REQ_REQ;
+	return adc5_write(adc, sdam_num, ADC5_GEN3_CONV_REQ, &val, 1);
+}
+
+static int adc_tm5_gen3_configure(struct adc5_channel_prop *prop);
+
 static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 {
 	struct adc5_chip *adc = dev_id;
-	u8 status, tm_status[2], eoc_status, val;
-	int ret, sdam_num;
+	u8 status, tm_status[2], eoc_status, val, conv_err;
+	int ret, sdam_num, i;
 
 	sdam_num = get_sdam_from_irq(adc, irq);
 	if (sdam_num < 0) {
@@ -594,9 +610,57 @@ static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 		goto handler_end;
 	}
 
+	ret = adc5_read(adc, sdam_num, ADC5_GEN3_STATUS1, &status, 1);
+	if (ret < 0) {
+		pr_err("adc read status1 failed with %d\n", ret);
+		goto handler_end;
+	}
+
+	ret = adc5_read(adc, sdam_num, ADC5_GEN3_CONV_ERROR_STS, &conv_err, 1);
+	if (ret < 0) {
+		pr_err("adc read conv_error_sts failed with %d\n", ret);
+		goto handler_end;
+	}
+
 	/* CHAN0 is the preconfigured channel for immediate conversion */
-	if (eoc_status & ADC5_GEN3_EOC_CHAN_0)
+	if (!status && !conv_err && (eoc_status & ADC5_GEN3_EOC_CHAN_0))
 		complete(&adc->complete);
+
+	pr_debug("Interrupt status:%#x, EOC status:%#x, conv_err:%#x\n",
+		status, eoc_status, conv_err);
+
+	if (status & ADC5_GEN3_STATUS1_CONV_FAULT) {
+		pr_err_ratelimited("Unexpected conversion fault, status:%#x, eoc_status:%#x, conv_err:%#x\n",
+					status, eoc_status, conv_err);
+		adc5_gen3_dump_regs_debug(adc);
+
+		if (sdam_num == 0 && (conv_err & BIT(0))) {
+			/* To indicate conversion request is only to clear a status */
+			val = 0;
+			ret = adc5_write(adc, sdam_num, ADC5_GEN3_PERPH_CH, &val, 1);
+			if (ret < 0)
+				goto handler_end;
+
+			ret = adc5_gen3_clear_conv_fault(adc, sdam_num, conv_err);
+			if (ret < 0)
+				goto handler_end;
+			return IRQ_HANDLED;
+		} else if (conv_err) {
+			ret = adc5_gen3_clear_conv_fault(adc, sdam_num, conv_err);
+			if (ret < 0)
+				goto handler_end;
+
+			/* Reconfigure ADC TM channels */
+			for (i = 0; i < adc->nchannels; i++) {
+				if (sdam_num != adc->chan_props[i].sdam_index)
+					continue;
+
+				if (conv_err & BIT(adc->chan_props[i].tm_chan_index))
+					adc_tm5_gen3_configure(&adc->chan_props[i]);
+			}
+			return IRQ_HANDLED;
+		}
+	}
 
 	ret = adc5_read(adc, sdam_num, ADC5_GEN3_TM_HIGH_STS, tm_status, 2);
 	if (ret < 0) {
@@ -606,37 +670,6 @@ static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 
 	if (tm_status[0] || tm_status[1])
 		schedule_work(&adc->tm_handler_work);
-
-	ret = adc5_read(adc, sdam_num, ADC5_GEN3_STATUS1, &status, 1);
-	if (ret < 0) {
-		pr_err("adc read status1 failed with %d\n", ret);
-		goto handler_end;
-	}
-
-	pr_debug("Interrupt status:%#x, EOC status:%#x, high:%#x, low:%#x\n",
-			status, eoc_status, tm_status[0], tm_status[1]);
-
-	if (status & ADC5_GEN3_STATUS1_CONV_FAULT) {
-		pr_err_ratelimited("Unexpected conversion fault, status:%#x, eoc_status:%#x\n",
-					status, eoc_status);
-		adc5_gen3_dump_regs_debug(adc);
-
-		val = ADC5_GEN3_CONV_ERR_CLR_REQ;
-		ret = adc5_write(adc, sdam_num, ADC5_GEN3_CONV_ERR_CLR, &val, 1);
-		if (ret < 0)
-			goto handler_end;
-
-		/* To indicate conversion request is only to clear a status */
-		val = 0;
-		ret = adc5_write(adc, sdam_num, ADC5_GEN3_PERPH_CH, &val, 1);
-		if (ret < 0)
-			goto handler_end;
-
-		val = ADC5_GEN3_CONV_REQ_REQ;
-		ret = adc5_write(adc, sdam_num, ADC5_GEN3_CONV_REQ, &val, 1);
-		if (ret < 0)
-			goto handler_end;
-	}
 
 	return IRQ_HANDLED;
 
