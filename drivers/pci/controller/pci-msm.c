@@ -2090,8 +2090,13 @@ static void msm_pcie_show_status(struct msm_pcie_dev_t *dev)
 		dev->link_turned_off_counter);
 	PCIE_DBG_FS(dev, "l23_rdy_poll_timeout: %llu\n",
 		dev->l23_rdy_poll_timeout);
-	PCIE_DBG_FS(dev, "PCIe CESTA is %s\n",
-		dev->pcie_sm ? "supported" : "not_supported");
+	PCIE_DBG_FS(dev, "PCIe %s is used for resource voting\n",
+		dev->pcie_sm ? "CESTA" : "SW");
+	if (dev->drv_supported)
+		PCIE_DBG_FS(dev, "PCIe L1ss sleep is supported using %s\n",
+							dev->drv_name);
+	else
+		PCIE_DBG_FS(dev, "PCIe L1ss sleep is not supported\n");
 }
 
 static void msm_pcie_access_reg(struct msm_pcie_dev_t *dev, bool wr)
