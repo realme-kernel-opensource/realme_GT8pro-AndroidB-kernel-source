@@ -106,6 +106,7 @@
 #define DRV_WF_SEL_MASK				GENMASK(1, 0)
 
 #define HAP_CFG_AUTO_SHUTDOWN_CFG_REG		0x4A
+#define EN_WFHOLD_FIFO_BIT			BIT(2) /* For haptics HAP525_HV and later */
 
 #define HAP_CFG_TRIG_PRIORITY_REG		0x4B
 #define SWR_IGNORE_BIT				BIT(4)
@@ -3622,6 +3623,25 @@ static int haptics_init_visense_config(struct haptics_chip *chip)
 	return rc;
 }
 
+static int haptics_init_fifo_config(struct haptics_chip *chip)
+{
+	/*
+	 * WF_HOLD_FIFO keeps haptics output to the previous value when FIFO runs dry.
+	 * It is helpful to keep haptics play continuously when we have a small FIFO
+	 * space and slow SW response to refill the FIFO samples. However, it also
+	 * brings a side effect that haptics would continue to output if FIFO play
+	 * ends with a non-zero sample while the SPMI_PLAY bit is not de-asserted
+	 * timely. Further, with the default minimal FIFO space of 640 bytes, we have
+	 * never run into the situation when FIFO runs dry because of SW couldn't
+	 * refill the FIFO samples. Hence, keep WF_HOLD_FIFO as disabled.
+	 */
+	if (chip->hw_type >= HAP525_HV)
+		return haptics_masked_write(chip, chip->cfg_addr_base,
+				HAP_CFG_AUTO_SHUTDOWN_CFG_REG, EN_WFHOLD_FIFO_BIT, 0);
+
+	return 0;
+}
+
 static int haptics_hw_init(struct haptics_chip *chip)
 {
 	int rc;
@@ -3658,6 +3678,10 @@ static int haptics_hw_init(struct haptics_chip *chip)
 		return rc;
 
 	rc = haptics_init_visense_config(chip);
+	if (rc < 0)
+		return rc;
+
+	rc = haptics_init_fifo_config(chip);
 	if (rc < 0)
 		return rc;
 
@@ -4718,6 +4742,10 @@ static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 		goto restore;
 
 	if (chip->hw_type >= HAP530_HV) {
+		rc = haptics_enable_autores(chip, false);
+		if (rc < 0)
+			goto restore;
+
 		chip->play.brake = NULL;
 		rc = haptics_set_fifo(chip, &fifo);
 		if (rc < 0)
