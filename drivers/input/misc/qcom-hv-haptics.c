@@ -31,6 +31,7 @@
 #include <linux/qpnp/qpnp-pbs.h>
 
 #include <linux/soc/qcom/battery_charger.h>
+#include <linux/soc/qcom/qcom_hv_haptics.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/qcom_haptics.h>
@@ -759,6 +760,17 @@ static const struct fifo_hw_info hap530_fifo = {
 	.fifo_threshold_per_bit	= 64,
 	.fifo_empty_threshold_mask = HAP530_EMPTY_THRESH_MASK,
 };
+
+static struct haptics_chip *phapchip;
+
+bool qcom_haptics_vi_sense_is_enabled(void)
+{
+	if (!phapchip)
+		return false;
+
+	return phapchip->visense_enabled;
+}
+EXPORT_SYMBOL_GPL(qcom_haptics_vi_sense_is_enabled);
 
 static inline int get_max_fifo_samples(struct haptics_chip *chip)
 {
@@ -5612,6 +5624,8 @@ static int haptics_probe(struct platform_device *pdev)
 	rc = haptics_create_debugfs(chip);
 	if (rc < 0)
 		dev_err(chip->dev, "Creating debugfs failed, rc=%d\n", rc);
+
+	phapchip = chip;
 	return 0;
 destroy_ff:
 	input_ff_destroy(chip->input_dev);
@@ -5622,6 +5636,7 @@ static int haptics_remove(struct platform_device *pdev)
 {
 	struct haptics_chip *chip = dev_get_drvdata(&pdev->dev);
 
+	phapchip = NULL;
 	if (chip->pbs_node)
 		of_node_put(chip->pbs_node);
 
