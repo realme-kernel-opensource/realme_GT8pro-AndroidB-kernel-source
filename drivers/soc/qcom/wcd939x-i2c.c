@@ -1708,6 +1708,7 @@ static int wcd_usbss_probe(struct i2c_client *i2c)
 	priv->runtime_env_counter = 0;
 	mutex_init(&priv->io_lock);
 	mutex_init(&priv->switch_update_lock);
+	mutex_init(&priv->runtime_env_counter_lock);
 	i2c_set_clientdata(i2c, priv);
 
 	pm_runtime_enable(dev);
@@ -1846,6 +1847,7 @@ static void wcd_usbss_remove(struct i2c_client *i2c)
 	mutex_destroy(&priv->notification_lock);
 	mutex_destroy(&priv->io_lock);
 	mutex_destroy(&priv->switch_update_lock);
+	mutex_destroy(&priv->runtime_env_counter_lock);
 	if (error >= 0)
 		pm_runtime_put_sync(priv->dev);
 	pm_runtime_dont_use_autosuspend(priv->dev);
