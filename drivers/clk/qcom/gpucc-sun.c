@@ -642,6 +642,8 @@ static int gpu_cc_sun_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	platform_set_drvdata(pdev, regmap);
+
 	dev_info(&pdev->dev, "Registered GPU CC clocks\n");
 
 	return ret;
@@ -652,12 +654,25 @@ static void gpu_cc_sun_sync_state(struct device *dev)
 	qcom_cc_sync_state(dev, &gpu_cc_sun_desc);
 }
 
+static int gpu_cc_sun_resume(struct device *dev)
+{
+	struct regmap *regmap = dev_get_drvdata(dev);
+
+	/* Enable gpu_cc_gx_ahb_ff_clk */
+	regmap_update_bits(regmap, 0x9064, BIT(0), BIT(0));
+
+	return 0;
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(gpu_cc_sun_pm_ops, NULL, gpu_cc_sun_resume);
+
 static struct platform_driver gpu_cc_sun_driver = {
 	.probe = gpu_cc_sun_probe,
 	.driver = {
 		.name = "gpu_cc-sun",
 		.of_match_table = gpu_cc_sun_match_table,
 		.sync_state = gpu_cc_sun_sync_state,
+		.pm = &gpu_cc_sun_pm_ops,
 	},
 };
 
