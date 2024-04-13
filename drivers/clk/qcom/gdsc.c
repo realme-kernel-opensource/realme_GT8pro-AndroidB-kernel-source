@@ -141,11 +141,18 @@ static int gdsc_toggle_logic(struct gdsc *sc, enum gdsc_status status,
 		bool wait)
 {
 	int ret;
+	u32 val;
 
 	if (status == GDSC_ON && sc->rsupply) {
 		ret = regulator_enable(sc->rsupply);
 		if (ret < 0)
 			return ret;
+	}
+
+	regmap_read(sc->regmap, sc->gdscr, &val);
+	if (val & HW_CONTROL_MASK) {
+		pr_debug("%s in HW control mode\n", sc->pd.name);
+		return 0;
 	}
 
 	ret = gdsc_update_collapse_bit(sc, status == GDSC_OFF);
