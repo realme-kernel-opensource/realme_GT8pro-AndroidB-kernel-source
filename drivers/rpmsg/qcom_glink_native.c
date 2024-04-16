@@ -637,15 +637,15 @@ static void qcom_glink_send_close_req(struct qcom_glink *glink,
 }
 
 static void qcom_glink_send_close_ack(struct qcom_glink *glink,
-				      unsigned int rcid)
+				      struct glink_channel *channel)
 {
 	struct glink_msg req;
 
 	req.cmd = cpu_to_le16(GLINK_CMD_CLOSE_ACK);
-	req.param1 = cpu_to_le16(rcid);
+	req.param1 = cpu_to_le16(channel->rcid);
 	req.param2 = 0;
 
-	GLINK_INFO(glink->ilc, "rcid:%d\n", rcid);
+	GLINK_INFO(glink->ilc, "rcid:%d\n", channel->rcid);
 	qcom_glink_tx(glink, &req, sizeof(req), NULL, 0, true);
 }
 
@@ -2274,7 +2274,7 @@ static void qcom_glink_rx_close(struct qcom_glink *glink, unsigned int rcid)
 	}
 	channel->rpdev = NULL;
 
-	qcom_glink_send_close_ack(glink, channel->rcid);
+	qcom_glink_send_close_ack(glink, channel);
 
 	spin_lock_irqsave(&glink->idr_lock, flags);
 	idr_remove(&glink->rcids, channel->rcid);
