@@ -547,6 +547,7 @@ static void qcom_glink_handle_intent_req_ack(struct qcom_glink *glink,
 {
 	struct glink_channel *channel;
 
+	qcom_glink_rx_advance(glink, ALIGN(sizeof(struct glink_msg), 8));
 	channel = qcom_glink_channel_ref_get(glink, true, cid);
 	if (!channel) {
 		dev_err(glink->dev, "unable to find channel\n");
@@ -964,6 +965,7 @@ static void qcom_glink_handle_rx_done(struct qcom_glink *glink,
 	struct glink_channel *channel;
 	unsigned long flags;
 
+	qcom_glink_rx_advance(glink, ALIGN(sizeof(struct glink_msg), 8));
 	channel = qcom_glink_channel_ref_get(glink, true, cid);
 	if (!channel) {
 		dev_err(glink->dev, "invalid channel id received\n");
@@ -1404,6 +1406,12 @@ advance_rx:
 	return 0;
 }
 
+static void qcom_glink_rx_read_notif(struct qcom_glink *glink)
+{
+	qcom_glink_rx_advance(glink, ALIGN(sizeof(struct glink_msg), 8));
+	qcom_glink_tx_kick(glink);
+}
+
 static void qcom_glink_handle_intent(struct qcom_glink *glink,
 				     unsigned int cid,
 				     unsigned int count,
@@ -1478,6 +1486,7 @@ static int qcom_glink_rx_open_ack(struct qcom_glink *glink, unsigned int lcid)
 {
 	struct glink_channel *channel;
 
+	qcom_glink_rx_advance(glink, ALIGN(sizeof(struct glink_msg), 8));
 	channel = qcom_glink_channel_ref_get(glink, false, lcid);
 	if (!channel) {
 		dev_err(glink->dev, "Invalid open ack packet\n");
@@ -1529,6 +1538,7 @@ static int qcom_glink_handle_signals(struct qcom_glink *glink,
 	struct glink_channel *channel;
 	u32 old;
 
+	qcom_glink_rx_advance(glink, ALIGN(sizeof(struct glink_msg), 8));
 	channel = qcom_glink_channel_ref_get(glink, true, rcid);
 	if (!channel) {
 		dev_err(glink->dev, "signal for non-existing channel\n");
@@ -1624,7 +1634,6 @@ void qcom_glink_native_rx(struct qcom_glink *glink)
 			break;
 		case GLINK_CMD_OPEN_ACK:
 			ret = qcom_glink_rx_open_ack(glink, param1);
-			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
 			break;
 		case GLINK_CMD_OPEN:
 			ret = qcom_glink_rx_defer(glink, param2);
@@ -1637,27 +1646,22 @@ void qcom_glink_native_rx(struct qcom_glink *glink)
 			ret = qcom_glink_rx_data_zero_copy(glink, avail);
 			break;
 		case GLINK_CMD_READ_NOTIF:
-			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
-			qcom_glink_tx_kick(glink);
+			qcom_glink_rx_read_notif(glink);
 			break;
 		case GLINK_CMD_INTENT:
 			qcom_glink_handle_intent(glink, param1, param2, avail);
 			break;
 		case GLINK_CMD_RX_DONE:
 			qcom_glink_handle_rx_done(glink, param1, param2, false);
-			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
 			break;
 		case GLINK_CMD_RX_DONE_W_REUSE:
 			qcom_glink_handle_rx_done(glink, param1, param2, true);
-			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
 			break;
 		case GLINK_CMD_RX_INTENT_REQ_ACK:
 			qcom_glink_handle_intent_req_ack(glink, param1, param2);
-			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
 			break;
 		case GLINK_CMD_SIGNALS:
 			qcom_glink_handle_signals(glink, param1, param2);
-			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
 			break;
 		default:
 			dev_err(glink->dev, "unhandled rx cmd: 0x%x\n", cmd);
