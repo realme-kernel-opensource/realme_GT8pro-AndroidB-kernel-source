@@ -864,24 +864,25 @@ static int qcom_glink_advertise_intent(struct qcom_glink *glink,
 	return 0;
 }
 
-static struct glink_core_rx_intent *
-qcom_glink_alloc_intent(struct qcom_glink *glink,
+static int qcom_glink_alloc_intent(struct qcom_glink *glink,
 			struct glink_channel *channel,
 			size_t size,
 			bool reuseable)
 {
 	struct glink_core_rx_intent *intent;
-	int ret;
 	unsigned long flags;
+	int ret;
 
 	intent = kzalloc(sizeof(*intent), GFP_KERNEL);
 	if (!intent)
-		return NULL;
+		return -ENOMEM;
 
 	if (size) {
 		intent->data = kzalloc(size, GFP_KERNEL);
-		if (!intent->data)
+		if (!intent->data) {
+			ret = -ENOMEM;
 			goto free_intent;
+		}
 	}
 
 	spin_lock_irqsave(&channel->intent_lock, flags);
@@ -896,13 +897,16 @@ qcom_glink_alloc_intent(struct qcom_glink *glink,
 	intent->size = size;
 	intent->reuse = reuseable;
 
-	return intent;
+	if (channel->channel_ready)
+		qcom_glink_advertise_intent(glink, channel, intent);
+
+	return 0;
 
 free_data:
 	kfree(intent->data);
 free_intent:
 	kfree(intent);
-	return NULL;
+	return ret;
 }
 
 static void qcom_glink_handle_rx_done(struct qcom_glink *glink,
@@ -963,6 +967,7 @@ static void qcom_glink_handle_intent_req(struct qcom_glink *glink,
 	struct glink_channel *channel;
 	unsigned long flags;
 	int iid;
+	int ret;
 
 	spin_lock_irqsave(&glink->idr_lock, flags);
 	channel = idr_find(&glink->rcids, cid);
@@ -986,11 +991,9 @@ static void qcom_glink_handle_intent_req(struct qcom_glink *glink,
 		return;
 	}
 
-	intent = qcom_glink_alloc_intent(glink, channel, size, false);
-	if (intent && channel->channel_ready)
-		qcom_glink_advertise_intent(glink, channel, intent);
+	ret = qcom_glink_alloc_intent(glink, channel, size, false);
 
-	qcom_glink_send_intent_req_ack(glink, channel, !!intent);
+	qcom_glink_send_intent_req_ack(glink, channel, ret == 0);
 }
 
 static int qcom_glink_rx_defer(struct qcom_glink *glink, size_t extra)
@@ -1715,14 +1718,8 @@ static int qcom_glink_announce_create(struct rpmsg_device *rpdev)
 	while (num_groups--) {
 		size = be32_to_cpup(val++);
 		num_intents = be32_to_cpup(val++);
-		while (num_intents--) {
-			intent = qcom_glink_alloc_intent(glink, channel, size,
-							 true);
-			if (!intent)
-				break;
-
-			qcom_glink_advertise_intent(glink, channel, intent);
-		}
+		while (num_intents--)
+			qcom_glink_alloc_intent(glink, channel, size, true);
 	}
 
 	channel->rx_task = kthread_run(qcom_glink_rx_thread, channel, "glink-%s", channel->name);
