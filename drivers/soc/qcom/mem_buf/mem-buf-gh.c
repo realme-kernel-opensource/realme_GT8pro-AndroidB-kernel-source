@@ -1181,8 +1181,7 @@ static bool __check_zone_watermark_ok(struct zone *z, unsigned long mark)
 
 	free_pages -= unusable_free;
 
-	return (free_pages <= min + z->lowmem_reserve[ZONE_NORMAL]) ?
-						true : false;
+	return free_pages > min + z->lowmem_reserve[ZONE_NORMAL];
 }
 
 static bool zone_ok_memmap(unsigned long nr_pages)
