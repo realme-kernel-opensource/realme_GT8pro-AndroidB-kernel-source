@@ -190,8 +190,6 @@ enum {
  * @intent_lock: lock for protection of @liids, @riids
  * @liids:	idr of all local intents
  * @riids:	idr of all remote intents
- * @intent_work: worker responsible for transmitting rx_done packets
- * @done_intents: list of intents that needs to be announced rx_done
  * @defer_intents: list of intents held by the client released by rpmsg_rx_done
  * @buf:	receive buffer, for gathering fragments
  * @buf_offset:	write offset in @buf
@@ -224,8 +222,6 @@ struct glink_channel {
 	spinlock_t intent_lock;
 	struct idr liids;
 	struct idr riids;
-	struct kthread_work intent_work;
-	struct list_head done_intents;
 	struct list_head defer_intents;
 
 	struct task_struct *rx_task;
@@ -283,8 +279,6 @@ static const struct rpmsg_endpoint_ops glink_endpoint_ops;
 #define NATIVE_CD_SIG			BIT(29)
 #define NATIVE_RI_SIG			BIT(28)
 
-static void qcom_glink_rx_done_work(struct kthread_work *work);
-
 static struct glink_channel *qcom_glink_alloc_channel(struct qcom_glink *glink,
 						      const char *name)
 {
@@ -311,9 +305,7 @@ static struct glink_channel *qcom_glink_alloc_channel(struct qcom_glink *glink,
 	init_waitqueue_head(&channel->intent_req_wq);
 	channel->intent_timeout_count = 0;
 
-	INIT_LIST_HEAD(&channel->done_intents);
 	INIT_LIST_HEAD(&channel->defer_intents);
-	kthread_init_work(&channel->intent_work, qcom_glink_rx_done_work);
 
 	INIT_LIST_HEAD(&channel->rx_queue);
 	init_waitqueue_head(&channel->rx_wq);
@@ -336,20 +328,7 @@ static void qcom_glink_channel_release(struct kref *ref)
 
 	CH_INFO(channel, "\n");
 
-	/* cancel pending rx_done work */
-	kthread_cancel_work_sync(&channel->intent_work);
-
 	spin_lock_irqsave(&channel->intent_lock, flags);
-	/* Free all non-reuse intents pending rx_done work */
-	list_for_each_entry_safe(intent, tmp, &channel->done_intents, node) {
-		if (!intent->size)
-			intent->data = NULL;
-
-		if (!intent->reuse) {
-			kfree(intent->data);
-			kfree(intent);
-		}
-	}
 	list_for_each_entry_safe(intent, tmp, &channel->defer_intents, node) {
 		if (!intent->size)
 			intent->data = NULL;
@@ -663,32 +642,11 @@ static int qcom_glink_send_rx_done(struct qcom_glink *glink,
 	return 0;
 }
 
-static void qcom_glink_rx_done_work(struct kthread_work *work)
-{
-	struct glink_channel *channel = container_of(work, struct glink_channel,
-						     intent_work);
-	struct qcom_glink *glink = channel->glink;
-	struct glink_core_rx_intent *intent, *tmp;
-	unsigned long flags;
-
-	spin_lock_irqsave(&channel->intent_lock, flags);
-	list_for_each_entry_safe(intent, tmp, &channel->done_intents, node) {
-		list_del(&intent->node);
-		spin_unlock_irqrestore(&channel->intent_lock, flags);
-
-		qcom_glink_send_rx_done(glink, channel, intent, true);
-
-		spin_lock_irqsave(&channel->intent_lock, flags);
-	}
-	spin_unlock_irqrestore(&channel->intent_lock, flags);
-}
-
 static void __qcom_glink_rx_done(struct qcom_glink *glink,
 			       struct glink_channel *channel,
 			       struct glink_core_rx_intent *intent)
 {
 	unsigned long flags;
-	int ret = -EAGAIN;
 
 	/* We don't send RX_DONE to intentless systems */
 	if (glink->intentless) {
@@ -707,15 +665,9 @@ static void __qcom_glink_rx_done(struct qcom_glink *glink,
 	spin_lock_irqsave(&channel->intent_lock, flags);
 	/* Remove intent from intent defer list */
 	list_del(&intent->node);
-	/* Schedule the sending of a rx_done indication */
-	if (list_empty(&channel->done_intents))
-		ret = qcom_glink_send_rx_done(glink, channel, intent, false);
-
-	if (ret) {
-		list_add_tail(&intent->node, &channel->done_intents);
-		kthread_queue_work(&glink->kworker, &channel->intent_work);
-	}
 	spin_unlock_irqrestore(&channel->intent_lock, flags);
+
+	qcom_glink_send_rx_done(glink, channel, intent, true);
 }
 
 bool qcom_glink_rx_done_supported(struct rpmsg_endpoint *ept)
@@ -2161,9 +2113,6 @@ static void qcom_glink_rx_close(struct qcom_glink *glink, unsigned int rcid)
 	if (WARN(!channel, "close request on unknown channel\n"))
 		return;
 	CH_INFO(channel, "\n");
-
-	/* cancel pending rx_done work */
-	kthread_cancel_work_sync(&channel->intent_work);
 
 	if (channel->rpdev) {
 		strscpy_pad(chinfo.name, channel->name, sizeof(chinfo.name));
