@@ -188,6 +188,8 @@ static void walt_get_indicies(struct task_struct *p, int *order_index,
 		*energy_eval_needed = false;
 		*order_index = num_sched_clusters - 1;
 		*end_index = num_sched_clusters - 2;
+		if (soc_feat(SOC_ENABLE_FT_BOOST_TO_ALL))
+			*end_index = 1;
 
 		for (; *end_index >= 0; (*end_index)--)
 			if (task_demand_fits(p,

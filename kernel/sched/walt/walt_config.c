@@ -90,6 +90,7 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
 		trailblazer_floor_freq[0] = 1000000;
 		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
+		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 
 	} else if (!strcmp(name, "PINEAPPLE")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);

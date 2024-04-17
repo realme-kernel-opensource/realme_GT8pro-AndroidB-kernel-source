@@ -83,7 +83,7 @@ enum freq_caps {
 #define	SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT		BIT(5)
 #define	SOC_ENABLE_SW_CYCLE_COUNTER_BIT			BIT(6)
 #define SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT	BIT(7)
-
+#define SOC_ENABLE_FT_BOOST_TO_ALL			BIT(8)
 
 #define WALT_FEAT_TRAILBLAZER_BIT	BIT_ULL(0)
 extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
