@@ -1,2 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+cmd-db.ko
+qcom_rpmh.ko
+crm-v2.ko
