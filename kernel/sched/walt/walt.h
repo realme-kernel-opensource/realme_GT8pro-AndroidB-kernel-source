@@ -1314,4 +1314,8 @@ static inline void walt_lockdep_assert(int cond, int cpu, struct task_struct *p)
 #define walt_lockdep_assert_rq(rq, p)			\
 	walt_lockdep_assert_held(&rq->__lock, cpu_of(rq), p)
 
+extern void pipeline_check(struct walt_rq *wrq);
+extern bool enable_load_sync(int cpu);
+extern unsigned int enable_pipeline_boost;
+extern struct walt_related_thread_group *lookup_related_thread_group(unsigned int group_id);
 #endif /* _WALT_H */
