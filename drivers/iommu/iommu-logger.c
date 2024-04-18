@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitfield.h>
@@ -130,42 +130,57 @@ static struct iommu_debug_attachment *iommu_logger_init(
 	logger->levels = levels;
 	logger->ttbr0 = ttbr0;
 	logger->ttbr1 = ttbr1;
+	logger->dev = dev;
 
 	return logger;
 }
 
-int iommu_logger_register(struct iommu_debug_attachment **logger_out,
-			  struct iommu_domain *domain, struct device *dev,
-			  struct io_pgtable *iop)
+int iommu_logger_register(struct iommu_domain *domain, struct device *dev,
+			  struct io_pgtable_ops *ops)
 {
 	struct iommu_debug_attachment *logger;
+	struct io_pgtable *iop;
+	int ret = 0;
 
-	if (!logger_out || !dev || !iop)
+	/* qcom,iommu-dma = "disabled" causes ops to be NULL */
+	if (!ops)
+		return 0;
+
+	if (!domain || !dev)
 		return -EINVAL;
 
-	logger = iommu_logger_init(domain, dev, iop);
-	if (IS_ERR(logger))
-		return PTR_ERR(logger);
-
+	iop = io_pgtable_ops_to_pgtable(ops);
 	mutex_lock(&iommu_debug_attachments_lock);
-	list_add(&logger->list, &iommu_debug_attachments);
-	mutex_unlock(&iommu_debug_attachments_lock);
+	list_for_each_entry(logger, &iommu_debug_attachments, list)
+		if (logger->dev == dev && logger->domain == domain)
+			goto out;
 
-	*logger_out = logger;
-	return 0;
+	logger = iommu_logger_init(domain, dev, iop);
+	if (IS_ERR(logger)) {
+		ret = PTR_ERR(logger);
+		goto out;
+	}
+
+	list_add(&logger->list, &iommu_debug_attachments);
+out:
+	mutex_unlock(&iommu_debug_attachments_lock);
+	return ret;
 }
 EXPORT_SYMBOL(iommu_logger_register);
 
-void iommu_logger_unregister(struct iommu_debug_attachment *logger)
+void iommu_logger_unregister(struct device *dev, struct iommu_domain *domain)
 {
-	if (!logger)
-		return;
+	struct iommu_debug_attachment *logger, *tmp;
 
 	mutex_lock(&iommu_debug_attachments_lock);
-	list_del(&logger->list);
+	list_for_each_entry_safe(logger, tmp, &iommu_debug_attachments, list) {
+		if (logger->dev == dev || logger->domain == domain) {
+			list_del(&logger->list);
+			kfree(logger->client_name);
+			kfree(logger);
+		}
+	}
 	mutex_unlock(&iommu_debug_attachments_lock);
-	kfree(logger->client_name);
-	kfree(logger);
 }
 EXPORT_SYMBOL(iommu_logger_unregister);
 

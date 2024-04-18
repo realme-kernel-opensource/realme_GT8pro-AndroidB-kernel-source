@@ -521,7 +521,6 @@ struct arm_smmu_domain {
 	struct list_head		*freelist;
 	bool				deferred_flush;
 
-	struct iommu_debug_attachment	*logger;
 	struct iommu_domain		domain;
 	/* mapping_cfg.atomic indicates that runtime power management should be disabled. */
 	bool				rpm_always_on;

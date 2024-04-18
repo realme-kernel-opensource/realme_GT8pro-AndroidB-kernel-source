@@ -1401,7 +1401,6 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
 	struct arm_smmu_cfg *cfg = &smmu_domain->cfg;
 	irqreturn_t (*context_fault)(int irq, void *dev);
-	struct io_pgtable *iop;
 
 	mutex_lock(&smmu_domain->init_mutex);
 	if (smmu_domain->smmu)
@@ -1575,14 +1574,6 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 		goto out_clear_smmu;
 	}
 
-	iop = container_of(pgtbl_ops, struct io_pgtable, ops);
-	ret = iommu_logger_register(&smmu_domain->logger, domain,
-				    smmu_domain->dev, iop);
-	if (ret) {
-		dev_err(dev, "Log registration failed\n");
-		goto out_free_io_pgtable;
-	}
-
 	/* Update the domain's page sizes to reflect the page table format */
 	domain->pgsize_bitmap = pgtbl_cfg->pgsize_bitmap;
 
@@ -1597,7 +1588,7 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 
 	ret = arm_smmu_get_dma_cookie(dev, smmu_domain, pgtbl_ops);
 	if (ret)
-		goto out_logger;
+		goto out_free_io_pgtable;
 
 	/*
 	 * Matches with call to arm_smmu_rpm_put in
@@ -1640,9 +1631,6 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 	smmu_domain->pgtbl_ops = pgtbl_ops;
 	return 0;
 
-out_logger:
-	iommu_logger_unregister(smmu_domain->logger);
-	smmu_domain->logger = NULL;
 out_free_io_pgtable:
 	qcom_free_io_pgtable_ops(smmu_domain->pgtbl_ops);
 out_clear_smmu:
@@ -1737,7 +1725,7 @@ static void arm_smmu_domain_free(struct iommu_domain *domain)
 	 */
 	arm_smmu_put_dma_cookie(domain);
 	arm_smmu_destroy_domain_context(domain);
-	iommu_logger_unregister(smmu_domain->logger);
+	iommu_logger_unregister(NULL, domain);
 	kfree(smmu_domain);
 }
 
@@ -2180,7 +2168,9 @@ static int arm_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 
 	/* Looks ok, so add the device to the domain */
 	ret = arm_smmu_domain_add_master(smmu_domain, cfg, fwspec);
-
+	if (!ret)
+		if (iommu_logger_register(domain, dev, smmu_domain->pgtbl_ops))
+			dev_err(dev, "Registering iommu debug info failed, continuing.\n");
 	/*
 	 * Setup an autosuspend delay to avoid bouncing runpm state.
 	 * Otherwise, if a driver for a suspended consumer device
@@ -2562,6 +2552,8 @@ static void arm_smmu_release_device(struct device *dev)
 
 	dev_iommu_priv_set(dev, NULL);
 	kfree(cfg);
+
+	iommu_logger_unregister(dev, NULL);
 }
 
 static void arm_smmu_probe_finalize(struct device *dev)
