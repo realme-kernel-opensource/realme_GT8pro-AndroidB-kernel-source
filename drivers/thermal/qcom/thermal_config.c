@@ -132,7 +132,7 @@ static int fetch_and_populate_cdevs(char *config_buf, struct thermal_zone_device
 		bool no_cdevs = true;
 
 		list_for_each_entry(instance, &tz->thermal_instances, tz_node) {
-			if (!instance->cdev || instance->trip != i)
+			if (!instance->cdev || instance->trip != &tz->trips[i])
 				continue;
 
 			no_cdevs = false;

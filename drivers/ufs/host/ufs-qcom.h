@@ -580,6 +580,8 @@ struct ufs_qcom_host {
 
 	struct ufs_qcom_dev_params host_pwr_cap;
 
+	u32 phy_gear;
+
 	bool disable_lpm;
 	struct qcom_bus_scale_data *qbsd;
 

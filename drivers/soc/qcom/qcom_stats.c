@@ -1080,7 +1080,7 @@ fail_create_stats_device:
 	return ret;
 }
 
-static int qcom_stats_remove(struct platform_device *pdev)
+static void qcom_stats_remove(struct platform_device *pdev)
 {
 	struct stats_drvdata *drv = platform_get_drvdata(pdev);
 
@@ -1090,8 +1090,6 @@ static int qcom_stats_remove(struct platform_device *pdev)
 	unregister_chrdev_region(drv->dev_no, 1);
 
 	debugfs_remove_recursive(drv->root);
-
-	return 0;
 }
 
 static int qcom_stats_suspend(struct device *dev)
@@ -1251,7 +1249,7 @@ static const struct dev_pm_ops qcom_stats_pm_ops = {
 
 static struct platform_driver qcom_stats = {
 	.probe = qcom_stats_probe,
-	.remove = qcom_stats_remove,
+	.remove_new = qcom_stats_remove,
 	.driver = {
 		.name = "qcom_stats",
 		.of_match_table = qcom_stats_table,

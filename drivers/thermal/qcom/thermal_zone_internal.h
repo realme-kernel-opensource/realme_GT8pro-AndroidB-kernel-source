@@ -59,7 +59,7 @@ static __maybe_unused inline int qti_tz_get_trend(
 	 * clear condition
 	 */
 	list_for_each_entry(instance, &tz->thermal_instances, tz_node) {
-		if (trip != &tz->trips[instance->trip])
+		if (trip != instance->trip)
 			continue;
 
 		if (instance->lower != instance->upper)

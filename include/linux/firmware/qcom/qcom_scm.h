@@ -131,15 +131,16 @@ static inline void qcom_scm_populate_mem_map_info(
 	mem_to_map->mem_size = cpu_to_le64(mem_size);
 }
 
-extern bool qcom_scm_is_available(void);
-
-extern int qcom_scm_set_cold_boot_addr(void *entry);
-extern int qcom_scm_set_warm_boot_addr(void *entry);
-extern void qcom_scm_cpu_power_down(u32 flags);
 extern int qcom_scm_sec_wdog_deactivate(void);
 extern int qcom_scm_sec_wdog_trigger(void);
-extern void qcom_scm_disable_sdi(void);
-extern int qcom_scm_set_remote_state(u32 state, u32 id);
+extern int qcom_scm_disable_sdi(void);
+
+bool qcom_scm_is_available(void);
+
+int qcom_scm_set_cold_boot_addr(void *entry);
+int qcom_scm_set_warm_boot_addr(void *entry);
+void qcom_scm_cpu_power_down(u32 flags);
+int qcom_scm_set_remote_state(u32 state, u32 id);
 
 extern int qcom_scm_spin_cpu(void);
 extern void qcom_scm_set_download_mode(enum qcom_download_mode mode);
@@ -152,48 +153,26 @@ struct qcom_scm_pas_metadata {
 	ssize_t size;
 };
 
-extern int qcom_scm_pas_init_image(u32 peripheral, const void *metadata,
-				   size_t size,
-				   struct qcom_scm_pas_metadata *ctx,
-				   struct device *dev);
-
 extern void qcom_scm_pas_metadata_release(struct qcom_scm_pas_metadata *ctx,
 					  struct device *dev);
-extern int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr,
-				  phys_addr_t size);
-extern int qcom_scm_pas_auth_and_reset(u32 peripheral);
-extern int qcom_scm_pas_shutdown(u32 peripheral);
+
 extern int qcom_scm_pas_shutdown_retry(u32 peripheral);
-extern bool qcom_scm_pas_supported(u32 peripheral);
 
 extern int qcom_scm_get_sec_dump_state(u32 *dump_state);
 extern int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t  addr, size_t size);
 
-extern int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val);
-extern int qcom_scm_io_writel(phys_addr_t addr, unsigned int val);
 extern int qcom_scm_io_reset(void);
 
 extern bool qcom_scm_is_secure_wdog_trigger_available(void);
 extern bool qcom_scm_is_mode_switch_available(void);
 
-extern bool qcom_scm_restore_sec_cfg_available(void);
-extern int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare);
-extern int qcom_scm_iommu_secure_ptbl_size(u32 spare, size_t *size);
-extern int qcom_scm_iommu_secure_ptbl_init(u64 addr, u32 size, u32 spare);
-extern int qcom_scm_iommu_set_cp_pool_size(u32 spare, u32 size);
-extern int qcom_scm_mem_protect_video_var(u32 cp_start, u32 cp_size,
-					  u32 cp_nonpixel_start,
-					  u32 cp_nonpixel_size);
 extern int qcom_scm_mem_protect_region_id(phys_addr_t paddr, size_t size);
 extern int
 qcom_scm_assign_mem_regions(struct qcom_scm_mem_map_info *mem_regions,
 			    size_t mem_regions_sz, u32 *srcvms, size_t src_sz,
 			    struct qcom_scm_current_perm_info *newvms,
 			    size_t newvms_sz);
-extern int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
-			       u64 *src,
-			       const struct qcom_scm_vmperm *newvm,
-			       unsigned int dest_cnt);
+
 extern int qcom_scm_mem_protect_sd_ctrl(u32 devid, phys_addr_t mem_addr,
 					u64 mem_size, u32 vmid);
 extern int qcom_scm_kgsl_set_smmu_aperture(
@@ -217,12 +196,6 @@ extern int qcom_scm_dcvs_update_v2(int level, s64 total_time, s64 busy_time);
 extern int qcom_scm_dcvs_update_ca_v2(int level, s64 total_time, s64 busy_time,
 				      int context_count);
 
-extern bool qcom_scm_ocmem_lock_available(void);
-extern int qcom_scm_ocmem_lock(enum qcom_scm_ocmem_client id, u32 offset,
-			       u32 size, u32 mode);
-extern int qcom_scm_ocmem_unlock(enum qcom_scm_ocmem_client id, u32 offset,
-				 u32 size);
-
 extern int qcom_scm_config_set_ice_key(uint32_t index, phys_addr_t paddr,
 				       size_t size, uint32_t cipher,
 				       unsigned int data_unit,
@@ -230,21 +203,10 @@ extern int qcom_scm_config_set_ice_key(uint32_t index, phys_addr_t paddr,
 extern int qcom_scm_clear_ice_key(uint32_t index, unsigned int ce);
 extern int qcom_scm_derive_sw_secret(phys_addr_t paddr_key, size_t size_key,
 				     phys_addr_t paddr_secret, size_t size_secret);
-extern bool qcom_scm_ice_available(void);
-extern int qcom_scm_ice_invalidate_key(u32 index);
-extern int qcom_scm_ice_set_key(u32 index, const u8 *key, u32 key_size,
-				enum qcom_scm_ice_cipher cipher,
-				u32 data_unit_size);
-
-extern bool qcom_scm_hdcp_available(void);
-extern int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt,
-			     u32 *resp);
 
 extern int qcom_scm_lmh_fetch_data(u32 node_id, u32 debug_type, uint32_t *peak,
 		uint32_t *avg);
 
-extern int qcom_scm_iommu_set_pt_format(u32 sec_id, u32 ctx_num, u32 pt_fmt);
-extern int qcom_scm_qsmmu500_wait_safe_toggle(bool en);
 extern int qcom_scm_smmu_notify_secure_lut(u64 dev_id, bool secure);
 
 extern int qcom_scm_camera_protect_all(uint32_t protect, uint32_t param);
@@ -268,9 +230,70 @@ extern int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 		size_t out_buf_size, int32_t *result, u64 *response_type,
 		unsigned int *data);
 
-extern int qcom_scm_lmh_dcvsh(u32 payload_fn, u32 payload_reg, u32 payload_val,
-			      u64 limit_node, u32 node_id, u64 version);
-extern int qcom_scm_lmh_profile_change(u32 profile_id);
-extern bool qcom_scm_lmh_dcvsh_available(void);
+int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
+			    struct qcom_scm_pas_metadata *ctx, struct device *dev);
+void qcom_scm_pas_metadata_release(struct qcom_scm_pas_metadata *ctx,
+				struct device *dev);
+int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr, phys_addr_t size);
+int qcom_scm_pas_auth_and_reset(u32 peripheral);
+int qcom_scm_pas_shutdown(u32 peripheral);
+bool qcom_scm_pas_supported(u32 peripheral);
+
+int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val);
+int qcom_scm_io_writel(phys_addr_t addr, unsigned int val);
+
+bool qcom_scm_restore_sec_cfg_available(void);
+int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare);
+int qcom_scm_iommu_secure_ptbl_size(u32 spare, size_t *size);
+int qcom_scm_iommu_secure_ptbl_init(u64 addr, u32 size, u32 spare);
+int qcom_scm_iommu_set_cp_pool_size(u32 spare, u32 size);
+int qcom_scm_mem_protect_video_var(u32 cp_start, u32 cp_size,
+				   u32 cp_nonpixel_start, u32 cp_nonpixel_size);
+int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz, u64 *src,
+			const struct qcom_scm_vmperm *newvm,
+			unsigned int dest_cnt);
+
+bool qcom_scm_ocmem_lock_available(void);
+int qcom_scm_ocmem_lock(enum qcom_scm_ocmem_client id, u32 offset, u32 size,
+			u32 mode);
+int qcom_scm_ocmem_unlock(enum qcom_scm_ocmem_client id, u32 offset, u32 size);
+
+bool qcom_scm_ice_available(void);
+int qcom_scm_ice_invalidate_key(u32 index);
+int qcom_scm_ice_set_key(u32 index, const u8 *key, u32 key_size,
+			 enum qcom_scm_ice_cipher cipher, u32 data_unit_size);
+
+bool qcom_scm_hdcp_available(void);
+int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt, u32 *resp);
+
+int qcom_scm_iommu_set_pt_format(u32 sec_id, u32 ctx_num, u32 pt_fmt);
+int qcom_scm_qsmmu500_wait_safe_toggle(bool en);
+
+int qcom_scm_lmh_dcvsh(u32 payload_fn, u32 payload_reg, u32 payload_val,
+		       u64 limit_node, u32 node_id, u64 version);
+int qcom_scm_lmh_profile_change(u32 profile_id);
+bool qcom_scm_lmh_dcvsh_available(void);
+
+#ifdef CONFIG_QCOM_QSEECOM
+
+int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id);
+int qcom_scm_qseecom_app_send(u32 app_id, void *req, size_t req_size, void *rsp,
+			      size_t rsp_size);
+
+#else /* CONFIG_QCOM_QSEECOM */
+
+static inline int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id)
+{
+	return -EINVAL;
+}
+
+static inline int qcom_scm_qseecom_app_send(u32 app_id, void *req,
+					    size_t req_size, void *rsp,
+					    size_t rsp_size)
+{
+	return -EINVAL;
+}
+
+#endif /* CONFIG_QCOM_QSEECOM */
 
 #endif
