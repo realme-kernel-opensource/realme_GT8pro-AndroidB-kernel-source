@@ -159,6 +159,9 @@ size_t md_dma_buf_procs_size = SZ_256K;
 char *md_dma_buf_procs_addr;
 #endif
 
+#define MD_KTASK_STACK_PAGES	64
+static struct seq_buf *md_ktask_stack_buf;
+
 /* Modules information */
 #ifdef CONFIG_MODULES
 #define MD_MODULE_PAGES	  8
@@ -170,6 +173,9 @@ static char *key_modules[10];
 module_param_array(key_modules, charp, &n_modump, 0644);
 #endif	/* CONFIG_MODULES */
 #endif
+
+static bool stack_dump;
+module_param(stack_dump, bool, 0644);
 
 #define FREQ_LOG_MAX	10
 
@@ -273,7 +279,7 @@ void dump_stack_minidump(u64 sp)
 	struct vm_struct *stack_vm_area;
 	unsigned int i, copy_pages;
 
-	if (IS_ENABLED(CONFIG_QCOM_DYN_MINIDUMP_STACK))
+	if (IS_ENABLED(CONFIG_QCOM_DYN_MINIDUMP_STACK) || !stack_dump)
 		return;
 
 	if (is_idle_task(current))
@@ -997,7 +1003,6 @@ static void md_dump_data(unsigned long addr, int nbytes, const char *name)
 
 static void md_reg_context_data(struct pt_regs *regs)
 {
-	unsigned int i;
 	int nbytes = 128;
 
 	if (user_mode(regs) ||  !regs->pc)
@@ -1006,12 +1011,6 @@ static void md_reg_context_data(struct pt_regs *regs)
 	md_dump_data(regs->pc - nbytes, nbytes * 2, "PC");
 	md_dump_data(regs->regs[30] - nbytes, nbytes * 2, "LR");
 	md_dump_data(regs->sp - nbytes, nbytes * 2, "SP");
-	for (i = 0; i < 30; i++) {
-		char name[4];
-
-		snprintf(name, sizeof(name), "X%u", i);
-		md_dump_data(regs->regs[i] - nbytes, nbytes * 2, name);
-	}
 }
 
 static inline void md_dump_panic_regs(void)
@@ -1102,8 +1101,38 @@ static void md_ipi_stop(void *unused, struct pt_regs *regs)
 	unsigned int cpu = smp_processor_id();
 
 	per_cpu(regs_before_stop, cpu) = *regs;
+	dump_stack_minidump(regs->sp);
 }
 #endif
+
+static bool dump_trace(void *arg, unsigned long where)
+{
+	seq_buf_printf(md_ktask_stack_buf, "%pSb\n", (void *)where);
+	return true;
+}
+
+static void md_dump_ktask_stack(void)
+{
+	struct task_struct *g, *t;
+	unsigned int state;
+
+	if (!md_ktask_stack_buf)
+		return;
+
+	for_each_process_thread(g, t) {
+		state = READ_ONCE(t->__state);
+		if ((state & TASK_UNINTERRUPTIBLE) && !(state & TASK_WAKEKILL)
+					&& !(state & TASK_NOLOAD))
+			seq_buf_printf(md_ktask_stack_buf,
+					"Task blocked for %ld seconds!",
+					(jiffies - t->last_switch_time) / HZ);
+		seq_buf_printf(md_ktask_stack_buf, "%d [%s]\n",
+				task_pid_nr(t), t->comm);
+		arch_stack_walk(dump_trace, NULL, t, NULL);
+		seq_buf_printf(md_ktask_stack_buf, "\n");
+	}
+	seq_buf_printf(md_ktask_stack_buf, "---ktask stack end---\n");
+}
 
 void md_dump_process(void)
 {
@@ -1122,6 +1151,7 @@ dump_rq:
 #endif
 	md_dump_next_event();
 	md_dump_runqueues();
+	md_dump_ktask_stack();
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_MEMORY_INFO
 	if (md_meminfo_seq_buf)
 		md_dump_meminfo(md_meminfo_seq_buf);
@@ -1145,6 +1175,7 @@ dump_rq:
 	if (md_dma_buf_procs_addr)
 		md_dma_buf_procs(md_dma_buf_procs_addr, md_dma_buf_procs_size);
 #endif
+	dump_stack_minidump(0);
 	md_in_oops_handler = false;
 }
 EXPORT_SYMBOL_GPL(md_dump_process);
@@ -1258,6 +1289,8 @@ static void md_register_panic_data(void)
 #endif
 	md_register_panic_entries(MD_RUNQUEUE_PAGES, "KRUNQUEUE",
 				  &md_runq_seq_buf);
+	md_register_panic_entries(MD_KTASK_STACK_PAGES, "KTASK_STACK",
+				  &md_ktask_stack_buf);
 }
 
 static int register_vmap_mem(const char *name, void *virual_addr, size_t dump_len)
