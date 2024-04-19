@@ -883,7 +883,7 @@ static irqreturn_t crm_vote_complete_irq(int irq, void *p)
 	struct crm_vcd *vcd;
 	struct crm_sw_votes *votes;
 	unsigned long irq_status;
-	int i, j, k;
+	int i, j, k, num_irq;
 
 	for (i = 0; i < crm->num_sw_drvs; i++) {
 		drv = &crm->sw_drvs[i];
@@ -896,7 +896,9 @@ static irqreturn_t crm_vote_complete_irq(int irq, void *p)
 				continue;
 			vcd = &drv->vcd[j];
 
-			for (k = 0; k < vcd->num_resources; k++) {
+			num_irq = j == BW_PT_VOTE_VCD ? 1 : vcd->num_resources;
+
+			for (k = 0; k < num_irq; k++) {
 
 				irq_status = read_crm_reg(drv, IRQ_STATUS, 0, j, k);
 				if (!irq_status)
@@ -962,6 +964,7 @@ static int crm_send_cmd(struct crm_drv *drv, u32 vcd_type, const struct crm_cmd 
 	unsigned long flags;
 	struct completion *compl = NULL;
 	u32 time_left;
+	u32 irq_idx;
 
 	spin_lock_irqsave(&drv->lock, flags);
 
@@ -969,17 +972,19 @@ static int crm_send_cmd(struct crm_drv *drv, u32 vcd_type, const struct crm_cmd 
 	if ((vcd_type == BW_VOTE_VCD) && wait)
 		data |= BW_VOTE_RESP_REQ;
 
+	irq_idx = vcd_type == BW_PT_VOTE_VCD ? 0 : resource_idx;
+
 	switch (pwr_state) {
 	case CRM_ACTIVE_STATE:
 		/* Wait forever for a previous request to complete */
-		wait_event_lock_irq(vcd->sw_votes[resource_idx].wait,
-			    !vcd->sw_votes[resource_idx].in_progress,
+		wait_event_lock_irq(vcd->sw_votes[irq_idx].wait,
+			    !vcd->sw_votes[irq_idx].in_progress,
 			    drv->lock);
 
-		compl = &vcd->sw_votes[resource_idx].compl;
+		compl = &vcd->sw_votes[irq_idx].compl;
 		init_completion(compl);
-		crm_fill_cmd(&vcd->sw_votes[resource_idx].cmd, cmd);
-		vcd->sw_votes[resource_idx].in_progress = true;
+		crm_fill_cmd(&vcd->sw_votes[irq_idx].cmd, cmd);
+		vcd->sw_votes[irq_idx].in_progress = true;
 		write_crm_reg(drv, PWR_ST0, 0, vcd_type, resource_idx, data);
 		break;
 	case CRM_SLEEP_STATE:
@@ -994,8 +999,11 @@ static int crm_send_cmd(struct crm_drv *drv, u32 vcd_type, const struct crm_cmd 
 	}
 
 	/* Set COMMIT to start aggregating votes */
-	if (pt_trigger)
-		write_crm_reg(drv, CRMB_PT_TRIGGER, 0, vcd_type, resource_idx, BW_PT_VOTE_TRIGGER);
+	if (pt_trigger) {
+		write_crm_reg(drv, CRMB_PT_TRIGGER, 0, vcd_type, 0, BW_PT_VOTE_TRIGGER);
+		udelay(1);
+		write_crm_reg(drv, CRMB_PT_TRIGGER, 0, vcd_type, 0, 0);
+	}
 
 	spin_unlock_irqrestore(&drv->lock, flags);
 	trace_crm_write_vcd_votes(drv->name, vcd_type, resource_idx, pwr_state, data);
@@ -1006,14 +1014,14 @@ static int crm_send_cmd(struct crm_drv *drv, u32 vcd_type, const struct crm_cmd 
 #endif
 
 	if (compl && wait) {
-		time_left = CRM_TIMEOUT_MS;
+		time_left = msecs_to_jiffies(CRM_TIMEOUT_MS);
 		time_left = wait_for_completion_timeout(compl, time_left);
 		if (!time_left) {
 			WARN_ON(1);
 			return -ETIMEDOUT;
 		}
 		/* Unblock new requests for same VCD */
-		wake_up(&vcd->sw_votes[resource_idx].wait);
+		wake_up(&vcd->sw_votes[irq_idx].wait);
 	}
 
 	return 0;
