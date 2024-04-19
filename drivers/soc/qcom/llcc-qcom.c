@@ -796,6 +796,26 @@ static const struct qcom_llcc_config sm8550_cfg[] = {
 	},
 };
 
+static const struct qcom_llcc_config pineapple_cfg[] = {
+	{
+		.sct_data	    = pineapple_data,
+		.size		    = ARRAY_SIZE(pineapple_data),
+		.need_llcc_cfg  = true,
+		.reg_offset = llcc_v2_1_reg_offset,
+		.edac_reg_offset = &llcc_v2_1_edac_reg_offset,
+	},
+};
+
+static const struct qcom_llcc_config sun_cfg[] = {
+	{
+		.sct_data       = sun_data,
+		.size           = ARRAY_SIZE(sun_data),
+		.need_llcc_cfg	= true,
+		.reg_offset	= llcc_v6_reg_offset,
+		.edac_reg_offset = &llcc_v6_edac_reg_offset,
+	},
+};
+
 static const struct qcom_sct_config qdu1000_cfgs = {
 	.llcc_config	= qdu1000_cfg,
 	.num_config	= ARRAY_SIZE(qdu1000_cfg),
@@ -861,20 +881,14 @@ static const struct qcom_sct_config sm8550_cfgs = {
 	.num_config	= ARRAY_SIZE(sm8550_cfg),
 };
 
-static const struct qcom_llcc_config pineapple_cfg = {
-	.sct_data	    = pineapple_data,
-	.size		    = ARRAY_SIZE(pineapple_data),
-	.need_llcc_cfg  = true,
-	.reg_offset = llcc_v2_1_reg_offset,
-	.edac_reg_offset = &llcc_v2_1_edac_reg_offset,
+static const struct qcom_sct_config pineapple_cfgs = {
+	.llcc_config	= pineapple_cfg,
+	.num_config	= ARRAY_SIZE(pineapple_cfg),
 };
 
-static const struct qcom_llcc_config sun_cfg = {
-	.sct_data       = sun_data,
-	.size           = ARRAY_SIZE(sun_data),
-	.need_llcc_cfg	= true,
-	.reg_offset	= llcc_v6_reg_offset,
-	.edac_reg_offset = &llcc_v6_edac_reg_offset,
+static const struct qcom_sct_config sun_cfgs = {
+	.llcc_config	= sun_cfg,
+	.num_config	= ARRAY_SIZE(sun_cfg),
 };
 
 static struct llcc_drv_data *drv_data = (void *) -EPROBE_DEFER;
@@ -1772,8 +1786,8 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,sm8350-llcc", .data = &sm8350_cfgs },
 	{ .compatible = "qcom,sm8450-llcc", .data = &sm8450_cfgs },
 	{ .compatible = "qcom,sm8550-llcc", .data = &sm8550_cfgs },
-	{ .compatible = "qcom,pineapple-llcc", .data = &pineapple_cfg },
-	{ .compatible = "qcom,sun-llcc", .data = &sun_cfg },
+	{ .compatible = "qcom,pineapple-llcc", .data = &pineapple_cfgs },
+	{ .compatible = "qcom,sun-llcc", .data = &sun_cfgs },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_llcc_of_match);
