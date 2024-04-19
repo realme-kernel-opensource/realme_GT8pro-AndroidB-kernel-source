@@ -104,7 +104,7 @@
 #define MAX_SW_DRV_PWR_STATES		3
 
 /* Time out for ACTIVE Only PWR STATE completion IRQ */
-#define CRM_TIMEOUT_MS			5000
+#define CRM_TIMEOUT_MS			msecs_to_jiffies(1000)
 
 #define CH0				0
 #define CH0_CHN_BUSY			BIT(0)
@@ -1035,8 +1035,7 @@ static int crm_send_cmd(struct crm_drv *drv, u32 vcd_type, const struct crm_cmd 
 #endif
 
 	if (compl && wait) {
-		time_left = msecs_to_jiffies(CRM_TIMEOUT_MS);
-		time_left = wait_for_completion_timeout(compl, time_left);
+		time_left = wait_for_completion_timeout(compl, CRM_TIMEOUT_MS);
 		if (!time_left) {
 			WARN_ON(1);
 			return -ETIMEDOUT;
