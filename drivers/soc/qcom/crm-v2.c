@@ -1273,7 +1273,7 @@ static int crm_probe_get_irqs(struct crm_drv_top *crm)
 			return irq;
 
 		ret = devm_request_irq(crm->dev, irq, crm_vote_complete_irq,
-					   IRQF_TRIGGER_RISING, crm->name, crm);
+					   IRQF_TRIGGER_RISING, drvs[i].name, crm);
 		if (ret)
 			return ret;
 
@@ -1829,7 +1829,7 @@ struct crm_desc cam_crm_desc_v2 = {
 
 struct crm_desc disp_crm_desc_v2 = {
 	.set_chn_behave = false,
-	.set_hw_chn_switch_ctrl = false,
+	.set_hw_chn_switch_ctrl = true,
 	.crm_capability = PERF_OL_VOTING_FLAG | BW_VOTING_FLAG | BW_PT_VOTING_FLAG,
 	.chn_regs = {
 		[CHN_BUSY]			 = 0xA0,
