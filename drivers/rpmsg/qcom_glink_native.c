@@ -329,14 +329,20 @@ static void qcom_glink_channel_release(struct kref *ref)
 	CH_INFO(channel, "\n");
 
 	spin_lock_irqsave(&channel->intent_lock, flags);
-	list_for_each_entry_safe(intent, tmp, &channel->defer_intents, node) {
+	list_for_each_entry_safe(intent, tmp, &channel->rx_queue, node) {
+		idr_remove(&channel->liids, intent->id);
 		if (!intent->size)
 			intent->data = NULL;
+		kfree(intent->data);
+		kfree(intent);
+	}
 
-		if (!intent->reuse) {
-			kfree(intent->data);
-			kfree(intent);
-		}
+	list_for_each_entry_safe(intent, tmp, &channel->defer_intents, node) {
+		idr_remove(&channel->liids, intent->id);
+		if (!intent->size)
+			intent->data = NULL;
+		kfree(intent->data);
+		kfree(intent);
 	}
 
 	idr_for_each_entry(&channel->liids, tmp, iid) {
@@ -955,7 +961,6 @@ static void qcom_glink_handle_intent_req(struct qcom_glink *glink,
 	struct glink_core_rx_intent *intent = NULL;
 	struct glink_core_rx_intent *tmp;
 	struct glink_channel *channel;
-	struct rpmsg_endpoint *ept;
 	unsigned long flags;
 	int iid;
 
@@ -981,7 +986,6 @@ static void qcom_glink_handle_intent_req(struct qcom_glink *glink,
 		return;
 	}
 
-	ept = &channel->ept;
 	intent = qcom_glink_alloc_intent(glink, channel, size, false);
 	if (intent && channel->channel_ready)
 		qcom_glink_advertise_intent(glink, channel, intent);
