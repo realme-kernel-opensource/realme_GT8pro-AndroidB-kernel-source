@@ -207,6 +207,7 @@ int rpmh_rsc_write_ctrl_data(struct rsc_drv *drv,
 void rpmh_rsc_invalidate(struct rsc_drv *drv, int ch);
 void rpmh_rsc_write_next_wakeup(struct rsc_drv *drv);
 void rpmh_rsc_debug(struct rsc_drv *drv, struct completion *compl);
+void rpmh_rsc_debug_channel_busy(struct rsc_drv *drv);
 int rpmh_rsc_mode_solver_set(struct rsc_drv *drv, bool enable);
 int rpmh_rsc_get_channel(struct rsc_drv *drv);
 int rpmh_rsc_switch_channel(struct rsc_drv *drv, int ch);
