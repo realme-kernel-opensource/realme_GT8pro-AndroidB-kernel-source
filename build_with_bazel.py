@@ -296,6 +296,7 @@ class BazelBuilder:
             "--user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom",
             "--ignore_missing_projects",
             "--incompatible_sandbox_hermetic_tmp=false",
+            "--nozstd_dwarf_compression",
         ])
 
         if self.dry_run:
