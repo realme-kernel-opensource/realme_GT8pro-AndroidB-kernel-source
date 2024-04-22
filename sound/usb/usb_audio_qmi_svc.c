@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -711,7 +711,8 @@ skip_sync_ep:
 	dma_coherent = dev_is_dma_coherent(subs->dev->bus->sysdev);
 
 	/* event ring */
-	ret = xhci_sideband_create_interrupter(uadev[card_num].sb, uaudio_qdev->intr_num);
+	ret = xhci_sideband_create_interrupter(uadev[card_num].sb, 1,
+						uaudio_qdev->intr_num, false);
 	if (ret == -ENOMEM) {
 		ret = -ENODEV;
 		goto drop_sync_ep;
@@ -1029,7 +1030,8 @@ static void uaudio_disconnect(struct snd_usb_audio *chip)
 
 	uaudio_dev_cleanup(dev);
 done:
-	xhci_sideband_unregister(dev->sb);
+	if (dev->sb)
+		xhci_sideband_unregister(dev->sb);
 
 	uadev[card_num].chip = NULL;
 	uadev[card_num].sb = NULL;
