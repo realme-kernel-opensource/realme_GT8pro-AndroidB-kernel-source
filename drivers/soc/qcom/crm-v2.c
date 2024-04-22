@@ -142,6 +142,8 @@ enum {
 	IRQ_CLEAR,
 	IRQ_ENABLE,
 	CRMB_PT_TRIGGER,
+	STATUS,
+	PWR_IDX_STATUS,
 	CRM_CLIENT_REG_MAX,
 };
 
@@ -150,9 +152,6 @@ enum {
 	ACTIVE_VOTE = PWR_ST0,
 	SLEEP_VOTE = PWR_ST1,
 	WAKE_VOTE = PWR_ST2,
-/* Status Registers re-map */
-	PERF_OL_STATUS = IRQ_STATUS,
-	PWR_IDX_STATUS = IRQ_CLEAR,
 };
 
 enum {
@@ -632,22 +631,22 @@ static int _crm_dump_drv_regs(struct crm_drv *drv, struct crm_drv_top *crm)
 				crm_print_hw_reg(drv->drv_id, chn, m, k,
 						reg-PWR_ST0, phy_base + offset, data);
 			}
+
+			pr_warn("DRV%d %s:%d HW Status\n", drv->drv_id,
+				BIT(m) == PERF_OL_VOTING_FLAG ? "PERF_OL_VCD" :
+				BIT(m) == BW_VOTING_FLAG ? "BW_VOTE_ND" : "BW_PT_VOTE_ND", k);
+
+			offset = crm_get_offset(drv, STATUS, 0, m, k);
+			data = readl_relaxed(drv->base + offset);
+			crm_print_reg(phy_base + offset, data);
+		}
+
+		if (BIT(m) == PERF_OL_VOTING_FLAG) {
+			offset = crm_get_offset(drv, PWR_IDX_STATUS, 0, m, 0);
+			data = readl_relaxed(drv->base + offset);
+			crm_print_reg(phy_base + offset, data);
 		}
 	}
-
-	vcd = &drv->vcd[PERF_OL_VCD];
-	pr_warn("DRV%d HW PERF_OL Status\n", drv->drv_id);
-	for (k = 0; k < vcd->num_resources; k++) {
-
-		offset = crm_get_offset(drv, PERF_OL_STATUS, 0, PERF_OL_VCD, k);
-		data = readl_relaxed(drv->base + offset);
-		crm_print_reg(phy_base + offset, data);
-	}
-
-	pr_warn("DRV%d HW BW Status\n", drv->drv_id);
-	offset = crm_get_offset(drv, PWR_IDX_STATUS, 0, BW_VOTE_VCD, 0);
-	data = readl_relaxed(drv->base + offset);
-	crm_print_reg(phy_base + offset, data);
 
 	offset = crm_get_channel_offset(drv, CHN_BUSY);
 	data = readl_relaxed(drv->base + offset);
@@ -1689,7 +1688,8 @@ struct crm_desc pcie_crm_desc_v2 = {
 		[PWR_ST3]			 = 0xC,
 		[PWR_ST4]			 = 0x10,
 		[PWR_ST_CHN_DISTANCE]		 = 0x14,
-		[PERF_OL_STATUS]		 = 0x28,
+		[STATUS]			 = 0x28,
+		[PWR_IDX_STATUS]		 = 0x37C,
 	},
 	.hw_drv_bw_vote_vcd_regs = {
 		[DRV_BASE]			 = 0x0,
@@ -1701,7 +1701,7 @@ struct crm_desc pcie_crm_desc_v2 = {
 		[PWR_ST3]			 = 0x64,
 		[PWR_ST4]			 = 0x68,
 		[PWR_ST_CHN_DISTANCE]		 = 0x14,
-		[PWR_IDX_STATUS]		 = 0x37C,
+		[STATUS]			 = 0x80,
 	},
 	.hw_drv_bw_pt_vote_vcd_regs = {
 		[DRV_BASE]			 = 0x0,
@@ -1713,7 +1713,7 @@ struct crm_desc pcie_crm_desc_v2 = {
 		[PWR_ST3_PT]			 = 0xBC,
 		[PWR_ST4_PT]			 = 0xC0,
 		[PWR_ST_CHN_DISTANCE]		 = 0x14,
-		[PWR_IDX_STATUS]		 = 0x37C,
+		[STATUS]			 = 0xD8,
 	},
 	.sw_drv_perf_ol_vcd_regs = {
 		[DRV_BASE]			 = 0x3B0,
@@ -1796,7 +1796,8 @@ struct crm_desc cam_crm_desc_v2 = {
 		[PWR_ST0]			 = 0x0,
 		[PWR_ST1]			 = 0x4,
 		[PWR_ST_CHN_DISTANCE]		 = 0x8,
-		[PERF_OL_STATUS]		 = 0x10,
+		[STATUS]			 = 0x10,
+		[PWR_IDX_STATUS]		 = 0xE8,
 	},
 	.hw_drv_bw_vote_vcd_regs = {
 		[DRV_BASE]			 = 0x0,
@@ -1805,7 +1806,7 @@ struct crm_desc cam_crm_desc_v2 = {
 		[PWR_ST0]			 = 0xA0,
 		[PWR_ST1]			 = 0xA4,
 		[PWR_ST_CHN_DISTANCE]		 = 0x8,
-		[PWR_IDX_STATUS]		 = 0xE8,
+		[STATUS]			 = 0xB0,
 	},
 	.hw_drv_bw_pt_vote_vcd_regs = {
 		[DRV_BASE]			 = 0x0,
@@ -1814,7 +1815,7 @@ struct crm_desc cam_crm_desc_v2 = {
 		[PWR_ST0_PT]			 = 0xC8,
 		[PWR_ST1_PT]			 = 0xCC,
 		[PWR_ST_CHN_DISTANCE]		 = 0x8,
-		[PWR_IDX_STATUS]		 = 0xE8,
+		[STATUS]			 = 0xD8,
 	},
 	.sw_drv_perf_ol_vcd_regs = {
 		[DRV_BASE]			 = 0x11C,
@@ -1899,7 +1900,8 @@ struct crm_desc disp_crm_desc_v2 = {
 		[PWR_ST0]			 = 0x0,
 		[PWR_ST1]			 = 0x4,
 		[PWR_ST_CHN_DISTANCE]		 = 0x8,
-		[PERF_OL_STATUS]		 = 0x10,
+		[STATUS]			 = 0x10,
+		[PWR_IDX_STATUS]		 = 0xAC,
 	},
 	.hw_drv_bw_vote_vcd_regs = {
 		[DRV_BASE]			 = 0x0,
@@ -1908,7 +1910,7 @@ struct crm_desc disp_crm_desc_v2 = {
 		[PWR_ST0]			 = 0x14,
 		[PWR_ST1]			 = 0x18,
 		[PWR_ST_CHN_DISTANCE]		 = 0x8,
-		[PWR_IDX_STATUS]		 = 0xAC,
+		[STATUS]			 = 0x24,
 	},
 	.hw_drv_bw_pt_vote_vcd_regs = {
 		[DRV_BASE]			 = 0x0,
@@ -1917,7 +1919,7 @@ struct crm_desc disp_crm_desc_v2 = {
 		[PWR_ST0_PT]			 = 0x28,
 		[PWR_ST1_PT]			 = 0x2C,
 		[PWR_ST_CHN_DISTANCE]		 = 0x8,
-		[PWR_IDX_STATUS]		 = 0xAC,
+		[STATUS]			 = 0x38,
 	},
 	.sw_drv_perf_ol_vcd_regs = {
 		[DRV_BASE]			 = 0xE0,
