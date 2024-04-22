@@ -14,6 +14,9 @@ struct qcom_cpufreq_thermal_domain {
 	struct mbox_client cl;
 	struct mbox_chan *ch;
 	struct cpufreq_policy *policy;
+
+	struct device_attribute freq_limit_attr;
+	unsigned long freq_limit;
 };
 
 struct qcom_cpufreq_thermal {
@@ -37,7 +40,19 @@ static void qcom_cpufreq_thermal_rx(struct mbox_client *cl, void *msg)
 
 	dev_dbg(cl->dev, "cpu%u thermal limit: %lu\n", cpu, throttled_freq);
 
+	domain->freq_limit = throttled_freq;
+
 	arch_update_thermal_pressure(domain->policy->related_cpus, throttled_freq);
+}
+
+static ssize_t dcvsh_freq_limit_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct qcom_cpufreq_thermal_domain *domain;
+
+	domain = container_of(attr, struct qcom_cpufreq_thermal_domain, freq_limit_attr);
+
+	return scnprintf(buf, PAGE_SIZE, "%lu\n", domain->freq_limit);
 }
 
 static int qcom_cpufreq_thermal_driver_probe(struct platform_device *pdev)
@@ -45,6 +60,7 @@ static int qcom_cpufreq_thermal_driver_probe(struct platform_device *pdev)
 	struct qcom_cpufreq_thermal *data = &qcom_cpufreq_thermal;
 	struct qcom_cpufreq_thermal_domain *domain;
 	struct device *dev = &pdev->dev;
+	struct device *cpu_dev;
 	struct device_node *np = dev->of_node;
 	int ret, cpu, i;
 
@@ -84,6 +100,20 @@ static int qcom_cpufreq_thermal_driver_probe(struct platform_device *pdev)
 				dev_err(dev, "Error getting mailbox %d: %d\n", i, ret);
 			goto err;
 		}
+
+		cpu_dev = get_cpu_device(cpu);
+		if (!cpu_dev) {
+			dev_err(dev, "Error getting CPU%d device\n", i);
+			ret = -EINVAL;
+			goto err;
+		}
+
+		sysfs_attr_init(&domain->freq_limit_attr.attr);
+		domain->freq_limit_attr.attr.name = "dcvsh_freq_limit";
+		domain->freq_limit_attr.show = dcvsh_freq_limit_show;
+		domain->freq_limit_attr.attr.mode = 0444;
+		domain->freq_limit = U32_MAX;
+		device_create_file(cpu_dev, &domain->freq_limit_attr);
 	}
 
 	dev_info(dev, "Probe successful\n");
