@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/atomic.h>
@@ -482,40 +482,10 @@ static int send_single(struct rpmh_ctrlr *ctrlr, enum rpmh_state state,
 	return rpmh_rsc_write_ctrl_data(ctrlr_to_drv(ctrlr), &rpm_msg.msg, ch);
 }
 
-/**
- * rpmh_flush() - Flushes the buffered sleep and wake sets to TCSes
- *
- * @ctrlr: Controller making request to flush cached data
- * @ch:    Channel number
- *
- * Return:
- * * 0          - Success
- * * Error code - Otherwise
- */
-int rpmh_flush(struct rpmh_ctrlr *ctrlr, int ch)
+int _rpmh_flush(struct rpmh_ctrlr *ctrlr, int ch)
 {
 	struct cache_req *p;
 	int ret = 0;
-	unsigned long flags;
-
-	if (rpmh_standalone)
-		return 0;
-
-	/*
-	 * For RSC that don't have solver mode,
-	 * rpmh_flush() is only called when we think we're running
-	 * on the last CPU with irqs_disabled.
-	 *
-	 * For RSC that have solver mode,
-	 * rpmh_flush() can be invoked with irqs enabled by any CPU.
-	 *
-	 * Conditionally check for irqs_disabled only when solver mode
-	 * is not available.
-	 */
-	if (!(ctrlr->flags & SOLVER_PRESENT))
-		lockdep_assert_irqs_disabled();
-
-	spin_lock_irqsave(&ctrlr->cache_lock, flags);
 
 	if (!ctrlr->dirty) {
 		pr_debug("Skipping flush, TCS has latest data.\n");
@@ -551,6 +521,43 @@ int rpmh_flush(struct rpmh_ctrlr *ctrlr, int ch)
 write_next_wakeup:
 	rpmh_rsc_write_next_wakeup(ctrlr_to_drv(ctrlr));
 exit:
+	return ret;
+}
+
+/**
+ * rpmh_flush() - Flushes the buffered sleep and wake sets to TCSes
+ *
+ * @ctrlr: Controller making request to flush cached data
+ * @ch:    Channel number
+ *
+ * Return:
+ * * 0          - Success
+ * * Error code - Otherwise
+ */
+int rpmh_flush(struct rpmh_ctrlr *ctrlr, int ch)
+{
+	int ret = 0;
+	unsigned long flags;
+
+	if (rpmh_standalone)
+		return 0;
+
+	/*
+	 * For RSC that don't have solver mode,
+	 * rpmh_flush() is only called when we think we're running
+	 * on the last CPU with irqs_disabled.
+	 *
+	 * For RSC that have solver mode,
+	 * rpmh_flush() can be invoked with irqs enabled by any CPU.
+	 *
+	 * Conditionally check for irqs_disabled only when solver mode
+	 * is not available.
+	 */
+	if (!(ctrlr->flags & SOLVER_PRESENT))
+		lockdep_assert_irqs_disabled();
+
+	spin_lock_irqsave(&ctrlr->cache_lock, flags);
+	ret = _rpmh_flush(ctrlr, ch);
 	spin_unlock_irqrestore(&ctrlr->cache_lock, flags);
 	return ret;
 }
