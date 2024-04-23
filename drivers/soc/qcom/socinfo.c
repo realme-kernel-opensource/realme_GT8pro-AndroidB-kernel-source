@@ -1206,6 +1206,7 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 	int i = 0;
 
 	switch (socinfo_format) {
+	case SOCINFO_VERSION(0, 21):
 	case SOCINFO_VERSION(0, 20):
 		msm_custom_socinfo_attrs[i++] = &dev_attr_raw_package_type.attr;
 		fallthrough;
@@ -1460,6 +1461,7 @@ static void socinfo_debugfs_init(struct qcom_socinfo *qcom_socinfo,
 			   &qcom_socinfo->info.fmt);
 
 	switch (qcom_socinfo->info.fmt) {
+	case SOCINFO_VERSION(0, 21):
 	case SOCINFO_VERSION(0, 20):
 		qcom_socinfo->info.raw_package_type = __le32_to_cpu(info->raw_package_type);
 		debugfs_create_u32("raw_package_type", 0444, qcom_socinfo->dbg_root,
