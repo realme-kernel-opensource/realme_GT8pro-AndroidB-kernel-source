@@ -25,7 +25,6 @@
 #include "remoteproc_elf_helpers.h"
 #include "remoteproc_internal.h"
 #include "qcom_common.h"
-#include "../soc/qcom/minidump_private.h"
 
 #define SSR_NOTIF_TIMEOUT CONFIG_RPROC_SSR_NOTIF_TIMEOUT
 
@@ -107,6 +106,9 @@ static bool qcom_collect_both_coredumps;
 
 static LIST_HEAD(qcom_ssr_subsystem_list);
 static DEFINE_MUTEX(qcom_ssr_subsys_lock);
+
+void (*rproc_recovery_set_fn)(struct rproc *rproc) = NULL;
+EXPORT_SYMBOL_GPL(rproc_recovery_set_fn);
 
 static const char * const ssr_timeout_msg = "srcu notifier chain for %s:%s taking too long";
 
@@ -195,7 +197,7 @@ static int qcom_add_minidump_segments(struct rproc *rproc, struct minidump_subsy
 			}
 			da = le64_to_cpu(region.address);
 			size = le32_to_cpu(region.size);
-			if (le32_to_cpu(subsystem->encryption_status) != MD_SS_ENCR_DONE) {
+			if (le32_to_cpu(subsystem->encryption_status) != MINIDUMP_SS_ENCR_DONE) {
 				if (!i && len < MAX_REGION_NAME_LENGTH &&
 				    !strcmp(name, dbg_buf_name))
 					rproc_coredump_add_custom_segment(rproc, da, size, dumpfn,
@@ -411,9 +413,10 @@ static int glink_subdev_start(struct rproc_subdev *subdev)
 static void glink_subdev_stop(struct rproc_subdev *subdev, bool crashed)
 {
 	struct qcom_rproc_glink *glink = to_glink_subdev(subdev);
+	struct rproc *rproc = container_of(glink->dev, struct rproc, dev);
 	int ret;
 
-	if (!glink->edge)
+	if (!glink->edge || (crashed && rproc->recovery_disabled))
 		return;
 
 	trace_rproc_qcom_event(dev_name(glink->dev->parent), GLINK_SUBDEV_NAME,
@@ -635,7 +638,6 @@ void qcom_notify_early_ssr_clients(struct rproc_subdev *subdev)
 {
 	struct qcom_rproc_ssr *ssr = to_ssr_subdev(subdev);
 
-
 	srcu_notifier_call_chain(&ssr->info->early_notifier_list, QCOM_SSR_BEFORE_SHUTDOWN, NULL);
 }
 EXPORT_SYMBOL(qcom_notify_early_ssr_clients);
@@ -829,6 +831,9 @@ static void rproc_recovery_notifier(void *data, struct rproc *rproc)
 	const char *recovery = rproc->recovery_disabled ? "disabled" : "enabled";
 
 	pr_info("qcom rproc: %s: recovery %s\n", rproc->name, recovery);
+
+	if (rproc_recovery_set_fn)
+		(rproc_recovery_set_fn)(rproc);
 }
 
 static int __init qcom_common_init(void)

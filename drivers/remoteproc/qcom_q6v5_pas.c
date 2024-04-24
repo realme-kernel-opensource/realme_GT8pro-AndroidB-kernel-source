@@ -160,8 +160,6 @@ struct qcom_adsp {
 	bool check_status;
 };
 
-static bool recovery_set_cb;
-
 static ssize_t txn_id_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct platform_device *pdev = container_of(dev, struct platform_device, dev);
@@ -1192,12 +1190,13 @@ out:
 	return ret;
 }
 
-static void android_vh_rproc_recovery_set(void *data, struct rproc *rproc)
+static void rproc_recovery_set(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = (struct qcom_adsp *)rproc->priv;
 
-	if (strnstr(rproc->name, "spss", sizeof(rproc->name)))
+	if (strnstr(rproc->name, "spss", strlen(rproc->name)))
 		return;
+
 	adsp->subsys_recovery_disabled = rproc->recovery_disabled;
 }
 
@@ -1377,20 +1376,16 @@ static int adsp_probe(struct platform_device *pdev)
 	if (ret)
 		goto destroy_minidump_dev;
 
-	if (!recovery_set_cb) {
-		ret = register_trace_android_vh_rproc_recovery_set(android_vh_rproc_recovery_set,
-											NULL);
-		if (ret) {
-			dev_err(&pdev->dev, "Unable to register with rproc_recovery_set trace hook\n");
-			goto remove_rproc;
-		}
-		recovery_set_cb = true;
-	}
+	/*
+	 * Concurrent stores can happen on the same global variable with
+	 * different subsystem probe, however, as it is happening with
+	 * same value at max, compiler can do is to optimize it away with
+	 * single store compared to multiple store on worst case, so be it.
+	 */
+	rproc_recovery_set_fn = rproc_recovery_set;
 
 	return 0;
 
-remove_rproc:
-	rproc_del(rproc);
 destroy_minidump_dev:
 	if (adsp->minidump_dev)
 		qcom_destroy_ramdump_device(adsp->minidump_dev);
@@ -1411,7 +1406,6 @@ static void adsp_remove(struct platform_device *pdev)
 {
 	struct qcom_adsp *adsp = platform_get_drvdata(pdev);
 
-	unregister_trace_android_vh_rproc_recovery_set(android_vh_rproc_recovery_set, NULL);
 	rproc_del(adsp->rproc);
 	qcom_q6v5_deinit(&adsp->q6v5);
 	if (adsp->minidump_dev)
