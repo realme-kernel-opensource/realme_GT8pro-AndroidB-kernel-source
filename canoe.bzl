@@ -7,6 +7,10 @@ def define_canoe():
     _canoe_in_tree_modules = [
         # keep sorted
         "drivers/cpuidle/governors/qcom_lpm.ko",
+        "drivers/regulator/debug-regulator.ko",
+        "drivers/regulator/proxy-consumer.ko",
+        "drivers/regulator/qti-fixed-regulator.ko",
+        "drivers/regulator/stub-regulator.ko",
         "drivers/soc/qcom/cmd-db.ko",
         "drivers/soc/qcom/crm-v2.ko",
         "drivers/soc/qcom/qcom_rpmh.ko",

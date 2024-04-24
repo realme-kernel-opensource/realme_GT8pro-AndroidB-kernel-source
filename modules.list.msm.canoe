@@ -3,3 +3,6 @@
 cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko
+debug-regulator.ko
+proxy-consumer.ko
+stub-regulator.ko
