@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DMESG_DUMPER_PRIVATE_H
@@ -59,13 +59,15 @@ struct ddump_shm_hdr {
  * @label, peer_name, memparcel: The info need by gunyah and
  *                               secure buffer driver
  * @primary_vm: Is primary virtual machine or not
- * @rm_nb: The resource manager callback
+ * @vm_nb: The VM notifier callback
  * @tx_dbl: The gunyah doorbell tx handler
  * @rx_dbl: The gunyah doorbell rx handler
  * @ddump_completion: The completion for synchronization when dump
  *                    alive log
  * @wakeup_source : Avoid system enter suspend when dump alive log
  * @md_entry : minidump entry
+ * @is_static: The shared memory is from carve out or not
+ * @is_ready: The vm is ready to get alive log or not
  */
 struct qcom_dmesg_dumper {
 	struct device *dev;
@@ -76,7 +78,7 @@ struct qcom_dmesg_dumper {
 	u64 size;
 	u32 label, peer_name, memparcel;
 	bool primary_vm;
-	struct notifier_block rm_nb;
+	struct notifier_block vm_nb;
 	void *tx_dbl;
 	void *rx_dbl;
 	struct completion ddump_completion;
@@ -84,6 +86,7 @@ struct qcom_dmesg_dumper {
 	struct notifier_block gh_panic_nb;
 	struct md_region md_entry;
 	bool is_static;
+	bool is_ready;
 };
 
 #if IS_ENABLED(CONFIG_QCOM_VM_ALIVE_LOG_ENCRYPT)
