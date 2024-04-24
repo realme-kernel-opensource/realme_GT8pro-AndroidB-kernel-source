@@ -369,12 +369,12 @@ static int sched_task_handler(struct ctl_table *table, int write,
 					 1000000UL);
 			break;
 		case LOW_LATENCY:
-			pid_and_val[1] = wts->low_latency &
-					 WALT_LOW_LATENCY_PROCFS_BIT;
+			pid_and_val[1] = !!(wts->low_latency &
+					 WALT_LOW_LATENCY_PROCFS_BIT);
 			break;
 		case PIPELINE:
-			pid_and_val[1] = wts->low_latency &
-					 WALT_LOW_LATENCY_PIPELINE_BIT;
+			pid_and_val[1] = !!(wts->low_latency &
+					 WALT_LOW_LATENCY_PIPELINE_BIT);
 			break;
 		case LOAD_BOOST:
 			pid_and_val[1] = wts->load_boost;
