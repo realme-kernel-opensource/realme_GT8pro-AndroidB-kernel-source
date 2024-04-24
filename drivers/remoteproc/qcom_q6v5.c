@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include "qcom_common.h"
 #include "qcom_q6v5.h"
+#include <trace/events/rproc_qcom.h>
 
 #define Q6V5_LOAD_STATE_MSG_LEN	64
 #define Q6V5_PANIC_DELAY_MS	200
@@ -149,8 +150,14 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 
 	q6v5->running = false;
 
+	trace_rproc_qcom_event(dev_name(q6v5->dev), "q6v5_wdog", msg);
 	if (q6v5->ssr_subdev)
 		qcom_notify_early_ssr_clients(q6v5->ssr_subdev);
+
+	dev_err(q6v5->dev, "rproc recovery state: %s\n",
+		q6v5->rproc->recovery_disabled ?
+		"disabled and lead to device crash" :
+		"enabled and kick reovery process");
 
 	if (q6v5->rproc->recovery_disabled)
 		schedule_work(&q6v5->crash_handler);
@@ -176,6 +183,11 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 		dev_err(q6v5->dev, "fatal error without message\n");
 
 	q6v5->running = false;
+
+	trace_rproc_qcom_event(dev_name(q6v5->dev), "q6v5_fatal", msg);
+	dev_err(q6v5->dev, "rproc recovery state: %s\n",
+		q6v5->rproc->recovery_disabled ? "disabled and lead to device crash" :
+		"enabled and kick reovery process");
 
 	if (q6v5->ssr_subdev)
 		qcom_notify_early_ssr_clients(q6v5->ssr_subdev);

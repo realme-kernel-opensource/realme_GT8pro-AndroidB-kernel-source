@@ -34,6 +34,7 @@
 #include <trace/hooks/remoteproc.h>
 #include <linux/iopoll.h>
 #include <linux/refcount.h>
+#include <trace/events/rproc_qcom.h>
 
 #include "qcom_common.h"
 #include "qcom_pil_info.h"
@@ -76,7 +77,6 @@ struct adsp_data {
 	int region_assign_count;
 	bool region_assign_shared;
 	int region_assign_vmid;
-	int region_multiple_vmid;
 	bool dma_phys_below_32b;
 	bool check_status;
 };
@@ -131,7 +131,6 @@ struct qcom_adsp {
 	int region_assign_count;
 	bool region_assign_shared;
 	int region_assign_vmid;
-	int region_multiple_vmid;
 	u64 region_assign_perms[MAX_ASSIGN_COUNT];
 
 	bool dma_phys_below_32b;
@@ -238,11 +237,16 @@ static void adsp_minidump(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = rproc->priv;
 
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_minidump", "enter");
+
 	if (rproc->dump_conf == RPROC_COREDUMP_DISABLED)
-		return;
+		goto exit;
 
 	qcom_minidump(rproc, adsp->minidump_dev, adsp->minidump_id, adsp_segment_dump,
 			adsp->both_dumps);
+
+exit:
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_minidump", "exit");
 }
 
 static void disable_regulators(struct qcom_adsp *adsp)
@@ -392,6 +396,7 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 	if (adsp->dma_phys_below_32b)
 		dev = adsp->dev;
 
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_load", "enter");
 	rproc_coredump_cleanup(adsp->rproc);
 
 	/* Store firmware handle to be used in adsp_start() */
@@ -428,6 +433,8 @@ release_dtb_metadata:
 
 release_dtb_firmware:
 	release_firmware(adsp->dtb_firmware);
+
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_load", "exit");
 
 	return ret;
 }
@@ -485,7 +492,7 @@ static void add_mpss_dsm_mem_ssr_dump(struct qcom_adsp *adsp)
 
 static int adsp_assign_memory_region(struct qcom_adsp *adsp)
 {
-	struct qcom_scm_vmperm perm[3];
+	struct qcom_scm_vmperm perm[2];
 	unsigned int perm_size = 1;
 	struct device_node *node;
 	struct resource r;
@@ -513,11 +520,6 @@ static int adsp_assign_memory_region(struct qcom_adsp *adsp)
 			perm[1].vmid = adsp->region_assign_vmid;
 			perm[1].perm = QCOM_SCM_PERM_RW;
 			perm_size = 2;
-			if (adsp->region_multiple_vmid) {
-				perm[2].vmid = adsp->region_multiple_vmid;
-				perm[2].perm = QCOM_SCM_PERM_RW;
-				perm_size = 3;
-			}
 		} else {
 			perm[0].vmid = adsp->region_assign_vmid;
 			perm[0].perm = QCOM_SCM_PERM_RW;
@@ -570,6 +572,7 @@ static int adsp_start(struct rproc *rproc)
 
 	if (adsp->dma_phys_below_32b)
 		dev = adsp->dev;
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_start", "enter");
 
 	ret = qcom_q6v5_prepare(&adsp->q6v5);
 	if (ret)
@@ -612,6 +615,7 @@ static int adsp_start(struct rproc *rproc)
 		goto disable_px_supply;
 
 	if (adsp->dtb_pas_id) {
+		trace_rproc_qcom_event(dev_name(adsp->dev), "dtb_auth_reset", "enter");
 		ret = qcom_scm_pas_auth_and_reset(adsp->dtb_pas_id);
 		if (ret)
 			panic("Panicking, auth and reset failed for remoteproc %s dtb\n",
@@ -620,6 +624,7 @@ static int adsp_start(struct rproc *rproc)
 
 	ret = qcom_mdt_pas_init(adsp->dev, adsp->firmware, rproc->firmware, adsp->pas_id,
 				adsp->mem_phys, &adsp->pas_metadata, adsp->dma_phys_below_32b);
+	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_firmware_loading", "enter");
 	if (ret)
 		goto disable_px_supply;
 
@@ -631,9 +636,12 @@ static int adsp_start(struct rproc *rproc)
 
 	qcom_pil_info_store(adsp->info_name, adsp->mem_phys, adsp->mem_size);
 
+	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_auth_reset", "enter");
+
 	ret = qcom_scm_pas_auth_and_reset(adsp->pas_id);
 	if (ret)
 		panic("Panicking, auth and reset failed for remoteproc %s\n", rproc->name);
+	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_auth_reset", "exit");
 
 	if (!timeout_disabled) {
 		ret = qcom_q6v5_wait_for_start(&adsp->q6v5, msecs_to_jiffies(5000));
@@ -678,6 +686,7 @@ disable_irqs:
 	/* Remove pointer to the loaded firmware, only valid in adsp_load() & adsp_start() */
 	adsp->firmware = NULL;
 
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_start", "exit");
 	return ret;
 }
 
@@ -852,12 +861,17 @@ static int rproc_panic_handler(struct notifier_block *this,
 
 	/* wake up SOCCP during panic to run error handlers on SOCCP */
 	dev_info(adsp->dev, "waking SOCCP from panic path\n");
-	ret = rproc_set_state(adsp->rproc, true);
+	ret = qcom_smem_state_update_bits(adsp->wake_state,
+				    SOCCP_STATE_MASK,
+				    BIT(adsp->wake_bit));
+	if (ret) {
+		dev_err(adsp->dev, "failed to update smem bits for D3 to D0\n");
+		goto done;
+	}
+	ret = rproc_config_check(adsp, SOCCP_D0);
 	if (ret)
-		dev_err(adsp->dev, "state did not changed during panic\n");
-	else
-		dev_info(adsp->dev, "subsystem woke-up done from panic path\n");
-
+		dev_err(adsp->dev, "failed to change to D0\n");
+done:
 	return NOTIFY_DONE;
 }
 
@@ -889,6 +903,7 @@ static int adsp_stop(struct rproc *rproc)
 	int handover;
 	int ret;
 
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_stop", "enter");
 	if (adsp->check_status) {
 		dev_info(adsp->dev, "wakeup: waking subsystem from shutdown path\n");
 		ret = rproc_set_state(rproc, true);
@@ -929,6 +944,7 @@ static int adsp_stop(struct rproc *rproc)
 		if (ret)
 			dev_err(adsp->dev, "sleep: state did not changed during shutdown\n");
 	}
+	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_stop", "exit");
 
 	return ret;
 }
@@ -1839,7 +1855,6 @@ static const struct adsp_data sun_cdsp_resource = {
 	.region_assign_count = 1,
 	.region_assign_shared = true,
 	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
-	.region_multiple_vmid = QCOM_SCM_VMID_SOCCP,
 	.auto_boot = true,
 };
 
