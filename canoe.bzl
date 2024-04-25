@@ -6,6 +6,9 @@ target_name = "canoe"
 def define_canoe():
     _canoe_in_tree_modules = [
         # keep sorted
+        "drivers/soc/qcom/cmd-db.ko",
+        "drivers/soc/qcom/crm-v2.ko",
+        "drivers/soc/qcom/qcom_rpmh.ko",
     ]
 
     _canoe_consolidate_in_tree_modules = _canoe_in_tree_modules + [
