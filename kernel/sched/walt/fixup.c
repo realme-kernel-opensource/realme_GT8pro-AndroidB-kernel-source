@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <trace/hooks/cpufreq.h>
+#include <trace/hooks/topology.h>
 
 #include "walt.h"
 
@@ -87,7 +88,19 @@ static void android_rvh_show_max_freq(void *unused, struct cpufreq_policy *polic
 		*max_freq = cpuinfo_max_freq_cached << 1;
 }
 
+static void android_rvh_cpu_capacity_show(void *unused,
+		unsigned long *capacity, int cpu)
+{
+	if (!soc_sched_lib_name_capacity)
+		return;
+
+	if (is_sched_lib_based_app(current->pid) &&
+			cpu < soc_sched_lib_name_capacity)
+		*capacity = 100;
+}
+
 void walt_fixup_init(void)
 {
 	register_trace_android_rvh_show_max_freq(android_rvh_show_max_freq, NULL);
+	register_trace_android_rvh_cpu_capacity_show(android_rvh_cpu_capacity_show, NULL);
 }

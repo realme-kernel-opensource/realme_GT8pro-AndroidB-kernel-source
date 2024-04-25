@@ -12,6 +12,7 @@ unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 cpumask_t asym_cap_sibling_cpus;
 cpumask_t pipeline_sync_cpus;
 int oscillate_period_ns;
+int soc_sched_lib_name_capacity;
 
 void walt_config(void)
 {
@@ -93,9 +94,9 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 		oscillate_period_ns = 8000000;
-
 		/*G + P*/
 		cpumask_copy(&pipeline_sync_cpus, cpu_possible_mask);
+		soc_sched_lib_name_capacity = 2;
 	} else if (!strcmp(name, "PINEAPPLE")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);

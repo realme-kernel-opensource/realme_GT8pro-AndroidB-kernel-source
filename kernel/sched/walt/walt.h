@@ -86,6 +86,8 @@ enum freq_caps {
 #define SOC_ENABLE_FT_BOOST_TO_ALL			BIT(8)
 #define SOC_ENABLE_OSCILLATE_ON_THERMALS		BIT(9)
 
+extern int soc_sched_lib_name_capacity;
+
 #define WALT_FEAT_TRAILBLAZER_BIT	BIT_ULL(0)
 extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 
