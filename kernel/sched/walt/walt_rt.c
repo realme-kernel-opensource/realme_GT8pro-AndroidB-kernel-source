@@ -249,6 +249,7 @@ static void walt_select_task_rq_rt(void *unused, struct task_struct *task, int c
 	bool sync = !!(wake_flags & WF_SYNC);
 	int ret, target = -1, this_cpu;
 	struct cpumask *lowest_mask = NULL;
+	int packing_cpu = -1;
 	int fastpath = NONE;
 	struct cpumask lowest_mask_reduced = { CPU_BITS_NONE };
 	struct walt_task_struct *wts;
@@ -311,6 +312,14 @@ static void walt_select_task_rq_rt(void *unused, struct task_struct *task, int c
 	ret = cpupri_find_fitness(&task_rq(task)->rd->cpupri, task,
 				lowest_mask, walt_rt_task_fits_capacity);
 
+	if (cpumask_test_cpu(0, &wts->reduce_mask))
+		packing_cpu = walt_find_and_choose_cluster_packing_cpu(0, task);
+	if (packing_cpu >= 0) {
+		fastpath = CLUSTER_PACKING_FASTPATH;
+		*new_cpu = packing_cpu;
+		goto unlock;
+	}
+
 	cpumask_and(&lowest_mask_reduced, lowest_mask, &wts->reduce_mask);
 	if (!cpumask_empty(&lowest_mask_reduced))
 		walt_rt_energy_aware_wake_cpu(task, &lowest_mask_reduced, ret, &target);
@@ -337,6 +346,7 @@ static void walt_select_task_rq_rt(void *unused, struct task_struct *task, int c
 		if (target < nr_cpu_ids)
 			*new_cpu = target;
 	}
+unlock:
 	rcu_read_unlock();
 out:
 	trace_sched_select_task_rt(task, fastpath, *new_cpu, lowest_mask);
@@ -347,6 +357,7 @@ static void walt_rt_find_lowest_rq(void *unused, struct task_struct *task,
 				   struct cpumask *lowest_mask, int ret, int *best_cpu)
 
 {
+	int packing_cpu = -1;
 	int fastpath = 0;
 	struct walt_task_struct *wts;
 	struct cpumask lowest_mask_reduced = { CPU_BITS_NONE };
@@ -355,6 +366,14 @@ static void walt_rt_find_lowest_rq(void *unused, struct task_struct *task,
 		return;
 
 	wts = (struct walt_task_struct *) task->android_vendor_data1;
+
+	if (cpumask_test_cpu(0, &wts->reduce_mask))
+		packing_cpu = walt_find_and_choose_cluster_packing_cpu(0, task);
+	if (packing_cpu >= 0) {
+		*best_cpu = packing_cpu;
+		fastpath = CLUSTER_PACKING_FASTPATH;
+		goto out;
+	}
 
 	cpumask_and(&lowest_mask_reduced, lowest_mask, &wts->reduce_mask);
 	if (!cpumask_empty(&lowest_mask_reduced))
@@ -369,6 +388,7 @@ static void walt_rt_find_lowest_rq(void *unused, struct task_struct *task,
 	 */
 	if (*best_cpu == -1)
 		cpumask_andnot(lowest_mask, lowest_mask, cpu_halt_mask);
+out:
 	trace_sched_rt_find_lowest_rq(task, fastpath, *best_cpu, lowest_mask);
 }
 
