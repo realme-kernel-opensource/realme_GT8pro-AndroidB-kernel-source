@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "gh_vm_mgr: " fmt
@@ -178,8 +178,6 @@ EXPORT_SYMBOL_GPL(gh_vm_function_register);
 
 void gh_vm_function_unregister(struct gh_vm_function *fn)
 {
-	/* Expecting unregister to only come when unloading a module */
-	WARN_ON(fn->mod && module_refcount(fn->mod));
 	xa_erase(&gh_vm_functions, fn->type);
 }
 EXPORT_SYMBOL_GPL(gh_vm_function_unregister);
