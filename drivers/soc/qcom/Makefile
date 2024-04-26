@@ -47,6 +47,7 @@ obj-$(CONFIG_QCOM_MINIDUMP) += minidump.o
 minidump-y   += msm_minidump.o minidump_log.o
 minidump-$(CONFIG_QCOM_MINIDUMP_PANIC_MEMORY_INFO) += minidump_memory.o
 obj-$(CONFIG_QCOM_VA_MINIDUMP) += qcom_va_minidump.o
+obj-$(CONFIG_QCOM_DYNAMIC_RAMOOPS) += qcom_dynamic_ramoops.o
 obj-$(CONFIG_QCOM_LOGBUF_VENDOR_HOOKS) += qcom_logbuf_vendor_hooks.o
 obj-$(CONFIG_QCOM_LOGBUF_BOOTLOG) += qcom_logbuf_boot_log.o
 obj-$(CONFIG_GIC_INTERRUPT_ROUTING) += gic_intr_routing.o
