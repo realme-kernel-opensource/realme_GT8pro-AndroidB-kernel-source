@@ -396,6 +396,7 @@ extern struct irq_work walt_migration_irq_work;
 #define LIB_PATH_LENGTH 512
 extern unsigned int cpuinfo_max_freq_cached;
 extern char sched_lib_name[LIB_PATH_LENGTH];
+extern char sched_lib_task[LIB_PATH_LENGTH];
 extern unsigned int sched_lib_mask_force;
 
 extern cpumask_t cpus_for_sbt_pause;

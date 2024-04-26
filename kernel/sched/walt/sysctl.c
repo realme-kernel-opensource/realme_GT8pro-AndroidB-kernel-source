@@ -1194,6 +1194,13 @@ static struct ctl_table walt_table[] = {
 		.proc_handler	= proc_dostring,
 	},
 	{
+		.procname	= "sched_lib_task",
+		.data		= sched_lib_task,
+		.maxlen		= LIB_PATH_LENGTH,
+		.mode		= 0644,
+		.proc_handler	= proc_dostring,
+	},
+	{
 		.procname	= "sched_lib_mask_force",
 		.data		= &sched_lib_mask_force,
 		.maxlen		= sizeof(unsigned int),

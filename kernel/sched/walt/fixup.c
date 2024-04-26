@@ -12,6 +12,7 @@
 unsigned int cpuinfo_max_freq_cached;
 
 char sched_lib_name[LIB_PATH_LENGTH];
+char sched_lib_task[LIB_PATH_LENGTH];
 unsigned int sched_lib_mask_force;
 
 static bool is_sched_lib_based_app(pid_t pid)
@@ -75,6 +76,20 @@ release_sem:
 	return found;
 }
 
+bool is_sched_lib_task(void)
+{
+	struct task_struct *g, *p;
+
+	if (strnlen(sched_lib_task, LIB_PATH_LENGTH) == 0)
+		return false;
+
+	for_each_process_thread(g, p) {
+		if (strnstr(p->comm, sched_lib_task, strnlen(p->comm, LIB_PATH_LENGTH)))
+			return true;
+	}
+	return false;
+}
+
 static void android_rvh_show_max_freq(void *unused, struct cpufreq_policy *policy,
 				     unsigned int *max_freq)
 {
@@ -84,7 +99,7 @@ static void android_rvh_show_max_freq(void *unused, struct cpufreq_policy *polic
 	if (!(BIT(policy->cpu) & sched_lib_mask_force))
 		return;
 
-	if (is_sched_lib_based_app(current->pid))
+	if (is_sched_lib_based_app(current->pid) || is_sched_lib_task())
 		*max_freq = cpuinfo_max_freq_cached << 1;
 }
 
@@ -94,7 +109,7 @@ static void android_rvh_cpu_capacity_show(void *unused,
 	if (!soc_sched_lib_name_capacity)
 		return;
 
-	if (is_sched_lib_based_app(current->pid) &&
+	if ((is_sched_lib_based_app(current->pid) || is_sched_lib_task()) &&
 			cpu < soc_sched_lib_name_capacity)
 		*capacity = 100;
 }
