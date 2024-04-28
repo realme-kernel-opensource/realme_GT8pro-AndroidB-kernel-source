@@ -170,6 +170,16 @@ config QCOM_LLCC_PERFMON
 	  interface. sysfs interface is used to configure and dump the LLCC
 	  performance events.
 
+config QCOM_LLCC_HEURISTICS
+	tristate "Qualcomm Technologies, Inc. LLCC HEURISTICS Driver"
+	depends on QCOM_LLCC
+	help
+	  This option enables driver for LLCC Heuristics support to pass the
+	  parameter input to heuristics algorithm parameters to control CPU
+	  HEURISTICS SCID. Parameters taken from DTB and can determine feature
+	  enablement from DTB itself. Also Provide the capability to disable,
+	  enable HERISTIC SCID functionality from SYSFS.
+
 config QCOM_MDT_LOADER
 	tristate
 	select QCOM_SCM
