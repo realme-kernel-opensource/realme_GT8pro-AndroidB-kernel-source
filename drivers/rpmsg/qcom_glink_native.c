@@ -1311,35 +1311,11 @@ static int qcom_glink_rx_data_zero_copy(struct qcom_glink *glink, size_t avail)
 	intent->data = data;
 	intent->offset = len;
 
-	spin_lock_irqsave(&channel->intent_lock, flags);
-	list_add_tail(&intent->node, &channel->defer_intents);
-	spin_unlock_irqrestore(&channel->intent_lock, flags);
-
 	spin_lock(&channel->recv_lock);
-	if (channel->ept.cb) {
-		ret = channel->ept.cb(channel->ept.rpdev, intent->data,
-				intent->offset,
-				channel->ept.priv,
-				RPMSG_ADDR_ANY);
-
-		if (ret < 0 && ret != -ENODEV) {
-			CH_ERR(channel, "callback error ret = %d\n", ret);
-			ret = 0;
-		}
-	} else {
-		CH_ERR(channel, "callback not present\n");
-	}
+	list_add_tail(&intent->node, &channel->rx_queue);
 	spin_unlock(&channel->recv_lock);
 
-	if (qcom_glink_is_wakeup(true)) {
-		pr_info("%s[%d:%d] %s: wakeup packet size:%d\n", channel->name,
-			channel->lcid, channel->rcid,
-			__func__, intent->offset);
-	}
-	intent->offset = 0;
-
-	if (!(qcom_glink_rx_done_supported(&channel->ept) && ret == RPMSG_DEFER))
-		__qcom_glink_rx_done(glink, channel, intent);
+	wake_up(&channel->rx_wq);
 
 advance_rx:
 	qcom_glink_rx_advance(glink, ALIGN(sizeof(hdr), 8));
