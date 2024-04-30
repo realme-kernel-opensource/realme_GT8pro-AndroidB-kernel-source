@@ -6,6 +6,8 @@ target_name = "canoe"
 def define_canoe():
     _canoe_in_tree_modules = [
         # keep sorted
+        "drivers/clk/qcom/clk-dummy.ko",
+        "drivers/clk/qcom/clk-qcom.ko",
         "drivers/cpuidle/governors/qcom_lpm.ko",
         "drivers/regulator/debug-regulator.ko",
         "drivers/regulator/proxy-consumer.ko",
