@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -62,8 +62,9 @@ struct gh_rm_connection {
 	struct completion seq_done;
 };
 
-struct gh_rm_notif_validate {
-	struct gh_rm_connection *conn;
+struct gh_rm_notif_work {
+	unsigned long action;
+	void *msg;
 	struct work_struct work;
 };
 
@@ -142,10 +143,91 @@ int gh_rm_unregister_notifier(struct notifier_block *nb)
 }
 EXPORT_SYMBOL_GPL(gh_rm_unregister_notifier);
 
+static size_t gh_rm_exited_notif_size(void *payload)
+{
+	struct gh_rm_notif_vm_exited_payload *vm_exited_payload = payload;
+
+	vm_exited_payload = payload;
+
+	switch (vm_exited_payload->exit_type) {
+	case GH_RM_VM_EXIT_TYPE_VM_EXIT:
+	case GH_RM_VM_EXIT_TYPE_SYSTEM_RESET2:
+		return sizeof(*vm_exited_payload) + sizeof(struct gh_vm_exit_reason_vm_exit);
+	case GH_RM_VM_EXIT_TYPE_WDT_BITE:
+	case GH_RM_VM_EXIT_TYPE_HYP_ERROR:
+	case GH_RM_VM_EXIT_TYPE_ASYNC_EXT_ABORT:
+	case GH_RM_VM_EXIT_TYPE_VM_STOP_FORCED:
+	case GH_RM_VM_EXIT_TYPE_SYSTEM_OFF:
+	case GH_RM_VM_EXIT_TYPE_SYSTEM_RESET:
+		return sizeof(*vm_exited_payload);
+	}
+
+	return 0;
+}
+
+static size_t gh_rm_notif_size(unsigned long action, void *msg)
+{
+	switch (action) {
+	case GH_RM_NOTIF_VM_STATUS:
+		return sizeof(struct gh_rm_notif_vm_status_payload);
+	case GH_RM_NOTIF_VM_EXITED:
+		return gh_rm_exited_notif_size(msg);
+	case GH_RM_NOTIF_VM_SHUTDOWN:
+		return sizeof(struct gh_rm_notif_vm_shutdown_payload);
+	case GH_RM_NOTIF_VM_IRQ_LENT:
+		return sizeof(struct gh_rm_notif_vm_irq_lent_payload);
+	case GH_RM_NOTIF_VM_IRQ_RELEASED:
+		return sizeof(struct gh_rm_notif_vm_irq_released_payload);
+	case GH_RM_NOTIF_VM_IRQ_ACCEPTED:
+		return sizeof(struct gh_rm_notif_vm_irq_accepted_payload);
+	case GH_RM_NOTIF_MEM_SHARED:
+		return sizeof(struct gh_rm_notif_mem_shared_payload);
+	case GH_RM_NOTIF_MEM_RELEASED:
+		return sizeof(struct gh_rm_notif_mem_released_payload);
+	case GH_RM_NOTIF_MEM_ACCEPTED:
+		return sizeof(struct gh_rm_notif_mem_accepted_payload);
+	case GH_RM_NOTIF_VM_CONSOLE_CHARS: {
+		struct gh_rm_notif_vm_console_chars *console_chars = msg;
+
+		return sizeof(*console_chars) + console_chars->num_bytes;
+	}
+	}
+	return 0;
+}
+
+static void gh_rm_notif_work(struct work_struct *notify_work)
+{
+	struct gh_rm_notif_work *notify = container_of(notify_work, struct gh_rm_notif_work, work);
+
+	srcu_notifier_call_chain(&gh_rm_notifier, notify->action, notify->msg);
+	kfree(notify->msg);
+	kfree(notify);
+}
+
 static int gh_rm_core_notifier_call(struct notifier_block *nb, unsigned long action,
 								void *msg)
 {
-	return srcu_notifier_call_chain(&gh_rm_notifier, action, msg);
+	struct gh_rm_notif_work *notif;
+	size_t msg_size;
+
+	msg_size = gh_rm_notif_size(action, msg);
+	if (!msg_size)
+		return NOTIFY_DONE;
+
+	notif = kzalloc(sizeof(*notif), GFP_KERNEL);
+	if (!notif)
+		return notifier_from_errno(-ENOMEM);
+
+	notif->action = action;
+	notif->msg = kmemdup(msg, msg_size, GFP_KERNEL);
+	if (!notif->msg) {
+		kfree(notif);
+		return notifier_from_errno(-ENOMEM);
+	}
+	INIT_WORK(&notif->work, gh_rm_notif_work);
+
+	schedule_work(&notif->work);
+	return NOTIFY_DONE;
 }
 
 /**
