@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -320,6 +320,7 @@ static int amoled_ecm_enable(struct amoled_ecm *ecm)
 static int amoled_ecm_disable(struct amoled_ecm *ecm)
 {
 	int rc;
+	u8 val;
 
 	if (ecm->subtype == PM8350B_ECM) {
 		rc = regmap_write(ecm->regmap, ecm->base + AB_ECM_COUNTER_CTL,
@@ -355,6 +356,13 @@ static int amoled_ecm_disable(struct amoled_ecm *ecm)
 
 	ecm->abort = false;
 	ecm->enable = false;
+
+	val = 0;
+	rc = ecm_nvmem_device_write(ecm->sdam[0].nvmem, ECM_WRITE_TO_SDAM, 1,
+				&val);
+	if (rc < 0)
+		dev_err(ecm->dev, "Failed to write %u to ECM_WRITE_TO_SDAM, rc=%d\n",
+			val, rc);
 
 	return rc;
 }
