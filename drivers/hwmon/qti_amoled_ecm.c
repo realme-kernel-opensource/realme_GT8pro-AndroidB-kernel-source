@@ -55,6 +55,7 @@
  #define ECM_ABORT				BIT(2)
  #define ECM_SDAM0_FULL				BIT(3)
  #define ECM_SDAM1_FULL				BIT(4)
+ #define ECM_SDAM2_FULL				BIT(5)
 
 #define ECM_SDAM0_INDEX				0x52
 #define ECM_SDAM1_INDEX				0x53
@@ -623,14 +624,55 @@ static u16 get_ecm_gain(struct amoled_ecm *ecm)
 	return 0;
 }
 
+static u64 get_ecm_cumulative(struct amoled_ecm *ecm, int sdam_num,
+				int sample_base, u8 sample_count)
+{
+	u8 bytes_per_sample = 1;
+	u64 cumulative = 0;
+	u8 buf[2];
+	int rc, i;
+	u16 gain;
+
+	gain = get_ecm_gain(ecm);
+	if (!gain)
+		return 0;
+
+	if (ecm->subtype == PM8350B_ECM)
+		bytes_per_sample = 2;
+
+	for (i = sample_base; i < sample_count; i += bytes_per_sample) {
+		rc = nvmem_device_read(ecm->sdam[sdam_num].nvmem, i,
+					bytes_per_sample, buf);
+		if (rc <= 0) {
+			dev_err(ecm->dev, "Failed to read SDAM sample, rc=%d\n",
+				rc);
+			return 0;
+		}
+
+		if (bytes_per_sample == 2)
+			cumulative += (buf[1] << 8) | buf[0];
+		else
+			cumulative += buf[0];
+	}
+
+	if (ecm->subtype == PM8350B_ECM)
+		cumulative = ((cumulative * 1000) / gain) / 1000;
+	else if (ecm->subtype == PMD802X_ECM)
+		cumulative = cumulative * gain;
+
+	dev_dbg(ecm->dev, "Cumulative: %llu\n", cumulative);
+
+	return cumulative;
+}
+
 static irqreturn_t sdam_full_irq_handler(int irq, void *_ecm)
 {
 	struct amoled_ecm *ecm = _ecm;
 	struct amoled_ecm_data *data = &ecm->data;
 	u64 cumulative = 0, m_sample;
-	int rc, i, sdam_num, sdam_start, num_ecm_samples, max_samples;
-	u16 ecm_sample, gain;
-	u8 buf[2], int_status, sdam_index, overwrite;
+	int rc, sdam_num, sdam_start, num_ecm_samples, max_samples;
+	u8 val, int_status, sdam_index, overwrite;
+	u8 bytes_per_sample = 1;
 
 	sdam_num = get_sdam_from_irq(ecm, irq);
 	if (sdam_num < 0) {
@@ -669,9 +711,13 @@ static irqreturn_t sdam_full_irq_handler(int irq, void *_ecm)
 
 	dev_dbg(ecm->dev, "sdam_num:%d sdam_index:%#x\n", sdam_num, sdam_index);
 
+	if (ecm->subtype == PM8350B_ECM)
+		bytes_per_sample = 2;
+
 	sdam_start = ecm->sdam[sdam_num].start_addr;
-	max_samples = (ECM_SDAM_SAMPLE_END_ADDR + 1 - sdam_start) / 2;
-	num_ecm_samples = (sdam_index + 1 - sdam_start) / 2;
+	max_samples = (ECM_SDAM_SAMPLE_END_ADDR + 1 - sdam_start) /
+			bytes_per_sample;
+	num_ecm_samples = (sdam_index + 1 - sdam_start) / bytes_per_sample;
 
 	if (!num_ecm_samples || (num_ecm_samples > max_samples)) {
 		dev_err(ecm->dev, "Incorrect number of ECM samples, num_ecm_samples:%d max_samples:%d\n",
@@ -698,22 +744,7 @@ static irqreturn_t sdam_full_irq_handler(int irq, void *_ecm)
 		goto irq_exit;
 	}
 
-	gain = get_ecm_gain(ecm);
-	if (!gain)
-		goto irq_exit;
-
-	for (i = sdam_start; i < sdam_index; i += 2) {
-		rc = nvmem_device_read(ecm->sdam[sdam_num].nvmem, i, 2, buf);
-		if (rc < 0) {
-			dev_err(ecm->dev, "Failed to read SDAM sample, rc=%d\n",
-				rc);
-			goto irq_exit;
-		}
-
-		ecm_sample = (buf[1] << 8) | buf[0];
-
-		cumulative += ((ecm_sample * 1000) / gain) / 1000;
-	}
+	cumulative = get_ecm_cumulative(ecm, sdam_num, sdam_start, sdam_index);
 
 	overwrite |= (OVERWRITE_SDAM0_DATA << sdam_num);
 	rc = ecm_nvmem_device_write(ecm->sdam[0].nvmem, ECM_WRITE_TO_SDAM,
@@ -734,9 +765,9 @@ static irqreturn_t sdam_full_irq_handler(int irq, void *_ecm)
 	data->m_cumulative += m_sample;
 	data->num_m_samples++;
 
-	buf[0] = (ECM_SDAM0_FULL << sdam_num);
+	val = (ECM_SDAM0_FULL << sdam_num);
 	rc = ecm_nvmem_device_write(ecm->sdam[0].nvmem, ECM_STATUS_CLR, 1,
-			&buf[0]);
+			&val);
 	if (rc < 0) {
 		dev_err(ecm->dev, "Failed to clear interrupt status in SDAM, rc=%d\n",
 			rc);
