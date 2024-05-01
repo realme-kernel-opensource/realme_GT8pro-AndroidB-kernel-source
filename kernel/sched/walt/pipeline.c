@@ -460,11 +460,18 @@ void rearrange_heavy(u64 window_start, bool force)
 
 	raw_spin_lock_irqsave(&heavy_lock, flags);
 
-	find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
+	if (pipeline_special_task) {
+		if (force)
+			heavy_wts[0]->pipeline_cpu =
+				cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
+		goto out;
+	}
 
 	/* swap prime for have_heavy_list >= 3 */
+	find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
 	swap_pipeline_with_prime_locked(prime_wts, other_wts);
 
+out:
 	raw_spin_unlock_irqrestore(&heavy_lock, flags);
 }
 
