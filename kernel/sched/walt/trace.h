@@ -1805,6 +1805,28 @@ TRACE_EVENT(sched_pipeline_swapped,
 			__entry->prime_pipeline_cpu)
 );
 
+TRACE_EVENT(sched_boost_bus_dcvs,
+
+	TP_PROTO(int oscillate_cpu),
+
+	TP_ARGS(oscillate_cpu),
+
+	TP_STRUCT__entry(
+		__field(bool,           oscillation_enabled)
+		__field(bool,           storage_boosted)
+		),
+
+	TP_fast_assign(
+		__entry->oscillation_enabled    = oscillate_cpu != -1 ? true : false;
+		__entry->storage_boosted        = is_storage_boost();
+		),
+
+
+	TP_printk("rotation_enabled=%d storage_boosted=%d",
+		__entry->oscillation_enabled,
+		__entry->storage_boosted)
+);
+
 #endif /* _TRACE_WALT_H */
 
 #undef TRACE_INCLUDE_PATH

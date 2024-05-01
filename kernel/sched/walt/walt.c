@@ -4669,6 +4669,14 @@ static void android_rvh_tick_entry(void *unused, struct rq *rq)
 		waltgov_run_callback(rq, WALT_CPUFREQ_EARLY_DET_BIT);
 }
 
+bool should_boost_bus_dcvs(void)
+{
+	trace_sched_boost_bus_dcvs(oscillate_cpu);
+
+	return (oscillate_cpu != -1) || is_storage_boost();
+}
+EXPORT_SYMBOL_GPL(should_boost_bus_dcvs);
+
 /*
  * oscillate_cpu = {-1, cpu} tells if system is currently rotating a big
  * task between Prime CPUs and on which CPU the big task is currently
