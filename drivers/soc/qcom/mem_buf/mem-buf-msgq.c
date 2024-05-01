@@ -37,6 +37,10 @@ static struct mem_buf_msgq_id mem_buf_msgqs[] = {
 		.label = GH_MSGQ_LABEL_MEMBUF,
 	},
 	{
+		.name = "oem_vm",
+		.label = GH_MSGQ_LABEL_MEMBUF_OEMVM,
+	},
+	{
 	},
 };
 

@@ -18,6 +18,7 @@
 #include <linux/genalloc.h>
 #include <linux/math.h>
 #include <linux/mem-buf-altmap.h>
+#include <linux/of.h>
 
 #include "../../../../drivers/dma-buf/heaps/qcom_sg_ops.h"
 #include "mem-buf-gh.h"
@@ -35,7 +36,13 @@ static LIST_HEAD(mem_buf_list);
 
 /* Data structures for tracking message queue usage. */
 static struct workqueue_struct *mem_buf_wq;
-static void *mem_buf_msgq_hdl;
+/*
+ * On TUIVM/OEMVM, msgqs[0] is to PVM, and msgqs[1] is unused.
+ * On PVM, msgqs[0] and [1] are both used, and point to TUIVM and OEMVM in an
+ * undefined order.
+ */
+static void **msgqs;
+static int num_msgqs;
 
 /* Maintains a list of memory buffers lent out to other VMs */
 static DEFINE_MUTEX(mem_buf_xfer_mem_list_lock);
@@ -805,7 +812,7 @@ static int mem_buf_request_mem(struct mem_buf_desc *membuf)
 	void *alloc_req_msg;
 	int ret;
 
-	txn = mem_buf_init_txn(mem_buf_msgq_hdl, membuf);
+	txn = mem_buf_init_txn(msgqs[0], membuf);
 	if (IS_ERR(txn))
 		return PTR_ERR(txn);
 
@@ -817,7 +824,7 @@ static int mem_buf_request_mem(struct mem_buf_desc *membuf)
 		goto out;
 	}
 
-	ret = mem_buf_msgq_send(mem_buf_msgq_hdl, alloc_req_msg);
+	ret = mem_buf_msgq_send(msgqs[0], alloc_req_msg);
 
 	/*
 	 * Free the buffer regardless of the return value as the hypervisor
@@ -828,12 +835,12 @@ static int mem_buf_request_mem(struct mem_buf_desc *membuf)
 	if (ret < 0)
 		goto out;
 
-	ret = mem_buf_txn_wait(mem_buf_msgq_hdl, txn);
+	ret = mem_buf_txn_wait(msgqs[0], txn);
 	if (ret < 0)
 		goto out;
 
 out:
-	mem_buf_destroy_txn(mem_buf_msgq_hdl, txn);
+	mem_buf_destroy_txn(msgqs[0], txn);
 	return ret;
 }
 
@@ -842,7 +849,7 @@ static void __mem_buf_relinquish_mem(u32 obj_id, u32 memparcel_hdl)
 	void *relinquish_msg, *txn;
 	int ret;
 
-	txn = mem_buf_init_txn(mem_buf_msgq_hdl, NULL);
+	txn = mem_buf_init_txn(msgqs[0], NULL);
 	if (IS_ERR(txn))
 		return;
 
@@ -851,7 +858,7 @@ static void __mem_buf_relinquish_mem(u32 obj_id, u32 memparcel_hdl)
 		goto err_construct_relinquish_msg;
 
 	trace_send_relinquish_msg(relinquish_msg);
-	ret = mem_buf_msgq_send(mem_buf_msgq_hdl, relinquish_msg);
+	ret = mem_buf_msgq_send(msgqs[0], relinquish_msg);
 
 	/*
 	 * Free the buffer regardless of the return value as the hypervisor
@@ -866,10 +873,10 @@ static void __mem_buf_relinquish_mem(u32 obj_id, u32 memparcel_hdl)
 		pr_debug("%s: allocation relinquish message sent\n", __func__);
 
 	/* Wait for response */
-	mem_buf_txn_wait(mem_buf_msgq_hdl, txn);
+	mem_buf_txn_wait(msgqs[0], txn);
 
 err_construct_relinquish_msg:
-	mem_buf_destroy_txn(mem_buf_msgq_hdl, txn);
+	mem_buf_destroy_txn(msgqs[0], txn);
 }
 
 /*
@@ -1583,7 +1590,8 @@ int mem_buf_msgq_alloc(struct device *dev)
 	struct mem_buf_msgq_hdlr_info info = {
 		.msgq_ops = &msgq_ops,
 	};
-	int ret;
+	int ret, i, count;
+	const char *name;
 
 	/* No msgq if neither a consumer nor a supplier */
 	if (!(mem_buf_capability & MEM_BUF_CAP_DUAL))
@@ -1595,16 +1603,42 @@ int mem_buf_msgq_alloc(struct device *dev)
 		return -EINVAL;
 	}
 
-	mem_buf_msgq_hdl = mem_buf_msgq_register("trusted_vm", &info);
-	if (IS_ERR(mem_buf_msgq_hdl)) {
-		ret = PTR_ERR(mem_buf_msgq_hdl);
-		dev_err(dev, "Unable to register for mem-buf message queue\n");
+	count = of_property_count_strings(dev->of_node, "qcom,msgq-names");
+	if (count < 0) {
+		dev_err(dev, "Invalid qcom,msgq-names property %d\n", count);
+		ret = count;
 		goto err_msgq_register;
+	}
+
+	msgqs = kcalloc(count, sizeof(*msgqs), GFP_KERNEL);
+	if (!msgqs) {
+		ret = -ENOMEM;
+		goto err_msgq_register;
+	}
+	num_msgqs = count;
+
+	for (i = 0; i < num_msgqs; i++) {
+		ret = of_property_read_string_index(dev->of_node, "qcom,msgq-names", i, &name);
+		if (ret)
+			goto err_msgq_register;
+
+		msgqs[i] = mem_buf_msgq_register(name, &info);
+		if (IS_ERR(msgqs[i])) {
+			dev_err(dev, "Unable to register for mem-buf message queue %s\n", name);
+			ret = PTR_ERR(msgqs[i]);
+			goto err_msgq_register;
+		}
 	}
 
 	return 0;
 
 err_msgq_register:
+	for (i = 0; i < num_msgqs; i++)
+		if (!IS_ERR_OR_NULL(msgqs[i]))
+			mem_buf_msgq_unregister(msgqs[i]);
+	kfree(msgqs);
+	num_msgqs = 0;
+	msgqs = NULL;
 	destroy_workqueue(mem_buf_wq);
 	mem_buf_wq = NULL;
 	return ret;
@@ -1612,6 +1646,8 @@ err_msgq_register:
 
 void mem_buf_msgq_free(struct device *dev)
 {
+	int i;
+
 	if (!(mem_buf_capability & MEM_BUF_CAP_DUAL))
 		return;
 
@@ -1626,8 +1662,11 @@ void mem_buf_msgq_free(struct device *dev)
 		dev_err(mem_buf_dev,
 			"Removing mem-buf driver while memory is still lent\n");
 	mutex_unlock(&mem_buf_xfer_mem_list_lock);
-	mem_buf_msgq_unregister(mem_buf_msgq_hdl);
-	mem_buf_msgq_hdl = NULL;
+	for (i = 0; i < num_msgqs; i++)
+		mem_buf_msgq_unregister(msgqs[i]);
+	kfree(msgqs);
+	num_msgqs = 0;
+	msgqs = NULL;
 	destroy_workqueue(mem_buf_wq);
 	mem_buf_wq = NULL;
 }
