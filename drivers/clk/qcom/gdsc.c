@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015, 2017-2018, 2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -157,7 +158,7 @@ static int gdsc_toggle_logic(struct gdsc *sc, enum gdsc_status status,
 		 * unknown state
 		 */
 		udelay(TIMEOUT_US);
-		return 0;
+		goto out;
 	}
 
 	if (sc->gds_hw_ctrl) {
@@ -177,6 +178,7 @@ static int gdsc_toggle_logic(struct gdsc *sc, enum gdsc_status status,
 	ret = gdsc_poll_status(sc, status);
 	WARN(ret, "%s status stuck at 'o%s'", sc->pd.name, status ? "ff" : "n");
 
+out:
 	if (!ret && status == GDSC_OFF && sc->rsupply) {
 		ret = regulator_disable(sc->rsupply);
 		if (ret < 0)
@@ -324,6 +326,13 @@ static int gdsc_disable(struct generic_pm_domain *domain)
 
 	/* Turn off HW trigger mode if supported */
 	if (sc->flags & HW_CTRL) {
+		if (sc->flags & HW_CTRL_SKIP_DIS) {
+			if (sc->rsupply)
+				return regulator_disable(sc->rsupply);
+
+			return 0;
+		}
+
 		ret = gdsc_hwctrl(sc, false);
 		if (ret < 0)
 			return ret;

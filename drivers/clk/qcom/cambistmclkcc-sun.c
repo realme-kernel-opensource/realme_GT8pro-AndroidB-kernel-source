@@ -49,8 +49,8 @@ static const struct alpha_pll_config cam_bist_mclk_cc_pll0_config = {
 	.cal_l = 0x32,
 	.alpha = 0x0,
 	.config_ctl_val = 0x12000000,
-	.config_ctl_hi_val = 0x008b0263,
-	.config_ctl_hi1_val = 0x00000237,
+	.config_ctl_hi_val = 0x00890263,
+	.config_ctl_hi1_val = 0x1c804237,
 	.config_ctl_hi2_val = 0x00000000,
 };
 

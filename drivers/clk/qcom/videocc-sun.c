@@ -23,6 +23,7 @@
 #include "clk-regmap-divider.h"
 #include "clk-regmap-mux.h"
 #include "common.h"
+#include "gdsc.h"
 #include "reset.h"
 #include "vdd-level.h"
 
@@ -350,6 +351,32 @@ static struct clk_branch video_cc_mvs0c_shift_clk = {
 	},
 };
 
+static struct gdsc video_cc_mvs0c_gdsc = {
+	.gdscr = 0x8034,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x6,
+	.pd = {
+		.name = "video_cc_mvs0c_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_mm_mxc_voter",
+};
+
+static struct gdsc video_cc_mvs0_gdsc = {
+	.gdscr = 0x8068,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x6,
+	.pd = {
+		.name = "video_cc_mvs0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.parent = &video_cc_mvs0c_gdsc.pd,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL,
+};
+
 static struct clk_regmap *video_cc_sun_clocks[] = {
 	[VIDEO_CC_AHB_CLK_SRC] = &video_cc_ahb_clk_src.clkr,
 	[VIDEO_CC_MVS0_CLK] = &video_cc_mvs0_clk.clkr,
@@ -364,6 +391,11 @@ static struct clk_regmap *video_cc_sun_clocks[] = {
 	[VIDEO_CC_PLL0] = &video_cc_pll0.clkr,
 	[VIDEO_CC_SLEEP_CLK_SRC] = &video_cc_sleep_clk_src.clkr,
 	[VIDEO_CC_XO_CLK_SRC] = &video_cc_xo_clk_src.clkr,
+};
+
+static struct gdsc *video_cc_sun_gdscs[] = {
+	[VIDEO_CC_MVS0_GDSC] = &video_cc_mvs0_gdsc,
+	[VIDEO_CC_MVS0C_GDSC] = &video_cc_mvs0c_gdsc,
 };
 
 static const struct qcom_reset_map video_cc_sun_resets[] = {
@@ -392,13 +424,41 @@ static struct qcom_cc_desc video_cc_sun_desc = {
 	.num_resets = ARRAY_SIZE(video_cc_sun_resets),
 	.clk_regulators = video_cc_sun_regulators,
 	.num_clk_regulators = ARRAY_SIZE(video_cc_sun_regulators),
+	.gdscs = video_cc_sun_gdscs,
+	.num_gdscs = ARRAY_SIZE(video_cc_sun_gdscs),
 };
 
 static const struct of_device_id video_cc_sun_match_table[] = {
 	{ .compatible = "qcom,sun-videocc" },
+	{ .compatible = "qcom,sun-videocc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, video_cc_sun_match_table);
+
+static void video_cc_sun_fixup_sunv1(struct regmap *regmap)
+{
+	/*
+	 * HW defaults this divider to div-2, but set it to div-3 so the mvs0c
+	 * and mvs0 clocks have the same rates. Needed to fix infrequent video
+	 * hangs on v1.
+	 */
+	regmap_write(regmap, video_cc_mvs0c_div2_div_clk_src.reg, 2);
+}
+
+static int video_cc_sun_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,sun-videocc"))
+		video_cc_sun_fixup_sunv1(regmap);
+
+	return 0;
+}
 
 static int video_cc_sun_probe(struct platform_device *pdev)
 {
@@ -423,6 +483,10 @@ static int video_cc_sun_probe(struct platform_device *pdev)
 	/* Change DLY_ACCU_RED_SHIFTER_DONE to 0xF for mvs0, mvs0c */
 	regmap_update_bits(regmap, 0x8074, dly_accu_mask, dly_accu_mask);
 	regmap_update_bits(regmap, 0x8040, dly_accu_mask, dly_accu_mask);
+
+	ret = video_cc_sun_fixup(pdev, regmap);
+	if (ret)
+		return ret;
 
 	/*
 	 * Keep clocks always enabled:

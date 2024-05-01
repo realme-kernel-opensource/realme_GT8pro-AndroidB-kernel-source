@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -38,6 +38,7 @@ static struct clk_vdd_class *disp_cc_sun_regulators[] = {
 
 static struct clk_crm disp_crm = {
 	.name = "disp_crm",
+	.num_perf_ol = 10,
 	.regs = {
 		.cfg_rcgr = 0xd8,
 		.l_val = 0xdc,
@@ -108,7 +109,7 @@ static struct clk_alpha_pll disp_cc_pll0 = {
 			.vdd_class = &vdd_mm,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 615000000,
+				[VDD_LOWER_D1] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -147,7 +148,7 @@ static struct clk_alpha_pll disp_cc_pll1 = {
 			.vdd_class = &vdd_mm,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 615000000,
+				[VDD_LOWER_D1] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -160,11 +161,11 @@ static const struct alpha_pll_config disp_cc_pll2_config = {
 	.l = 0x493,
 	.cal_l = 0x493,
 	.alpha = 0x0,
-	.config_ctl_val = 0x60000f6a,
+	.config_ctl_val = 0x60000f68,
 	.config_ctl_hi_val = 0x0001c808,
 	.config_ctl_hi1_val = 0x00000000,
 	.config_ctl_hi2_val = 0x040082f4,
-	.test_ctl_val = 0x00000000,
+	.test_ctl_val = 0x00008000,
 	.test_ctl_hi_val = 0x0080c496,
 	.test_ctl_hi1_val = 0x40100180,
 	.test_ctl_hi2_val = 0x441001bc,
