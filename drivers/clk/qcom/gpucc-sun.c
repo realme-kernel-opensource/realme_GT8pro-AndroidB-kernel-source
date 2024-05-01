@@ -10,9 +10,11 @@
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/of.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
 #include <dt-bindings/clock/qcom,gpucc-sun.h>
+#include <dt-bindings/clock/qcom,gxclkctl-sun.h>
 
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
@@ -22,6 +24,7 @@
 #include "clk-regmap-divider.h"
 #include "clk-regmap-mux.h"
 #include "common.h"
+#include "gdsc.h"
 #include "reset.h"
 #include "vdd-level.h"
 
@@ -495,6 +498,34 @@ static struct clk_branch gpu_cc_memnoc_gfx_clk = {
 	},
 };
 
+static struct gdsc gpu_cc_cx_gdsc = {
+	.gdscr = 0x9080,
+	.gds_hw_ctrl = 0x9094,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "gpu_cc_cx_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = RETAIN_FF_ENABLE | VOTABLE,
+	.supply = "vdd_cx",
+};
+
+static struct gdsc gx_clkctl_gx_gdsc = {
+	.gdscr = 0x0,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "gx_clkctl_gx_gdsc",
+		.power_on = gdsc_gx_do_nothing_enable,
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_gx",
+};
+
 static struct clk_regmap *gpu_cc_sun_clocks[] = {
 	[GPU_CC_AHB_CLK] = &gpu_cc_ahb_clk.clkr,
 	[GPU_CC_CX_ACCU_SHIFT_CLK] = &gpu_cc_cx_accu_shift_clk.clkr,
@@ -520,6 +551,14 @@ static struct clk_regmap *gpu_cc_sun_clocks[] = {
 	[GPU_CC_PLL0_OUT_EVEN] = &gpu_cc_pll0_out_even.clkr,
 };
 
+static struct gdsc *gpu_cc_sun_gdscs[] = {
+	[GPU_CC_CX_GDSC] = &gpu_cc_cx_gdsc,
+};
+
+static struct gdsc *gx_clkctl_gdscs[] = {
+	[GX_CLKCTL_GX_GDSC] = &gx_clkctl_gx_gdsc,
+};
+
 static const struct qcom_reset_map gpu_cc_sun_resets[] = {
 	[GPUCC_GPU_CC_CB_BCR] = { 0x93a0 },
 	[GPUCC_GPU_CC_CX_BCR] = { 0x907c },
@@ -538,6 +577,14 @@ static const struct regmap_config gpu_cc_sun_regmap_config = {
 	.fast_io = true,
 };
 
+static const struct regmap_config gx_clkctl_regmap_config = {
+	.reg_bits = 32,
+	.reg_stride = 4,
+	.val_bits = 32,
+	.max_register = 0x8,
+	.fast_io = true,
+};
+
 static const struct qcom_cc_desc gpu_cc_sun_desc = {
 	.config = &gpu_cc_sun_regmap_config,
 	.clks = gpu_cc_sun_clocks,
@@ -546,6 +593,14 @@ static const struct qcom_cc_desc gpu_cc_sun_desc = {
 	.num_resets = ARRAY_SIZE(gpu_cc_sun_resets),
 	.clk_regulators = gpu_cc_sun_regulators,
 	.num_clk_regulators = ARRAY_SIZE(gpu_cc_sun_regulators),
+	.gdscs = gpu_cc_sun_gdscs,
+	.num_gdscs = ARRAY_SIZE(gpu_cc_sun_gdscs),
+};
+
+static const struct qcom_cc_desc gx_clkctl_sun_desc = {
+	.config = &gx_clkctl_regmap_config,
+	.gdscs = gx_clkctl_gdscs,
+	.num_gdscs = ARRAY_SIZE(gx_clkctl_gdscs),
 };
 
 static const struct of_device_id gpu_cc_sun_match_table[] = {
@@ -587,6 +642,8 @@ static int gpu_cc_sun_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	platform_set_drvdata(pdev, regmap);
+
 	dev_info(&pdev->dev, "Registered GPU CC clocks\n");
 
 	return ret;
@@ -597,23 +654,82 @@ static void gpu_cc_sun_sync_state(struct device *dev)
 	qcom_cc_sync_state(dev, &gpu_cc_sun_desc);
 }
 
+static int gpu_cc_sun_resume(struct device *dev)
+{
+	struct regmap *regmap = dev_get_drvdata(dev);
+
+	/* Enable gpu_cc_gx_ahb_ff_clk */
+	regmap_update_bits(regmap, 0x9064, BIT(0), BIT(0));
+
+	return 0;
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(gpu_cc_sun_pm_ops, NULL, gpu_cc_sun_resume);
+
 static struct platform_driver gpu_cc_sun_driver = {
 	.probe = gpu_cc_sun_probe,
 	.driver = {
 		.name = "gpu_cc-sun",
 		.of_match_table = gpu_cc_sun_match_table,
 		.sync_state = gpu_cc_sun_sync_state,
+		.pm = &gpu_cc_sun_pm_ops,
+	},
+};
+
+static const struct of_device_id gx_clkctl_sun_match_table[] = {
+	{ .compatible = "qcom,sun-gx_clkctl" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, gx_clkctl_sun_match_table);
+
+static int gx_clkctl_sun_probe(struct platform_device *pdev)
+{
+
+	struct regmap *regmap;
+	int ret;
+
+	pm_runtime_enable(&pdev->dev);
+
+	ret = pm_runtime_resume_and_get(&pdev->dev);
+	if (ret)
+		return ret;
+
+	regmap = qcom_cc_map(pdev, &gx_clkctl_sun_desc);
+	if (IS_ERR(regmap)) {
+		pm_runtime_put(&pdev->dev);
+		return PTR_ERR(regmap);
+	}
+
+	ret = qcom_cc_really_probe(pdev, &gx_clkctl_sun_desc, regmap);
+
+	pm_runtime_put(&pdev->dev);
+
+	return ret;
+}
+
+static struct platform_driver gx_clkctl_sun_driver = {
+	.probe = gx_clkctl_sun_probe,
+	.driver = {
+		.name = "gx_clkctl-sun",
+		.of_match_table = gx_clkctl_sun_match_table,
 	},
 };
 
 static int __init gpu_cc_sun_init(void)
 {
-	return platform_driver_register(&gpu_cc_sun_driver);
+	int ret;
+
+	ret = platform_driver_register(&gpu_cc_sun_driver);
+	if (ret)
+		return ret;
+
+	return platform_driver_register(&gx_clkctl_sun_driver);
 }
 subsys_initcall(gpu_cc_sun_init);
 
 static void __exit gpu_cc_sun_exit(void)
 {
+	platform_driver_unregister(&gx_clkctl_sun_driver);
 	platform_driver_unregister(&gpu_cc_sun_driver);
 }
 module_exit(gpu_cc_sun_exit);

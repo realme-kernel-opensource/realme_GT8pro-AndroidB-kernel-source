@@ -141,11 +141,18 @@ static int gdsc_toggle_logic(struct gdsc *sc, enum gdsc_status status,
 		bool wait)
 {
 	int ret;
+	u32 val;
 
 	if (status == GDSC_ON && sc->rsupply) {
 		ret = regulator_enable(sc->rsupply);
 		if (ret < 0)
 			return ret;
+	}
+
+	regmap_read(sc->regmap, sc->gdscr, &val);
+	if (val & HW_CONTROL_MASK) {
+		pr_debug("%s in HW control mode\n", sc->pd.name);
+		return 0;
 	}
 
 	ret = gdsc_update_collapse_bit(sc, status == GDSC_OFF);
@@ -566,7 +573,15 @@ void gdsc_unregister(struct gdsc_desc *desc)
  */
 int gdsc_gx_do_nothing_enable(struct generic_pm_domain *domain)
 {
-	/* Do nothing but give genpd the impression that we were successful */
-	return 0;
+	struct gdsc *sc = domain_to_gdsc(domain);
+	int ret = 0;
+
+	/* Enable the parent supply, when controlled through the regulator framework. */
+	if (sc->rsupply)
+		ret = regulator_enable(sc->rsupply);
+
+	/* Do nothing with the GDSC itself */
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(gdsc_gx_do_nothing_enable);
