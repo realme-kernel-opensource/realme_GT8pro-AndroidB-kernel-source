@@ -48,6 +48,7 @@ static LIST_HEAD(mem_buf_xfer_mem_list);
  * thread, so as to not block the message queue receiving thread.
  */
 struct mem_buf_rmt_msg {
+	void *msgq;
 	void *msg;
 	size_t msg_size;
 	struct work_struct work;
@@ -656,6 +657,7 @@ static void mem_buf_alloc_req_work(struct work_struct *work)
 {
 	struct mem_buf_rmt_msg *rmt_msg = to_rmt_msg(work);
 	void *req_msg = rmt_msg->msg;
+	void *msgq = rmt_msg->msgq;
 	void *resp_msg;
 	struct mem_buf_xfer_mem *xfer_mem;
 	gh_memparcel_handle_t hdl = 0;
@@ -683,7 +685,7 @@ static void mem_buf_alloc_req_work(struct work_struct *work)
 		goto out_err;
 
 	trace_send_alloc_resp_msg(resp_msg);
-	ret = mem_buf_msgq_send(mem_buf_msgq_hdl, resp_msg);
+	ret = mem_buf_msgq_send(msgq, resp_msg);
 	/*
 	 * Free the buffer regardless of the return value as the hypervisor
 	 * would have consumed the data in the case of a success.
@@ -734,7 +736,7 @@ static void mem_buf_relinquish_work(struct work_struct *work)
 	resp_msg = mem_buf_construct_relinquish_resp(relinquish_msg);
 	if (!IS_ERR(resp_msg)) {
 		trace_send_relinquish_resp_msg(resp_msg);
-		mem_buf_msgq_send(mem_buf_msgq_hdl, resp_msg);
+		mem_buf_msgq_send(rmt_msg->msgq, resp_msg);
 		kfree(resp_msg);
 	}
 
@@ -742,7 +744,7 @@ static void mem_buf_relinquish_work(struct work_struct *work)
 	kfree(rmt_msg);
 }
 
-static int mem_buf_alloc_resp_hdlr(void *hdlr_data, void *msg_buf, size_t size, void *out_buf)
+static int mem_buf_alloc_resp_hdlr(void *msgq, void *msg_buf, size_t size, void *out_buf)
 {
 	struct mem_buf_alloc_resp *alloc_resp = msg_buf;
 	struct mem_buf_desc *membuf = out_buf;
@@ -764,7 +766,7 @@ static int mem_buf_alloc_resp_hdlr(void *hdlr_data, void *msg_buf, size_t size, 
 }
 
 /* Functions invoked when treating allocation requests to other VMs. */
-static void mem_buf_alloc_req_hdlr(void *hdlr_data, void *_buf, size_t size)
+static void mem_buf_alloc_req_hdlr(void *msgq, void *_buf, size_t size)
 {
 	struct mem_buf_rmt_msg *rmt_msg;
 	void *buf;
@@ -782,13 +784,14 @@ static void mem_buf_alloc_req_hdlr(void *hdlr_data, void *_buf, size_t size)
 		return;
 	}
 
+	rmt_msg->msgq = msgq;
 	rmt_msg->msg = buf;
 	rmt_msg->msg_size = size;
 	INIT_WORK(&rmt_msg->work, mem_buf_alloc_req_work);
 	queue_work(mem_buf_wq, &rmt_msg->work);
 }
 
-static void mem_buf_relinquish_hdlr(void *hdlr_data, void *_buf, size_t size)
+static void mem_buf_relinquish_hdlr(void *msgq, void *_buf, size_t size)
 {
 	struct mem_buf_rmt_msg *rmt_msg;
 	void *buf;
@@ -806,6 +809,7 @@ static void mem_buf_relinquish_hdlr(void *hdlr_data, void *_buf, size_t size)
 		return;
 	}
 
+	rmt_msg->msgq = msgq;
 	rmt_msg->msg = buf;
 	rmt_msg->msg_size = size;
 	INIT_WORK(&rmt_msg->work, mem_buf_relinquish_work);
@@ -927,7 +931,7 @@ err_free_sgt:
 	kfree(sgt);
 }
 
-static void mem_buf_relinquish_memparcel_hdl(void *hdlr_data, u32 obj_id, gh_memparcel_handle_t hdl)
+static void mem_buf_relinquish_memparcel_hdl(void *msgq, u32 obj_id, gh_memparcel_handle_t hdl)
 {
 	__mem_buf_relinquish_mem(obj_id, hdl);
 }

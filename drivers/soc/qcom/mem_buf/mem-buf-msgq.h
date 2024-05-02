@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef MEM_BUF_MSGQ_H
@@ -114,10 +114,10 @@ struct mem_buf_alloc_relinquish {
  *                            still needs to be relinquished.
  */
 struct mem_buf_msgq_ops {
-	void (*alloc_req_hdlr)(void *hdlr_data, void *msg, size_t size);
-	int (*alloc_resp_hdlr)(void *hdlr_data, void *msg, size_t size, void *resp_buf);
-	void (*relinquish_hdlr)(void *hdlr_data, void *msg, size_t size);
-	void (*relinquish_memparcel_hdl)(void *hdlr_data, u32 obj_id,
+	void (*alloc_req_hdlr)(void *msgq_desc, void *msg, size_t size);
+	int (*alloc_resp_hdlr)(void *msgq_desc, void *msg, size_t size, void *resp_buf);
+	void (*relinquish_hdlr)(void *msgq_desc, void *msg, size_t size);
+	void (*relinquish_memparcel_hdl)(void *msgq_desc, u32 obj_id,
 					 gh_memparcel_handle_t memparcel_hdl);
 };
 
