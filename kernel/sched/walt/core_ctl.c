@@ -1298,7 +1298,7 @@ static bool core_ctl_check_masks_set(void)
 /* is the system in a single-big-thread case? */
 static inline bool is_sbt(bool prev_is_sbt, int prev_is_sbt_windows)
 {
-	struct cluster_data *cluster = &cluster_state[MAX_CLUSTERS - 1];
+	struct cluster_data *cluster = &cluster_state[num_sched_clusters - 1];
 	bool ret = false;
 
 	if (!sysctl_sched_sbt_enable)
