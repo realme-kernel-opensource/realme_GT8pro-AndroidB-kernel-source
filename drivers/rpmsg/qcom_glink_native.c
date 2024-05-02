@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2016-2017, Linaro Ltd
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/idr.h>
@@ -1018,7 +1018,7 @@ static void qcom_glink_handle_intent_req(struct qcom_glink *glink,
 
 	spin_lock_irqsave(&channel->intent_lock, flags);
 	idr_for_each_entry(&channel->liids, tmp, iid) {
-		if (tmp->size >= size && tmp->reuse) {
+		if (size && tmp->size >= size && tmp->reuse) {
 			intent = tmp;
 			break;
 		}
