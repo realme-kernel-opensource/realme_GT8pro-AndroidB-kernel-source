@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -575,7 +575,6 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 err_deregister_provider:
 	icc_provider_deregister(provider);
 err_remove_nodes:
-	clk_bulk_put_all(qp->num_clks, qp->clks);
 	icc_nodes_remove(provider);
 
 	return ret;
