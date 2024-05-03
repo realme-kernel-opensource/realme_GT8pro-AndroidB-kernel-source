@@ -1194,6 +1194,36 @@ static void disable_audio_stream(struct snd_usb_substream *subs)
 	snd_usb_autosuspend(chip);
 }
 
+static void _usb_qmi_snd_pcm_hw_param_any(struct snd_pcm_hw_params *params,
+				  snd_pcm_hw_param_t var)
+{
+	if (hw_is_mask(var)) {
+		snd_mask_any(hw_param_mask(params, var));
+		params->cmask |= 1 << var;
+		params->rmask |= 1 << var;
+		return;
+	}
+	if (hw_is_interval(var)) {
+		snd_interval_any(hw_param_interval(params, var));
+		params->cmask |= 1 << var;
+		params->rmask |= 1 << var;
+		return;
+	}
+	snd_BUG();
+}
+
+static void _usb_qmi_snd_pcm_hw_params_any(struct snd_pcm_hw_params *params)
+{
+	unsigned int k;
+
+	memset(params, 0, sizeof(*params));
+	for (k = SNDRV_PCM_HW_PARAM_FIRST_MASK; k <= SNDRV_PCM_HW_PARAM_LAST_MASK; k++)
+		_usb_qmi_snd_pcm_hw_param_any(params, k);
+	for (k = SNDRV_PCM_HW_PARAM_FIRST_INTERVAL; k <= SNDRV_PCM_HW_PARAM_LAST_INTERVAL; k++)
+		_usb_qmi_snd_pcm_hw_param_any(params, k);
+	params->info = ~0U;
+}
+
 static int enable_audio_stream(struct snd_usb_substream *subs,
 				snd_pcm_format_t pcm_format,
 				unsigned int channels, unsigned int cur_rate,
@@ -1205,7 +1235,7 @@ static int enable_audio_stream(struct snd_usb_substream *subs,
 	struct snd_interval *i;
 	int ret;
 
-	_snd_pcm_hw_params_any(&params);
+	_usb_qmi_snd_pcm_hw_params_any(&params);
 
 	m = hw_param_mask(&params, SNDRV_PCM_HW_PARAM_FORMAT);
 	snd_mask_leave(m, pcm_format);
