@@ -21,7 +21,7 @@ static int one_hundred = 100;
 static int one_thousand = 1000;
 static int one_thousand_twenty_four = 1024;
 static int two_thousand = 2000;
-static int walt_max_cpus = WALT_NR_CPUS;
+static int max_nr_pipeline = MAX_NR_PIPELINE;
 
 /*
  * CFS task prio range is [100 ... 139]
@@ -92,6 +92,7 @@ unsigned int high_perf_cluster_freq_cap[MAX_CLUSTERS];
 unsigned int sysctl_sched_pipeline_cpus;
 unsigned int fmax_cap[MAX_FREQ_CAP][MAX_CLUSTERS];
 unsigned int sysctl_sched_pipeline_special;
+unsigned int sysctl_sched_pipeline_util_thres;
 
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
@@ -1413,7 +1414,7 @@ static struct ctl_table walt_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_douintvec_minmax,
 		.extra1		= SYSCTL_ZERO,
-		.extra2		= &walt_max_cpus,
+		.extra2		= &max_nr_pipeline,
 	},
 	{
 		.procname	= "sched_sbt_enable",
@@ -1487,6 +1488,15 @@ static struct ctl_table walt_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= sched_pipeline_special_handler,
+	},
+	{
+		.procname	= "sched_pipeline_util_thres",
+		.data		= &sysctl_sched_pipeline_util_thres,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
 	},
 	{ }
 };

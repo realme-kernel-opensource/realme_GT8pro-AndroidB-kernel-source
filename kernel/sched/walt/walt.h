@@ -1338,4 +1338,6 @@ extern unsigned int sysctl_sched_pipeline_special;
 extern struct task_struct *pipeline_special_task;
 extern void remove_special_task(void);
 extern void set_special_task(struct task_struct *pipeline_special_local);
+extern unsigned int sysctl_sched_pipeline_util_thres;
+#define MAX_NR_PIPELINE 3
 #endif /* _WALT_H */
