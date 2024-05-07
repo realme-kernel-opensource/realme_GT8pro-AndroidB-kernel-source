@@ -8,7 +8,7 @@
 #ifndef __QCOM_SYSMON_SUBSYSTEM_STATS_H__
 #define __QCOM_SYSMON_SUBSYSTEM_STATS_H__
 /* Maximum number of clock levels in power stats */
-#define SYSMON_POWER_STATS_MAX_CLK_LEVELS 16
+#define SYSMON_POWER_STATS_MAX_CLK_LEVELS 32
 
 /* Error Codes */
 /* Error code when DSP PMU Counters are unavailable/overridden */
