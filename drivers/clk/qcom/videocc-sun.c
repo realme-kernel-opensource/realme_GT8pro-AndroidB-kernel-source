@@ -463,6 +463,8 @@ static int video_cc_sun_fixup(struct platform_device *pdev, struct regmap *regma
 
 	if (!strcmp(compat, "qcom,sun-videocc"))
 		video_cc_sun_fixup_sunv1(regmap);
+	else
+		regmap_update_bits(regmap, 0x9f24, BIT(0), BIT(0));
 
 	return 0;
 }
