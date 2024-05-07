@@ -495,6 +495,29 @@ static unsigned int waltgov_next_freq_shared(struct waltgov_cpu *wg_cpu, u64 tim
 	return get_next_freq(wg_policy, util, max, wg_cpu, time);
 }
 
+static void waltgov_update_smart_freq(struct waltgov_callback *cb, u64 time,
+				unsigned int flags)
+{
+	struct waltgov_cpu *wg_cpu = container_of(cb, struct waltgov_cpu, cb);
+	struct waltgov_policy *wg_policy = wg_cpu->wg_policy;
+	unsigned int next_f;
+
+	raw_spin_lock(&wg_policy->update_lock);
+
+	next_f = waltgov_next_freq_shared(wg_cpu, time);
+
+	if (!next_f)
+		goto out;
+
+	if (wg_policy->policy->fast_switch_enabled)
+		waltgov_fast_switch(wg_policy, time, next_f);
+	else
+		waltgov_deferred_update(wg_policy, time, next_f);
+
+out:
+	raw_spin_unlock(&wg_policy->update_lock);
+}
+
 static void waltgov_update_freq(struct waltgov_callback *cb, u64 time,
 				unsigned int flags)
 {
@@ -502,6 +525,11 @@ static void waltgov_update_freq(struct waltgov_callback *cb, u64 time,
 	struct waltgov_policy *wg_policy = wg_cpu->wg_policy;
 	unsigned long hs_util, rtg_boost_util;
 	unsigned int next_f;
+
+	if (flags & WALT_CPUFREQ_SMART_FREQ_BIT) {
+		waltgov_update_smart_freq(cb, time, flags);
+		return;
+	}
 
 	if (!wg_policy->tunables->pl && flags & WALT_CPUFREQ_PL_BIT)
 		return;

@@ -452,6 +452,7 @@ extern cpumask_t cpus_for_pipeline;
 #define WALT_CPUFREQ_ASYM_FIXUP_BIT		BIT(6)
 #define WALT_CPUFREQ_SHARED_RAIL_BIT		BIT(7)
 #define WALT_CPUFREQ_TRAILBLAZER_BIT		BIT(8)
+#define WALT_CPUFREQ_SMART_FREQ_BIT		BIT(9)
 
 /* CPUFREQ_REASON_LOAD is unused. If reasons value is 0, this indicates
  * that no extra features were enforcd, and the frequency alligns with

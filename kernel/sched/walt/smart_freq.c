@@ -60,6 +60,7 @@ static void smart_freq_update_one_cluster(struct walt_sched_cluster *cluster,
 		smart_freq_info->legacy_reason_config[NO_REASON_SMART_FREQ].freq_allowed;
 	int max_reason, i;
 	unsigned long old_freq_cap = freq_cap[SMART_FREQ][cluster->id];
+	struct rq *rq;
 
 	for (i = 0; i < LEGACY_SMART_FREQ; i++) {
 		current_reason = current_reasons & BIT(i);
@@ -107,7 +108,12 @@ static void smart_freq_update_one_cluster(struct walt_sched_cluster *cluster,
 
 	update_smart_freq_capacities_one_cluster(cluster);
 
-	walt_irq_work_queue(&walt_cpufreq_irq_work);
+	rq = cpu_rq(cpumask_first(&cluster->cpus));
+	/*
+	 * cpufreq smart fmax doesn't call get_util for the cpu, hence
+	 * invoking callback without rq lock is safe.
+	 */
+	waltgov_run_callback(rq, WALT_CPUFREQ_SMART_FREQ_BIT);
 }
 
 #define UNCAP_THRES		300000000
