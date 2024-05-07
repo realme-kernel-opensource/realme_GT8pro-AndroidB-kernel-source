@@ -1422,6 +1422,11 @@
   gro_cells_destroy
   gro_cells_init
   gro_cells_receive
+  gunyah_rm_call
+  gunyah_rm_notifier_register
+  gunyah_rm_notifier_unregister
+  gunyah_rm_register_platform_ops
+  gunyah_rm_unregister_platform_ops
   h4_recv_buf
   handle_bad_irq
   handle_edge_irq
