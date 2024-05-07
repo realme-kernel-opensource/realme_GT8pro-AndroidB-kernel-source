@@ -770,10 +770,10 @@ TRACE_EVENT(waltgov_next_freq,
 	    TP_PROTO(struct cpufreq_policy *policy, unsigned long util, unsigned long max,
 		     unsigned int raw_freq, unsigned int freq, unsigned int cached_raw_freq,
 		     bool need_freq_update, bool thermal_isolated, unsigned int driving_cpu,
-		     unsigned int reason, unsigned int final_freq),
+		     unsigned int reason, unsigned int ipc_smart_freq, unsigned int final_freq),
 	    TP_ARGS(policy, util, max, raw_freq, freq,
 		    cached_raw_freq, need_freq_update, thermal_isolated, driving_cpu, reason,
-		    final_freq),
+		    ipc_smart_freq, final_freq),
 	    TP_STRUCT__entry(
 		    __field(unsigned int, cpu)
 		    __field(unsigned long, util)
@@ -789,6 +789,7 @@ TRACE_EVENT(waltgov_next_freq,
 		    __field(unsigned int, driving_cpu)
 		    __field(unsigned int, reason)
 		    __field(unsigned int, smart_freq)
+		    __field(unsigned int, ipc_smart_freq)
 		    __field(unsigned int, final_freq)
 	    ),
 	    TP_fast_assign(
@@ -807,9 +808,10 @@ TRACE_EVENT(waltgov_next_freq,
 		    __entry->reason		= reason;
 		    __entry->smart_freq		=
 				freq_cap[SMART_FREQ][cpu_cluster(policy->cpu)->id];
+		    __entry->ipc_smart_freq	= ipc_smart_freq;
 		    __entry->final_freq		= final_freq;
 	    ),
-	    TP_printk("cpu=%u util=%lu max=%lu raw_freq=%u freq=%u policy_min_freq=%u policy_max_freq=%u cached_raw_freq=%u need_update=%d thermal_isolated=%d rt_util=%u driv_cpu=%u reason=0x%x smart_freq=%u final_freq=%u",
+	    TP_printk("cpu=%u util=%lu max=%lu raw_freq=%u freq=%u policy_min_freq=%u policy_max_freq=%u cached_raw_freq=%u need_update=%d thermal_isolated=%d rt_util=%u driv_cpu=%u reason=0x%x smart_freq=%u ipc_smart_freq=%u final_freq=%u",
 		      __entry->cpu,
 		      __entry->util,
 		      __entry->max,
@@ -824,6 +826,7 @@ TRACE_EVENT(waltgov_next_freq,
 		      __entry->driving_cpu,
 		      __entry->reason,
 		      __entry->smart_freq,
+		      __entry->ipc_smart_freq,
 		      __entry->final_freq)
 );
 
@@ -1643,6 +1646,72 @@ TRACE_EVENT(sched_freq_uncap,
 	TP_printk("cluster=%d nr_big=%d wakeup_ctr_sum=%d cuuret_reasons=0x%x cluster_active_reason=0x%x max_cap=%lu max_reason=0x%x",
 		  __entry->id, __entry->nr_big, __entry->wakeup_ctr_sum, __entry->reasons,
 		  __entry->cluster_active_reason, __entry->max_cap, __entry->max_reason)
+);
+
+TRACE_EVENT(ipc_freq,
+
+	TP_PROTO(int id, int cpu, int index, unsigned int freq, u64 time, u64 deactivate_ns,
+		 int curr_cpu, unsigned long ipc_cnt),
+
+	TP_ARGS(id, cpu, index, freq, time, deactivate_ns, curr_cpu, ipc_cnt),
+
+	TP_STRUCT__entry(
+		__field(int, id)
+		__field(int, cpu)
+		__field(int, index)
+		__field(unsigned int, freq)
+		__field(u64, time)
+		__field(u64, deactivate_ns)
+		__field(int, curr_cpu)
+		__field(unsigned long, ipc_cnt)
+	),
+
+	TP_fast_assign(
+		__entry->id = id;
+		__entry->cpu = cpu;
+		__entry->index = index;
+		__entry->freq = freq;
+		__entry->time = time;
+		__entry->deactivate_ns = deactivate_ns;
+		__entry->curr_cpu = curr_cpu;
+		__entry->ipc_cnt = ipc_cnt;
+	),
+
+	TP_printk("cluster=%d winning_cpu=%d winning_index=%d winning_freq=%u curr_time=%llu dactivate_time=%llu current_cpu=%d current_cpu_ipc_count=%lu",
+		  __entry->id, __entry->cpu, __entry->index, __entry->freq,
+		  __entry->time, __entry->deactivate_ns, __entry->curr_cpu, __entry->ipc_cnt)
+);
+
+TRACE_EVENT(ipc_update,
+
+	TP_PROTO(int cpu, unsigned long cycle_cnt, unsigned long intr_cnt, unsigned long ipc_cnt,
+		 unsigned long last_ipc_update, u64 deactivate_ns, u64 now),
+
+	TP_ARGS(cpu, cycle_cnt, intr_cnt, ipc_cnt, last_ipc_update, deactivate_ns, now),
+
+	TP_STRUCT__entry(
+		__field(int, cpu)
+		__field(unsigned long, cycle_cnt)
+		__field(unsigned long, intr_cnt)
+		__field(unsigned long, ipc_cnt)
+		__field(unsigned long, last_ipc_update)
+		__field(u64, deactivate_ns)
+		__field(u64, now)
+	),
+
+	TP_fast_assign(
+		__entry->cpu = cpu;
+		__entry->cycle_cnt = cycle_cnt;
+		__entry->intr_cnt = intr_cnt;
+		__entry->ipc_cnt = ipc_cnt;
+		__entry->last_ipc_update = last_ipc_update;
+		__entry->deactivate_ns = deactivate_ns;
+		__entry->now = now;
+	),
+
+	TP_printk("cpu=%d cycle_cnt=%lu intr_cnt=%lu ipc_count=%lu last_ipc_update=%lu ipc_deactivate_ns=%llu now=%llu",
+		  __entry->cpu, __entry->cycle_cnt, __entry->intr_cnt,  __entry->ipc_cnt,
+		  __entry->last_ipc_update, __entry->deactivate_ns, __entry->now)
 );
 
 TRACE_EVENT(sched_update_updown_migrate_values,

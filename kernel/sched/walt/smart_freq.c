@@ -3,28 +3,64 @@
  * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/tick.h>
 #include "walt.h"
 #include "trace.h"
 
 static bool smart_freq_init_done;
+/* return highest ipc of the cluster */
+unsigned int get_cluster_ipc_level_freq(int curr_cpu, u64 time)
+{
+	int cpu, winning_cpu, cpu_ipc_level = 0, index = 0;
+	struct walt_sched_cluster *cluster = cpu_cluster(curr_cpu);
+	struct smart_freq_cluster_info *smart_freq_info = cluster->smart_freq_info;
+
+	if (!smart_freq_init_done)
+		return 0;
+
+	for_each_cpu(cpu, &cluster->cpus) {
+		cpu_ipc_level = per_cpu(ipc_level, cpu);
+
+		if ((time - per_cpu(last_ipc_update, cpu)) > 7999999ULL)
+			cpu_ipc_level = 0;
+
+		if (cpu_ipc_level >= index) {
+			winning_cpu = cpu;
+			index = cpu_ipc_level;
+		}
+	}
+
+	smart_freq_info->cluster_ipc_level = index;
+
+	trace_ipc_freq(cluster->id, winning_cpu, index,
+		smart_freq_info->ipc_reason_config[index].freq_allowed,
+		time, per_cpu(ipc_deactivate_ns, winning_cpu), curr_cpu,
+		per_cpu(ipc_cnt, curr_cpu));
+
+	return smart_freq_info->ipc_reason_config[index].freq_allowed;
+}
+
 static inline bool has_internal_freq_limit_changed(struct walt_sched_cluster *cluster)
 {
-	unsigned int internal_freq;
+	unsigned int internal_freq, ipc_freq;
 	int i;
+	struct smart_freq_cluster_info *smci = cluster->smart_freq_info;
 
 	internal_freq = cluster->walt_internal_freq_limit;
 	cluster->walt_internal_freq_limit = cluster->max_freq;
 
-	if (likely(!waltgov_disabled)) {
-		for (i = 0; i < MAX_FREQ_CAP; i++)
-			cluster->walt_internal_freq_limit = min(freq_cap[i][cluster->id],
-					     cluster->walt_internal_freq_limit);
-	}
+	for (i = 0; i < MAX_FREQ_CAP; i++)
+		cluster->walt_internal_freq_limit = min(freq_cap[i][cluster->id],
+				     cluster->walt_internal_freq_limit);
+
+	ipc_freq = smci->ipc_reason_config[smci->cluster_ipc_level].freq_allowed;
+	cluster->walt_internal_freq_limit = max(ipc_freq,
+			     cluster->walt_internal_freq_limit);
 
 	return cluster->walt_internal_freq_limit != internal_freq;
 }
 
-static void update_smart_freq_capacities_one_cluster(struct walt_sched_cluster *cluster)
+void update_smart_freq_capacities_one_cluster(struct walt_sched_cluster *cluster)
 {
 	int cpu;
 
@@ -106,11 +142,9 @@ static void smart_freq_update_one_cluster(struct walt_sched_cluster *cluster,
 
 	freq_cap[SMART_FREQ][cluster->id] = max_cap;
 
-	update_smart_freq_capacities_one_cluster(cluster);
-
 	rq = cpu_rq(cpumask_first(&cluster->cpus));
 	/*
-	 * cpufreq smart fmax doesn't call get_util for the cpu, hence
+	 * cpufreq smart freq doesn't call get_util for the cpu, hence
 	 * invoking callback without rq lock is safe.
 	 */
 	waltgov_run_callback(rq, WALT_CPUFREQ_SMART_FREQ_BIT);
@@ -148,7 +182,7 @@ static bool thres_based_uncap(u64 window_start, struct walt_sched_cluster *clust
 	return sustained_load;
 }
 
-#define BIG_TASKCNT_LIMIT	6
+unsigned int big_task_cnt = 6;
 #define WAKEUP_CNT		100
 /*
  * reason is a two part bitmap
@@ -217,7 +251,7 @@ void smart_freq_update_reason_common(u64 wallclock, int nr_big, u32 wakeup_ctr_s
 		 * BIG_TASKCNT
 		 */
 		if (cluster_participation_mask & BIT(BIG_TASKCNT_SMART_FREQ)) {
-			current_state = (nr_big >= BIG_TASKCNT_LIMIT) &&
+			current_state = (nr_big >= big_task_cnt) &&
 						(wakeup_ctr_sum < WAKEUP_CNT);
 			if (current_state)
 				cluster_reasons |= BIT(BIG_TASKCNT_SMART_FREQ);
@@ -271,6 +305,8 @@ void smart_freq_init(const char *soc)
 		cluster->smart_freq_info = &default_freq_config[i];
 		cluster->smart_freq_info->smart_freq_participation_mask = BIT(NO_REASON_SMART_FREQ);
 		cluster->smart_freq_info->cluster_active_reason = 0;
+		cluster->smart_freq_info->min_cycles = 100;
+		cluster->smart_freq_info->smart_freq_ipc_participation_mask = 0;
 		freq_cap[SMART_FREQ][cluster->id] = FREQ_QOS_MAX_DEFAULT_VALUE;
 
 		memset(cluster->smart_freq_info->legacy_reason_status, 0,
@@ -279,9 +315,16 @@ void smart_freq_init(const char *soc)
 		memset(cluster->smart_freq_info->legacy_reason_config, 0,
 		       sizeof(struct smart_freq_legacy_reason_config) *
 		       LEGACY_SMART_FREQ);
+		memset(cluster->smart_freq_info->ipc_reason_config, 0,
+		       sizeof(struct smart_freq_ipc_reason_config) *
+		       SMART_FMAX_IPC_MAX);
 
 		for (j = 0; j < LEGACY_SMART_FREQ; j++) {
 			cluster->smart_freq_info->legacy_reason_config[j].freq_allowed =
+				FREQ_QOS_MAX_DEFAULT_VALUE;
+		}
+		for (j = 0; j < SMART_FMAX_IPC_MAX; j++) {
+			cluster->smart_freq_info->ipc_reason_config[j].freq_allowed =
 				FREQ_QOS_MAX_DEFAULT_VALUE;
 		}
 
@@ -291,4 +334,3 @@ void smart_freq_init(const char *soc)
 	smart_freq_init_done = true;
 	update_smart_freq_capacities();
 }
-

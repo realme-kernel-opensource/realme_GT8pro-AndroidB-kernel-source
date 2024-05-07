@@ -152,6 +152,23 @@ enum smart_freq_legacy_reason {
 	LEGACY_SMART_FREQ,
 };
 
+enum smart_freq_ipc_reason {
+	IPC_A,
+	IPC_B,
+	IPC_C,
+	IPC_D,
+	IPC_E,
+	SMART_FMAX_IPC_MAX,
+};
+#define IPC_PARTICIPATION	(BIT(IPC_A) | BIT(IPC_B) | BIT(IPC_C) | BIT(IPC_D) | BIT(IPC_E))
+
+DECLARE_PER_CPU(unsigned int, ipc_level);
+DECLARE_PER_CPU(unsigned long, ipc_cnt);
+DECLARE_PER_CPU(unsigned long, intr_cnt);
+DECLARE_PER_CPU(unsigned long, cycle_cnt);
+DECLARE_PER_CPU(u64, last_ipc_update);
+DECLARE_PER_CPU(u64, ipc_deactivate_ns);
+
 struct smart_freq_legacy_reason_status {
 	u64 deactivate_ns;
 };
@@ -161,11 +178,21 @@ struct smart_freq_legacy_reason_config {
 	u64 hyst_ns;
 };
 
+struct smart_freq_ipc_reason_config {
+	unsigned long ipc;
+	unsigned long freq_allowed;
+	u64 hyst_ns;
+};
+
 struct smart_freq_cluster_info {
 	u32 smart_freq_participation_mask;
 	unsigned int cluster_active_reason;
+	unsigned int cluster_ipc_level;
+	unsigned long min_cycles;
+	u32 smart_freq_ipc_participation_mask;
 	struct smart_freq_legacy_reason_config legacy_reason_config[LEGACY_SMART_FREQ];
 	struct smart_freq_legacy_reason_status legacy_reason_status[LEGACY_SMART_FREQ];
+	struct smart_freq_ipc_reason_config ipc_reason_config[SMART_FMAX_IPC_MAX];
 };
 
 /*=========================================================================*/
@@ -478,6 +505,7 @@ extern cpumask_t cpus_for_pipeline;
 #define CPUFREQ_REASON_TRAILBLAZER_STATE_BIT	BIT(15)
 #define CPUFREQ_REASON_TRAILBLAZER_CPU_BIT	BIT(16)
 #define CPUFREQ_REASON_ADAPTIVE_LVL_1_BIT	BIT(17)
+#define CPUFREQ_REASON_IPC_SMART_FREQ_BIT	BIT(18)
 
 enum sched_boost_policy {
 	SCHED_BOOST_NONE,
@@ -1229,6 +1257,8 @@ extern void update_cpu_capacity_helper(int cpu);
 extern void smart_freq_update_for_all_cluster(u64 wallclock, uint32_t reasons);
 extern void smart_freq_update_reason_common(u64 window_start, int nr_big, u32 wakeup_ctr_sum);
 extern void smart_freq_init(const char *name);
+extern unsigned int get_cluster_ipc_level_freq(int curr_cpu, u64 time);
+extern void update_smart_freq_capacities_one_cluster(struct walt_sched_cluster *cluster);
 
 extern int add_pipeline(struct walt_task_struct *wts);
 extern int remove_pipeline(struct walt_task_struct *wts);

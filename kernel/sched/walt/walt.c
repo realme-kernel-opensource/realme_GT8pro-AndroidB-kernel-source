@@ -4589,6 +4589,38 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 static u64 tick_sched_clock;
 static DECLARE_COMPLETION(tick_sched_clock_completion);
 
+DEFINE_PER_CPU(unsigned long, intr_cnt);
+DEFINE_PER_CPU(unsigned long, cycle_cnt);
+DEFINE_PER_CPU(unsigned int, ipc_level);
+DEFINE_PER_CPU(unsigned long, ipc_cnt);
+DEFINE_PER_CPU(u64, last_ipc_update);
+DEFINE_PER_CPU(u64, ipc_deactivate_ns);
+static unsigned long calculate_ipc(int cpu)
+{
+	unsigned long amu_cnt, delta_cycl = 0, delta_intr = 0;
+	unsigned long prev_cycl_cnt = per_cpu(cycle_cnt, cpu);
+	unsigned long prev_intr_cnt = per_cpu(intr_cnt, cpu);
+	unsigned long ipc = 0;
+	struct walt_sched_cluster *cluster = cpu_cluster(cpu);
+
+	amu_cnt = read_sysreg_s(SYS_AMEVCNTR0_CORE_EL0);
+	delta_cycl = amu_cnt - prev_cycl_cnt;
+	per_cpu(cycle_cnt, cpu) = amu_cnt;
+	amu_cnt = read_sysreg_s(SYS_AMEVCNTR0_INST_RET_EL0);
+	per_cpu(intr_cnt, cpu) = amu_cnt;
+	delta_intr = amu_cnt - prev_intr_cnt;
+	if (prev_cycl_cnt && delta_cycl > cluster->smart_freq_info->min_cycles)
+		ipc = (delta_intr * 100) / delta_cycl;
+
+	per_cpu(ipc_cnt, cpu) = ipc;
+	per_cpu(last_ipc_update, cpu) = cpu_rq(cpu)->clock;
+	trace_ipc_update(cpu, per_cpu(cycle_cnt, cpu), per_cpu(intr_cnt, cpu),
+			 per_cpu(ipc_cnt, cpu), per_cpu(last_ipc_update, cpu),
+			 per_cpu(ipc_deactivate_ns, cpu), cpu_rq(cpu)->clock);
+
+	return ipc;
+}
+
 static void android_rvh_tick_entry(void *unused, struct rq *rq)
 {
 	u64 wallclock;
@@ -4603,6 +4635,7 @@ static void android_rvh_tick_entry(void *unused, struct rq *rq)
 
 	if (is_ed_task_present(rq, wallclock, NULL))
 		waltgov_run_callback(rq, WALT_CPUFREQ_EARLY_DET_BIT);
+
 }
 
 bool is_sbt_or_oscillate(void)
@@ -4672,7 +4705,13 @@ static void should_oscillate_tick(void)
 static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 {
 	struct walt_related_thread_group *grp;
-	u32 old_load;
+	unsigned int old_load, last_ipc_level, curr_ipc_level;
+	unsigned long ipc;
+	int i, cpu = cpu_of(rq);
+	struct walt_sched_cluster *cluster;
+	struct smart_freq_cluster_info *smart_freq_info;
+	u64 last_deactivate_ns;
+	bool inform_governor;
 
 	if (!tick_sched_clock) {
 		/*
@@ -4700,6 +4739,45 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 
 	if (soc_feat(SOC_ENABLE_OSCILLATE_ON_THERMALS))
 		should_oscillate_tick();
+
+	/* IPC based smart FMAX */
+	cluster = cpu_cluster(cpu);
+	smart_freq_info = cluster->smart_freq_info;
+	if (smart_freq_info->smart_freq_ipc_participation_mask & IPC_PARTICIPATION) {
+		last_ipc_level = per_cpu(ipc_level, cpu);
+		last_deactivate_ns = per_cpu(ipc_deactivate_ns, cpu);
+		ipc = calculate_ipc(cpu);
+		for (i = 0; i < SMART_FMAX_IPC_MAX; i++)
+			if (ipc < smart_freq_info->ipc_reason_config[i].ipc)
+				break;
+
+		if (i >= SMART_FMAX_IPC_MAX)
+			i = SMART_FMAX_IPC_MAX - 1;
+
+		curr_ipc_level = i;
+		if (curr_ipc_level != last_ipc_level)
+			inform_governor = true;
+
+		if ((curr_ipc_level < last_ipc_level) &&
+		    (smart_freq_info->ipc_reason_config[last_ipc_level].hyst_ns > 0)) {
+			if (!last_deactivate_ns) {
+				per_cpu(ipc_deactivate_ns, cpu) = rq->clock;
+				inform_governor = false;
+			} else {
+				u64 delta = rq->clock - last_deactivate_ns;
+
+				if (smart_freq_info->ipc_reason_config[last_ipc_level].hyst_ns >
+					delta)
+					inform_governor = false;
+			}
+		}
+
+		if (inform_governor) {
+			per_cpu(ipc_level, cpu) = curr_ipc_level;
+			per_cpu(ipc_deactivate_ns, cpu) = 0;
+			waltgov_run_callback(rq, WALT_CPUFREQ_SMART_FREQ_BIT);
+		}
+	}
 }
 
 static void android_rvh_schedule(void *unused, struct task_struct *prev,
