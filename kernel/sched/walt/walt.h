@@ -1232,6 +1232,8 @@ extern void walt_cfs_deactivate_mvp_task(struct rq *rq, struct task_struct *p);
 void inc_rq_walt_stats(struct rq *rq, struct task_struct *p);
 void dec_rq_walt_stats(struct rq *rq, struct task_struct *p);
 
+extern bool is_obet;
+
 enum WALT_DEBUG_FEAT {
 	WALT_BUG_UPSTREAM,
 	WALT_BUG_WALT,

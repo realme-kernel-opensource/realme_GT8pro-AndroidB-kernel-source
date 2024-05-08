@@ -3920,6 +3920,95 @@ static void android_rvh_update_cpu_capacity(void *unused, int cpu, unsigned long
 	*capacity = max((int)(cpu_rq(cpu)->cpu_capacity_orig - rt_pressure), 0);
 }
 
+/*
+ *	big_task_pid is used by the One Big Enqueue Task feature to track the
+ *	number of big tasks enqueued on largest cluster.
+ *	big_task_pid = {0, pid, -1}
+ *	0 -> indicates there are 0 big tasks enqueued on the CPU
+ *	pid -> indicates that there is one big task enqueued whose PID
+ *	is pid
+ *	-1 -> indicates that there is more than one big task enqueued
+ *	on the CPU.
+ *	The big_task_pid value is checked every window rollover
+ *	and updated according to the rules above.
+ */
+DEFINE_PER_CPU(pid_t, big_task_pid);
+bool is_obet;
+
+/*
+ * check_obet() needs to be called with all the rq locks held.
+ * It resets per cpu big_task_pid and does cpu checks on a
+ * single big task.
+ */
+static void check_obet(void)
+{
+	struct task_struct *p;
+	int is_obet_temp = 0;
+	int mid_cluster_cpu, cpu;
+
+	if (num_sched_clusters < 2)
+		return;
+
+	mid_cluster_cpu = cpumask_first(&cpu_array[0][num_sched_clusters - 2]);
+
+	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
+		if (per_cpu(big_task_pid, cpu) == -1) {
+			is_obet_temp = -1;
+		} else if (per_cpu(big_task_pid, cpu) != 0) {
+			if (is_obet_temp == 0) {
+				is_obet_temp = per_cpu(big_task_pid, cpu);
+			} else {
+				if (is_obet_temp != per_cpu(big_task_pid, cpu))
+					is_obet_temp = -1;
+			}
+		}
+	}
+
+	if (is_obet_temp == -1 || is_obet_temp == 0)
+		is_obet = false;
+	else
+		is_obet = true;
+
+	//reset per CPU big_task_pid for the upcoming window
+	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
+		pid_t pid = per_cpu(big_task_pid, cpu);
+
+		if (pid == -1) {
+			int task_count = 0;
+			int big_task_count = 0;
+
+			list_for_each_entry(p, &(cpu_rq(cpu)->cfs_tasks),
+					se.group_node) {
+				task_count++;
+				if (!task_fits_max(p, mid_cluster_cpu)) {
+					big_task_count++;
+					pid = p->pid;
+					if (big_task_count == 2)
+						break;
+				}
+				if (task_count == 10)
+					break;
+			}
+			if (task_count == 10)
+				per_cpu(big_task_pid, cpu) = -1;
+			else if (big_task_count == 0)
+				per_cpu(big_task_pid, cpu) = 0;
+			else if (big_task_count == 1)
+				per_cpu(big_task_pid, cpu) = pid;
+			else
+				per_cpu(big_task_pid, cpu) = -1;
+		} else if (pid) {
+			/*
+			 * no need for get_task_struct() as we are running
+			 * with rq locks held
+			 */
+			p = find_task_by_vpid(pid);
+			if (!p || !task_on_rq_queued(p) || (task_cpu(p) != cpu))
+				per_cpu(big_task_pid, cpu) = 0;
+		}
+	}
+}
+
 DEFINE_PER_CPU(u32, wakeup_ctr);
 /**
  * walt_irq_work() - perform walt irq work for rollover and migration
@@ -3987,6 +4076,8 @@ static void walt_irq_work(struct irq_work *irq_work)
 				prime_wakeup_ctr_sum += per_cpu(wakeup_ctr, cpu);
 			per_cpu(wakeup_ctr, cpu) = 0;
 		}
+
+		check_obet();
 	}
 
 	for_each_cpu(cpu, &lock_cpus)
@@ -4375,6 +4466,7 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	bool double_enqueue = false;
+	int mid_cluster_cpu;
 
 	if (unlikely(walt_disabled))
 		return;
@@ -4426,6 +4518,18 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 			waltgov_run_callback(rq, WALT_CPUFREQ_TRAILBLAZER_BIT);
 		else if (do_pl_notif(rq))
 			waltgov_run_callback(rq, WALT_CPUFREQ_PL_BIT);
+	}
+
+	if (num_sched_clusters >= 2) {
+		mid_cluster_cpu = cpumask_first(
+				&cpu_array[0][num_sched_clusters - 2]);
+		if (is_max_possible_cluster_cpu(rq->cpu) &&
+				!task_fits_max(p, mid_cluster_cpu)) {
+			if (!per_cpu(big_task_pid, rq->cpu))
+				per_cpu(big_task_pid, rq->cpu) = p->pid;
+			else if (p->pid != per_cpu(big_task_pid, rq->cpu))
+				per_cpu(big_task_pid, rq->cpu) = -1;
+		}
 	}
 
 	trace_sched_enq_deq_task(p, 1, cpumask_bits(p->cpus_ptr)[0], is_mvp(wts));
