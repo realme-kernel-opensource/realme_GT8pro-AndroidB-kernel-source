@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -113,6 +113,7 @@ EXPORT_SYMBOL_GPL(gh_put_virq);
 int gh_put_irq(int irq)
 {
 	struct irq_data *irq_data;
+	unsigned long virq;
 
 	if (irq <= 0)
 		return -EINVAL;
@@ -121,8 +122,10 @@ int gh_put_irq(int irq)
 	if (!irq_data)
 		return -EINVAL;
 
+	virq = irq_data->hwirq;
+
 	irq_dispose_mapping(irq);
 
-	return gh_put_virq(irq_data->hwirq);
+	return gh_put_virq(virq);
 }
 EXPORT_SYMBOL_GPL(gh_put_irq);
