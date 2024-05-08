@@ -240,6 +240,10 @@ struct adc5_channel_prop {
  * @list: list item, used to add this device to gloal list of ADC_TM devices.
  * @device_list: pointer to list of ADC_TM devices.
  * @tm_handler_work: scheduled work for handling TM threshold violation.
+ * @tm_err_handler_work: scheduled work for handling TM conversion error.
+ * @conv_err: pointer to array of TM conversion error faults stored for ADC
+ * peripherals.
+ * @tm_lock: spinlock to be used to guard access to conversion error array.
  */
 struct adc5_chip {
 	struct regmap			*regmap;
@@ -257,6 +261,9 @@ struct adc5_chip {
 	struct list_head		list;
 	struct list_head		*device_list;
 	struct work_struct		tm_handler_work;
+	struct work_struct		tm_err_handler_work;
+	u8				*conv_err;
+	spinlock_t			tm_lock;
 };
 
 static int adc5_read(struct adc5_chip *adc, unsigned int sdam_index, u16 offset, u8 *data, int len)
@@ -586,6 +593,12 @@ static int adc5_gen3_clear_conv_fault(struct adc5_chip *adc, int sdam_num, u8 va
 	if (ret < 0)
 		return ret;
 
+	/* To indicate conversion request is only to clear a status */
+	val = 0;
+	ret = adc5_write(adc, sdam_num, ADC5_GEN3_PERPH_CH, &val, 1);
+	if (ret < 0)
+		return ret;
+
 	val = ADC5_GEN3_CONV_REQ_REQ;
 	return adc5_write(adc, sdam_num, ADC5_GEN3_CONV_REQ, &val, 1);
 }
@@ -595,8 +608,8 @@ static int adc_tm5_gen3_configure(struct adc5_channel_prop *prop);
 static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 {
 	struct adc5_chip *adc = dev_id;
-	u8 status, tm_status[2], eoc_status, val, conv_err;
-	int ret, sdam_num, i;
+	u8 status, tm_status[2], eoc_status, conv_err;
+	int ret, sdam_num;
 
 	sdam_num = get_sdam_from_irq(adc, irq);
 	if (sdam_num < 0) {
@@ -634,30 +647,17 @@ static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 					status, eoc_status, conv_err);
 		adc5_gen3_dump_regs_debug(adc);
 
-		if (sdam_num == 0 && (conv_err & BIT(0))) {
-			/* To indicate conversion request is only to clear a status */
-			val = 0;
-			ret = adc5_write(adc, sdam_num, ADC5_GEN3_PERPH_CH, &val, 1);
-			if (ret < 0)
-				goto handler_end;
+		ret = adc5_gen3_clear_conv_fault(adc, sdam_num, conv_err);
+		if (ret < 0)
+			goto handler_end;
 
-			ret = adc5_gen3_clear_conv_fault(adc, sdam_num, conv_err);
-			if (ret < 0)
-				goto handler_end;
+		if (sdam_num == 0 && (conv_err & BIT(0))) {
 			return IRQ_HANDLED;
 		} else if (conv_err) {
-			ret = adc5_gen3_clear_conv_fault(adc, sdam_num, conv_err);
-			if (ret < 0)
-				goto handler_end;
-
-			/* Reconfigure ADC TM channels */
-			for (i = 0; i < adc->nchannels; i++) {
-				if (sdam_num != adc->chan_props[i].sdam_index)
-					continue;
-
-				if (conv_err & BIT(adc->chan_props[i].tm_chan_index))
-					adc_tm5_gen3_configure(&adc->chan_props[i]);
-			}
+			spin_lock(&adc->tm_lock);
+			adc->conv_err[sdam_num] |= conv_err;
+			spin_unlock(&adc->tm_lock);
+			schedule_work(&adc->tm_err_handler_work);
 			return IRQ_HANDLED;
 		}
 	}
@@ -675,6 +675,42 @@ static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 
 handler_end:
 	return IRQ_NONE;
+}
+
+static void tm_err_handler_work(struct work_struct *work)
+{
+	struct adc5_chip *adc = container_of(work, struct adc5_chip,
+						tm_err_handler_work);
+	unsigned long flags;
+	int i, sdam_num;
+	u8 conv_err;
+
+	for (sdam_num = 0; sdam_num < adc->num_sdams; sdam_num++) {
+		spin_lock_irqsave(&adc->tm_lock, flags);
+		conv_err = adc->conv_err[sdam_num];
+		if (!conv_err) {
+			spin_unlock_irqrestore(&adc->tm_lock, flags);
+			continue;
+		}
+
+		adc->conv_err[sdam_num] = 0;
+		spin_unlock_irqrestore(&adc->tm_lock, flags);
+
+		/* Reconfigure ADC TM channels */
+		for (i = 0; i < adc->nchannels; i++) {
+			if (!adc->chan_props[i].adc_tm)
+				continue;
+
+			if (sdam_num != adc->chan_props[i].sdam_index)
+				continue;
+
+			if (conv_err & BIT(adc->chan_props[i].tm_chan_index)) {
+				mutex_lock(&adc->lock);
+				adc_tm5_gen3_configure(&adc->chan_props[i]);
+				mutex_unlock(&adc->lock);
+			}
+		}
+	}
 }
 
 static void tm_handler_work(struct work_struct *work)
@@ -1821,6 +1857,11 @@ static int adc5_gen3_probe(struct platform_device *pdev)
 
 	adc->num_sdams = ret;
 
+	adc->conv_err = devm_kcalloc(adc->dev, adc->num_sdams, sizeof(*adc->conv_err),
+								GFP_KERNEL);
+	if (!adc->conv_err)
+		return -ENOMEM;
+
 	adc->base = devm_kcalloc(adc->dev, adc->num_sdams, sizeof(*adc->base), GFP_KERNEL);
 	if (!adc->base)
 		return -ENOMEM;
@@ -1854,6 +1895,7 @@ static int adc5_gen3_probe(struct platform_device *pdev)
 
 	init_completion(&adc->complete);
 	mutex_init(&adc->lock);
+	spin_lock_init(&adc->tm_lock);
 
 	ret = adc5_get_dt_data(adc, node);
 	if (ret < 0) {
@@ -1872,8 +1914,10 @@ static int adc5_gen3_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto fail;
 
-	if (adc->n_tm_channels)
+	if (adc->n_tm_channels) {
 		INIT_WORK(&adc->tm_handler_work, tm_handler_work);
+		INIT_WORK(&adc->tm_err_handler_work, tm_err_handler_work);
+	}
 
 	indio_dev->dev.parent = dev;
 	indio_dev->dev.of_node = node;
@@ -1926,8 +1970,10 @@ static int adc5_gen3_exit(struct platform_device *pdev)
 
 	mutex_unlock(&adc->lock);
 
-	if (adc->n_tm_channels)
+	if (adc->n_tm_channels) {
+		cancel_work_sync(&adc->tm_err_handler_work);
 		cancel_work_sync(&adc->tm_handler_work);
+	}
 
 	mutex_destroy(&adc->lock);
 
