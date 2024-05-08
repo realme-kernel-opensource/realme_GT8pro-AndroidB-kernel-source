@@ -132,6 +132,7 @@ static void gh_vm_cleanup(struct gh_vm *vm)
 	int vm_status = vm->status.vm_status;
 	int ret;
 
+	gh_notify_clients(vm, GH_VM_EXITED);
 	switch (vm_status) {
 	case GH_RM_VM_STATUS_EXITED:
 	case GH_RM_VM_STATUS_RUNNING:
