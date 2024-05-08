@@ -129,6 +129,7 @@ struct stats_config {
 	bool subsystem_stats_in_smem;
 	bool read_ddr_votes;
 	bool read_ddr_his;
+	bool read_cx_final_vote;
 	bool ddr_freq_update;
 	bool island_stats_avail;
 };
@@ -680,7 +681,8 @@ int cx_stats_get_ss_vote_info(int ss_count,
 	void __iomem *reg;
 	int ret;
 	int i, j;
-	u32 data[((MAX_DRV + 0x3) & (~0x3))/4];
+	u32 data[((MAX_DRV + 0x3) & (~0x3))/4 + 1];
+	u32 entry_count = 0;
 
 	if (!vote_info || !(ss_count == MAX_DRV) || !drv)
 		return -ENODEV;
@@ -703,13 +705,20 @@ int cx_stats_get_ss_vote_info(int ss_count,
 		return -EINVAL;
 	}
 
-	cxvt_info_fill_data(reg, ((MAX_DRV + 0x3) & (~0x3))/4, data);
+	if (drv->config->read_cx_final_vote)
+		entry_count = ((MAX_DRV + 0x3) & (~0x3))/4 + 1;
+	else
+		entry_count = ((MAX_DRV + 0x3) & (~0x3))/4;
+	cxvt_info_fill_data(reg, entry_count, data);
 	for (i = 0, j = 0; i < ((MAX_DRV + 0x3) & (~0x3))/4; i++, j += 4) {
 		vote_info[j].level = (data[i] & 0xff);
 		vote_info[j+1].level = ((data[i] & 0xff00) >> 8);
 		vote_info[j+2].level = ((data[i] & 0xff0000) >> 16);
 		vote_info[j+3].level = ((data[i] & 0xff000000) >> 24);
 	}
+
+	if (drv->config->read_cx_final_vote)
+		vote_info[j].level = (u8)data[i];
 
 	mutex_unlock(&drv->lock);
 	return 0;
@@ -1261,6 +1270,7 @@ static const struct stats_config rpmh_v4_data = {
 	.read_ddr_votes = true,
 	.read_ddr_his = true,
 	.ddr_freq_update = true,
+	.read_cx_final_vote = true,
 	.island_stats_avail = true,
 };
 
