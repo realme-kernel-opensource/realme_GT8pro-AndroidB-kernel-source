@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cdev.h>
@@ -59,6 +59,9 @@
 #define STATS_DEVICE_NAME			"stats"
 #define SUBSYSTEM_STATS_MAGIC_NUM		(0x9d)
 #define SUBSYSTEM_STATS_OTHERS_NUM		(-2)
+
+#define DDR_HISTORY_MC_ADDR			0x0
+#define DDR_HISTORY_SHUB_ADDR			0x4
 
 #define APSS_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 0, \
 				     struct sleep_stats *)
@@ -125,6 +128,7 @@ struct stats_config {
 	bool dynamic_offset;
 	bool subsystem_stats_in_smem;
 	bool read_ddr_votes;
+	bool read_ddr_his;
 	bool ddr_freq_update;
 	bool island_stats_avail;
 };
@@ -712,6 +716,38 @@ int cx_stats_get_ss_vote_info(int ss_count,
 }
 EXPORT_SYMBOL_GPL(cx_stats_get_ss_vote_info);
 
+int ddr_stats_get_change_his(struct ddr_stats_change_his_info *ddr_his_info)
+{
+	static const char buf[MAX_MSG_LEN] = "{class: misc_debug, res: ddr_his}";
+	int ret;
+	void __iomem *reg;
+
+	if (!drv || !drv->qmp || !drv->config->read_ddr_his)
+		return -ENODEV;
+
+	mutex_lock(&drv->lock);
+	ret = qmp_send(drv->qmp, buf, sizeof(buf));
+	if (ret) {
+		pr_err("Error sending qmp message: %d\n", ret);
+		mutex_unlock(&drv->lock);
+		return ret;
+	}
+
+	reg = qcom_stats_get_ddr_stats_data_addr();
+	if (!reg) {
+		pr_err("Error getting ddr stats data addr\n");
+		mutex_unlock(&drv->lock);
+		return -EINVAL;
+	}
+
+	ddr_his_info->mc_his = readl_relaxed(reg + DDR_HISTORY_MC_ADDR);
+	ddr_his_info->shub_his = readl_relaxed(reg + DDR_HISTORY_SHUB_ADDR);
+
+	mutex_unlock(&drv->lock);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ddr_stats_get_change_his);
+
 static void qcom_print_stats(struct seq_file *s, const struct sleep_stats *stat)
 {
 	u64 accumulated = stat->accumulated;
@@ -1223,6 +1259,7 @@ static const struct stats_config rpmh_v4_data = {
 	.dynamic_offset = false,
 	.subsystem_stats_in_smem = true,
 	.read_ddr_votes = true,
+	.read_ddr_his = true,
 	.ddr_freq_update = true,
 	.island_stats_avail = true,
 };
