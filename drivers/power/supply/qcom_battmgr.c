@@ -258,6 +258,7 @@ struct qcom_battmgr_status {
 
 	unsigned int discharge_time;
 	unsigned int charge_time;
+	unsigned int charge_ctl_limit;
 	unsigned int max_charge_ctl_limit;
 };
 
@@ -642,10 +643,10 @@ static int qcom_battmgr_bat_get_property(struct power_supply *psy,
 		val->intval = battmgr->status.percent;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
-		val->intval = battmgr->curr_thermal_level;
+		val->intval = battmgr->status.charge_ctl_limit;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
-		val->intval = battmgr->num_thermal_levels;
+		val->intval = battmgr->status.max_charge_ctl_limit;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = battmgr->status.temperature;
@@ -676,35 +677,6 @@ static int qcom_battmgr_bat_get_property(struct power_supply *psy,
 		break;
 	default:
 		return -EINVAL;
-	}
-
-	return 0;
-}
-
-static int qcom_battmgr_bat_set_property(struct power_supply *psy,
-					 enum power_supply_property prop,
-					 const union power_supply_propval *pval)
-{
-	struct qcom_battmgr *battmgr = power_supply_get_drvdata(psy);
-
-	switch (prop) {
-	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
-		return battery_psy_set_charge_current(battmgr, pval->intval);
-	default:
-		break;
-	}
-
-	return -EINVAL;
-}
-
-static int qcom_battmgr_prop_is_writeable(struct power_supply *psy,
-					  enum power_supply_property prop)
-{
-	switch (prop) {
-	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
-		return 1;
-	default:
-		break;
 	}
 
 	return 0;
@@ -773,8 +745,6 @@ static const struct power_supply_desc sm8350_bat_psy_desc = {
 	.properties = sm8350_bat_props,
 	.num_properties = ARRAY_SIZE(sm8350_bat_props),
 	.get_property = qcom_battmgr_bat_get_property,
-	.set_property = qcom_battmgr_bat_set_property,
-	.property_is_writeable = qcom_battmgr_prop_is_writeable,
 };
 
 static int qcom_battmgr_ac_get_property(struct power_supply *psy,
@@ -1325,6 +1295,7 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 			battmgr->status.current_now = le32_to_cpu(resp->intval.value);
 			break;
 		case BATT_CHG_CTRL_LIM:
+			battmgr->status.charge_ctl_limit = le32_to_cpu(resp->intval.value);
 			break;
 		case BATT_CHG_CTRL_LIM_MAX:
 			battmgr->status.max_charge_ctl_limit = le32_to_cpu(resp->intval.value);
@@ -1366,7 +1337,6 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 		}
 		break;
 
-	case BATTMGR_BAT_PROPERTY_SET:
 	case BATTMGR_USB_PROPERTY_SET:
 		property = le32_to_cpu(resp->intval.property);
 		if (payload_len != sizeof(resp->intval)) {
