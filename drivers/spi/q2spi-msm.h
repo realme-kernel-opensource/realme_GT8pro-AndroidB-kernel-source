@@ -18,6 +18,8 @@
 #include <uapi/linux/q2spi/q2spi.h>
 #include "q2spi-gsi.h"
 
+#define GENI_SE_Q2SPI_PROTO		(0xE)
+
 #define DATA_WORD_LEN			4
 #define SMA_BUF_SIZE			4096
 #define MAX_CR_SIZE			24 /* Max CR size is 24 bytes per CR */

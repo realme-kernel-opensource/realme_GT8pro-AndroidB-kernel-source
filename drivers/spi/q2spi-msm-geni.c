@@ -2500,7 +2500,7 @@ static int q2spi_geni_init(struct q2spi_geni *q2spi)
 
 	/* make sure to turn on the resources before this ex: pm_runtime_get_sync(q2spi->dev); */
 	proto = geni_se_read_proto(&q2spi->se);
-	if (proto != GENI_SE_Q2SPI) {
+	if (proto != GENI_SE_Q2SPI_PROTO) {
 		Q2SPI_ERROR(q2spi, "Err Invalid proto %d\n", proto);
 		return -EINVAL;
 	}
