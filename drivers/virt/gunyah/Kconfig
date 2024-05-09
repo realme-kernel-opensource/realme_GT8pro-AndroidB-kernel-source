@@ -184,5 +184,16 @@ config GH_RES_REQUEST
 	  release request, secondary virtual machine client handle the request
 	  and release resource to primary virtual machine.
 
+config GH_GUEST_POPS
+	  tristate "Gunyah Guest Power-Operations driver"
+	  depends on GH_RM_DRV
+	  help
+	  The driver runs on guest VMs and is majorly responsible for coordinating
+	    the guest's power operations. This includes, setting the VM's status,
+	    such as OS_STATUS_* or APPS_STATUS_*. It also acts as an input power key
+	    driver. That is, it listens to the shutdown requests, and when it receives
+	    one, it'll emulate a power key press action by sending an input
+	    notification to user-space.
+
 endif
 
