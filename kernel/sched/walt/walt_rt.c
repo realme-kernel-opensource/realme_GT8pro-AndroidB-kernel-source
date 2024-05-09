@@ -319,9 +319,7 @@ static void walt_select_task_rq_rt(void *unused, struct task_struct *task, int c
 				cpumask_test_cpu(packing_cpu, task->cpus_ptr) &&
 				cpu_active(packing_cpu) &&
 				!cpu_halted(packing_cpu) &&
-				((cpu_rq(packing_cpu)->rt.rt_nr_running == 0) ||
-				((cpu_rq(packing_cpu)->rt.rt_nr_running == 1) &&
-				(task_has_rt_policy(cpu_rq(packing_cpu)->curr)))))
+				(cpu_rq(packing_cpu)->rt.rt_nr_running <= 1))
 				break;
 			packing_cpu++;
 		}
