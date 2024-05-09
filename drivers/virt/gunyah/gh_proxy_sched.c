@@ -390,6 +390,8 @@ static int gh_unpopulate_vm_vcpu_info(gh_vmid_t vmid, gh_label_t cpu_idx,
 			free_irq(vcpu->virq, vcpu);
 			vcpu->virq = U32_MAX;
 			wakeup_source_unregister(vcpu->ws);
+			vcpu->workqueue_mode = false;
+			unregister_pm_notifier(&vcpu->suspend_nb);
 
 			if (nr_vcpus)
 				nr_vcpus--;
