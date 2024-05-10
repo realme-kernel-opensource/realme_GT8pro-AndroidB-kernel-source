@@ -2818,6 +2818,10 @@ static void init_new_task_load(struct task_struct *p)
 	wts->mark_start_birth_ts = 0;
 	wts->high_util_history = 0;
 	__sched_fork_init(p);
+
+	/* New task inherits the MPAM part_id */
+	wts->mpam_part_id = cur_wts->mpam_part_id;
+
 	walt_flag_set(p, WALT_INIT_BIT, 1);
 	walt_flag_set(p, WALT_TRAILBLAZER_BIT, 0);
 }
