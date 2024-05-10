@@ -1167,35 +1167,6 @@ static struct mem_buf_dma_buf_ops mem_buf_retrieve_dma_buf_ops = {
 	}
 };
 
-/* return true if free base pages are above 'mark'. */
-static bool __check_zone_watermark_ok(struct zone *z, unsigned long mark)
-{
-	long free_pages = zone_page_state(z, NR_FREE_PAGES);
-	long min = mark;
-	long unusable_free;
-
-	unusable_free = z->nr_reserved_highatomic;
-#ifdef CONFIG_CMA
-	unusable_free += zone_page_state(z, NR_FREE_CMA_PAGES);
-#endif
-
-	free_pages -= unusable_free;
-
-	return free_pages > min + z->lowmem_reserve[ZONE_NORMAL];
-}
-
-static bool zone_ok_memmap(unsigned long nr_pages)
-{
-	struct zone *zone;
-	int wm;
-
-	zone = &NODE_DATA(numa_node_id())->node_zones[ZONE_NORMAL];
-	wm = high_wmark_pages(zone);
-	wm += nr_pages;
-
-	return __check_zone_watermark_ok(zone, wm);
-}
-
 /* Fix this with relevant RM - GH call */
 static size_t get_mem_parcel_size(struct mem_buf_retrieve_kernel_arg *arg,
 		struct gh_acl_desc *acl_desc, struct gh_sgl_desc **__sgl_desc)
@@ -1375,13 +1346,10 @@ struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
 	sgl_desc = NULL;
 
 	/*
-	 * if dmabuf is large or default memmap allocation would likely fail,
-	 * request for extra memory from Primary VM for hosting the memmap data
-	 * for this large dmabuf.
+	 * if dmabuf is large, request for extra memory from
+	 * Primary VM for hosting the memmap data for this large dmabuf.
 	 */
-	if ((dmabuf_size >= SZ_128M ||
-			!zone_ok_memmap(memmap_size >> PAGE_SHIFT)) &&
-			dmabuf_mem_pool) {
+	if (dmabuf_size >= SZ_128M && dmabuf_mem_pool) {
 		ret = prepare_altmap(obj, &sgl_desc, dmabuf_size);
 		memmap_base = PFN_PHYS(obj->pgmap.altmap.base_pfn);
 		if (ret)
