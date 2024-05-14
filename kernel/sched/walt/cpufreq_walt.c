@@ -280,6 +280,7 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	bool skip = false;
 	bool thermal_isolated_now = cpus_halted_by_client(
 			wg_policy->policy->related_cpus, PAUSE_THERMAL);
+	bool reset_need_freq_update = false;
 
 	if (thermal_isolated_now) {
 		if (!wg_policy->thermal_isolated) {
@@ -348,20 +349,21 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 		goto out;
 	}
 
-	wg_policy->need_freq_update = false;
+	reset_need_freq_update = true;
 
 	final_freq = cpufreq_driver_resolve_freq(policy, freq);
 
-	if (!waltgov_update_next_freq(wg_policy, time, final_freq, freq)) {
+	if (!waltgov_update_next_freq(wg_policy, time, final_freq, freq))
 		final_freq = 0;
-		goto out;
-	}
 out:
-	trace_waltgov_next_freq(policy->cpu, util, max, raw_freq, freq,
-				policy->min, policy->max,
+	trace_waltgov_next_freq(policy, util, max, raw_freq, freq,
 				wg_policy->cached_raw_freq, wg_policy->need_freq_update,
 				wg_policy->thermal_isolated,
-				wg_driv_cpu->cpu, wg_driv_cpu->reasons);
+				wg_driv_cpu->cpu, wg_driv_cpu->reasons,
+				final_freq);
+
+	if (reset_need_freq_update)
+		wg_policy->need_freq_update = false;
 
 	return final_freq;
 }
