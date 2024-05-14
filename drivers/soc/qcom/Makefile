@@ -3,6 +3,7 @@ CFLAGS_rpmh-rsc.o := -I$(src)
 obj-$(CONFIG_QCOM_AOSS_QMP) +=	qcom_aoss.o
 obj-$(CONFIG_QCOM_GENI_SE) +=	qcom-geni-se.o
 obj-$(CONFIG_QCOM_COMMAND_DB) += cmd-db.o
+obj-$(CONFIG_QCOM_CPUSS_SLEEP_STATS_V4) += qcom_cpuss_sleep_stats_v4.o
 obj-$(CONFIG_QCOM_CRM)	+= crm.o
 obj-$(CONFIG_QCOM_CRM_V2)	+= crm-v2.o
 obj-$(CONFIG_QCOM_GSBI)	+=	qcom_gsbi.o
