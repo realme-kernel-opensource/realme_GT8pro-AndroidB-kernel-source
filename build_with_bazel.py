@@ -305,7 +305,8 @@ class BazelBuilder:
 
         try:
             if self.gki_headers:
-                gki_f = open('msm-kernel/files_gki_aarch64.txt', 'r')
+                gki_files_path = os.path.join(self.workspace, 'msm-kernel/files_gki_aarch64.txt')
+                gki_f = open(gki_files_path, 'r')
                 gki_files = gki_f.readlines()
                 common_d = os.path.join(self.workspace, "common")
                 msm_d = os.path.join(self.workspace, "msm-kernel")
