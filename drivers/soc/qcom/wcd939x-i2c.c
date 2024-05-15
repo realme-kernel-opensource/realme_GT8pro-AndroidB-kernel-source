@@ -42,7 +42,9 @@ enum {
 	WCD_USBSS_LPD_MODE_SET,
 	WCD_USBSS_USB_MODE_SET,
 	WCD_USBSS_LPD_USB_MODE_SET,
-	WCD_USBSS_SDAM_MODE_MAX = 7, /* Values 4 to 7 are reserved */
+	WCD_USBSS_LPD_CONTINUOUS_1 = 5,
+	WCD_USBSS_LPD_CONTINUOUS_2 = 7,
+	WCD_USBSS_SDAM_MODE_MAX = WCD_USBSS_LPD_CONTINUOUS_2,
 	WCD_USBSS_AUDIO_MODE_SET = WCD_USBSS_SDAM_MODE_MAX + 1,
 };
 
@@ -939,6 +941,10 @@ static const char *status_to_str(int status)
 		return "LPD_USB";
 	case WCD_USBSS_AUDIO_MODE_SET:
 		return "AUDIO";
+	case WCD_USBSS_LPD_CONTINUOUS_1:
+		fallthrough;
+	case WCD_USBSS_LPD_CONTINUOUS_2:
+		return "LPD_CONTINUOUS";
 	default:
 		return "UNDEFINED";
 	}
@@ -1553,15 +1559,28 @@ static int wcd_usbss_sdam_handle_events_locked(int req_state)
 		/* Enter standby */
 		wcd_usbss_standby_control_locked(true);
 		break;
+	case WCD_USBSS_LPD_CONTINUOUS_1:
+		fallthrough;
+	case WCD_USBSS_LPD_CONTINUOUS_2:
+		regmap_update_bits(priv->regmap, WCD_USBSS_PMP_OUT1, 0x20, 0x20);
+		/* Disable SBU1/2 2K PLDN */
+		regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x00);
+		regmap_update_bits(priv->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x00);
+		/* USB Mode : Connect D+/D- switch */
+		wcd_usbss_dpdm_switch_connect(priv, true);
+
+		/* Exit from standby */
+		wcd_usbss_standby_control_locked(false);
+		break;
 	case WCD_USBSS_LPD_MODE_SET:
 		fallthrough;
 	case WCD_USBSS_LPD_USB_MODE_SET:
 		regmap_update_bits(priv->regmap, WCD_USBSS_PMP_OUT1, 0x20, 0x20);
-		/* Disable D+/D- 1M & 400K PLDN */
-		regmap_update_bits(priv->regmap, WCD_USBSS_BIAS_TOP, 0x20, 0x20);
 		/* Disable DP/DN 2K PLDN */
 		regmap_update_bits(priv->regmap, WCD_USBSS_DP_BIAS, 0x01, 0x00);
 		regmap_update_bits(priv->regmap, WCD_USBSS_DN_BIAS, 0x01, 0x00);
+		/* Disable D+/D- 1M & 400K PLDN */
+		regmap_update_bits(priv->regmap, WCD_USBSS_BIAS_TOP, 0x20, 0x20);
 
 		/* Disable SBU1/2 2K PLDN */
 		regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x00);
@@ -1613,7 +1632,7 @@ static irqreturn_t wcd_usbss_sdam_notifier_handler(int irq, void *data)
 		dev_err(priv->dev, "nvmem cell read failed, rc:%d\n", rc);
 		return rc;
 	}
-	buf[0] &= 0x3;
+	buf[0] &= 0x7;
 	dev_dbg(priv->dev, "sdam notifier request:%d\n", buf[0]);
 
 	mutex_lock(&wcd_usbss_ctxt_->switch_update_lock);
