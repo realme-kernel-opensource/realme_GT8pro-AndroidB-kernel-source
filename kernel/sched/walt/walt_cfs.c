@@ -1178,6 +1178,8 @@ void walt_cfs_deactivate_mvp_task(struct rq *rq, struct task_struct *p)
  * slice expired: MVP slice is expired and other MVP can preempt.
  * slice not expired: This MVP task can continue to run.
  */
+#define MAX_MVP_TIME_NS			500000000ULL
+#define MVP_THROTTLE_TIME_NS		100000000ULL
 static void walt_cfs_account_mvp_runtime(struct rq *rq, struct task_struct *curr)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
@@ -1197,6 +1199,23 @@ static void walt_cfs_account_mvp_runtime(struct rq *rq, struct task_struct *curr
 	if (!(rq->clock_update_flags & RQCF_UPDATED))
 		update_rq_clock(rq);
 
+	if (wrq->mvp_throttle_time) {
+		if ((rq->clock - wrq->mvp_throttle_time) > MVP_THROTTLE_TIME_NS) {
+			wrq->skip_mvp = false;
+			wrq->mvp_throttle_time = 0;
+		}
+	} else if (wrq->mvp_arrival_time) {
+		if ((rq->clock - wrq->mvp_arrival_time) > MAX_MVP_TIME_NS) {
+			wrq->skip_mvp = true;
+			wrq->mvp_arrival_time = 0;
+			wrq->mvp_throttle_time = rq->clock;
+		}
+	}
+
+	/*
+	 * continue accounting even in skip_mvp state if a MVP task is selected
+	 * by scheduler core to run on CPU.
+	 */
 	if (curr->se.sum_exec_runtime > wts->sum_exec_snapshot_for_total)
 		wts->total_exec = curr->se.sum_exec_runtime - wts->sum_exec_snapshot_for_total;
 	else
@@ -1286,6 +1305,7 @@ void walt_cfs_tick(struct rq *rq)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *) rq->curr->android_vendor_data1;
+	bool skip_mvp;
 
 	if (unlikely(walt_disabled))
 		return;
@@ -1295,12 +1315,15 @@ void walt_cfs_tick(struct rq *rq)
 	if (list_empty(&wts->mvp_list) || (wts->mvp_list.next == NULL))
 		goto out;
 
+	/* Reschedule if RQ's skip_mvp state changes */
+	skip_mvp = wrq->skip_mvp;
 	walt_cfs_account_mvp_runtime(rq, rq->curr);
 	/*
 	 * If the current is not MVP means, we have to re-schedule to
 	 * see if we can run any other task including MVP tasks.
 	 */
-	if ((wrq->mvp_tasks.next != &wts->mvp_list) && rq->cfs.h_nr_running > 1)
+	if (((skip_mvp != wrq->skip_mvp) ||
+		(wrq->mvp_tasks.next != &wts->mvp_list)) && rq->cfs.h_nr_running > 1)
 		resched_curr(rq);
 
 out:
@@ -1320,7 +1343,7 @@ static void walt_cfs_check_preempt_wakeup(void *unused, struct rq *rq, struct ta
 	struct walt_task_struct *wts_p = (struct walt_task_struct *) p->android_vendor_data1;
 	struct task_struct *c = rq->curr;
 	struct walt_task_struct *wts_c = (struct walt_task_struct *) rq->curr->android_vendor_data1;
-	bool resched = false;
+	bool resched = false, skip_mvp;
 	bool p_is_mvp, curr_is_mvp;
 
 	if (unlikely(walt_disabled))
@@ -1334,7 +1357,7 @@ static void walt_cfs_check_preempt_wakeup(void *unused, struct rq *rq, struct ta
 	 * is simple.
 	 */
 	if (!curr_is_mvp) {
-		if (p_is_mvp)
+		if (p_is_mvp && !wrq->skip_mvp)
 			goto preempt;
 		return; /* CFS decides preemption */
 	}
@@ -1343,8 +1366,9 @@ static void walt_cfs_check_preempt_wakeup(void *unused, struct rq *rq, struct ta
 	 * current is MVP. update its runtime before deciding the
 	 * preemption.
 	 */
+	skip_mvp = wrq->skip_mvp;
 	walt_cfs_account_mvp_runtime(rq, c);
-	resched = (wrq->mvp_tasks.next != &wts_c->mvp_list);
+	resched = (skip_mvp != wrq->skip_mvp) || (wrq->mvp_tasks.next != &wts_c->mvp_list);
 
 	/*
 	 * current is no longer eligible to run. It must have been
@@ -1396,9 +1420,14 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 			 (*p)->on_rq, task_thread_info(*p)->cpu,
 			 cpu_of(rq), ((*p)->flags & PF_KTHREAD));
 
-	/* We don't have MVP tasks queued */
-	if (list_empty(&wrq->mvp_tasks))
+	/* RQ is in MVP throttled state*/
+	if (wrq->skip_mvp)
 		return;
+
+	if (list_empty(&wrq->mvp_tasks)) {
+		wrq->mvp_arrival_time = 0;
+		return;
+	}
 
 	/* Return the first task from MVP queue */
 	wts = list_first_entry(&wrq->mvp_tasks, struct walt_task_struct, mvp_list);
@@ -1407,6 +1436,10 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 	*p = mvp;
 	*se = &mvp->se;
 	*repick = true;
+
+	/* Mark arrival of MVP task */
+	if (!wrq->mvp_arrival_time)
+		wrq->mvp_arrival_time = rq->clock;
 
 	if (simple) {
 		for_each_sched_entity((*se)) {
