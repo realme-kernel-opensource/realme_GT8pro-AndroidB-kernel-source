@@ -6950,10 +6950,7 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 			dbg_event(0xFF, "SUSP put",
 				atomic_read(&mdwc->dev->power.usage_count));
 		} else if (test_and_clear_bit(CONN_DONE, &mdwc->inputs) && mdwc->wcd_usbss) {
-			if (dwc->gadget->speed >= USB_SPEED_SUPER)
-				wcd_usbss_dpdm_switch_update(false, false);
-			else
-				wcd_usbss_dpdm_switch_update(true,
+			wcd_usbss_dpdm_switch_update(true,
 					dwc->gadget->speed == USB_SPEED_HIGH);
 		}
 		break;
