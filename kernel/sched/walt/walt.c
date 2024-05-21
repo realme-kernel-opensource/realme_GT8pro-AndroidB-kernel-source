@@ -4932,6 +4932,12 @@ int walt_get_cpus_in_state1(struct cpumask *cpus)
 }
 EXPORT_SYMBOL_GPL(walt_get_cpus_in_state1);
 
+cpumask_t walt_get_halted_cpus(void)
+{
+	return *(cpu_halt_mask);
+}
+EXPORT_SYMBOL_GPL(walt_get_halted_cpus);
+
 static void register_walt_hooks(void)
 {
 	register_trace_android_rvh_wake_up_new_task(android_rvh_wake_up_new_task, NULL);

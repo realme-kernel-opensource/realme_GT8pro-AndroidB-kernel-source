@@ -202,6 +202,7 @@ extern int walt_partial_pause_cpus(struct cpumask *cpus, enum pause_client clien
 extern int walt_partial_resume_cpus(struct cpumask *cpus, enum pause_client client);
 extern int sched_set_boost(int type);
 extern bool should_boost_bus_dcvs(void);
+extern cpumask_t walt_get_halted_cpus(void);
 #else
 static inline int sched_lpm_disallowed_time(int cpu, u64 *timeout)
 {
@@ -279,6 +280,12 @@ static inline int sched_set_boost(int type)
 static inline bool should_boost_bus_dcvs(void)
 {
 	return false;
+}
+
+static inline cpumask_t walt_get_halted_cpus(void)
+{
+	cpumask_t t = { CPU_BITS_NONE };
+	return t;
 }
 #endif
 
