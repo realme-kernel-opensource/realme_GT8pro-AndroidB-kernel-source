@@ -54,6 +54,7 @@ struct wcd_usbss_ctxt {
 	bool suspended;
 	bool defer_writes;
 	int req_state;
+	bool usb_sbu_compliance;
 };
 
 extern struct regmap *wcd_usbss_regmap_init(struct device *dev,
