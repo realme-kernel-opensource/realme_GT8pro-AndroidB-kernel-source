@@ -840,7 +840,7 @@ static int clock_debug_print_clock(struct hw_debug_clk *dclk, struct seq_file *s
 		if (!clk_hw)
 			break;
 
-		clk_rate = clk_hw_get_rate(clk_hw);
+		clk_rate = clk_get_rate(clk);
 
 		if (!atomic)
 			vdd_level = clk_list_rate_vdd_level(clk_hw, clk_rate);
