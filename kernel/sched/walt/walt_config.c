@@ -95,6 +95,7 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 		oscillate_period_ns = 8000000;
+		soc_feat_set(SOC_ENABLE_OSCILLATE_ON_THERMALS);
 		/*G + P*/
 		cpumask_copy(&pipeline_sync_cpus, cpu_possible_mask);
 		soc_sched_lib_name_capacity = 2;
