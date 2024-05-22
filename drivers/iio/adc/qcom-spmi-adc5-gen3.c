@@ -670,7 +670,8 @@ static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 	}
 
 	/* CHAN0 is the preconfigured channel for immediate conversion */
-	if (!status && !conv_err && (eoc_status & ADC5_GEN3_EOC_CHAN_0))
+	if ((status & ADC5_GEN3_STATUS1_EOC) && !conv_err &&
+			(eoc_status & ADC5_GEN3_EOC_CHAN_0))
 		complete(&adc->complete);
 
 	pr_debug("Interrupt status:%#x, EOC status:%#x, conv_err:%#x\n",
