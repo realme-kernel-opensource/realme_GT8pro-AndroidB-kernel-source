@@ -674,6 +674,11 @@ static inline bool is_storage_boost(void)
 	return sched_boost_type == STORAGE_BOOST;
 }
 
+static inline bool is_balance_boost(void)
+{
+	return sched_boost_type == BALANCE_BOOST;
+}
+
 static inline bool task_sched_boost(struct task_struct *p)
 {
 	struct cgroup_subsys_state *css;
@@ -723,6 +728,9 @@ static inline enum sched_boost_policy task_boost_policy(struct task_struct *p)
 		if (sched_boost_type == CONSERVATIVE_BOOST &&
 			task_util(p) <= sysctl_sched_min_task_util_for_boost &&
 			!walt_pipeline_low_latency_task(p))
+			policy = SCHED_BOOST_NONE;
+		if (sched_boost_type == BALANCE_BOOST &&
+			task_util(p) <= sysctl_sched_min_task_util_for_boost)
 			policy = SCHED_BOOST_NONE;
 	}
 
