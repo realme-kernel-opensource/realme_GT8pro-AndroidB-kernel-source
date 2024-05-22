@@ -10,6 +10,7 @@ def define_canoe():
         "drivers/clk/qcom/clk-qcom.ko",
         "drivers/cpuidle/governors/qcom_lpm.ko",
         "drivers/firmware/qcom/qcom-scm.ko",
+        "drivers/irqchip/qcom-pdc.ko",
         "drivers/pinctrl/qcom/pinctrl-canoe.ko",
         "drivers/pinctrl/qcom/pinctrl-msm.ko",
         "drivers/regulator/debug-regulator.ko",
