@@ -10,15 +10,19 @@
 #include <linux/irq.h>
 #include <linux/irqdesc.h>
 #include <linux/sched.h>
+#include <linux/usb/android_configfs_uevent.h>
 #include <linux/usb/dwc3-msm.h>
 #include <linux/usb/composite.h>
 #include "drivers/usb/dwc3/core.h"
 #include "debug-ipc.h"
 #include "drivers/usb/dwc3/gadget.h"
 
-struct kprobe_data {
-	struct dwc3 *dwc;
-	int xi0;
+union kprobe_data {
+	struct {
+		struct dwc3 *dwc;
+		int xi0;
+	};
+	struct work_struct *data;
 };
 
 static int entry_dwc3_gadget_run_stop(struct kretprobe_instance *ri,
@@ -100,7 +104,7 @@ static int entry_dwc3_gadget_reset_interrupt(struct kretprobe_instance *ri,
 static int entry_dwc3_gadget_pullup(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
-	struct kprobe_data *data = (struct kprobe_data *)ri->data;
+	union kprobe_data *data = (union kprobe_data *)ri->data;
 	struct usb_gadget *g = (struct usb_gadget *)regs->regs[0];
 
 	data->dwc = gadget_to_dwc(g);
@@ -118,7 +122,7 @@ static int entry_dwc3_gadget_pullup(struct kretprobe_instance *ri,
 static int exit_dwc3_gadget_pullup(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
-	struct kprobe_data *data = (struct kprobe_data *)ri->data;
+	union kprobe_data *data = (union kprobe_data *)ri->data;
 
 	dwc3_msm_notify_event(data->dwc, DWC3_CONTROLLER_PULLUP_EXIT,
 				data->xi0);
@@ -181,17 +185,44 @@ static int entry_trace_event_raw_event_dwc3_log_ep(struct kretprobe_instance *ri
 	return 0;
 }
 
+static int entry_android_work(struct kretprobe_instance *ri,
+			     struct pt_regs *regs)
+{
+	struct work_struct *data = (struct work_struct *)regs->regs[0];
+	union kprobe_data *w_data = (union kprobe_data *)ri->data;
+
+	w_data->data = data;
+	return 0;
+}
+
+static int exit_android_work(struct kretprobe_instance *ri,
+			    struct pt_regs *regs)
+{
+	union kprobe_data *w_data = (union kprobe_data *)ri->data;
+	struct android_uevent_opts *opts = container_of(w_data->data,
+			struct android_uevent_opts, work);
+
+	if (opts->configured)
+		pr_info("USB_STATE=CONFIGURED\n");
+	else if (opts->sw_connected)
+		pr_info(" USB_STATE=CONNECTED\n");
+	else
+		pr_info("USB_STATE=DISCONNECTED\n");
+
+	return 0;
+}
+
 #define ENTRY_EXIT(name) {\
 	.handler = exit_##name,\
 	.entry_handler = entry_##name,\
-	.data_size = sizeof(struct kprobe_data),\
+	.data_size = sizeof(union kprobe_data),\
 	.maxactive = 8,\
 	.kp.symbol_name = #name,\
 }
 
 #define ENTRY(name) {\
 	.entry_handler = entry_##name,\
-	.data_size = sizeof(struct kprobe_data),\
+	.data_size = sizeof(union kprobe_data),\
 	.maxactive = 8,\
 	.kp.symbol_name = #name,\
 }
@@ -202,6 +233,7 @@ static struct kretprobe dwc3_msm_probes[] = {
 	ENTRY(dwc3_gadget_reset_interrupt),
 	ENTRY(__dwc3_gadget_ep_enable),
 	ENTRY_EXIT(dwc3_gadget_pullup),
+	ENTRY_EXIT(android_work),
 	ENTRY(trace_event_raw_event_dwc3_log_request),
 	ENTRY(trace_event_raw_event_dwc3_log_gadget_ep_cmd),
 	ENTRY(trace_event_raw_event_dwc3_log_trb),
