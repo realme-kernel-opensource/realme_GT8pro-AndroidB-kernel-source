@@ -4669,6 +4669,11 @@ static void android_rvh_tick_entry(void *unused, struct rq *rq)
 		waltgov_run_callback(rq, WALT_CPUFREQ_EARLY_DET_BIT);
 }
 
+bool is_sbt_or_oscillate(void)
+{
+	return now_is_sbt || (oscillate_cpu != -1);
+}
+
 bool should_boost_bus_dcvs(void)
 {
 	trace_sched_boost_bus_dcvs(oscillate_cpu);

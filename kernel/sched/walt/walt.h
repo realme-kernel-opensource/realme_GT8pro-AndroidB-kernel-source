@@ -1238,6 +1238,8 @@ extern int oscillate_cpu;
 extern int oscillate_period_ns;
 extern enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt);
 extern bool should_oscillate(void);
+extern bool now_is_sbt;
+extern bool is_sbt_or_oscillate(void);
 
 enum WALT_DEBUG_FEAT {
 	WALT_BUG_UPSTREAM,
