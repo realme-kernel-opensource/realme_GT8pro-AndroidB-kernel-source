@@ -12,3 +12,4 @@ qcom-pdc.ko
 pinctrl-msm.ko
 pinctrl-canoe.ko
 qcom-scm.ko
+qcom_hwspinlock.ko
