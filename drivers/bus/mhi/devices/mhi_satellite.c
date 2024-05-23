@@ -8,6 +8,7 @@
 #include <linux/ipc_logging.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/rpmsg.h>
 #include <linux/slab.h>

@@ -8,6 +8,7 @@
 
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
+#include <linux/mod_devicetable.h>
 #include <linux/mutex.h>
 #include <linux/bitops.h>
 #include <linux/io.h>

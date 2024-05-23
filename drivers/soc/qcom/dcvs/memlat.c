@@ -18,6 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
+#include <linux/of_platform.h>
 #include <linux/slab.h>
 #include <linux/irq.h>
 #include <linux/cpu_pm.h>

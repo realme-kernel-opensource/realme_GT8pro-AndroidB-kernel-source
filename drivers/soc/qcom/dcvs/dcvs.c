@@ -19,6 +19,7 @@
 #include <linux/of_fdt.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <soc/qcom/dcvs.h>
 #include <soc/qcom/of_common.h>
