@@ -8,6 +8,7 @@ crm-v2.ko
 debug-regulator.ko
 proxy-consumer.ko
 stub-regulator.ko
+qcom-pdc.ko
 pinctrl-msm.ko
 pinctrl-canoe.ko
 qcom-scm.ko
