@@ -2,7 +2,7 @@
 
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "logbuf_vh: " fmt
@@ -64,12 +64,14 @@ void register_log_minidump(struct printk_ringbuffer *prb)
 		pr_err("Failed to add log_info entry in minidump table\n");
 }
 
-static int logbuf_vh_driver_probe(struct platform_device *pdev)
+static int __init logbuf_vh_driver_init(void)
 {
 	struct printk_ringbuffer *prb = NULL;
 
-	if (!debug_symbol_available())
-		return -EPROBE_DEFER;
+	if (!debug_symbol_available()) {
+		pr_err("debug symbol driver is not available\n");
+		return -ENODEV;
+	}
 
 	prb = *(struct printk_ringbuffer **)DEBUG_SYMBOL_LOOKUP(prb);
 	register_log_minidump(prb);
@@ -77,26 +79,7 @@ static int logbuf_vh_driver_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int logbuf_vh_driver_remove(struct platform_device *pdev)
-{
-	return 0;
-}
-
-static const struct of_device_id logbuf_vh_of_match[] = {
-	{ .compatible = "qcom,logbuf-vendor-hooks" },
-	{ }
-};
-MODULE_DEVICE_TABLE(of, logbuf_vh_of_match);
-
-static struct platform_driver logbuf_vh_driver = {
-	.driver = {
-		.name = "qcom-logbuf-vh",
-		.of_match_table = logbuf_vh_of_match,
-	},
-	.probe = logbuf_vh_driver_probe,
-	.remove = logbuf_vh_driver_remove,
-};
-module_platform_driver(logbuf_vh_driver);
+module_init(logbuf_vh_driver_init);
 
 MODULE_DESCRIPTION("QCOM Logbuf Vendor Hooks Driver");
 MODULE_LICENSE("GPL");
