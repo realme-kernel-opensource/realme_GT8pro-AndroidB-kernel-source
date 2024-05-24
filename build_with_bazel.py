@@ -61,7 +61,7 @@ class Target:
 class BazelBuilder:
     """Helper class for building with Bazel"""
 
-    def __init__(self, target_list, skip_list, out_dir, cache_dir, dry_run, user_opts):
+    def __init__(self, target_list, skip_list, out_dir, cache_dir, dry_run, gki_headers, user_opts):
         self.workspace = os.path.realpath(
             os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
         )
@@ -82,6 +82,7 @@ class BazelBuilder:
         self.target_list = target_list
         self.skip_list = skip_list
         self.dry_run = dry_run
+        self.gki_headers = gki_headers
         self.user_opts = user_opts
         self.process_list = []
         if len(self.target_list) > 1 and out_dir:
@@ -302,18 +303,42 @@ class BazelBuilder:
         if self.dry_run:
             self.user_opts.append("--nobuild")
 
-        logging.debug(
-            "Building the following targets:\n%s",
-            "\n".join([t.bazel_label for t in targets_to_build])
-        )
+        try:
+            if self.gki_headers:
+                gki_f = open('msm-kernel/files_gki_aarch64.txt', 'r')
+                gki_files = gki_f.readlines()
+                common_d = os.path.join(self.workspace, "common")
+                msm_d = os.path.join(self.workspace, "msm-kernel")
+                for f in gki_files:
+                    if ".h" in f:
+                        logging.info('GKI header file...%s', f)
+                        f=f.strip()
+                        common_f = os.path.join(common_d, f)
+                        msm_f = os.path.join(msm_d, f)
+                        os.remove(msm_f)
+                        os.symlink(common_f, msm_f)
+                gki_f.close()
 
-        self.clean_legacy_generated_files()
+            logging.debug(
+                "Building the following targets:\n%s",
+                "\n".join([t.bazel_label for t in targets_to_build])
+            )
 
-        logging.info("Building targets...")
-        self.build_targets(targets_to_build)
+            self.clean_legacy_generated_files()
 
-        if not self.dry_run:
-            self.run_targets(targets_to_build)
+            logging.info("Building targets...")
+            self.build_targets(targets_to_build)
+
+            if not self.dry_run:
+                self.run_targets(targets_to_build)
+        finally:
+            if self.gki_headers:
+                status = subprocess.run(["git", "restore",
+                                     "--pathspec-from-file=files_gki_aarch64.txt"],
+                                    cwd = os.path.join(self.workspace, "msm-kernel"))
+                if status.returncode != 0:
+                    logging.error("Failed to restore headers from symlinks")
+                    logging.error("You might want to check your msm-kernel tree")
 
 def main():
     """Main script entrypoint"""
@@ -367,6 +392,12 @@ def main():
         default=DEFAULT_CACHE_DIR,
         help='Specify the bazel cache directory (defaults to ' + DEFAULT_CACHE_DIR + ')'
     )
+    parser.add_argument(
+        "-g",
+        "--gki-headers",
+        action="store_true",
+        help="Compile with common headers instead of msm-kernel"
+    )
 
     args, user_opts = parser.parse_known_args(sys.argv[1:])
 
@@ -383,6 +414,7 @@ def main():
         args.out_dir,
         args.cache_dir,
         args.dry_run,
+        args.gki_headers,
         user_opts
     )
     try:
