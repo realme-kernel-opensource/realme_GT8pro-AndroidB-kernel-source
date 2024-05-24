@@ -30,6 +30,7 @@ def define_canoe():
         "drivers/iommu/qcom_iommu_util.ko",
         "drivers/irqchip/qcom-pdc.ko",
         "drivers/mailbox/qcom-ipcc.ko",
+        "drivers/nvmem/nvmem_qfprom.ko",
         "drivers/pci/controller/pci-msm-drv.ko",
         "drivers/pinctrl/qcom/pinctrl-canoe.ko",
         "drivers/pinctrl/qcom/pinctrl-msm.ko",
