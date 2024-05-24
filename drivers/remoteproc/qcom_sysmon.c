@@ -621,7 +621,7 @@ static void sysmon_stop(struct rproc_subdev *subdev, bool crashed)
 	timeout = jiffies + msecs_to_jiffies(SYSMON_NOTIF_TIMEOUT);
 	mod_timer(&sysmon->timeout_data.timer, timeout);
 
-	if (sysmon->ssctl_instance) {
+	if (sysmon->ssctl_instance != -EINVAL) {
 		if (!wait_for_completion_timeout(&sysmon->ssctl_comp, HZ / 2))
 			dev_err(sysmon->dev, "timeout waiting for ssctl service\n");
 	}
