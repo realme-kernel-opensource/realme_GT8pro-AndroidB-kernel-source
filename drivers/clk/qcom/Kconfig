@@ -1070,6 +1070,14 @@ config SM_DEBUGCC_SUN
 	  Say Y if you want to support the debug clocks such as clock
 	  measurement functionality.
 
+config SM_GCC_CANOE
+        tristate "CANOE Global Clock Controller"
+        help
+	  Support for the global clock controller on Qualcomm Technologies, Inc
+	  Canoe devices.
+	  Say Y if you want to use peripheral devices such as UART,
+	  SPI, I2C, USB, SD/UFS, PCIe etc.
+
 config SM_GPUCC_6115
 	tristate "SM6115 Graphics Clock Controller"
 	select SM_GCC_6115
