@@ -312,12 +312,19 @@
 #define MMAP_PAT3_PAT4_LEN_MASK			GENMASK(4, 0)
 
 /* HAPTICS_PATTERN registers only present in HAP530_HV */
+#define HAP_PTN_VISENSE_EN_REG			0x46
+#define HAP_PTN_VISENSE_EN_BIT			BIT(7)
+
 #define HAP_PTN_PATX_MEM_WR_START_ADDR_REG	0x50
 #define HAP_PTN_SPMI_PATX_MEM_START_ADDR_REG	0xA4
 #define HAP_PTN_SPMI_PATX_MEM_LEN_LSB_REG	0xA6
 #define HAP_PTN_PATX_MEM_LEN_HI_MASK		GENMASK(2, 0)
 #define HAP_PTN_PATX_MEM_LEN_LO_MASK		GENMASK(7, 0)
 #define HAP_PTN_PATX_MEM_LEN_HI_SHIFT		8
+
+#define HAP_PTN_VSENSE_ADC_CTL_REG		0x68
+#define HAP_PTN_ISENSE_ADC_CTL_REG		0x69
+#define HAP_PTN_VISENSE_ADC_CTL_MASK		GENMASK(7, 0)
 
 /* register in HBOOST module */
 #define HAP_BOOST_REVISION1			0x00
@@ -693,6 +700,7 @@ struct haptics_chip {
 	bool				hpwr_vreg_enabled;
 	bool				is_hv_haptics;
 	bool				hboost_enabled;
+	bool				visense_enabled;
 };
 
 struct haptics_reg_info {
@@ -3473,6 +3481,30 @@ static int haptics_config_wa(struct haptics_chip *chip)
 	return 0;
 }
 
+static int haptics_init_visense_config(struct haptics_chip *chip)
+{
+	int rc;
+	u8 val;
+
+	if (chip->hw_type < HAP530_HV)
+		return 0;
+
+	rc = haptics_read(chip, chip->ptn_addr_base, HAP_PTN_VISENSE_EN_REG, &val, 1);
+	if (!rc)
+		chip->visense_enabled = val & HAP_PTN_VISENSE_EN_BIT;
+
+	if (chip->visense_enabled) {
+		val = HAP_PTN_VISENSE_ADC_CTL_MASK;
+		rc = haptics_write(chip, chip->ptn_addr_base, HAP_PTN_VSENSE_ADC_CTL_REG, &val, 1);
+		if (rc < 0)
+			return rc;
+
+		rc = haptics_write(chip, chip->ptn_addr_base, HAP_PTN_ISENSE_ADC_CTL_REG, &val, 1);
+	}
+
+	return rc;
+}
+
 static int haptics_hw_init(struct haptics_chip *chip)
 {
 	int rc;
@@ -3505,6 +3537,10 @@ static int haptics_hw_init(struct haptics_chip *chip)
 		return rc;
 
 	rc = haptics_init_preload_pattern_effect(chip);
+	if (rc < 0)
+		return rc;
+
+	rc = haptics_init_visense_config(chip);
 	if (rc < 0)
 		return rc;
 
@@ -5235,11 +5271,22 @@ static ssize_t primitive_duration_store(const struct class *c,
 
 static CLASS_ATTR_RW(primitive_duration);
 
+static ssize_t visense_enabled_show(const struct class *c,
+		const struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", chip->visense_enabled);
+}
+static CLASS_ATTR_RO(visense_enabled);
+
 static struct attribute *hap_class_attrs[] = {
 	&class_attr_lra_calibration.attr,
 	&class_attr_lra_frequency_hz.attr,
 	&class_attr_lra_impedance.attr,
 	&class_attr_primitive_duration.attr,
+	&class_attr_visense_enabled.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(hap_class);
