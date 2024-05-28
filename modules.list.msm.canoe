@@ -6,6 +6,7 @@ cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko
 debug-regulator.ko
+gcc-canoe.ko
 proxy-consumer.ko
 stub-regulator.ko
 qcom-pdc.ko

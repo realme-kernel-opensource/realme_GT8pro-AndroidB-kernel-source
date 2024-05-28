@@ -8,6 +8,7 @@ def define_canoe():
         # keep sorted
         "drivers/clk/qcom/clk-dummy.ko",
         "drivers/clk/qcom/clk-qcom.ko",
+        "drivers/clk/qcom/gcc-canoe.ko",
         "drivers/cpuidle/governors/qcom_lpm.ko",
         "drivers/firmware/qcom/qcom-scm.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
