@@ -1840,7 +1840,7 @@ int clk_rcg2_crmc_populate_freq_table(struct clk_rcg2 *rcg)
 		prev_freq = curr_freq_tbl->freq;
 	}
 
-	return ret;
+	return 0;
 }
 
 static int clk_rcg2_crmc_determine_rate(struct clk_hw *hw,
