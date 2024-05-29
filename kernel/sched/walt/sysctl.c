@@ -1530,6 +1530,35 @@ static struct ctl_table walt_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_INT_MAX,
 	},
+	{
+		.procname	= "sched_smart_freq_legacy_reason_config",
+		.data		= &sysctl_freq_legacy_reason_cfg,
+		.maxlen		= SMART_FREQ_LEGACY_TUPLE_SIZE * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_legacy_config_handler,
+	},
+	{
+		.procname	= "sched_smart_freq_dump_legacy_reason",
+		.data		= &reason_dump,
+		.maxlen		= 1024 * sizeof(char),
+		.mode		= 0444,
+		.proc_handler	= sched_smart_freq_legacy_dump_handler,
+	},
+	{
+		.procname	= "sched_smart_freq_ipc_reason_config",
+		.data		= &sysctl_freq_ipc_reason_cfg,
+		.maxlen		= SMART_FREQ_IPC_TUPLE_SIZE * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_ipc_config_handler,
+	},
+	{
+		.procname	= "sched_smart_freq_dump_ipc_reason",
+		.data		= &reason_dump,
+		.maxlen		= 1024 * sizeof(char),
+		.mode		= 0444,
+		.proc_handler	= sched_smart_freq_ipc_dump_handler,
+	},
+	{ }
 };
 
 void walt_register_sysctl(void)

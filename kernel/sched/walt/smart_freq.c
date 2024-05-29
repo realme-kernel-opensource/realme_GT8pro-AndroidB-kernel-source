@@ -8,6 +8,217 @@
 #include "trace.h"
 
 static bool smart_freq_init_done;
+
+/* sysctl  handlers */
+unsigned int sysctl_freq_legacy_reason_cfg[SMART_FREQ_LEGACY_TUPLE_SIZE];
+unsigned int sysctl_freq_ipc_reason_cfg[SMART_FREQ_IPC_TUPLE_SIZE];
+char reason_dump[1024];
+
+static DEFINE_MUTEX(freq_reason_mutex);
+
+
+int sched_smart_freq_legacy_dump_handler(struct ctl_table *table, int write,
+					 void __user *buffer, size_t *lenp,
+					 loff_t *ppos)
+{
+	int ret = -EINVAL, pos = 0, i, j;
+
+	mutex_lock(&freq_reason_mutex);
+	for (j = 0; j < num_sched_clusters; j++) {
+		for (i = 0; i < LEGACY_SMART_FREQ; i++) {
+			pos += snprintf(reason_dump + pos, 50, "%d:%d:%lu:%llu:%d\n", j, i,
+			       default_freq_config[j].legacy_reason_config[i].freq_allowed,
+			       default_freq_config[j].legacy_reason_config[i].hyst_ns,
+			       !!(default_freq_config[j].smart_freq_participation_mask &
+				  BIT(i)));
+		}
+	}
+
+	ret = proc_dostring(table, write, buffer, lenp, ppos);
+	mutex_unlock(&freq_reason_mutex);
+
+	return ret;
+}
+
+int sched_smart_freq_ipc_dump_handler(struct ctl_table *table, int write,
+					 void __user *buffer, size_t *lenp,
+					 loff_t *ppos)
+{
+	int ret = -EINVAL, pos = 0, i, j;
+
+	mutex_lock(&freq_reason_mutex);
+
+	for (j = 0; j < num_sched_clusters; j++) {
+		for (i = 0; i < SMART_FMAX_IPC_MAX; i++) {
+			pos += snprintf(reason_dump + pos, 50, "%d:%d:%lu:%lu:%llu:%d\n", j, i,
+			       default_freq_config[j].ipc_reason_config[i].ipc,
+			       default_freq_config[j].ipc_reason_config[i].freq_allowed,
+			       default_freq_config[j].ipc_reason_config[i].hyst_ns,
+			       !!(default_freq_config[j].smart_freq_ipc_participation_mask &
+					BIT(i)));
+		}
+	}
+
+	ret = proc_dostring(table, write, buffer, lenp, ppos);
+	mutex_unlock(&freq_reason_mutex);
+
+	return ret;
+}
+
+int sched_smart_freq_legacy_config_handler(struct ctl_table *table, int write,
+					 void __user *buffer, size_t *lenp,
+					 loff_t *ppos)
+{
+	int ret = -EINVAL, reason_idx, cluster_id;
+	int i;
+	unsigned int *data = (unsigned int *)table->data;
+	int val[SMART_FREQ_LEGACY_TUPLE_SIZE];
+	struct ctl_table tmp = {
+		.data	= &val,
+		.maxlen	= sizeof(int) * SMART_FREQ_LEGACY_TUPLE_SIZE,
+		.mode	= table->mode,
+	};
+	unsigned long reason_freq;
+	unsigned long no_reason_freq;
+
+	mutex_lock(&freq_reason_mutex);
+
+	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
+	if (ret)
+		goto unlock;
+	ret = -EINVAL;
+
+	cluster_id = val[0];
+	reason_idx = val[1];
+	reason_freq = val[2];
+
+	/*Sanity out of bounds error check*/
+	if ((cluster_id < 0) || (cluster_id >= num_sched_clusters))
+		goto unlock;
+	if ((reason_idx < 0) || (reason_idx >= LEGACY_SMART_FREQ))
+		goto unlock;
+
+	/* Make sure that NO_REASON freq is less than any of the ones in legacy */
+	if (reason_idx == NO_REASON_SMART_FREQ) {
+		for (i = reason_idx + 1; i < LEGACY_SMART_FREQ; i++) {
+			if (!(default_freq_config[cluster_id].smart_freq_participation_mask &
+								BIT(i)))
+				continue;
+			if (reason_freq >
+			default_freq_config[cluster_id].legacy_reason_config[i].freq_allowed)
+				goto unlock;
+		}
+	}
+
+	no_reason_freq =
+	default_freq_config[cluster_id].legacy_reason_config[NO_REASON_SMART_FREQ].freq_allowed;
+	/* Make sure all reasons freq are larger than NO_REASON */
+	if (reason_idx > NO_REASON_SMART_FREQ) {
+		if (reason_freq < no_reason_freq)
+			goto unlock;
+	}
+
+	default_freq_config[cluster_id].legacy_reason_config[reason_idx].freq_allowed =
+		reason_freq;
+	/*
+	 * Update IPC_A as well, though we don't use IPC_A config but reading
+	 * from sysfs will give a consistent view.
+	 */
+	if (reason_idx == NO_REASON_SMART_FREQ)
+		default_freq_config[cluster_id].ipc_reason_config[0].freq_allowed = reason_freq;
+
+	for (i = 0; i < SMART_FREQ_LEGACY_TUPLE_SIZE; i++)
+		data[i] = val[i];
+
+	ret = 0;
+
+unlock:
+	mutex_unlock(&freq_reason_mutex);
+	return ret;
+}
+
+int sched_smart_freq_ipc_config_handler(struct ctl_table *table, int write,
+				      void __user *buffer, size_t *lenp,
+				      loff_t *ppos)
+{
+	int ret = -EINVAL, i, reason_idx, cluster_id, lower_index, higher_index;
+	unsigned long no_reason_freq;
+	unsigned int *data = (unsigned int *)table->data;
+	int val[SMART_FREQ_IPC_TUPLE_SIZE];
+	struct ctl_table tmp = {
+		.data	= &val,
+		.maxlen	= sizeof(int) * SMART_FREQ_IPC_TUPLE_SIZE,
+		.mode	= table->mode,
+	};
+	unsigned long ipc_freq;
+
+
+	mutex_lock(&freq_reason_mutex);
+
+	if (!write)
+		goto unlock;
+
+	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
+	if (ret)
+		goto unlock;
+	ret = -EINVAL;
+
+	cluster_id = val[0];
+	reason_idx = val[1];
+	ipc_freq = val[2];
+	no_reason_freq =
+	default_freq_config[cluster_id].legacy_reason_config[NO_REASON_SMART_FREQ].freq_allowed;
+
+	/*Sanity out of bounds error check*/
+	if ((cluster_id < 0) || (cluster_id >= num_sched_clusters))
+		goto unlock;
+	if ((reason_idx < 0) || (reason_idx >= SMART_FMAX_IPC_MAX))
+		goto unlock;
+	/* Make sure all reasons freq are larger than NO_REASON */
+	if (ipc_freq < no_reason_freq)
+		goto unlock;
+
+	/* IPC/freq should be in increasing order */
+	for (i = reason_idx - 1; i > 0; i--)
+		if (!!(default_freq_config[cluster_id].smart_freq_ipc_participation_mask &
+								BIT(i)))
+			break;
+	lower_index = i;
+
+	for (i = reason_idx + 1; i < SMART_FMAX_IPC_MAX; i++)
+		if (!!(default_freq_config[cluster_id].smart_freq_ipc_participation_mask &
+								BIT(i)))
+			break;
+
+	higher_index = i;
+
+	if (higher_index < SMART_FMAX_IPC_MAX) {
+		if (ipc_freq >
+		    default_freq_config[cluster_id].ipc_reason_config[higher_index].freq_allowed)
+			goto unlock;
+	}
+
+	if (reason_idx == IPC_A) {
+		if (ipc_freq != no_reason_freq)
+			goto unlock;
+	} else {
+		if (ipc_freq <
+		    default_freq_config[cluster_id].ipc_reason_config[lower_index].freq_allowed)
+			goto unlock;
+	}
+
+	default_freq_config[cluster_id].ipc_reason_config[reason_idx].freq_allowed = ipc_freq;
+
+	for (i = 0; i < SMART_FREQ_IPC_TUPLE_SIZE; i++)
+		data[i] = val[i];
+
+	ret = 0;
+
+unlock:
+	mutex_unlock(&freq_reason_mutex);
+	return ret;
+}
+
 /* return highest ipc of the cluster */
 unsigned int get_cluster_ipc_level_freq(int curr_cpu, u64 time)
 {
@@ -296,7 +507,7 @@ void smart_freq_update_reason_common(u64 wallclock, int nr_big, u32 wakeup_ctr_s
 /* Common config for 4 cluster system */
 struct smart_freq_cluster_info default_freq_config[MAX_CLUSTERS];
 
-void smart_freq_init(const char *soc)
+void smart_freq_init(const char *name)
 {
 	struct walt_sched_cluster *cluster;
 	int i = 0, j;
@@ -331,6 +542,74 @@ void smart_freq_init(const char *soc)
 		i++;
 	}
 
+	if (!strcmp(name, "SUN")) {
+		for_each_sched_cluster(cluster) {
+			if (cluster->id == 0) {
+				/* Legacy */
+				cluster->smart_freq_info->legacy_reason_config[0].freq_allowed =
+					2400000;
+				cluster->smart_freq_info->legacy_reason_config[5].freq_allowed =
+					2400000;
+				cluster->smart_freq_info->legacy_reason_config[2].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[3].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
+					300000000;
+				cluster->smart_freq_info->smart_freq_participation_mask |=
+					BIT(BOOST_SMART_FREQ) |
+					BIT(SUSTAINED_HIGH_UTIL_SMART_FREQ) |
+					BIT(BIG_TASKCNT_SMART_FREQ) |
+					BIT(TRAILBLAZER_SMART_FREQ) |
+					BIT(SBT_SMART_FREQ) |
+					BIT(PIPELINE_SMART_FREQ) |
+					BIT(THERMAL_ROTATION_SMART_FREQ);
+
+				/* IPC */
+				cluster->smart_freq_info->ipc_reason_config[0].ipc = 120;
+				cluster->smart_freq_info->ipc_reason_config[1].ipc = 180;
+				cluster->smart_freq_info->ipc_reason_config[2].ipc = 220;
+				cluster->smart_freq_info->ipc_reason_config[3].ipc = 260;
+				cluster->smart_freq_info->ipc_reason_config[4].ipc = 300;
+				cluster->smart_freq_info->smart_freq_ipc_participation_mask =
+					BIT(IPC_A) | BIT(IPC_B) | BIT(IPC_C) | BIT(IPC_D) |
+					BIT(IPC_E);
+				cluster->smart_freq_info->min_cycles = 5806080;
+			} else if (cluster->id == 1) {
+				/* Legacy */
+				cluster->smart_freq_info->legacy_reason_config[0].freq_allowed =
+					3513600;
+				cluster->smart_freq_info->legacy_reason_config[5].freq_allowed =
+					3513600;
+				cluster->smart_freq_info->legacy_reason_config[2].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[3].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
+					300000000;
+				cluster->smart_freq_info->smart_freq_participation_mask |=
+					BIT(BOOST_SMART_FREQ) |
+					BIT(SUSTAINED_HIGH_UTIL_SMART_FREQ) |
+					BIT(BIG_TASKCNT_SMART_FREQ) |
+					BIT(TRAILBLAZER_SMART_FREQ) |
+					BIT(SBT_SMART_FREQ) |
+					BIT(PIPELINE_SMART_FREQ) |
+					BIT(THERMAL_ROTATION_SMART_FREQ);
+
+				/* IPC */
+				cluster->smart_freq_info->ipc_reason_config[0].ipc = 220;
+				cluster->smart_freq_info->ipc_reason_config[1].ipc = 260;
+				cluster->smart_freq_info->ipc_reason_config[2].ipc = 280;
+				cluster->smart_freq_info->ipc_reason_config[3].ipc = 320;
+				cluster->smart_freq_info->ipc_reason_config[4].ipc = 400;
+				cluster->smart_freq_info->smart_freq_ipc_participation_mask =
+					BIT(IPC_A) | BIT(IPC_B) | BIT(IPC_C) | BIT(IPC_D) |
+					BIT(IPC_E);
+				cluster->smart_freq_info->min_cycles = 7004160;
+			}
+		}
+	}
 	smart_freq_init_done = true;
 	update_smart_freq_capacities();
+
 }
