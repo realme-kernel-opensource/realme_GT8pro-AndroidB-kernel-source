@@ -298,6 +298,7 @@ class BazelBuilder:
             "--ignore_missing_projects",
             "--incompatible_sandbox_hermetic_tmp=false",
             "--nozstd_dwarf_compression",
+            "--noenable_bzlmod",
         ])
 
         if self.dry_run:
