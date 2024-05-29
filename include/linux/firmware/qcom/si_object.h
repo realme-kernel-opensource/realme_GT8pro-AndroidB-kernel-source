@@ -226,5 +226,6 @@ int init_si_object_user(struct si_object *object, enum si_object_type ot,
 
 int get_si_object(struct si_object *object);
 void put_si_object(struct si_object *object);
+int get_async_proto_version(void);
 
 #endif /* _LINUX_SI_OBJECT_H__ */

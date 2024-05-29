@@ -12,6 +12,13 @@
 /* Processing of the async messges happens without any ordering. */
 
 struct si_object *erase_si_object(u32 idx);
+u32 global_version;
+
+struct async_msg_info {
+	u32 owner;
+	u32 out;
+	u64 user_data[];
+};
 
 /* Async handlers and providers. */
 struct async_msg {
@@ -31,9 +38,7 @@ struct async_msg {
 		/* This is a generic structure. */
 		struct {
 			u32 count;	/* SET to one; We create per-object 'owner' messages. */
-			u32 owner;
-			u32 out;
-			char user_data[];
+			struct async_msg_info async_info;
 		} info;
 	};
 };
@@ -48,13 +53,19 @@ struct async_msg {
  * ASYNC_OP_x_MSG_SIZE: size of a message with n entries.
  */
 
-#define ASYNC_OP_USER_HDR_SIZE offsetof(struct async_msg, info.user_data)
+#define ASYNC_OP_USER_HDR_SIZE offsetof(struct async_msg, info.async_info.user_data)
 
 #define ASYNC_OP_RELEASE SI_OBJECT_OP_RELEASE	/* Added in minor version 0x0000. **/
 #define ASYNC_OP_RELEASE_HDR_SIZE offsetof(struct async_msg, op_release.obj)
 #define ASYNC_OP_RELEASE_SIZE sizeof(((struct async_msg *)(0))->op_release.obj[0])
 #define ASYNC_OP_RELEASE_MSG_SIZE(n) \
 	(ASYNC_OP_RELEASE_HDR_SIZE + ((n) * ASYNC_OP_RELEASE_SIZE))
+
+int get_async_proto_version(void)
+{
+	return global_version;
+}
+EXPORT_SYMBOL_GPL(get_async_proto_version);
 
 /* 'async_si_buffer' return the available async buffer in the output buffer. */
 
@@ -260,9 +271,11 @@ static void call_prepare(struct si_object_invoke_ctx *oic,
 
 				/* Object's provider has done some preparation on the object. */
 
-				async_msg->info.owner = object_id;
+				async_msg->info.async_info.owner = object_id;
+
 				if (typeof_si_object(t_object) != SI_OT_NULL) {
-					if (get_object_id(t_object, &async_msg->info.out)) {
+					if (get_object_id(t_object,
+						&async_msg->info.async_info.out)) {
 						put_si_object(t_object);
 
 						break;
@@ -431,6 +444,7 @@ void __fetch__async_reqs(struct si_object_invoke_ctx *oic)
 
 		switch (async_msg->header.op) {
 		case ASYNC_OP_RELEASE:
+			global_version = async_msg->header.version;
 			consumed = async_release_handler(oic,
 				async_msg, async_buffer.size - used);
 
