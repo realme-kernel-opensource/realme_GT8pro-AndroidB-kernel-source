@@ -3973,7 +3973,7 @@ static void check_obet(void)
 	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
 		pid_t pid = per_cpu(big_task_pid, cpu);
 
-		if (pid == -1) {
+		if (pid) {
 			int task_count = 0;
 			int big_task_count = 0;
 
@@ -3997,14 +3997,6 @@ static void check_obet(void)
 				per_cpu(big_task_pid, cpu) = pid;
 			else
 				per_cpu(big_task_pid, cpu) = -1;
-		} else if (pid) {
-			/*
-			 * no need for get_task_struct() as we are running
-			 * with rq locks held
-			 */
-			p = find_task_by_vpid(pid);
-			if (!p || !task_on_rq_queued(p) || (task_cpu(p) != cpu))
-				per_cpu(big_task_pid, cpu) = 0;
 		}
 	}
 }
