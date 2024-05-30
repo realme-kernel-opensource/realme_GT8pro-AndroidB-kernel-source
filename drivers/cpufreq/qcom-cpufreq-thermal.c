@@ -131,6 +131,23 @@ err:
 	return ret;
 }
 
+static void qcom_cpufreq_thermal_driver_remove(struct platform_device *pdev)
+{
+	struct qcom_cpufreq_thermal *data = &qcom_cpufreq_thermal;
+	struct qcom_cpufreq_thermal_domain *domain;
+	struct device *cpu_dev;
+	int i;
+
+	for (i = 0; i < data->num_domains; i++) {
+		domain = &data->domains[i];
+
+		mbox_free_channel(domain->ch);
+		cpu_dev = get_cpu_device(domain->policy->cpu);
+		device_remove_file(cpu_dev, &domain->freq_limit_attr);
+		cpufreq_cpu_put(domain->policy);
+	}
+}
+
 static const struct of_device_id qcom_cpufreq_thermal_match[] = {
 	{ .compatible = "qcom,cpufreq-thermal" },
 	{}
@@ -139,6 +156,7 @@ MODULE_DEVICE_TABLE(of, qcom_cpufreq_thermal_match);
 
 static struct platform_driver qcom_cpufreq_thermal_driver = {
 	.probe = qcom_cpufreq_thermal_driver_probe,
+	.remove_new = qcom_cpufreq_thermal_driver_remove,
 	.driver = {
 		.name = "qcom-cpufreq-thermal",
 		.of_match_table = qcom_cpufreq_thermal_match,
