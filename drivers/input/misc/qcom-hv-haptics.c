@@ -217,6 +217,9 @@
 #define FORCE_VSET_ACK_BIT			BIT(1) /* This is only for HAP525_HV */
 #define FORCE_VREG_RDY_BIT			BIT(0)
 
+#define HAP_CFG_ZX_SYNC_CFG			0x6F /* only for HAP530_HV */
+#define EN_PDN_ZX_TO_FAULT_BIT			BIT(2)
+
 #define HAP_CFG_MOD_STATUS_SEL_REG		0x70
 #define HAP_CFG_MOD_STATUS_XT_REG		0x71
 
@@ -333,6 +336,9 @@
 
 #define PTRN_AMP_MSB_MASK			BIT(0)
 #define PTRN_AMP_LSB_MASK			GENMASK(7, 0)
+
+#define HAP_PTN_CL_VDRIVE_CTL_REG		0x4A /* only for HAP530_HV */
+#define EN_CL_VDRIVE_BIT			BIT(7)
 
 #define HAP_PTN_PTRN2_CFG_REG			0x50
 
@@ -1418,6 +1424,20 @@ static int haptics_get_lra_nominal_impedance(struct haptics_chip *chip, u32 *nom
 	return rc > 0 ? 0 : rc;
 }
 
+static int haptics_clear_fault(struct haptics_chip *chip)
+{
+	u8 val;
+
+	val = SC_CLR_BIT | AUTO_RES_ERR_CLR_BIT |
+		HPWR_RDY_FAULT_CLR_BIT;
+
+	if (chip->hw_type >= HAP530_HV)
+		val |= HAP_ZX_TO_FAULT_CLR_BIT;
+
+	return haptics_write(chip, chip->cfg_addr_base,
+			HAP_CFG_FAULT_CLR_REG, &val, 1);
+}
+
 static int haptics_set_vmax_headroom_mv(struct haptics_chip *chip, u32 hdrm_mv)
 {
 	int rc = 0;
@@ -1510,15 +1530,56 @@ static int haptics_set_vmax_mv(struct haptics_chip *chip, u32 vmax_mv)
 			vmax_mv = MAX_VMAX_MV - vmax_hdrm_mv;
 
 		rc = haptics_set_vmax_headroom_mv(chip, vmax_hdrm_mv);
-		if (rc < 0) {
-			mutex_unlock(&chip->vmax_lock);
-			return rc;
-		}
+		if (rc < 0)
+			goto unlock;
 
 		dev_dbg(chip->dev, "update VMAX_HDRM to %d mv\n", vmax_hdrm_mv);
 	}
 
+	if (chip->hw_type == HAP530_HV) {
+		rc = haptics_masked_write(chip, chip->cfg_addr_base,
+				HAP_CFG_ZX_SYNC_CFG,
+				EN_PDN_ZX_TO_FAULT_BIT,
+				EN_PDN_ZX_TO_FAULT_BIT);
+		if (rc < 0) {
+			dev_err(chip->dev, "enable PDM_ZX_TO_FAULT failed, rc=%d\n", rc);
+			goto unlock;
+		}
+
+		rc = haptics_masked_write(chip, chip->ptn_addr_base,
+				HAP_PTN_CL_VDRIVE_CTL_REG,
+				EN_CL_VDRIVE_BIT, 0);
+		if (rc < 0) {
+			dev_err(chip->dev, "disable CL_VDRIVE failed, rc=%d\n", rc);
+			goto unlock;
+		}
+
+		rc = haptics_clear_fault(chip);
+		if (rc < 0)
+			goto unlock;
+	}
+
 	rc = __haptics_set_vmax_mv(chip, vmax_mv);
+	if (rc < 0)
+		goto unlock;
+
+	if (chip->hw_type == HAP530_HV) {
+		rc = haptics_masked_write(chip, chip->cfg_addr_base,
+				HAP_CFG_ZX_SYNC_CFG,
+				EN_PDN_ZX_TO_FAULT_BIT, 0);
+		if (rc < 0) {
+			dev_err(chip->dev, "disable PDM_ZX_TO_FAULT failed, rc=%d\n", rc);
+			goto unlock;
+		}
+
+		rc = haptics_masked_write(chip, chip->ptn_addr_base,
+				HAP_PTN_CL_VDRIVE_CTL_REG,
+				EN_CL_VDRIVE_BIT, EN_CL_VDRIVE_BIT);
+		if (rc < 0)
+			dev_err(chip->dev, "enable CL_VDRIVE failed, rc=%d\n", rc);
+	}
+
+unlock:
 	mutex_unlock(&chip->vmax_lock);
 	return rc;
 }
@@ -1811,20 +1872,6 @@ static int haptics_open_loop_drive_config(struct haptics_chip *chip, bool en)
 	}
 
 	return 0;
-}
-
-static int haptics_clear_fault(struct haptics_chip *chip)
-{
-	u8 val;
-
-	val = SC_CLR_BIT | AUTO_RES_ERR_CLR_BIT |
-		HPWR_RDY_FAULT_CLR_BIT;
-
-	if (chip->hw_type >= HAP530_HV)
-		val |= HAP_ZX_TO_FAULT_CLR_BIT;
-
-	return haptics_write(chip, chip->cfg_addr_base,
-			HAP_CFG_FAULT_CLR_REG, &val, 1);
 }
 
 static int haptics_wait_brake_complete(struct haptics_chip *chip)
