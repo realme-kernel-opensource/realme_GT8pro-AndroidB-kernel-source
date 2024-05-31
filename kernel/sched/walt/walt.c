@@ -60,7 +60,7 @@ u64 (*walt_get_cycle_counts_cb)(int cpu, u64 wc);
 
 static u64 walt_load_reported_window;
 
-static struct irq_work walt_cpufreq_irq_work;
+struct irq_work walt_cpufreq_irq_work;
 struct irq_work walt_migration_irq_work;
 unsigned int walt_rotation_enabled;
 
@@ -4121,92 +4121,12 @@ void walt_rotation_checkpoint(int nr_big)
 
 	for (i = 0; i < num_sched_clusters; i++) {
 		if (walt_rotation_enabled && !prev)
-			fmax_cap[HIGH_PERF_CAP][i] = high_perf_cluster_freq_cap[i];
+			freq_cap[HIGH_PERF_CAP][i] = high_perf_cluster_freq_cap[i];
 		else if (!walt_rotation_enabled && prev)
-			fmax_cap[HIGH_PERF_CAP][i] = FREQ_QOS_MAX_DEFAULT_VALUE;
+			freq_cap[HIGH_PERF_CAP][i] = FREQ_QOS_MAX_DEFAULT_VALUE;
 	}
 
-	update_fmax_cap_capacities();
-}
-
-#define WAKEUP_CTR_THRESH 50
-#define FMAX_CAP_HYSTERESIS 1000000000
-#define UTIL_THRES 90
-#define UNCAP_THRES 300000000
-bool thres_based_uncap(u64 window_start)
-{
-	struct walt_sched_cluster *cluster;
-	int cpu, i = 0;
-	struct walt_rq *wrq;
-
-	for (i = 0; i < num_sched_clusters; i++) {
-		bool cluster_high_load = false;
-		unsigned long fmax_capacity, tgt_cap;
-
-		cluster = sched_cluster[i];
-		fmax_capacity = arch_scale_cpu_capacity(cpumask_first(&cluster->cpus));
-		tgt_cap = mult_frac(fmax_capacity, sysctl_fmax_cap[cluster->id],
-					cluster->max_possible_freq);
-
-		for_each_cpu(cpu, &cluster->cpus) {
-			wrq = &per_cpu(walt_rq, cpu);
-			if (wrq->util >= mult_frac(tgt_cap, UTIL_THRES, 100)) {
-				cluster_high_load = true;
-				if (!cluster->found_ts)
-					cluster->found_ts = window_start;
-				else if ((window_start - cluster->found_ts) >= UNCAP_THRES)
-					return true;
-
-				break;
-			}
-		}
-		if (!cluster_high_load)
-			cluster->found_ts = 0;
-	}
-
-	return false;
-}
-
-void fmax_uncap_checkpoint(int nr_big, u64 window_start, u32 wakeup_ctr_sum)
-{
-	bool fmax_uncap_load_detected;
-	static u64 fmax_uncap_timestamp;
-	int i;
-
-	fmax_uncap_load_detected = (nr_big >= 7 && wakeup_ctr_sum < WAKEUP_CTR_THRESH) ||
-			is_full_throttle_boost() ||
-			is_storage_boost() ||
-			thres_based_uncap(window_start) ||
-			trailblazer_on_prime();
-
-	if (fmax_uncap_load_detected) {
-		if (!fmax_uncap_timestamp)
-			for (i = 0; i < num_sched_clusters; i++)
-				fmax_cap[SMART_FMAX_CAP][i] = FREQ_QOS_MAX_DEFAULT_VALUE;
-		fmax_uncap_timestamp = window_start;
-	} else if (fmax_uncap_timestamp) {
-		/*
-		 * Enter to check for capping again only if we have already uncapped
-		 * Apply fmax capping if we are continuously running at lower
-		 * load for more than FMAX_CAP_HYSTERESIS.
-		 */
-		if (window_start > fmax_uncap_timestamp + FMAX_CAP_HYSTERESIS) {
-			for (int i = 0; i < num_sched_clusters; i++)
-				fmax_cap[SMART_FMAX_CAP][i] = sysctl_fmax_cap[i];
-
-			fmax_uncap_timestamp = 0;
-		}
-	}
-
-	update_fmax_cap_capacities();
-
-	trace_sched_fmax_uncap(nr_big, window_start, wakeup_ctr_sum,
-			fmax_uncap_load_detected, fmax_uncap_timestamp);
-
-	if (trace_sched_cluster_fmax_uncap_enabled()) {
-		for (i = 0; i < num_sched_clusters; i++)
-			trace_sched_cluster_fmax_uncap(i);
-	}
+	update_smart_freq_capacities();
 }
 
 void walt_fill_ta_data(struct core_ctl_notif_data *data)

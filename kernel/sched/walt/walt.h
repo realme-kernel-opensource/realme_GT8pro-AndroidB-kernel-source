@@ -69,7 +69,7 @@ enum pipeline_types {
 
 enum freq_caps {
 	PARTIAL_HALT_CAP,
-	SMART_FMAX_CAP,
+	SMART_FREQ,
 	HIGH_PERF_CAP,
 	MAX_FREQ_CAP,
 };
@@ -139,6 +139,55 @@ struct load_subtractions {
 	u64			new_subs;
 };
 
+/* ========================= SMART FREQ config =====================*/
+enum smart_freq_legacy_reason {
+	NO_REASON_SMART_FREQ,
+	BOOST_SMART_FREQ,
+	SUSTAINED_HIGH_UTIL_SMART_FREQ,
+	BIG_TASKCNT_SMART_FREQ,
+	TRAILBLAZER_SMART_FREQ,
+	SBT_SMART_FREQ,
+	PIPELINE_SMART_FREQ,
+	THERMAL_ROTATION_SMART_FREQ,
+	LEGACY_SMART_FREQ,
+};
+
+struct smart_freq_legacy_reason_status {
+	u64 deactivate_ns;
+};
+
+struct smart_freq_legacy_reason_config {
+	unsigned long freq_allowed;
+	u64 hyst_ns;
+};
+
+struct smart_freq_cluster_info {
+	u32 smart_freq_participation_mask;
+	unsigned int cluster_active_reason;
+	struct smart_freq_legacy_reason_config legacy_reason_config[LEGACY_SMART_FREQ];
+	struct smart_freq_legacy_reason_status legacy_reason_status[LEGACY_SMART_FREQ];
+};
+
+/*=========================================================================*/
+struct walt_sched_cluster {
+	raw_spinlock_t		load_lock;
+	struct list_head	list;
+	struct cpumask		cpus;
+	int			id;
+	/*
+	 * max_possible_freq = maximum supported by hardware
+	 * max_freq = max freq as per cpufreq limits
+	 */
+	unsigned int		cur_freq;
+	unsigned int		max_possible_freq;
+	unsigned int		max_freq;
+	unsigned int		walt_internal_freq_limit;
+	u64			aggr_grp_load;
+	unsigned long		util_to_cost[1024];
+	u64			found_ts;
+	struct smart_freq_cluster_info *smart_freq_info;
+};
+
 struct walt_rq {
 	struct task_struct	*push_task;
 	struct walt_sched_cluster *cluster;
@@ -186,24 +235,6 @@ struct walt_rq {
 
 DECLARE_PER_CPU(struct walt_rq, walt_rq);
 
-struct walt_sched_cluster {
-	raw_spinlock_t		load_lock;
-	struct list_head	list;
-	struct cpumask		cpus;
-	int			id;
-	/*
-	 * max_possible_freq = maximum supported by hardware
-	 * max_freq = max freq as per cpufreq limits
-	 */
-	unsigned int		cur_freq;
-	unsigned int		max_possible_freq;
-	unsigned int		max_freq;
-	unsigned int		walt_internal_freq_limit;
-	u64			aggr_grp_load;
-	unsigned long		util_to_cost[1024];
-	u64			found_ts;
-};
-
 extern struct completion walt_get_cycle_counts_cb_completion;
 extern bool use_cycle_counter;
 extern struct walt_sched_cluster *sched_cluster[WALT_NR_CPUS];
@@ -227,7 +258,6 @@ extern void sched_update_nr_prod(int cpu, int enq);
 extern unsigned int walt_big_tasks(int cpu);
 extern int walt_trailblazer_tasks(int cpu);
 extern void walt_rotation_checkpoint(int nr_big);
-extern void fmax_uncap_checkpoint(int nr_big, u64 window_start, u32 wakeup_ctr_sum);
 extern void walt_fill_ta_data(struct core_ctl_notif_data *data);
 extern int sched_set_group_id(struct task_struct *p, unsigned int group_id);
 extern unsigned int sched_get_group_id(struct task_struct *p);
@@ -327,9 +357,9 @@ extern const int sched_user_hint_max;
 extern unsigned int sysctl_sched_dynamic_tp_enable;
 extern unsigned int sysctl_panic_on_walt_bug;
 extern unsigned int sysctl_max_freq_partial_halt;
-extern unsigned int sysctl_fmax_cap[MAX_CLUSTERS];
+extern unsigned int sysctl_freq_cap[MAX_CLUSTERS];
 extern unsigned int high_perf_cluster_freq_cap[MAX_CLUSTERS];
-extern unsigned int fmax_cap[MAX_FREQ_CAP][MAX_CLUSTERS];
+extern unsigned int freq_cap[MAX_FREQ_CAP][MAX_CLUSTERS];
 extern unsigned int debugfs_walt_features;
 #define walt_feat(feat)		(debugfs_walt_features & feat)
 extern int sched_dynamic_tp_handler(struct ctl_table *table, int write,
@@ -398,6 +428,7 @@ extern void walt_update_group_thresholds(void);
 extern void sched_window_nr_ticks_change(void);
 extern unsigned long sched_user_hint_reset_time;
 extern struct irq_work walt_migration_irq_work;
+extern struct irq_work walt_cpufreq_irq_work;
 
 #define LIB_PATH_LENGTH 512
 extern unsigned int cpuinfo_max_freq_cached;
@@ -440,7 +471,7 @@ extern cpumask_t cpus_for_pipeline;
 #define CPUFREQ_REASON_SUH_BIT			BIT(9)
 #define CPUFREQ_REASON_ADAPTIVE_LOW_BIT		BIT(10)
 #define CPUFREQ_REASON_ADAPTIVE_HIGH_BIT	BIT(11)
-#define CPUFREQ_REASON_SMART_FMAX_CAP_BIT	BIT(12)
+#define CPUFREQ_REASON_SMART_FREQ_BIT		BIT(12)
 #define CPUFREQ_REASON_HIGH_PERF_CAP_BIT	BIT(13)
 #define CPUFREQ_REASON_PARTIAL_HALT_CAP_BIT	BIT(14)
 #define CPUFREQ_REASON_TRAILBLAZER_STATE_BIT	BIT(15)
@@ -1192,37 +1223,11 @@ static inline int walt_find_and_choose_cluster_packing_cpu(int start_cpu, struct
 	return packing_cpu;
 }
 
+extern void update_smart_freq_capacities(void);
 extern void update_cpu_capacity_helper(int cpu);
-
-static inline bool has_internal_freq_limit_changed(struct walt_sched_cluster *cluster)
-{
-	unsigned int internal_freq;
-	int i;
-
-	internal_freq = cluster->walt_internal_freq_limit;
-	cluster->walt_internal_freq_limit = cluster->max_freq;
-
-	if (likely(!waltgov_disabled)) {
-		for (i = 0; i < MAX_FREQ_CAP; i++)
-			cluster->walt_internal_freq_limit = min(fmax_cap[i][cluster->id],
-					     cluster->walt_internal_freq_limit);
-	}
-
-	return cluster->walt_internal_freq_limit != internal_freq;
-}
-
-static inline void update_fmax_cap_capacities(void)
-{
-	struct walt_sched_cluster *cluster;
-	int cpu;
-
-	for_each_sched_cluster(cluster) {
-		if (has_internal_freq_limit_changed(cluster)) {
-			for_each_cpu(cpu, &cluster->cpus)
-				update_cpu_capacity_helper(cpu);
-		}
-	}
-}
+extern void smart_freq_update_for_all_cluster(u64 wallclock, uint32_t reasons);
+extern void smart_freq_update_reason_common(u64 window_start, int nr_big, u32 wakeup_ctr_sum);
+extern void smart_freq_init(const char *name);
 
 extern int add_pipeline(struct walt_task_struct *wts);
 extern int remove_pipeline(struct walt_task_struct *wts);

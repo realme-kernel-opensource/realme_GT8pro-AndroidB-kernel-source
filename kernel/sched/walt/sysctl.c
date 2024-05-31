@@ -88,13 +88,13 @@ unsigned int sysctl_em_inflate_pct;
 unsigned int sysctl_em_inflate_thres;
 unsigned int sysctl_sched_heavy_nr;
 unsigned int sysctl_max_freq_partial_halt;
-unsigned int sysctl_fmax_cap[MAX_CLUSTERS];
+unsigned int sysctl_freq_cap[MAX_CLUSTERS];
 unsigned int sysctl_sched_sbt_pause_cpus;
 unsigned int sysctl_sched_sbt_enable = 1;
 unsigned int sysctl_sched_sbt_delay_windows;
 unsigned int high_perf_cluster_freq_cap[MAX_CLUSTERS];
 unsigned int sysctl_sched_pipeline_cpus;
-unsigned int fmax_cap[MAX_FREQ_CAP][MAX_CLUSTERS];
+unsigned int freq_cap[MAX_FREQ_CAP][MAX_CLUSTERS];
 unsigned int sysctl_sched_pipeline_special;
 unsigned int sysctl_sched_pipeline_util_thres;
 
@@ -730,7 +730,7 @@ unlock_mutex:
 	return ret;
 }
 
-int sched_fmax_cap_handler(struct ctl_table *table, int write,
+int sched_freq_cap_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp,
 		loff_t *ppos)
 {
@@ -1501,18 +1501,11 @@ static struct ctl_table walt_table[] = {
 		.extra2		= SYSCTL_INT_MAX,
 	},
 	{
-		.procname	= "sched_fmax_cap",
-		.data		= &sysctl_fmax_cap,
-		.maxlen		= sizeof(unsigned int) * MAX_CLUSTERS,
-		.mode		= 0644,
-		.proc_handler	= sched_fmax_cap_handler,
-	},
-	{
 		.procname	= "sched_high_perf_cluster_freq_cap",
 		.data		= &high_perf_cluster_freq_cap,
 		.maxlen		= sizeof(unsigned int) * MAX_CLUSTERS,
 		.mode		= 0644,
-		.proc_handler	= sched_fmax_cap_handler,
+		.proc_handler	= sched_freq_cap_handler,
 	},
 	{
 		.procname	= "mpam_part_id",

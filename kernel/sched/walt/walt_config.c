@@ -63,7 +63,7 @@ void walt_config(void)
 	}
 
 	for (i = 0; i < MAX_CLUSTERS; i++) {
-		sysctl_fmax_cap[i] = FREQ_QOS_MAX_DEFAULT_VALUE;
+		sysctl_freq_cap[i] = FREQ_QOS_MAX_DEFAULT_VALUE;
 		high_perf_cluster_freq_cap[i] = FREQ_QOS_MAX_DEFAULT_VALUE;
 		sysctl_sched_idle_enough_clust[i] = SCHED_IDLE_ENOUGH_DEFAULT;
 		sysctl_sched_cluster_util_thres_pct_clust[i] = SCHED_CLUSTER_UTIL_THRES_PCT_DEFAULT;
@@ -72,7 +72,7 @@ void walt_config(void)
 
 	for (i = 0; i < MAX_FREQ_CAP; i++) {
 		for (j = 0; j < MAX_CLUSTERS; j++)
-			fmax_cap[i][j] = FREQ_QOS_MAX_DEFAULT_VALUE;
+			freq_cap[i][j] = FREQ_QOS_MAX_DEFAULT_VALUE;
 	}
 
 	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
@@ -123,4 +123,6 @@ void walt_config(void)
 				&pipeline_sync_cpus, &cpu_array[0][3]);
 		}
 	}
+
+	smart_freq_init(name);
 }

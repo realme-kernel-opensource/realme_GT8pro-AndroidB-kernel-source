@@ -805,7 +805,8 @@ TRACE_EVENT(waltgov_next_freq,
 		    __entry->rt_util		= cpu_util_rt(cpu_rq(policy->cpu));
 		    __entry->driving_cpu	= driving_cpu;
 		    __entry->reason		= reason;
-		    __entry->smart_freq	= fmax_cap[SMART_FMAX_CAP][cpu_cluster(policy->cpu)->id];
+		    __entry->smart_freq		=
+				freq_cap[SMART_FREQ][cpu_cluster(policy->cpu)->id];
 		    __entry->final_freq		= final_freq;
 	    ),
 	    TP_printk("cpu=%u util=%lu max=%lu raw_freq=%u freq=%u policy_min_freq=%u policy_max_freq=%u cached_raw_freq=%u need_update=%d thermal_isolated=%d rt_util=%u driv_cpu=%u reason=0x%x smart_freq=%u final_freq=%u",
@@ -1611,63 +1612,38 @@ TRACE_EVENT(update_cpu_capacity,
 			__entry->rq_cpu_capacity_orig)
 );
 
-TRACE_EVENT(sched_fmax_uncap,
 
-	TP_PROTO(int nr_big, u64 window_start, u32 wakeup_ctr_sum, bool fmax_uncap_load_detected,
-		u64 fmax_uncap_timestamp),
+TRACE_EVENT(sched_freq_uncap,
 
-	TP_ARGS(nr_big, window_start, wakeup_ctr_sum, fmax_uncap_load_detected,
-		fmax_uncap_timestamp),
+	TP_PROTO(int id, int nr_big, u32 wakeup_ctr_sum, uint32_t reasons,
+		 uint32_t cluster_active_reason, unsigned long max_cap, int max_reason),
+
+	TP_ARGS(id, nr_big, wakeup_ctr_sum, reasons, cluster_active_reason, max_cap, max_reason),
 
 	TP_STRUCT__entry(
+		__field(int, id)
 		__field(int, nr_big)
-		__field(u64, ws)
 		__field(u32, wakeup_ctr_sum)
-		__field(bool, load_detected)
-		__field(u64, uncap_ts)
+		__field(uint32_t, reasons)
+		__field(uint32_t, cluster_active_reason)
+		__field(unsigned long, max_cap)
+		__field(int, max_reason)
 	),
 
 	TP_fast_assign(
+		__entry->id = id;
 		__entry->nr_big = nr_big;
-		__entry->ws = window_start;
-		__entry->wakeup_ctr_sum	= wakeup_ctr_sum;
-		__entry->load_detected = fmax_uncap_load_detected;
-		__entry->uncap_ts = fmax_uncap_timestamp;
+		__entry->wakeup_ctr_sum = wakeup_ctr_sum;
+		__entry->reasons = reasons;
+		__entry->cluster_active_reason = cluster_active_reason;
+		__entry->max_cap = max_cap;
+		__entry->max_reason = BIT(max_reason);
 	),
 
-	TP_printk("nr_big=%d ws=%llu wakeup_ctr_sum=%u load_detected=%d uncap_ts=%llu",
-			__entry->nr_big, __entry->ws,
-			__entry->wakeup_ctr_sum, __entry->load_detected,
-			__entry->uncap_ts)
+	TP_printk("cluster=%d nr_big=%d wakeup_ctr_sum=%d cuuret_reasons=0x%x cluster_active_reason=0x%x max_cap=%lu max_reason=0x%x",
+		  __entry->id, __entry->nr_big, __entry->wakeup_ctr_sum, __entry->reasons,
+		  __entry->cluster_active_reason, __entry->max_cap, __entry->max_reason)
 );
-
-TRACE_EVENT(sched_cluster_fmax_uncap,
-
-	TP_PROTO(int i),
-
-	TP_ARGS(i),
-
-	TP_STRUCT__entry(
-		__field(unsigned int, fmax_cap_0)
-		__field(unsigned int, fmax_cap_1)
-		__field(unsigned int, fmax_cap_2)
-		__field(unsigned int, fmax_cap_3)
-	),
-
-	TP_fast_assign(
-		__entry->fmax_cap_0 = sysctl_fmax_cap[0];
-		__entry->fmax_cap_1 = sysctl_fmax_cap[1];
-		__entry->fmax_cap_2 = sysctl_fmax_cap[2];
-		__entry->fmax_cap_3 = sysctl_fmax_cap[3];
-	),
-
-	TP_printk("fmax_cap_0=%u fmax_cap_1=%u fmax_cap_2=%u fmax_cap_3=%u",
-			__entry->fmax_cap_0,
-			__entry->fmax_cap_1,
-			__entry->fmax_cap_2,
-			__entry->fmax_cap_3)
-);
-
 
 TRACE_EVENT(sched_update_updown_migrate_values,
 

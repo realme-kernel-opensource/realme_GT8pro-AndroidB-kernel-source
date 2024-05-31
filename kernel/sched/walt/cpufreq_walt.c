@@ -330,16 +330,16 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 		}
 	}
 
-	if (freq > fmax_cap[SMART_FMAX_CAP][cluster->id]) {
-		freq = fmax_cap[SMART_FMAX_CAP][cluster->id];
-		wg_driv_cpu->reasons |= CPUFREQ_REASON_SMART_FMAX_CAP_BIT;
+	if (freq > freq_cap[SMART_FREQ][cluster->id]) {
+		freq = freq_cap[SMART_FREQ][cluster->id];
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_SMART_FREQ_BIT;
 	}
-	if (freq > fmax_cap[HIGH_PERF_CAP][cluster->id]) {
-		freq = fmax_cap[HIGH_PERF_CAP][cluster->id];
+	if (freq > freq_cap[HIGH_PERF_CAP][cluster->id]) {
+		freq = freq_cap[HIGH_PERF_CAP][cluster->id];
 		wg_driv_cpu->reasons |= CPUFREQ_REASON_HIGH_PERF_CAP_BIT;
 	}
-	if (freq > fmax_cap[PARTIAL_HALT_CAP][cluster->id]) {
-		freq = fmax_cap[PARTIAL_HALT_CAP][cluster->id];
+	if (freq > freq_cap[PARTIAL_HALT_CAP][cluster->id]) {
+		freq = freq_cap[PARTIAL_HALT_CAP][cluster->id];
 		wg_driv_cpu->reasons |= CPUFREQ_REASON_PARTIAL_HALT_CAP_BIT;
 	}
 
