@@ -1036,7 +1036,7 @@ static int crm_send_cmd(struct crm_drv *drv, u32 vcd_type, const struct crm_cmd 
 	if (compl && wait) {
 		time_left = wait_for_completion_timeout(compl, CRM_TIMEOUT_MS);
 		if (!time_left) {
-			WARN_ON(1);
+			BUG_ON(1);
 			return -ETIMEDOUT;
 		}
 		/* Unblock new requests for same VCD */
