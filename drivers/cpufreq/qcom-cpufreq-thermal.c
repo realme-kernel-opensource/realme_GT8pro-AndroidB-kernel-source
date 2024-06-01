@@ -124,7 +124,7 @@ err:
 		domain = &data->domains[i];
 		if (domain->policy)
 			cpufreq_cpu_put(domain->policy);
-		if (domain->ch)
+		if (!IS_ERR_OR_NULL(domain->ch))
 			mbox_free_channel(domain->ch);
 	}
 
