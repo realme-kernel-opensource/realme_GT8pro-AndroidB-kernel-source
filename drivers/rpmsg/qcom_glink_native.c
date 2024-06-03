@@ -1719,35 +1719,37 @@ static int qcom_glink_announce_create(struct rpmsg_device *rpdev)
 	int size;
 
 	CH_INFO(channel, "Entered\n");
-	if (glink->intentless || !completion_done(&channel->open_ack))
+	if (!completion_done(&channel->open_ack))
 		return 0;
 
-	channel->channel_ready = true;
+	if (!glink->intentless) {
+		channel->channel_ready = true;
 
-	/*Serve any pending intent request*/
-	spin_lock_irqsave(&channel->intent_lock, flags);
-	idr_for_each_entry(&channel->liids, tmp, iid) {
-		if (!tmp->reuse && !tmp->advertised) {
-			intent = tmp;
-			spin_unlock_irqrestore(&channel->intent_lock, flags);
-			qcom_glink_advertise_intent(glink, channel, intent);
-			spin_lock_irqsave(&channel->intent_lock, flags);
+		/*Serve any pending intent request*/
+		spin_lock_irqsave(&channel->intent_lock, flags);
+		idr_for_each_entry(&channel->liids, tmp, iid) {
+			if (!tmp->reuse && !tmp->advertised) {
+				intent = tmp;
+				spin_unlock_irqrestore(&channel->intent_lock, flags);
+				qcom_glink_advertise_intent(glink, channel, intent);
+				spin_lock_irqsave(&channel->intent_lock, flags);
+			}
 		}
-	}
-	spin_unlock_irqrestore(&channel->intent_lock, flags);
+		spin_unlock_irqrestore(&channel->intent_lock, flags);
 
-	prop = of_find_property(np, "qcom,intents", NULL);
-	if (prop) {
-		val = prop->value;
-		num_groups = prop->length / sizeof(u32) / 2;
-	}
+		prop = of_find_property(np, "qcom,intents", NULL);
+		if (prop) {
+			val = prop->value;
+			num_groups = prop->length / sizeof(u32) / 2;
+		}
 
-	/* Channel is now open, advertise base set of intents */
-	while (num_groups--) {
-		size = be32_to_cpup(val++);
-		num_intents = be32_to_cpup(val++);
-		while (num_intents--)
-			qcom_glink_queue_rx_intent_alloc(glink, channel, size, true, false);
+		/* Channel is now open, advertise base set of intents */
+		while (num_groups--) {
+			size = be32_to_cpup(val++);
+			num_intents = be32_to_cpup(val++);
+			while (num_intents--)
+				qcom_glink_queue_rx_intent_alloc(glink, channel, size, true, false);
+		}
 	}
 
 	channel->rx_task = kthread_run(qcom_glink_rx_thread, channel, "glink-%s", channel->name);
