@@ -31,6 +31,7 @@
 #include <linux/qpnp/qpnp-pbs.h>
 
 #include <linux/soc/qcom/battery_charger.h>
+#include <linux/soc/qcom/qcom_hv_haptics.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/qcom_haptics.h>
@@ -106,6 +107,7 @@
 #define DRV_WF_SEL_MASK				GENMASK(1, 0)
 
 #define HAP_CFG_AUTO_SHUTDOWN_CFG_REG		0x4A
+#define EN_WFHOLD_FIFO_BIT			BIT(2) /* For haptics HAP525_HV and later */
 
 #define HAP_CFG_TRIG_PRIORITY_REG		0x4B
 #define SWR_IGNORE_BIT				BIT(4)
@@ -134,6 +136,19 @@
 #define HAP_CFG_CL_BRAKE_CAL_PARAM_REG		0x52
 #define HAP_CFG_CL_BRAKE_RSET_REG		0x53
 #define HAP_CFG_PWM_CFG_REG			0x5A
+
+/* Only for HAP530_HV */
+
+#define HAP_CFG_CL_BRAKE_RCAL_REG		0x52
+#define CL_BRAKE_RCAL_MASK			GENMASK(5, 0)
+
+/* For HAP_CFG_CL_BRAKE_RSET_REG */
+#define FORCE_RNAT_RCAL_PARAM_MASK		BIT(0)
+
+#define HAP_CFG_CL_BRAKE_RNAT_REG		0x54
+#define CL_BRAKE_RNAT_MASK			GENMASK(5, 0)
+
+/* End HAP530_HV */
 
 #define HAP_CFG_TLRA_OL_HIGH_REG		0x5C
 #define TLRA_OL_MSB_MASK			GENMASK(3, 0)
@@ -186,6 +201,7 @@
 #define ILIM_DENSITY_8_OVER_64_CYCLES		0
 
 #define HAP_CFG_FAULT_CLR_REG			0x66
+#define HAP_ZX_TO_FAULT_CLR_BIT			BIT(4) /* only for HAP530_HV */
 #define SC_CLR_BIT				BIT(2)
 #define AUTO_RES_ERR_CLR_BIT			BIT(1)
 #define HPWR_RDY_FAULT_CLR_BIT			BIT(0)
@@ -208,6 +224,11 @@
 #define CAL_RC_CLK_DISABLED_VAL			0
 #define CAL_RC_CLK_AUTO_VAL			1
 #define CAL_RC_CLK_MANUAL_VAL			2
+#define BRAKE_CAL_MASK				GENMASK(1, 0)
+#define BRAKE_CAL_NONE				0
+#define BRAKE_CAL_CL_NATURAL			1
+#define BRAKE_CAL_CL_FORCED			2
+#define BRAKE_CAL_CL_RECAL			3
 
 /* For HAP520_MV and HAP525_HV */
 #define HAP_CFG_ISC_CFG2_REG			0x77
@@ -237,6 +258,28 @@
 #define LRA_IMPEDANCE_MEAS_CURRENT_SEL_BIT	BIT(0)
 #define CURRENT_SEL_VAL_125MA			0
 #define CURRENT_SEL_VAL_250MA			1
+
+/* Only for HAP530 */
+#define HAP_CFG_ICOMP_AVG_CTL1_REG		0xC0
+#define ICOMP_THRESH_MASK			GENMASK(6, 0)
+#define ICOMP_THRESH_STEP_NA			7812500
+
+#define HAP_CFG_ICOMP_AVG_CTL2_REG		0xC1
+
+#define HAP_CFG_RSENSE_MEAS_LSB_REG		0xC4
+#define LRA_IMPEDANCE_VISENSE_MOHMS		25
+#define HAP_CFG_RSENSE_MEAS_MSB_MASK		GENMASK(3, 0)
+
+#define HAP_CFG_VISENSE_PEAK_DET_CTL_REG	0xC7
+#define VISENSE_PEAK_DET_EN_BIT			BIT(7)
+#define VISENSE_PEAK_DET_MODE			BIT(6)
+#define VISENSE_INST_DET_EN_BIT			BIT(4)
+
+#define HAP_CFG_VSENSE_PEAK_LSB_REG		0xC8
+#define HAP_CFG_VSENSE_PEAK_MSB_MASK		GENMASK(5, 0)
+
+#define HAP_CFG_ISENSE_PEAK_LSB_REG		0xCA
+#define HAP_CFG_ISENSE_PEAK_MSB_MASK		GENMASK(4, 0)
 
 /* version register definitions for HAPTICS_PATTERN module */
 #define HAP_PTN_REVISION2_REG			0x01
@@ -312,10 +355,16 @@
 #define MMAP_PAT3_PAT4_LEN_MASK			GENMASK(4, 0)
 
 /* HAPTICS_PATTERN registers only present in HAP530_HV */
+#define HAP_PTN_FORCE_TWIND_CAL_MSB		0x30
+#define HAP_PTN_TWIND_CAL_MSB_MASK		GENMASK(3, 0)
+
+#define HAP_PTN_FORCE_TWIND_CAL_LSB		0x31
+
 #define HAP_PTN_VISENSE_EN_REG			0x46
 #define HAP_PTN_VISENSE_EN_BIT			BIT(7)
 
 #define HAP_PTN_PATX_MEM_WR_START_ADDR_REG	0x50
+#define HAP_PTN_BRAKE_AMP_0_REG			0x70
 #define HAP_PTN_SPMI_PATX_MEM_START_ADDR_REG	0xA4
 #define HAP_PTN_SPMI_PATX_MEM_LEN_LSB_REG	0xA6
 #define HAP_PTN_PATX_MEM_LEN_HI_MASK		GENMASK(2, 0)
@@ -369,6 +418,22 @@
 #define PBS_TRIG_SET_VAL			0x1
 #define PBS_TRIG_CLR_VAL			0x1
 
+/*
+ * haptics SDAM register offset definitions for HAP530 that overrides some
+ * definitions above.
+ */
+
+#define HAP_AUTO_BRAKE_CAL_CL_BRAKE_RSET_OFFSET	0x52
+#define HAP_AUTO_BRAKE_CAL_BRAKE_AMP0_OFFSET	0x53
+#define HAP_AUTO_BRAKE_RNAT_DEFAULT_OFFSET	0x61
+#define HAP_AUTO_BRAKE_RCAL_DEFAULT_OFFSET	0x62
+#define HAP_AUTO_BRAKE_T_WIND_MSB_DEF_OFFSET	0x63
+#define HAP_AUTO_BRAKE_T_WIND_LSB_DEF_OFFSET	0x64
+#define HAP_AUTO_BRAKE_T_WIND_STS_MSB_OFFSET	0x6E
+#define HAP_AUTO_BRAKE_T_WIND_STS_LSB_OFFSET	0x6F
+#define HAP_AUTO_BRAKE_RNAT_OFFSET		0x78
+#define HAP_AUTO_BRAKE_RCAL_OFFSET		0x79
+
 /* constant parameters */
 #define SAMPLES_PER_PATTERN			8
 #define BRAKE_SAMPLE_COUNT			8
@@ -406,6 +471,7 @@ enum hap_status_sel {
 	BRAKE_CAL_SCALAR = 0x07,
 	CLAMPED_DUTY_CYCLE_STS = 0x8003,
 	FIFO_REAL_TIME_STS = 0x8005,
+	AUTO_BRAKE_CAL_STS = 0x8006,
 };
 
 enum drv_sig_shape {
@@ -701,6 +767,7 @@ struct haptics_chip {
 	bool				is_hv_haptics;
 	bool				hboost_enabled;
 	bool				visense_enabled;
+	ktime_t				pattern_start_time;
 };
 
 struct haptics_reg_info {
@@ -735,6 +802,17 @@ static const struct fifo_hw_info hap530_fifo = {
 	.fifo_threshold_per_bit	= 64,
 	.fifo_empty_threshold_mask = HAP530_EMPTY_THRESH_MASK,
 };
+
+static struct haptics_chip *phapchip;
+
+bool qcom_haptics_vi_sense_is_enabled(void)
+{
+	if (!phapchip)
+		return false;
+
+	return phapchip->visense_enabled;
+}
+EXPORT_SYMBOL_GPL(qcom_haptics_vi_sense_is_enabled);
 
 static inline int get_max_fifo_samples(struct haptics_chip *chip)
 {
@@ -1050,6 +1128,8 @@ static int haptics_get_status_data(struct haptics_chip *chip,
 		name = "CLAMPED_DUTY_CYCLE_STS";
 	else if (sel == FIFO_REAL_TIME_STS)
 		name = "FIFO_REAL_TIME_STS";
+	else if (sel == AUTO_BRAKE_CAL_STS)
+		name = "AUTO_BRAKE_CAL_STS";
 
 	dev_dbg(chip->dev, "Get status data[%s] = (%#x, %#x)\n", name, data[0], data[1]);
 	trace_qcom_haptics_status(name, data[0], data[1]);
@@ -1731,6 +1811,9 @@ static int haptics_clear_fault(struct haptics_chip *chip)
 
 	val = SC_CLR_BIT | AUTO_RES_ERR_CLR_BIT |
 		HPWR_RDY_FAULT_CLR_BIT;
+
+	if (chip->hw_type >= HAP530_HV)
+		val |= HAP_ZX_TO_FAULT_CLR_BIT;
 
 	return haptics_write(chip, chip->cfg_addr_base,
 			HAP_CFG_FAULT_CLR_REG, &val, 1);
@@ -2891,9 +2974,85 @@ static int haptics_playback(struct input_dev *dev, int effect_id, int val)
 	struct haptics_chip *chip = input_get_drvdata(dev);
 
 	dev_dbg(chip->dev, "playback val = %d\n", val);
-	if (!!val)
-		return haptics_enable_play(chip, true);
+	if (!!val) {
+		if (chip->config.measure_lra_impedance && chip->visense_enabled)
+			chip->pattern_start_time = ktime_get_boottime();
 
+		return haptics_enable_play(chip, true);
+	}
+
+	return 0;
+}
+
+#define AVG_RSENSE_MEAS_PER_CYCLE		4
+static int haptics_measure_visense_lra_impedance(struct haptics_chip *chip, int pattern_run_time)
+{
+	u32 avg_rsense_meas, icomp_thresh_na, r_typical_ohm, vmax_mv;
+	u32 i_peak_ma, rsense_mohm, v_peak_mv;
+	u32 play_rsense_meas;
+	u8 val[2];
+	int rc;
+
+	rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_ICOMP_AVG_CTL1_REG, val, 1);
+	if (rc < 0)
+		return rc;
+	icomp_thresh_na = (val[0] & ICOMP_THRESH_MASK) * ICOMP_THRESH_STEP_NA;
+
+	rc = haptics_get_lra_nominal_impedance(chip, &r_typical_ohm);
+	if (rc < 0)
+		return rc;
+
+	rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_VMAX_REG, val, 1);
+	if (rc < 0)
+		return rc;
+	vmax_mv = val[0] * ((chip->is_hv_haptics) ? VMAX_HV_STEP_MV : VMAX_MV_STEP_MV);
+
+	rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_ICOMP_AVG_CTL2_REG, val, 1);
+	if (rc < 0)
+		return rc;
+	avg_rsense_meas = 1 << val[0];
+
+	play_rsense_meas = (pattern_run_time * AVG_RSENSE_MEAS_PER_CYCLE) / chip->config.t_lra_us;
+
+	/*
+	 * If vmax is higher than ICOMP_THRESH * R_typical and play length is
+	 * longer than #N of measurement time use rsense directly otherwise use
+	 * v_peak and i_peak to calculate rsense
+	 */
+	if ((u64)vmax_mv * 1000000 > (u64)icomp_thresh_na * r_typical_ohm &&
+	    play_rsense_meas >= avg_rsense_meas) {
+		/* LRA Resistance = RSENSE_MEAS * 0.025 Ohms */
+		rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_RSENSE_MEAS_LSB_REG, val, 2);
+		if (rc < 0)
+			return rc;
+		rsense_mohm = ((val[1] & HAP_CFG_RSENSE_MEAS_MSB_MASK) << 8) | val[0];
+
+		dev_dbg(chip->dev, "measured rsense: %#x mohm\n", rsense_mohm);
+
+		chip->config.lra_measured_mohms = rsense_mohm * LRA_IMPEDANCE_VISENSE_MOHMS;
+	} else {
+		/* Measured Voltage Peak = VSENSE_MEAS * 50mV/2^6 */
+		rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_VSENSE_PEAK_LSB_REG, val, 2);
+		if (rc < 0)
+			return rc;
+		v_peak_mv = ((val[1] & HAP_CFG_VSENSE_PEAK_MSB_MASK) << 8) | val[0];
+		v_peak_mv = (v_peak_mv * 50) / 64;
+
+		/* Measured Current Peak = ISENSE_MEAS * 1A/2^12 */
+		rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_ISENSE_PEAK_LSB_REG, val, 2);
+		if (rc < 0)
+			return rc;
+		i_peak_ma = ((val[1] & HAP_CFG_ISENSE_PEAK_MSB_MASK) << 8) | val[0];
+		i_peak_ma = (i_peak_ma * 1000) / 4096;
+
+		dev_dbg(chip->dev, "measured voltage peak: %#x mv, current peak = %#x ma\n",
+			v_peak_mv, i_peak_ma);
+
+		/* LRA Resistance = VPEAK / IPEAK */
+		chip->config.lra_measured_mohms = (v_peak_mv * 1000) / i_peak_ma;
+	}
+
+	dev_dbg(chip->dev, "measured LRA impedance: %u mohm\n", chip->config.lra_measured_mohms);
 	return 0;
 }
 
@@ -2901,12 +3060,14 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 {
 	struct haptics_chip *chip = input_get_drvdata(dev);
 	struct haptics_play_info *play = &chip->play;
+	ktime_t pattern_run_time;
 	int rc;
 
 	dev_dbg(chip->dev, "erase effect, really stop play\n");
 	cancel_work_sync(&chip->set_gain_work);
 	mutex_lock(&play->lock);
 	cancel_delayed_work_sync(&chip->stop_work);
+	pattern_run_time = ktime_us_delta(ktime_get_boottime(), chip->pattern_start_time);
 	if ((play->pattern_src == FIFO) &&
 			atomic_read(&play->fifo_status.is_busy)) {
 		if (atomic_read(&play->fifo_status.written_done) == 0) {
@@ -2934,6 +3095,12 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 	rc = haptics_enable_hpwr_vreg(chip, false);
 	if (rc < 0)
 		dev_err(chip->dev, "disable hpwr_vreg failed, rc=%d\n", rc);
+
+	if (chip->config.measure_lra_impedance && chip->visense_enabled) {
+		rc = haptics_measure_visense_lra_impedance(chip, pattern_run_time);
+		if (rc < 0)
+			dev_err(chip->dev, "visense lra impedance measurement failed, rc=%d\n", rc);
+	}
 
 	return rc;
 }
@@ -3484,7 +3651,7 @@ static int haptics_config_wa(struct haptics_chip *chip)
 static int haptics_init_visense_config(struct haptics_chip *chip)
 {
 	int rc;
-	u8 val;
+	u8 val, mask;
 
 	if (chip->hw_type < HAP530_HV)
 		return 0;
@@ -3500,10 +3667,41 @@ static int haptics_init_visense_config(struct haptics_chip *chip)
 			return rc;
 
 		rc = haptics_write(chip, chip->ptn_addr_base, HAP_PTN_ISENSE_ADC_CTL_REG, &val, 1);
+		if (rc < 0)
+			return rc;
+
+		if (chip->config.measure_lra_impedance) {
+			mask = VISENSE_PEAK_DET_EN_BIT | VISENSE_PEAK_DET_MODE |
+				VISENSE_INST_DET_EN_BIT;
+			val = VISENSE_PEAK_DET_EN_BIT | VISENSE_PEAK_DET_MODE;
+			rc = haptics_masked_write(chip, chip->cfg_addr_base,
+				HAP_CFG_VISENSE_PEAK_DET_CTL_REG, mask, val);
+		}
 	}
 
 	return rc;
 }
+
+static int haptics_init_fifo_config(struct haptics_chip *chip)
+{
+	/*
+	 * WF_HOLD_FIFO keeps haptics output to the previous value when FIFO runs dry.
+	 * It is helpful to keep haptics play continuously when we have a small FIFO
+	 * space and slow SW response to refill the FIFO samples. However, it also
+	 * brings a side effect that haptics would continue to output if FIFO play
+	 * ends with a non-zero sample while the SPMI_PLAY bit is not de-asserted
+	 * timely. Further, with the default minimal FIFO space of 640 bytes, we have
+	 * never run into the situation when FIFO runs dry because of SW couldn't
+	 * refill the FIFO samples. Hence, keep WF_HOLD_FIFO as disabled.
+	 */
+	if (chip->hw_type >= HAP525_HV)
+		return haptics_masked_write(chip, chip->cfg_addr_base,
+				HAP_CFG_AUTO_SHUTDOWN_CFG_REG, EN_WFHOLD_FIFO_BIT, 0);
+
+	return 0;
+}
+
+static int haptics_auto_brake_manual_config(struct haptics_chip *chip);
 
 static int haptics_hw_init(struct haptics_chip *chip)
 {
@@ -3541,6 +3739,16 @@ static int haptics_hw_init(struct haptics_chip *chip)
 		return rc;
 
 	rc = haptics_init_visense_config(chip);
+	if (rc < 0)
+		return rc;
+
+	if (chip->visense_enabled) {
+		rc = haptics_auto_brake_manual_config(chip);
+		if (rc < 0)
+			return rc;
+	}
+
+	rc = haptics_init_fifo_config(chip);
 	if (rc < 0)
 		return rc;
 
@@ -4601,6 +4809,10 @@ static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 		goto restore;
 
 	if (chip->hw_type >= HAP530_HV) {
+		rc = haptics_enable_autores(chip, false);
+		if (rc < 0)
+			goto restore;
+
 		chip->play.brake = NULL;
 		rc = haptics_set_fifo(chip, &fifo);
 		if (rc < 0)
@@ -4974,11 +5186,186 @@ restore:
 	return rc;
 }
 
+static int haptics_auto_brake_manual_config(struct haptics_chip *chip)
+{
+	bool auto_brake_cal_done = false;
+	unsigned int addr;
+	u8 val[2];
+	int rc;
+
+	rc = nvmem_device_read(chip->hap_cfg_nvmem,
+				HAP_AUTO_BRAKE_CAL_DONE_OFFSET, 1, val);
+	if (rc <= 0) {
+		dev_err(chip->dev, "read AUTO_BRAKE_CAL_DONE failed, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	auto_brake_cal_done = val[0] & AUTO_BRAKE_CAL_DONE;
+	dev_dbg(chip->dev, "auto_brake_cal_done: %u\n", auto_brake_cal_done);
+
+	/* Read RNAT and RCAL values from SDAM and write to HAP_CFG */
+	addr = auto_brake_cal_done ? HAP_AUTO_BRAKE_RNAT_OFFSET :
+		HAP_AUTO_BRAKE_RNAT_DEFAULT_OFFSET;
+	rc = nvmem_device_read(chip->hap_cfg_nvmem, addr, 2, val);
+	if (rc < 0) {
+		dev_err(chip->dev, "Error reading RNAT/RCAL values, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	val[0] &= CL_BRAKE_RNAT_MASK;
+	rc = haptics_write(chip, chip->cfg_addr_base, HAP_CFG_CL_BRAKE_RNAT_REG,
+			&val[0], 1);
+	if (rc < 0)
+		return rc;
+
+	val[1] &= CL_BRAKE_RCAL_MASK;
+	rc = haptics_write(chip, chip->cfg_addr_base, HAP_CFG_CL_BRAKE_RCAL_REG,
+			&val[1], 1);
+	if (rc < 0)
+		return rc;
+
+	/* Read T_WIND_STS values from SDAM and write to HAP_PTN */
+	addr = auto_brake_cal_done ? HAP_AUTO_BRAKE_T_WIND_STS_MSB_OFFSET :
+		HAP_AUTO_BRAKE_T_WIND_MSB_DEF_OFFSET;
+	rc = nvmem_device_read(chip->hap_cfg_nvmem, addr, 2, val);
+	if (rc < 0) {
+		dev_err(chip->dev, "Error reading T_WIND_STS values, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	val[0] &= HAP_PTN_TWIND_CAL_MSB_MASK;
+	rc = haptics_write(chip, chip->ptn_addr_base,
+			HAP_PTN_FORCE_TWIND_CAL_MSB, val, 2);
+	if (rc < 0)
+		return rc;
+
+	/* Read BRAKE_AMP_0 value from SDAM and write to HAP_PTN */
+	rc = nvmem_device_read(chip->hap_cfg_nvmem,
+			HAP_AUTO_BRAKE_CAL_BRAKE_AMP0_OFFSET, 1, val);
+	if (rc < 0) {
+		dev_err(chip->dev, "Error reading BRAKE_AMP0 value, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	rc = haptics_write(chip, chip->ptn_addr_base, HAP_PTN_BRAKE_AMP_0_REG,
+			&val[0], 1);
+	if (rc < 0)
+		return rc;
+
+	/* Read BRAKE_RSET value from SDAM and write to HAP_CFG */
+	rc = nvmem_device_read(chip->hap_cfg_nvmem,
+			HAP_AUTO_BRAKE_CAL_CL_BRAKE_RSET_OFFSET, 1, val);
+	if (rc < 0) {
+		dev_err(chip->dev, "Error reading BRAKE_RSET value, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	val[0] &= FORCE_RNAT_RCAL_PARAM_MASK;
+	rc = haptics_masked_write(chip, chip->cfg_addr_base,
+			HAP_CFG_CL_BRAKE_RSET_REG, FORCE_RNAT_RCAL_PARAM_MASK,
+			val[0]);
+	if (rc < 0)
+		return rc;
+
+	/* Run auto brake re-calibration */
+	val[0] = BRAKE_CAL_CL_RECAL;
+	rc = haptics_masked_write(chip, chip->cfg_addr_base, HAP_CFG_CAL_EN_REG,
+			BRAKE_CAL_MASK, val[0]);
+	if (rc < 0)
+		return rc;
+
+	/* As per HW recommendation, wait for 5 uS before clearing BRAKE_CAL */
+	udelay(5);
+
+	val[0] = BRAKE_CAL_NONE;
+	rc = haptics_masked_write(chip, chip->cfg_addr_base, HAP_CFG_CAL_EN_REG,
+			BRAKE_CAL_MASK, val[0]);
+
+	/*
+	 * Read back whether BRAKE_CAL_DONE is high and the calibration is
+	 * successful or not.
+	 */
+	rc = haptics_get_status_data(chip, AUTO_BRAKE_CAL_STS, val);
+	if (!rc)
+		dev_dbg(chip->dev, "Manual AUTO_BRAKE_CAL_DONE: %#x %s\n",
+			 val[1], val[1] & BIT(2) ? "Success" : "Fail");
+
+	return rc;
+}
+
 #define AUTO_BRAKE_CAL_POLLING_COUNT	10
 #define AUTO_BRAKE_CAL_POLLING_STEP_US	20000
 #define AUTO_BRAKE_CAL_WAIT_MS		800
+
+static int haptics_auto_brake_pbs_trigger(struct haptics_chip *chip)
+{
+	u32 retry_count = AUTO_BRAKE_CAL_POLLING_COUNT;
+	int rc;
+	u8 val;
+
+	rc = haptics_clear_fault(chip);
+	if (rc < 0)
+		return rc;
+
+	val = HAP_AUTO_BRAKE_CAL_VAL;
+	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_ARG_REG, 1, &val);
+	if (rc < 0) {
+		dev_err(chip->dev, "set PBS_ARG for auto brake cal failed, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	val = PBS_TRIG_CLR_VAL;
+	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_TRIG_CLR_REG, 1, &val);
+	if (rc < 0) {
+		dev_err(chip->dev, "clear PBS_TRIG for auto brake cal failed, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	val = PBS_TRIG_SET_VAL;
+	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_TRIG_SET_REG, 1, &val);
+	if (rc < 0) {
+		dev_err(chip->dev, "set PBS_TRIG for auto brake cal failed, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	/*
+	 * wait for ~800ms and then poll auto brake cal done flag with ~200ms
+	 * timeout
+	 */
+	msleep(AUTO_BRAKE_CAL_WAIT_MS);
+
+	while (retry_count--) {
+		rc = nvmem_device_read(chip->hap_cfg_nvmem,
+				HAP_AUTO_BRAKE_CAL_DONE_OFFSET, 1, &val);
+		if (rc < 0) {
+			dev_err(chip->dev, "read auto brake cal done flag failed, rc=%d\n",
+				rc);
+			return rc;
+		}
+
+		if (val & AUTO_BRAKE_CAL_DONE) {
+			dev_info(chip->dev, "auto brake calibration is done\n");
+			break;
+		}
+
+		usleep_range(AUTO_BRAKE_CAL_POLLING_STEP_US,
+				AUTO_BRAKE_CAL_POLLING_STEP_US + 1);
+	}
+
+	return rc;
+}
+
 #define AUTO_BRAKE_CAL_DRIVE_CYCLES	6
-static int haptics_start_auto_brake_calibration(struct haptics_chip *chip)
+
+static int haptics_auto_brake_calibration_customize(struct haptics_chip *chip)
 {
 	struct haptics_reg_info lra_config[4] = {
 		{ HAP_CFG_DRV_DUTY_CFG_REG, 0x55 },
@@ -4987,14 +5374,9 @@ static int haptics_start_auto_brake_calibration(struct haptics_chip *chip)
 		{ HAP_CFG_ADT_DRV_DUTY_CFG_REG, 0x3B },
 	};
 	struct haptics_reg_info backup[4];
-	u32 retry_count = AUTO_BRAKE_CAL_POLLING_COUNT;
 	u32 t_lra_us, tmp;
 	u8 val[AUTO_BRAKE_CAL_DRIVE_CYCLES] = {};
 	int rc, i;
-
-	/* Ignore calibration if nvmem is not assigned */
-	if (!chip->hap_cfg_nvmem || chip->hw_type != HAP525_HV)
-		return -EOPNOTSUPP;
 
 	t_lra_us = chip->config.t_lra_us;
 	/* Update T_LRA into SDAM */
@@ -5068,50 +5450,7 @@ static int haptics_start_auto_brake_calibration(struct haptics_chip *chip)
 		goto restore;
 	}
 
-	rc = haptics_clear_fault(chip);
-	if (rc < 0)
-		goto restore;
-
-	/* Trigger PBS to start calibration */
-	val[0] = HAP_AUTO_BRAKE_CAL_VAL;
-	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_ARG_REG, 1, val);
-	if (rc < 0) {
-		dev_err(chip->dev, "set PBS_ARG for auto brake cal failed, rc=%d\n", rc);
-		goto restore;
-	}
-
-	val[0] = PBS_TRIG_CLR_VAL;
-	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_TRIG_CLR_REG, 1, val);
-	if (rc < 0) {
-		dev_err(chip->dev, "clear PBS_TRIG for auto brake cal failed, rc=%d\n", rc);
-		goto restore;
-	}
-
-	val[0] = PBS_TRIG_SET_VAL;
-	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_TRIG_SET_REG, 1, val);
-	if (rc < 0) {
-		dev_err(chip->dev, "set PBS_TRIG for auto brake cal failed, rc=%d\n", rc);
-		goto restore;
-	}
-
-	/* wait for ~800ms and then poll auto brake cal done flag with ~200ms timeout */
-	msleep(AUTO_BRAKE_CAL_WAIT_MS);
-
-	while (retry_count--) {
-		rc = nvmem_device_read(chip->hap_cfg_nvmem,
-				HAP_AUTO_BRAKE_CAL_DONE_OFFSET, 1, val);
-		if (rc < 0) {
-			dev_err(chip->dev, "read auto brake cal done flag failed, rc=%d\n", rc);
-			goto restore;
-		}
-
-		if (val[0] & AUTO_BRAKE_CAL_DONE) {
-			dev_info(chip->dev, "auto brake calibration is done\n");
-			break;
-		}
-
-		usleep_range(AUTO_BRAKE_CAL_POLLING_STEP_US, AUTO_BRAKE_CAL_POLLING_STEP_US + 1);
-	}
+	rc = haptics_auto_brake_pbs_trigger(chip);
 
 restore:
 	/* restore haptics settings after auto brake calibration */
@@ -5120,6 +5459,25 @@ restore:
 				backup[i].addr, &backup[i].val, 1);
 
 	return rc;
+}
+
+static int haptics_start_auto_brake_calibration(struct haptics_chip *chip)
+{
+	/* Ignore calibration if nvmem is not assigned */
+	if (!chip->hap_cfg_nvmem)
+		return -EOPNOTSUPP;
+
+	/*
+	 * Auto brake calibration is supported only for HAP525_HV
+	 * and HAP530_HV.
+	 */
+	if (chip->hw_type < HAP525_HV)
+		return -EOPNOTSUPP;
+
+	if (chip->hw_type == HAP525_HV)
+		return haptics_auto_brake_calibration_customize(chip);
+
+	return haptics_auto_brake_pbs_trigger(chip);
 }
 
 static int haptics_start_lra_calibrate(struct haptics_chip *chip)
@@ -5471,6 +5829,8 @@ static int haptics_probe(struct platform_device *pdev)
 	rc = haptics_create_debugfs(chip);
 	if (rc < 0)
 		dev_err(chip->dev, "Creating debugfs failed, rc=%d\n", rc);
+
+	phapchip = chip;
 	return 0;
 destroy_ff:
 	input_ff_destroy(chip->input_dev);
@@ -5481,6 +5841,7 @@ static int haptics_remove(struct platform_device *pdev)
 {
 	struct haptics_chip *chip = dev_get_drvdata(&pdev->dev);
 
+	phapchip = NULL;
 	if (chip->pbs_node)
 		of_node_put(chip->pbs_node);
 
