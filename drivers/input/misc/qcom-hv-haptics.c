@@ -2172,9 +2172,9 @@ static int haptics_update_fifo_samples(struct haptics_chip *chip,
 static int haptics_update_pat_mem_samples(struct haptics_chip *chip,
 		u32 pat_sel, u8 *samples, u32 length)
 {
-	u8 val[4] = {0};
+	u8 val[4] = {0}, zero_samples[HAP_PTN_FIFO_DIN_NUM] = {0};
 	u32 addr, size;
-	int rc;
+	int zero_padding, rc;
 
 	if (!samples) {
 		dev_err(chip->dev, "no data available to update PAT_MEM\n");
@@ -2187,21 +2187,6 @@ static int haptics_update_pat_mem_samples(struct haptics_chip *chip,
 				chip->hw_type);
 		return 0;
 	}
-
-	if (chip->hw_type == HAP525_HV)
-		val[0] = FIELD_PREP(MEM_PAT_RW_SEL_MASK, pat_sel);
-
-	val[0] |= MEM_PAT_ACCESS_BIT | MEM_FLUSH_RELOAD_BIT;
-	rc = haptics_write(chip, chip->ptn_addr_base,
-			HAP_PTN_MEM_OP_ACCESS_REG, val, 1);
-	if (rc < 0)
-		return rc;
-
-	val[0] &= ~MEM_FLUSH_RELOAD_BIT;
-	rc = haptics_write(chip, chip->ptn_addr_base,
-			HAP_PTN_MEM_OP_ACCESS_REG, val, 1);
-	if (rc < 0)
-		return rc;
 
 	/*
 	 * For HAP530_HV module, start address and length for each partition
@@ -2221,10 +2206,39 @@ static int haptics_update_pat_mem_samples(struct haptics_chip *chip,
 			return rc;
 	}
 
+	val[0] = 0;
+	if (chip->hw_type == HAP525_HV)
+		val[0] = FIELD_PREP(MEM_PAT_RW_SEL_MASK, pat_sel);
+
+	val[0] |= MEM_PAT_ACCESS_BIT | MEM_FLUSH_RELOAD_BIT;
+	rc = haptics_write(chip, chip->ptn_addr_base,
+			HAP_PTN_MEM_OP_ACCESS_REG, val, 1);
+	if (rc < 0)
+		return rc;
+
+	val[0] &= ~MEM_FLUSH_RELOAD_BIT;
+	rc = haptics_write(chip, chip->ptn_addr_base,
+			HAP_PTN_MEM_OP_ACCESS_REG, val, 1);
+	if (rc < 0)
+		return rc;
+
 	rc = haptics_update_memory_data(chip, samples, length);
-	rc |= haptics_masked_write(chip, chip->ptn_addr_base,
+	if (rc < 0)
+		return rc;
+
+	zero_padding = chip->mmap.pat_sel_mmap[pat_sel].length - length;
+	while (zero_padding > 0) {
+		rc = haptics_update_memory_data(chip, zero_samples,
+				zero_padding > HAP_PTN_FIFO_DIN_NUM ?
+				HAP_PTN_FIFO_DIN_NUM : zero_padding);
+		if (rc < 0)
+			return rc;
+
+		zero_padding -= HAP_PTN_FIFO_DIN_NUM;
+	}
+
+	return haptics_masked_write(chip, chip->ptn_addr_base,
 			HAP_PTN_MEM_OP_ACCESS_REG, MEM_PAT_ACCESS_BIT, 0);
-	return rc;
 }
 
 static int haptics_get_fifo_fill_status(struct haptics_chip *chip, u32 *fill)
