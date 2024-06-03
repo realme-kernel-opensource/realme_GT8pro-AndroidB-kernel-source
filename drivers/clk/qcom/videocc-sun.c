@@ -61,6 +61,7 @@ static struct clk_alpha_pll video_cc_pll0 = {
 	.vco_table = taycan_elu_vco,
 	.num_vco = ARRAY_SIZE(taycan_elu_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_ELU],
+	.flags = DISABLE_TO_OFF,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "video_cc_pll0",
