@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __LINUX_QTI_IOMMU_LOGGER_H
@@ -32,23 +32,22 @@ struct iommu_debug_attachment {
 	void *ttbr0;
 	void *ttbr1;
 	struct list_head list;
+	struct device *dev;
 };
 
 #if IS_ENABLED(CONFIG_QTI_IOMMU_SUPPORT)
 
-int iommu_logger_register(struct iommu_debug_attachment **a,
-			  struct iommu_domain *domain, struct device *dev,
-			  struct io_pgtable *iop);
-void iommu_logger_unregister(struct iommu_debug_attachment *a);
+int iommu_logger_register(struct iommu_domain *domain, struct device *dev,
+			  struct io_pgtable_ops *ops);
+void iommu_logger_unregister(struct device *dev, struct iommu_domain *domain);
 #else
-static inline int iommu_logger_register(struct iommu_debug_attachment **a,
-					struct iommu_domain *domain,
+static inline int iommu_logger_register(struct iommu_domain *domain,
 					struct device *dev,
-					struct io_pgtable *iop)
+					struct io_pgtable_ops *ops)
 {
 	return 0;
 }
 
-static inline void iommu_logger_unregister(struct iommu_debug_attachment *a) {}
+static inline void iommu_logger_unregister(struct device *dev, struct iommu_domain *domain) {}
 #endif /* CONFIG_QTI_IOMMU_LOGGER */
 #endif /* __LINUX_QTI_IOMMU_LOGGER_H */
