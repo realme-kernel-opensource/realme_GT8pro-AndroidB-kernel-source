@@ -2032,8 +2032,6 @@ account_busy_for_task_demand(struct rq *rq, struct task_struct *p, int event)
 
 #define TRAILBLAZER_THRES 230
 #define TRAILBLAZER_BYPASS 243
-#define FINAL_BUCKET_DEMAND ((NUM_BUSY_BUCKETS - 2) << \
-		(SCHED_CAPACITY_SHIFT - NUM_BUSY_BUCKETS_SHIFT))
 #define FINAL_BUCKET_STEP_UP 8
 #define FINAL_BUCKET_STEP_DOWN 1
 
@@ -2048,6 +2046,7 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	bool is_prev_trailblazer = walt_flag_test(p, WALT_TRAILBLAZER_BIT);
+	u64 trailblazer_capacity;
 
 	if (walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
 			(((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
@@ -2073,7 +2072,14 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 			wrq->walt_stats.nr_trailblazer_tasks++;
 	}
 
-	if (runtime_scaled >= FINAL_BUCKET_DEMAND) {
+	/*
+	 * The CPU might be running with capped capacities. In order for a runtime to be considered
+	 * as trailblazer worthy, it must be 87.5% or more of the prime CPU capacity.
+	 */
+	trailblazer_capacity =
+		capacity_orig_of(cpumask_first(&cpu_array[0][num_sched_clusters - 1]));
+	trailblazer_capacity = trailblazer_capacity - (trailblazer_capacity >> 3);
+	if (runtime_scaled >= (u16)trailblazer_capacity) {
 		if (wts->high_util_history > U8_MAX - FINAL_BUCKET_STEP_UP)
 			wts->high_util_history = U8_MAX;
 		else
