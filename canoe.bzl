@@ -13,6 +13,7 @@ def define_canoe():
         "drivers/firmware/qcom/qcom-scm.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
         "drivers/irqchip/qcom-pdc.ko",
+        "drivers/pci/controller/pci-msm-drv.ko",
         "drivers/pinctrl/qcom/pinctrl-canoe.ko",
         "drivers/pinctrl/qcom/pinctrl-msm.ko",
         "drivers/power/reset/qcom-dload-mode.ko",
