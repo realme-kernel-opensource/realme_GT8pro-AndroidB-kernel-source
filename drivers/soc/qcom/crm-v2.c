@@ -183,6 +183,20 @@ enum {
 
 enum {
 /* CRM DRV Register */
+	CRMB_PT_BASE = CRM_BASE,
+	CRMB_PT_DISTANCE = CRM_DISTANCE,
+/* CRMB_PT Registers */
+	TCS_CMD_DATA,
+	TCS_CMD_ADDR,
+	TCS_CMD_CTRL,
+	TCS_CMD_STATUS,
+	TCS_CMD_ENABLE,
+	CRMB_PT_FSM_STATUS,
+	CRMB_PT_REG_MAX,
+};
+
+enum {
+/* CRM DRV Register */
 	CRMC_BASE = CRM_BASE,
 	CRMC_DISTANCE = CRM_DISTANCE,
 /* CRMC Registers */
@@ -219,6 +233,7 @@ struct crm_desc {
 	u32 crm_capability;
 	u32 chn_regs[CHN_REG_MAX];
 	u32 crmb_regs[CRMB_REG_MAX];
+	u32 crmb_pt_regs[CRMB_PT_REG_MAX];
 	u32 crmc_regs[CRMC_REG_MAX];
 	u32 crmv_regs[CRMV_REG_MAX];
 	u32 hw_drv_perf_ol_vcd_regs[CRM_CLIENT_REG_MAX];
@@ -330,6 +345,7 @@ struct crm_mgr {
  * @sw_drvs:            Controller for each SW DRV
  * @num_sw_drvs:        Number of SW DRV controllers in the CRM device
  * @crmb_mgr:           Controller for CRMB device.
+ * @crmb_pt_mgr:        Controller for CRMB_PT device.
  * @crmc_mgr:           Controller for CRMC device.
  * @crmv_mgr:           Controller for CRMV device.
  * @list:               CRM device added in crm_dev_list.
@@ -347,6 +363,7 @@ struct crm_drv_top {
 	struct crm_drv *sw_drvs;
 	int num_sw_drvs;
 	struct crm_mgr crmb_mgr;
+	struct crm_mgr crmb_pt_mgr;
 	struct crm_mgr crmc_mgr;
 	struct crm_mgr crmv_mgr;
 	struct list_head list;
@@ -737,6 +754,9 @@ static int _crm_dump_regs(struct crm_drv_top *crm)
 	u32 phy_base, data, offset;
 	int i, ret = 0;
 
+	if (!(crm->desc->crm_capability & BW_VOTING_FLAG))
+		goto dump_crmb_pt;
+
 	pr_warn("CRMB Regs\n");
 	phy_base = get_crm_phy_addr(crm->crmb_mgr.base) +
 					((unsigned long) crm->crmb_mgr.base & VPAGE_SHIFT_BITS);
@@ -750,6 +770,36 @@ static int _crm_dump_regs(struct crm_drv_top *crm)
 		crm_print_reg(phy_base + offset, data);
 	}
 
+dump_crmb_pt:
+	if (!(crm->desc->crm_capability & BW_PT_VOTING_FLAG))
+		goto dump_crmc;
+
+	pr_warn("CRMB_PT Regs\n");
+	phy_base = get_crm_phy_addr(crm->crmb_pt_mgr.base) +
+					((unsigned long) crm->crmb_pt_mgr.base & VPAGE_SHIFT_BITS);
+
+	pr_warn("CRMB_PT: num_of_resources:%d\n", crm->crmb_pt_mgr.num_resources);
+	for (i = 0; i < crm->crmb_pt_mgr.num_resources; i++) {
+		data = read_crmb_mgr_reg(&crm->crmb_pt_mgr, &offset, TCS_CMD_DATA, i);
+		crm_print_reg(phy_base + offset, data);
+
+		data = read_crmb_mgr_reg(&crm->crmb_pt_mgr, &offset, TCS_CMD_ADDR, i);
+		crm_print_reg(phy_base + offset, data);
+
+		data = read_crmb_mgr_reg(&crm->crmb_pt_mgr, &offset, TCS_CMD_CTRL, i);
+		crm_print_reg(phy_base + offset, data);
+
+		data = read_crmb_mgr_reg(&crm->crmb_pt_mgr, &offset, TCS_CMD_STATUS, i);
+		crm_print_reg(phy_base + offset, data);
+
+		data = read_crmb_mgr_reg(&crm->crmb_pt_mgr, &offset, TCS_CMD_ENABLE, i);
+		crm_print_reg(phy_base + offset, data);
+	}
+
+	data = read_crmb_mgr_reg(&crm->crmb_pt_mgr, &offset, CRMB_PT_FSM_STATUS, 0);
+	crm_print_reg(phy_base + offset, data);
+
+dump_crmc:
 	pr_warn("CRMC Regs\n");
 	phy_base = get_crm_phy_addr(crm->crmc_mgr.base) +
 					((unsigned long) crm->crmc_mgr.base & VPAGE_SHIFT_BITS);
@@ -1525,6 +1575,8 @@ static int crm_probe_set_vcd_caches(struct crm_drv_top *crm, u32 crm_cfg, u32 cr
 
 	crm->crmb_mgr.offsets = (u32 *)&crm->desc->crmb_regs;
 	crm->crmb_mgr.num_resources = num_bw_vote_vcds;
+	crm->crmb_pt_mgr.offsets = (u32 *)&crm->desc->crmb_pt_regs;
+	crm->crmb_pt_mgr.num_resources = num_nds_pt;
 	crm->crmc_mgr.offsets = (u32 *)&crm->desc->crmc_regs;
 	crm->crmc_mgr.num_resources = num_perf_ol_vcds;
 	crm->crmv_mgr.offsets = (u32 *)&crm->desc->crmv_regs;
@@ -1652,17 +1704,22 @@ static int crm_probe_platform_resources(struct platform_device *pdev, struct crm
 		return -ENOMEM;
 	strscpy(crm->crmb_mgr.name, res->name, sizeof(crm->crmb_mgr.name));
 
-	crm->crmc_mgr.base = devm_platform_get_and_ioremap_resource(pdev, 2, &res);
+	crm->crmb_pt_mgr.base = devm_platform_get_and_ioremap_resource(pdev, 2, &res);
+	if (IS_ERR(crm->crmb_pt_mgr.base))
+		return -ENOMEM;
+	strscpy(crm->crmb_pt_mgr.name, res->name, sizeof(crm->crmb_pt_mgr.name));
+
+	crm->crmc_mgr.base = devm_platform_get_and_ioremap_resource(pdev, 3, &res);
 	if (IS_ERR(crm->crmc_mgr.base))
 		return -ENOMEM;
 	strscpy(crm->crmc_mgr.name, res->name, sizeof(crm->crmc_mgr.name));
 
-	crm->crmv_mgr.base = devm_platform_get_and_ioremap_resource(pdev, 3, &res);
+	crm->crmv_mgr.base = devm_platform_get_and_ioremap_resource(pdev, 4, &res);
 	if (IS_ERR(crm->crmv_mgr.base))
 		return -ENOMEM;
 	strscpy(crm->crmv_mgr.name, res->name, sizeof(crm->crmv_mgr.name));
 
-	crm->common = devm_platform_get_and_ioremap_resource(pdev, 4, &res);
+	crm->common = devm_platform_get_and_ioremap_resource(pdev, 5, &res);
 	if (IS_ERR(crm->common))
 		return -ENOMEM;
 
@@ -1736,6 +1793,15 @@ struct crm_desc pcie_crm_desc_v2 = {
 		[CRM_DISTANCE]			 = 0x50,
 		[STATUS_BE]			 = 0x18,
 		[STATUS_FE]			 = 0x1C,
+	},
+	.crmb_pt_regs = {
+		[CRM_BASE]			 = 0x0,
+		[CRM_DISTANCE]			 = 0x14,
+		[TCS_CMD_DATA]			 = 0x0,
+		[TCS_CMD_ADDR]			 = 0x4,
+		[TCS_CMD_STATUS]		 = 0x8,
+		[TCS_CMD_ENABLE]		 = 0x10,
+		[CRMB_PT_FSM_STATUS]		 = 0x144,
 	},
 	.crmc_regs = {
 		[CRM_BASE]			 = 0x0,
@@ -1959,6 +2025,15 @@ struct crm_desc disp_crm_desc_v2 = {
 		[CRM_DISTANCE]			 = 0x78,
 		[STATUS_BE]			 = 0x18,
 		[STATUS_FE]			 = 0x1C,
+	},
+	.crmb_pt_regs = {
+		[CRM_BASE]			 = 0x0,
+		[CRM_DISTANCE]			 = 0x14,
+		[TCS_CMD_DATA]			 = 0x0,
+		[TCS_CMD_ADDR]			 = 0x4,
+		[TCS_CMD_STATUS]		 = 0x8,
+		[TCS_CMD_ENABLE]		 = 0x10,
+		[CRMB_PT_FSM_STATUS]		 = 0x7c,
 	},
 	.crmc_regs = {
 		[CRM_BASE]			 = 0x0,
