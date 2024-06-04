@@ -14,6 +14,11 @@
 #include "si_core.h"
 #include "si_core_adci.h"
 
+#if IS_ENABLED(CONFIG_QSEECOM_PROXY)
+#include <linux/qseecom_kernel.h>
+#include <soc/qcom/qseecomi.h>
+#endif
+
 /* Static 'Primordial Object' operations. */
 
 #define OBJECT_OP_YIELD	1
@@ -991,8 +996,25 @@ int si_object_do_invoke(struct si_object_invoke_ctx *oic,
 		/* SUCCESS. Release async request queued for this context.*/
 		__release__async_queued_reqs(oic);
 
-		/* Is it a callback request?! */
-		if (response_type != QTEE_RESULT_INBOUND_REQ_NEEDED) {
+		/* Is it not a callback request?! */
+		if (response_type == QTEE_RESULT_INBOUND_REQ_NEEDED) {
+			oic->flags |= OIC_FLAG_BUSY;
+
+			/* Before dispatching the request, handle any pending async requests. */
+			__fetch__async_reqs(oic);
+
+			si_object_invoke(oic, cb_msg);
+
+		} else {
+#if IS_ENABLED(CONFIG_QSEECOM_PROXY)
+			if (response_type == QSEOS_RESULT_INCOMPLETE ||
+			response_type == QSEOS_RESULT_BLOCKED_ON_LISTENER) {
+				ret = qseecom_process_listener_from_smcinvoke(result,
+					&response_type, &data);
+				if (ret)
+					pr_err("qseecom bridge failed with= %d\n", ret);
+			}
+#endif
 
 			if (!*result) {
 				ret = update_args(u, oic);
@@ -1004,13 +1026,6 @@ int si_object_do_invoke(struct si_object_invoke_ctx *oic,
 
 			break;
 
-		} else {
-			oic->flags |= OIC_FLAG_BUSY;
-
-			/* Before dispatching the request, handle any pending async requests. */
-			__fetch__async_reqs(oic);
-
-			si_object_invoke(oic, cb_msg);
 		}
 	}
 
