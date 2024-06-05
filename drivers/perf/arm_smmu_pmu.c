@@ -79,6 +79,7 @@
 #define SMMU_PMCG_CR_ENABLE                   BIT(0)
 #define SMMU_PMCG_CEID0                 0xE20
 #define SMMU_STATS_CFG                 0x584
+#define SMMU_STATS_CB_CFG                 0x690
 
 #define SMMU_COUNTER_RELOAD             BIT(31)
 #define SMMU_DEFAULT_FILTER_STREAM_ID   GENMASK(31, 0)
@@ -480,6 +481,13 @@ static void smmu_pmu_event_start(struct perf_event *event, int flags)
 				__func__, ret);
 			return;
 		}
+		ret = qcom_scm_io_writel(smmu_pmu->tcu_base_start + SMMU_STATS_CB_CFG, 0);
+		if (ret) {
+			dev_err(&smmu_pmu->pdev->dev,
+				"%s: Failed to write to TCU STATS CB CFG! rc: %d\n",
+				__func__, ret);
+			return;
+		}
 		smmu_pmu_set_period(smmu_pmu, hwc);
 		return;
 	}
@@ -527,6 +535,13 @@ static void smmu_pmu_event_stop(struct perf_event *event, int flags)
 		if (ret) {
 			dev_err(&smmu_pmu->pdev->dev,
 				"%s: Failed to write to TCU STATS CFG! rc: %d\n",
+				__func__, ret);
+			return;
+		}
+		ret = qcom_scm_io_writel(smmu_pmu->tcu_base_start + SMMU_STATS_CB_CFG, 0x30000);
+		if (ret) {
+			dev_err(&smmu_pmu->pdev->dev,
+				"%s: Failed to write to TCU STATS CB CFG! rc: %d\n",
 				__func__, ret);
 			return;
 		}
