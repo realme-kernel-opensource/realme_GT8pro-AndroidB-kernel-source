@@ -9,6 +9,7 @@ def define_canoe():
         "drivers/clk/qcom/clk-dummy.ko",
         "drivers/clk/qcom/clk-qcom.ko",
         "drivers/clk/qcom/gcc-canoe.ko",
+        "drivers/clk/qcom/gdsc-regulator.ko",
         "drivers/cpuidle/governors/qcom_lpm.ko",
         "drivers/firmware/qcom/qcom-scm.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
