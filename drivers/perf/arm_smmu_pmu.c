@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /*
@@ -47,6 +47,7 @@
 #include <linux/of_device.h>
 #include <linux/of_iommu.h>
 #include <linux/of_platform.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <asm/local64.h>
@@ -77,7 +78,7 @@
 #define SMMU_PMCG_CR                    0xE04
 #define SMMU_PMCG_CR_ENABLE                   BIT(0)
 #define SMMU_PMCG_CEID0                 0xE20
-#define SMMU_STATS_CFG                 0x84
+#define SMMU_STATS_CFG                 0x584
 
 #define SMMU_COUNTER_RELOAD             BIT(31)
 #define SMMU_DEFAULT_FILTER_STREAM_ID   GENMASK(31, 0)
@@ -141,6 +142,7 @@ struct smmu_pmu {
 	void __iomem *reg_base;
 	void __iomem *tcu_base;
 	void __iomem *tcu_base_ns;
+	phys_addr_t tcu_base_start;
 	u64 counter_present_mask;
 	u64 counter_mask;
 	bool reg_size_32;
@@ -457,14 +459,27 @@ static void smmu_pmu_event_start(struct perf_event *event, int flags)
 	u32 event_id;
 	u32 filter_stream_id;
 	int counters_per_tbu = (int)(smmu_pmu->num_counters / smmu_pmu->num_countergroups);
+	int ret;
 
 	hwc->state = 0;
 
 	event_id = get_event(event);
 
 	if (event_id >= SMMU_STATS_START) {
-		writel_relaxed(1, (void *)(smmu_pmu->tcu_base + SMMU_STATS_CFG));
-		writel_relaxed(0, (void *)(smmu_pmu->tcu_base + SMMU_STATS_CFG));
+		ret = qcom_scm_io_writel(smmu_pmu->tcu_base_start + SMMU_STATS_CFG, 1);
+		if (ret) {
+			dev_err(&smmu_pmu->pdev->dev,
+				"%s: Failed to write to TCU STATS CFG! rc: %d\n",
+				__func__, ret);
+			return;
+		}
+		ret = qcom_scm_io_writel(smmu_pmu->tcu_base_start + SMMU_STATS_CFG, 0);
+		if (ret) {
+			dev_err(&smmu_pmu->pdev->dev,
+				"%s: Failed to write to TCU STATS CFG! rc: %d\n",
+				__func__, ret);
+			return;
+		}
 		smmu_pmu_set_period(smmu_pmu, hwc);
 		return;
 	}
@@ -490,6 +505,7 @@ static void smmu_pmu_event_stop(struct perf_event *event, int flags)
 	struct hw_perf_event *hwc = &event->hw;
 	int idx = hwc->idx;
 	int counters_per_tbu = (int)(smmu_pmu->num_counters / smmu_pmu->num_countergroups);
+	int ret;
 	u32 event_id;
 
 	if (hwc->state & PERF_HES_STOPPED)
@@ -506,8 +522,15 @@ static void smmu_pmu_event_stop(struct perf_event *event, int flags)
 	if (flags & PERF_EF_UPDATE)
 		smmu_pmu_event_update(event);
 	hwc->state |= PERF_HES_STOPPED | PERF_HES_UPTODATE;
-	if (event_id >= SMMU_STATS_START)
-		writel_relaxed(2, (void *)(smmu_pmu->tcu_base + SMMU_STATS_CFG));
+	if (event_id >= SMMU_STATS_START) {
+		ret = qcom_scm_io_writel(smmu_pmu->tcu_base_start + SMMU_STATS_CFG, 2);
+		if (ret) {
+			dev_err(&smmu_pmu->pdev->dev,
+				"%s: Failed to write to TCU STATS CFG! rc: %d\n",
+				__func__, ret);
+			return;
+		}
+	}
 }
 
 static int smmu_pmu_event_add(struct perf_event *event, int flags)
@@ -780,6 +803,8 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 	smmu_pmu->reg_base = mem_map_0;
 	smmu_pmu->tcu_base = mem_map_0 + SMMU_STATS_OFFSET;
 	smmu_pmu->tcu_base_ns = mem_map_1;
+	smmu_pmu->tcu_base_start =
+		(phys_addr_t)(mem_resource_0->start + SMMU_STATS_OFFSET);
 	smmu_pmu->pmu.name =
 		devm_kasprintf(&pdev->dev, GFP_KERNEL, "smmu_0_%llx",
 			       (mem_resource_0->start) >> SMMU_PA_SHIFT);
