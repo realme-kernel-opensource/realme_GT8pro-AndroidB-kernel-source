@@ -852,7 +852,7 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 		smmu_pmu->irqs[i] = irq;
 	}
 	/* Pick one CPU to be the preferred one to use */
-	smmu_pmu->on_cpu = smp_processor_id();
+	smmu_pmu->on_cpu = raw_smp_processor_id();
 
 	for (i = 0; i < smmu_pmu->num_irqs; ++i) {
 		WARN_ON(irq_set_affinity_hint(smmu_pmu->irqs[i],
