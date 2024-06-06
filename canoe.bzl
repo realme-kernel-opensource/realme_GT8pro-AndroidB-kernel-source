@@ -6,6 +6,9 @@ target_name = "canoe"
 def define_canoe():
     _canoe_in_tree_modules = [
         # keep sorted
+        "drivers/bus/mhi/devices/mhi_dev_satellite.ko",
+        "drivers/bus/mhi/devices/mhi_dev_uci.ko",
+        "drivers/bus/mhi/host/mhi.ko",
         "drivers/clk/qcom/clk-dummy.ko",
         "drivers/clk/qcom/clk-qcom.ko",
         "drivers/clk/qcom/gcc-canoe.ko",
