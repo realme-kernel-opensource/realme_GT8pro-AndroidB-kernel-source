@@ -1611,30 +1611,29 @@ static void ufs_qcom_set_affinity_hint(struct ufs_hba *hba, bool prime)
 static void ufs_qcom_set_esi_affinity_hint(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	cpumask_t *affinity_mask = &host->esi_affinity_mask;
 	const cpumask_t *mask;
 	struct msi_desc *desc;
 	unsigned int set = IRQ_NO_BALANCING;
 	unsigned int clear = 0;
-	unsigned int cpu = 0;
 	int ret, i = 0;
 
-	if (affinity_mask->bits[0] == 0)
+	if (!host->esi_affinity_mask)
 		return;
 
 	msi_lock_descs(hba->dev);
 	msi_for_each_desc(desc, hba->dev, MSI_DESC_ALL) {
-		if (i % cpumask_weight(affinity_mask) == 0)
-			cpu = cpumask_first(affinity_mask);
-		else
-			cpu = cpumask_next(cpu, affinity_mask);
+		/* Affine IRQ for each desc parsed from DT node */
+		mask = get_cpu_mask(host->esi_affinity_mask[i]);
+		if (!cpumask_subset(mask, cpu_possible_mask)) {
+			dev_err(hba->dev, "Invalid esi-cpu affinity mask passed, using default\n");
+			mask = get_cpu_mask(UFS_QCOM_ESI_AFFINITY_MASK);
+		}
 
-		mask = get_cpu_mask(cpu);
 		irq_modify_status(desc->irq, clear, set);
 		ret = irq_set_affinity_hint(desc->irq, mask);
 		if (ret < 0)
 			dev_err(hba->dev, "%s: Failed to set affinity hint to cpu %d for ESI %d, err = %d\n",
-					__func__, cpu, desc->irq, ret);
+					__func__, i, desc->irq, ret);
 		i++;
 	}
 	msi_unlock_descs(hba->dev);
@@ -2957,6 +2956,7 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 	struct device_node *np = dev->of_node;
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int mask = 0;
+	int num_cqs = 0;
 
 	/*
 	 * In a system where CPUs are partially populated, the cpu mapping
@@ -2974,22 +2974,32 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 	of_property_read_u32(np, "qcom,prime-mask", &mask);
 	host->perf_mask.bits[0] = mask;
 	if (!cpumask_subset(&host->perf_mask, cpu_possible_mask)) {
-		dev_err(dev, "Invalid group prime mask 0x%x\n", mask);
+		dev_err(dev, "Invalid group prime mask\n");
 		host->perf_mask.bits[0] = UFS_QCOM_IRQ_PRIME_MASK;
 	}
 	mask = 0;
 	of_property_read_u32(np, "qcom,silver-mask", &mask);
 	host->def_mask.bits[0] = mask;
 	if (!cpumask_subset(&host->def_mask, cpu_possible_mask)) {
-		dev_err(dev, "Invalid group silver mask 0x%x\n", mask);
+		dev_err(dev, "Invalid group silver mask\n");
 		host->def_mask.bits[0] = UFS_QCOM_IRQ_SLVR_MASK;
 	}
 	mask = 0;
-	of_property_read_u32(np, "qcom,esi-affinity-mask", &mask);
-	host->esi_affinity_mask.bits[0] = mask;
-	if (!cpumask_subset(&host->esi_affinity_mask, cpu_possible_mask)) {
-		dev_err(dev, "Invalid group ESI affinity mask\n");
-		host->esi_affinity_mask.bits[0] = UFS_QCOM_ESI_AFFINITY_MASK;
+	if (of_find_property(dev->of_node, "qcom,esi-affinity-mask", &mask)) {
+		num_cqs = mask/sizeof(*host->esi_affinity_mask);
+		host->esi_affinity_mask = devm_kcalloc(hba->dev, num_cqs,
+						sizeof(*host->esi_affinity_mask),
+						GFP_KERNEL);
+		if (!host->esi_affinity_mask)
+			return;
+
+		mask = of_property_read_variable_u32_array(np, "qcom,esi-affinity-mask",
+				host->esi_affinity_mask, 0, num_cqs);
+
+		if (mask < 0) {
+			dev_info(dev, "Not found esi-affinity-mask property values\n");
+			return;
+		}
 	}
 
 	/* If device includes perf mask, enable dynamic irq affinity feature */
