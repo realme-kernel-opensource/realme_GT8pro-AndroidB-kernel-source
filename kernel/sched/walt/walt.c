@@ -183,7 +183,6 @@ static DEFINE_SPINLOCK(sched_ravg_window_lock);
 static u64 sched_ravg_window_change_time;
 
 static unsigned int __read_mostly sched_init_task_load_windows_scaled;
-static unsigned int __read_mostly sysctl_sched_init_task_load_pct = 15;
 
 /* Size of bitmaps maintained to track top tasks */
 static const unsigned int top_tasks_bitmap_size =
@@ -4258,13 +4257,13 @@ fill_util:
 	}
 }
 
+#define INIT_TASK_LOAD_PCT 15
 static void walt_init_window_dep(void)
 {
 	walt_scale_demand_divisor = sched_ravg_window >> SCHED_CAPACITY_SHIFT;
-
-	sched_init_task_load_windows =
-		div64_u64((u64)sysctl_sched_init_task_load_pct *
-			  (u64)sched_ravg_window, 100);
+	/* default task to 15 pct */
+	sched_init_task_load_windows = div64_u64((u64)INIT_TASK_LOAD_PCT *
+			(u64)sched_ravg_window, 100);
 	sched_init_task_load_windows_scaled =
 		scale_time_to_util(sched_init_task_load_windows);
 
