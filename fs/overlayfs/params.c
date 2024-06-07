@@ -43,11 +43,6 @@ module_param_named(metacopy, ovl_metacopy_def, bool, 0644);
 MODULE_PARM_DESC(metacopy,
 		 "Default to on or off for the metadata only copy up feature");
 
-static bool __read_mostly ovl_override_creds_def = true;
-module_param_named(override_creds, ovl_override_creds_def, bool, 0644);
-MODULE_PARM_DESC(ovl_override_creds_def,
-		 "Use mounter's credentials for accesses");
-
 enum ovl_opt {
 	Opt_lowerdir,
 	Opt_lowerdir_add,
@@ -64,7 +59,6 @@ enum ovl_opt {
 	Opt_metacopy,
 	Opt_verity,
 	Opt_volatile,
-	Opt_override_creds,
 };
 
 static const struct constant_table ovl_parameter_bool[] = {
@@ -165,7 +159,6 @@ const struct fs_parameter_spec ovl_parameter_spec[] = {
 	fsparam_enum("metacopy",            Opt_metacopy, ovl_parameter_bool),
 	fsparam_enum("verity",              Opt_verity, ovl_parameter_verity),
 	fsparam_flag("volatile",            Opt_volatile),
-	fsparam_enum("override_creds",      Opt_override_creds, ovl_parameter_bool),
 	{}
 };
 
@@ -287,12 +280,20 @@ static int ovl_mount_dir_check(struct fs_context *fc, const struct path *path,
 {
 	struct ovl_fs_context *ctx = fc->fs_private;
 
-	if (ovl_dentry_weird(path->dentry))
-		return invalfc(fc, "filesystem on %s not supported", name);
-
 	if (!d_is_dir(path->dentry))
 		return invalfc(fc, "%s is not a directory", name);
 
+	/*
+	 * Root dentries of case-insensitive capable filesystems might
+	 * not have the dentry operations set, but still be incompatible
+	 * with overlayfs.  Check explicitly to prevent post-mount
+	 * failures.
+	 */
+	if (sb_has_encoding(path->mnt->mnt_sb))
+		return invalfc(fc, "case-insensitive capable filesystem on %s not supported", name);
+
+	if (ovl_dentry_weird(path->dentry))
+		return invalfc(fc, "filesystem on %s not supported", name);
 
 	/*
 	 * Check whether upper path is read-only here to report failures
@@ -626,9 +627,6 @@ static int ovl_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	case Opt_userxattr:
 		config->userxattr = true;
 		break;
-	case Opt_override_creds:
-		config->override_creds = result.uint_32;
-		break;
 	default:
 		pr_err("unrecognized mount option \"%s\" or missing value\n",
 		       param->key);
@@ -753,10 +751,8 @@ void ovl_free_fs(struct ovl_fs *ofs)
 	unsigned i;
 
 	iput(ofs->workbasedir_trap);
-	iput(ofs->indexdir_trap);
 	iput(ofs->workdir_trap);
 	dput(ofs->whiteout);
-	dput(ofs->indexdir);
 	dput(ofs->workdir);
 	if (ofs->workdir_locked)
 		ovl_inuse_unlock(ofs->workbasedir);

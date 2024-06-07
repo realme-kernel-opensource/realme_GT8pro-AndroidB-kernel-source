@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2014, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -32,7 +31,6 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
-#include <linux/of.h>
 #include <linux/clk/clk-conf.h>
 
 #include <asm/barrier.h>
@@ -47,7 +45,6 @@
 #include "coresight-self-hosted-trace.h"
 #include "coresight-syscfg.h"
 #include "coresight-trace-id.h"
-#include "coresight-common.h"
 
 static int boot_enable;
 module_param(boot_enable, int, 0444);
@@ -647,7 +644,7 @@ static int etm4_parse_event_config(struct coresight_device *csdev,
 	struct etmv4_config *config = &drvdata->config;
 	struct perf_event_attr *attr = &event->attr;
 	unsigned long cfg_hash;
-	int preset;
+	int preset, cc_threshold;
 
 	/* Clear configuration from previous run */
 	memset(config, 0, sizeof(struct etmv4_config));
@@ -670,7 +667,12 @@ static int etm4_parse_event_config(struct coresight_device *csdev,
 	if (attr->config & BIT(ETM_OPT_CYCACC)) {
 		config->cfg |= TRCCONFIGR_CCI;
 		/* TRM: Must program this for cycacc to work */
-		config->ccctlr = ETM_CYC_THRESHOLD_DEFAULT;
+		cc_threshold = attr->config3 & ETM_CYC_THRESHOLD_MASK;
+		if (!cc_threshold)
+			cc_threshold = ETM_CYC_THRESHOLD_DEFAULT;
+		if (cc_threshold < drvdata->ccitmin)
+			cc_threshold = drvdata->ccitmin;
+		config->ccctlr = cc_threshold;
 	}
 	if (attr->config & BIT(ETM_OPT_TS)) {
 		/*
@@ -782,13 +784,8 @@ static int etm4_enable_perf(struct coresight_device *csdev,
 	}
 	drvdata->trcid = (u8)trace_id;
 
-	coresight_csr_set_etr_atid(csdev, drvdata->trcid, true);
-
 	/* And enable it */
 	ret = etm4_enable_hw(drvdata);
-
-	if (ret)
-		coresight_csr_set_etr_atid(csdev, drvdata->trcid, false);
 
 out:
 	return ret;
@@ -816,8 +813,6 @@ static int etm4_enable_sysfs(struct coresight_device *csdev)
 	if (ret < 0)
 		goto unlock_sysfs_enable;
 
-	coresight_csr_set_etr_atid(csdev, drvdata->trcid, true);
-
 	/*
 	 * Executing etm4_enable_hw on the cpu whose ETM is being enabled
 	 * ensures that register writes occur when cpu is powered.
@@ -830,10 +825,8 @@ static int etm4_enable_sysfs(struct coresight_device *csdev)
 	if (!ret)
 		drvdata->sticky_enable = true;
 
-	if (ret) {
-		coresight_csr_set_etr_atid(csdev, drvdata->trcid, false);
+	if (ret)
 		etm4_release_trace_id(drvdata);
-	}
 
 unlock_sysfs_enable:
 	spin_unlock(&drvdata->spinlock);
@@ -1031,7 +1024,6 @@ static void etm4_disable(struct coresight_device *csdev,
 		break;
 	}
 
-	coresight_csr_set_etr_atid(csdev, drvdata->trcid, false);
 	if (mode)
 		local_set(&drvdata->mode, CS_MODE_DISABLED);
 }
@@ -1163,6 +1155,41 @@ static void cpu_detect_trace_filtering(struct etmv4_drvdata *drvdata)
 	drvdata->trfcr = trfcr;
 }
 
+/*
+ * The following errata on applicable cpu ranges, affect the CCITMIN filed
+ * in TCRIDR3 register. Software read for the field returns 0x100 limiting
+ * the cycle threshold granularity, whereas the right value should have
+ * been 0x4, which is well supported in the hardware.
+ */
+static struct midr_range etm_wrong_ccitmin_cpus[] = {
+	/* Erratum #1490853 - Cortex-A76 */
+	MIDR_RANGE(MIDR_CORTEX_A76, 0, 0, 4, 0),
+	/* Erratum #1490853 - Neoverse-N1 */
+	MIDR_RANGE(MIDR_NEOVERSE_N1, 0, 0, 4, 0),
+	/* Erratum #1491015 - Cortex-A77 */
+	MIDR_RANGE(MIDR_CORTEX_A77, 0, 0, 1, 0),
+	/* Erratum #1502854 - Cortex-X1 */
+	MIDR_REV(MIDR_CORTEX_X1, 0, 0),
+	/* Erratum #1619801 - Neoverse-V1 */
+	MIDR_REV(MIDR_NEOVERSE_V1, 0, 0),
+	{},
+};
+
+static void etm4_fixup_wrong_ccitmin(struct etmv4_drvdata *drvdata)
+{
+	/*
+	 * Erratum affected cpus will read 256 as the minimum
+	 * instruction trace cycle counting threshold whereas
+	 * the correct value should be 4 instead. Override the
+	 * recorded value for 'drvdata->ccitmin' to workaround
+	 * this problem.
+	 */
+	if (is_midr_in_range_list(read_cpuid_id(), etm_wrong_ccitmin_cpus)) {
+		if (drvdata->ccitmin == 256)
+			drvdata->ccitmin = 4;
+	}
+}
+
 static void etm4_init_arch_data(void *info)
 {
 	u32 etmidr0;
@@ -1227,6 +1254,8 @@ static void etm4_init_arch_data(void *info)
 	etmidr3 = etm4x_relaxed_read32(csa, TRCIDR3);
 	/* CCITMIN, bits[11:0] minimum threshold value that can be programmed */
 	drvdata->ccitmin = FIELD_GET(TRCIDR3_CCITMIN_MASK, etmidr3);
+	etm4_fixup_wrong_ccitmin(drvdata);
+
 	/* EXLEVEL_S, bits[19:16] Secure state instruction tracing */
 	drvdata->s_ex_level = FIELD_GET(TRCIDR3_EXLEVEL_S_MASK, etmidr3);
 	drvdata->config.s_ex_level = drvdata->s_ex_level;
@@ -2027,8 +2056,7 @@ static int etm4_add_coresight_dev(struct etm4_init_arg *init_arg)
 		type_name = "etm";
 	}
 
-	if (of_property_read_string(dev->of_node, "coresight-name", &desc.name))
-		desc.name = devm_kasprintf(dev, GFP_KERNEL,
+	desc.name = devm_kasprintf(dev, GFP_KERNEL,
 				   "%s%d", type_name, drvdata->cpu);
 	if (!desc.name)
 		return -ENOMEM;
@@ -2275,7 +2303,7 @@ static void etm4_remove_amba(struct amba_device *adev)
 		etm4_remove_dev(drvdata);
 }
 
-static int etm4_remove_platform_dev(struct platform_device *pdev)
+static void etm4_remove_platform_dev(struct platform_device *pdev)
 {
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(&pdev->dev);
 
@@ -2285,8 +2313,6 @@ static int etm4_remove_platform_dev(struct platform_device *pdev)
 
 	if (drvdata && !IS_ERR_OR_NULL(drvdata->pclk))
 		clk_put(drvdata->pclk);
-
-	return 0;
 }
 
 static const struct amba_id etm4_ids[] = {
@@ -2372,7 +2398,7 @@ MODULE_DEVICE_TABLE(acpi, etm4x_acpi_ids);
 
 static struct platform_driver etm4_platform_driver = {
 	.probe		= etm4_probe_platform_dev,
-	.remove		= etm4_remove_platform_dev,
+	.remove_new	= etm4_remove_platform_dev,
 	.driver			= {
 		.name			= "coresight-etm4x",
 		.of_match_table		= etm4_sysreg_match,

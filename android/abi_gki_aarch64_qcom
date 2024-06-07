@@ -681,6 +681,7 @@
   device_wakeup_disable
   device_wakeup_enable
   _dev_info
+  dev_iommu_priv_set
   dev_kfree_skb_any_reason
   dev_kfree_skb_irq_reason
   dev_load
@@ -757,6 +758,7 @@
   devm_platform_ioremap_resource
   devm_platform_ioremap_resource_byname
   devm_power_supply_register
+  __devm_pwmchip_add
   devm_pwm_get
   devm_qcom_smem_state_get
   devm_regmap_add_irq_chip
@@ -782,6 +784,7 @@
   devm_rtc_allocate_device
   __devm_rtc_register_device
   devm_snd_soc_register_card
+  devm_spmi_controller_alloc
   devm_thermal_of_cooling_device_register
   devm_thermal_of_zone_register
   devm_thermal_of_zone_unregister
@@ -2616,6 +2619,8 @@
   platform_device_add_data
   platform_device_alloc
   platform_device_del
+  platform_device_msi_free_irqs_all
+  platform_device_msi_init_and_alloc_irqs
   platform_device_put
   platform_device_register
   platform_device_register_full
@@ -3867,9 +3872,11 @@
   udp_tunnel_sock_release
   udp_tunnel_xmit_skb
   ufshcd_auto_hibern8_update
+  ufshcd_disable_irq
   ufshcd_dme_get_attr
   ufshcd_dme_set_attr
   ufshcd_dump_regs
+  ufshcd_enable_irq
   ufshcd_fixup_dev_quirks
   ufshcd_get_local_unipro_ver
   ufshcd_hba_stop
@@ -3879,6 +3886,7 @@
   ufshcd_mcq_enable_esi
   ufshcd_mcq_poll_cqe_lock
   ufshcd_mcq_write_cqis
+  ufshcd_negotiate_pwr_params
   ufshcd_pltfrm_init
   ufshcd_pltfrm_shutdown
   ufshcd_query_attr

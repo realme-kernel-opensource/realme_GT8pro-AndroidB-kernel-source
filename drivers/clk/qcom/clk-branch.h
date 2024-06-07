@@ -40,6 +40,27 @@ struct clk_branch {
 	struct clk_regmap clkr;
 };
 
+/**
+ * struct clk_mem_branch - gating clock which are associated with memories
+ *
+ * @mem_enable_reg: branch clock memory gating register
+ * @mem_ack_reg: branch clock memory ack register
+ * @mem_enable_mask: branch clock memory enable mask
+ * @mem_enable_ack_mask: branch clock memory enable and ack field in @mem_ack_reg
+ * @mem_enable_inverted: clock memory enable bit inverted
+ * @branch: branch clock gating handle
+ *
+ * Clock which can gate its memories.
+ */
+struct clk_mem_branch {
+	u32	mem_enable_reg;
+	u32	mem_ack_reg;
+	u32	mem_enable_mask;
+	u32	mem_enable_ack_mask;
+	u8	mem_enable_inverted;
+	struct clk_branch branch;
+};
+
 /* Branch clock common bits for HLOS-owned clocks */
 #define CBCR_CLK_OFF			BIT(31)
 #define CBCR_NOC_FSM_STATUS		GENMASK(30, 28)
@@ -82,27 +103,6 @@ static inline void qcom_branch_set_sleep(struct regmap *regmap, struct clk_branc
 	regmap_update_bits(regmap, clk.halt_reg, CBCR_SLEEP,
 			   FIELD_PREP(CBCR_SLEEP, val));
 }
-
-/**
- * struct clk_mem_branch - gating clock which are associated with memories
- *
- * @mem_enable_reg: branch clock memory gating register
- * @mem_ack_reg: branch clock memory ack register
- * @mem_enable_mask: branch clock memory enable mask
- * @mem_enable_ack_mask: branch clock memory enable and ack field in @mem_ack_reg
- * @mem_enable_inverted: clock memory enable bit inverted
- * @branch: branch clock gating handle
- *
- * Clock which can gate its memories.
- */
-struct clk_mem_branch {
-	u32	mem_enable_reg;
-	u32	mem_ack_reg;
-	u32	mem_enable_mask;
-	u32	mem_enable_ack_mask;
-	u8	mem_enable_inverted;
-	struct clk_branch branch;
-};
 
 extern const struct clk_ops clk_branch_ops;
 extern const struct clk_ops clk_branch2_ops;

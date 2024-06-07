@@ -240,6 +240,7 @@
 #define ADC7_GPIO3				0x0c
 #define ADC7_GPIO4				0x0d
 
+#define ADC7_SMB_TEMP				0x06
 #define ADC7_CHG_TEMP				0x10
 #define ADC7_USB_IN_V_16			0x11
 #define ADC7_VDC_16				0x12

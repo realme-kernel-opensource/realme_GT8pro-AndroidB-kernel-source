@@ -25,6 +25,8 @@
 #include <trace/hooks/printk.h>
 #include <trace/hooks/timer.h>
 
+#include "debug_symbol.h"
+
 static DEFINE_PER_CPU(struct pt_regs, regs_before_stop);
 static DEFINE_RAW_SPINLOCK(stop_lock);
 
@@ -129,9 +131,9 @@ static void store_kaslr_offset(void)
 		return;
 
 	__raw_writel(0xdead4ead, mem);
-	__raw_writel((kimage_vaddr - KIMAGE_VADDR) & KASLR_OFFSET_MASK,
+	__raw_writel(((u64)DEBUG_SYMBOL_LOOKUP(_text) - KIMAGE_VADDR) & KASLR_OFFSET_MASK,
 		     mem + 4);
-	__raw_writel(((kimage_vaddr - KIMAGE_VADDR) >> 32) & KASLR_OFFSET_MASK,
+	__raw_writel((((u64)DEBUG_SYMBOL_LOOKUP(_text) - KIMAGE_VADDR) >> 32) & KASLR_OFFSET_MASK,
 		     mem + 8);
 
 	iounmap(mem);
@@ -150,6 +152,9 @@ static void store_kaslr_offset(void) {}
 static int cpu_vendor_hooks_driver_probe(struct platform_device *pdev)
 {
 	int ret;
+
+	if (!debug_symbol_available())
+		return -EPROBE_DEFER;
 
 	store_kaslr_offset();
 #ifdef CONFIG_HIBERNATION

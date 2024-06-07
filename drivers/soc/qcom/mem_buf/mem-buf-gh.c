@@ -227,7 +227,7 @@ static int mem_buf_rmt_alloc_pages(struct sg_table *sgt, unsigned int count)
 	int ret, i = 0;
 	struct page **pages;
 	size_t size = count << PAGE_SHIFT;
-	unsigned long order_mask = (1U << MAX_ORDER) - 1;
+	unsigned long order_mask = (1U << MAX_PAGE_ORDER) - 1;
 
 	pages = kvcalloc(count, sizeof(*pages), GFP_KERNEL);
 	if (!pages)

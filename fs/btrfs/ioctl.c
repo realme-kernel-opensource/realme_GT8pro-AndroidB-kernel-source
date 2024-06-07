@@ -721,7 +721,7 @@ static noinline int create_subvol(struct mnt_idmap *idmap,
 	free_extent_buffer(leaf);
 	leaf = NULL;
 
-	new_root = btrfs_get_new_fs_root(fs_info, objectid, anon_dev);
+	new_root = btrfs_get_new_fs_root(fs_info, objectid, &anon_dev);
 	if (IS_ERR(new_root)) {
 		ret = PTR_ERR(new_root);
 		btrfs_abort_transaction(trans, ret);
@@ -789,6 +789,9 @@ static int create_snapshot(struct btrfs_root *root, struct inode *dir,
 			   "extent tree v2 doesn't support snapshotting yet");
 		return -EOPNOTSUPP;
 	}
+
+	if (btrfs_root_refs(&root->root_item) == 0)
+		return -ENOENT;
 
 	if (!test_bit(BTRFS_ROOT_SHAREABLE, &root->state))
 		return -EINVAL;
@@ -2608,6 +2611,10 @@ static int btrfs_ioctl_defrag(struct file *file, void __user *argp)
 				ret = -EFAULT;
 				goto out;
 			}
+			if (range.flags & ~BTRFS_DEFRAG_RANGE_FLAGS_SUPP) {
+				ret = -EOPNOTSUPP;
+				goto out;
+			}
 			/* compression requires us to start the IO */
 			if ((range.flags & BTRFS_DEFRAG_RANGE_COMPRESS)) {
 				range.flags |= BTRFS_DEFRAG_RANGE_START_IO;
@@ -2691,7 +2698,7 @@ static long btrfs_ioctl_rm_dev_v2(struct file *file, void __user *arg)
 	struct inode *inode = file_inode(file);
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
 	struct btrfs_ioctl_vol_args_v2 *vol_args;
-	struct bdev_handle *bdev_handle = NULL;
+	struct file *bdev_file = NULL;
 	int ret;
 	bool cancel = false;
 
@@ -2728,7 +2735,7 @@ static long btrfs_ioctl_rm_dev_v2(struct file *file, void __user *arg)
 		goto err_drop;
 
 	/* Exclusive operation is now claimed */
-	ret = btrfs_rm_device(fs_info, &args, &bdev_handle);
+	ret = btrfs_rm_device(fs_info, &args, &bdev_file);
 
 	btrfs_exclop_finish(fs_info);
 
@@ -2742,8 +2749,8 @@ static long btrfs_ioctl_rm_dev_v2(struct file *file, void __user *arg)
 	}
 err_drop:
 	mnt_drop_write_file(file);
-	if (bdev_handle)
-		bdev_release(bdev_handle);
+	if (bdev_file)
+		fput(bdev_file);
 out:
 	btrfs_put_dev_args_from_path(&args);
 	kfree(vol_args);
@@ -2756,7 +2763,7 @@ static long btrfs_ioctl_rm_dev(struct file *file, void __user *arg)
 	struct inode *inode = file_inode(file);
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
 	struct btrfs_ioctl_vol_args *vol_args;
-	struct bdev_handle *bdev_handle = NULL;
+	struct file *bdev_file = NULL;
 	int ret;
 	bool cancel = false;
 
@@ -2783,15 +2790,15 @@ static long btrfs_ioctl_rm_dev(struct file *file, void __user *arg)
 	ret = exclop_start_or_cancel_reloc(fs_info, BTRFS_EXCLOP_DEV_REMOVE,
 					   cancel);
 	if (ret == 0) {
-		ret = btrfs_rm_device(fs_info, &args, &bdev_handle);
+		ret = btrfs_rm_device(fs_info, &args, &bdev_file);
 		if (!ret)
 			btrfs_info(fs_info, "disk deleted %s", vol_args->name);
 		btrfs_exclop_finish(fs_info);
 	}
 
 	mnt_drop_write_file(file);
-	if (bdev_handle)
-		bdev_release(bdev_handle);
+	if (bdev_file)
+		fput(bdev_file);
 out:
 	btrfs_put_dev_args_from_path(&args);
 	kfree(vol_args);
@@ -3804,6 +3811,11 @@ static long btrfs_ioctl_qgroup_create(struct file *file, void __user *arg)
 	}
 
 	if (!sa->qgroupid) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (sa->create && is_fstree(sa->qgroupid)) {
 		ret = -EINVAL;
 		goto out;
 	}

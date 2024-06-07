@@ -329,8 +329,8 @@ static ssize_t regmap_read_debugfs(struct regmap *map, unsigned int from,
 	if (*ppos < 0 || !count)
 		return -EINVAL;
 
-	if (count > (PAGE_SIZE << (MAX_ORDER - 1)))
-		count = PAGE_SIZE << (MAX_ORDER - 1);
+	if (count > (PAGE_SIZE << (MAX_PAGE_ORDER - 1)))
+		count = PAGE_SIZE << (MAX_PAGE_ORDER - 1);
 
 	buf = kzalloc(count, GFP_KERNEL);
 	if (!buf)

@@ -121,7 +121,7 @@ static void gh_hvc_put_work_fn(struct work_struct *ws)
 	}
 }
 
-static int gh_hvc_get_chars(uint32_t vtermno, char *buf, int count)
+ssize_t gh_hvc_get_chars(uint32_t vtermno, u8 *buf, size_t count)
 {
 	int vm_name = vtermno_to_gh_vm_name(vtermno);
 
@@ -132,7 +132,7 @@ static int gh_hvc_get_chars(uint32_t vtermno, char *buf, int count)
 				    buf, count, &fifo_lock);
 }
 
-static int gh_hvc_put_chars(uint32_t vtermno, const char *buf, int count)
+ssize_t gh_hvc_put_chars(uint32_t vtermno, const u8 *buf, size_t count)
 {
 	int ret, vm_name = vtermno_to_gh_vm_name(vtermno);
 

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef UFS_QCOM_H_
@@ -15,6 +15,7 @@
 #include <soc/qcom/ice.h>
 #include <ufs/ufshcd.h>
 #include <ufs/unipro.h>
+#include "ufshcd-pltfrm.h"
 
 #define MAX_UFS_QCOM_HOSTS	2
 #define MAX_U32                 (~(u32)0)
@@ -25,10 +26,13 @@
 #define DEFAULT_CLK_RATE_HZ     1000000
 #define BUS_VECTOR_NAME_LEN     32
 #define MAX_SUPP_MAC		64
+#define MAX_ESI_VEC		32
 
 #define UFS_HW_VER_MAJOR_MASK	GENMASK(31, 28)
 #define UFS_HW_VER_MINOR_MASK	GENMASK(27, 16)
 #define UFS_HW_VER_STEP_MASK	GENMASK(15, 0)
+
+#define UFS_DEV_VER_MAJOR_MASK	GENMASK(7, 4)
 
 #define UFS_VENDOR_MICRON	0x12C
 
@@ -94,9 +98,10 @@ enum {
 	UFS_AH8_CFG				= 0xFC,
 	UFS_RD_REG_MCQ				= 0xD00,
 	UFS_MEM_ICE				= 0x2600,
-	REG_UFS_DEBUG_SPARE_CFG			= 0x284C,
 
 	REG_UFS_CFG3				= 0x271C,
+
+	REG_UFS_DEBUG_SPARE_CFG			= 0x284C,
 };
 
 /* QCOM UFS host controller vendor specific debug registers */
@@ -146,9 +151,6 @@ enum {
 #define TEST_BUS_SEL		GENMASK(22, 19)
 #define UFS_REG_TEST_BUS_EN	BIT(30)
 
-#define UFS_PHY_RESET_ENABLE	1
-#define UFS_PHY_RESET_DISABLE	0
-
 /* bit definitions for REG_UFS_CFG2 register */
 #define UAWM_HW_CGC_EN		BIT(0)
 #define UARM_HW_CGC_EN		BIT(1)
@@ -158,6 +160,13 @@ enum {
 #define TRLUT_HW_CGC_EN		BIT(5)
 #define TMRLUT_HW_CGC_EN	BIT(6)
 #define OCSC_HW_CGC_EN		BIT(7)
+
+/* bit definitions for REG_UFS_CFG3 register */
+#define ESI_VEC_MASK		GENMASK(22, 12)
+
+/* bit definitions for REG_UFS_PARAM0 */
+#define MAX_HS_GEAR_MASK	GENMASK(6, 4)
+#define UFS_QCOM_MAX_GEAR(x)	FIELD_GET(MAX_HS_GEAR_MASK, (x))
 
 /* bit definition for UFS_UFS_TEST_BUS_CTRL_n */
 #define TEST_BUS_SUB_SEL_MASK	GENMASK(4, 0)  /* All XXX_SEL fields are 5 bits wide */
@@ -205,10 +214,7 @@ enum ufs_qcom_phy_init_type {
 
 /* QCOM UFS debug print bit mask */
 #define UFS_QCOM_DBG_PRINT_REGS_EN	BIT(0)
-
-#define MASK_TX_SYMBOL_CLK_1US_REG	GENMASK(9, 0)
 #define MASK_CLK_NS_REG			GENMASK(23, 10)
-
 
 /* QUniPro Vendor specific attributes */
 #define PA_VS_CONFIG_REG1	0x9000
@@ -275,8 +281,7 @@ ufs_qcom_get_controller_revision(struct ufs_hba *hba,
 
 static inline void ufs_qcom_assert_reset(struct ufs_hba *hba)
 {
-	ufshcd_rmwl(hba, UFS_PHY_SOFT_RESET, FIELD_PREP(UFS_PHY_SOFT_RESET, UFS_PHY_RESET_ENABLE),
-		    REG_UFS_CFG1);
+	ufshcd_rmwl(hba, UFS_PHY_SOFT_RESET, UFS_PHY_SOFT_RESET, REG_UFS_CFG1);
 
 	/*
 	 * Make sure assertion of ufs phy reset is written to
@@ -287,8 +292,7 @@ static inline void ufs_qcom_assert_reset(struct ufs_hba *hba)
 
 static inline void ufs_qcom_deassert_reset(struct ufs_hba *hba)
 {
-	ufshcd_rmwl(hba, UFS_PHY_SOFT_RESET, FIELD_PREP(UFS_PHY_SOFT_RESET, UFS_PHY_RESET_DISABLE),
-		    REG_UFS_CFG1);
+	ufshcd_rmwl(hba, UFS_PHY_SOFT_RESET, 0, REG_UFS_CFG1);
 
 	/*
 	 * Make sure de-assertion of ufs phy reset is written to
@@ -551,10 +555,8 @@ struct ufs_qcom_host {
 	struct ufs_hba *hba;
 	struct ufs_qcom_bus_vote bus_vote;
 	struct ufs_pa_layer_attr dev_req_params;
-	struct clk *rx_l0_sync_clk;
-	struct clk *tx_l0_sync_clk;
-	struct clk *rx_l1_sync_clk;
-	struct clk *tx_l1_sync_clk;
+	struct clk_bulk_data *clks;
+	u32 num_clks;
 	bool is_lane_clks_enabled;
 
 #ifdef CONFIG_SCSI_UFS_CRYPTO
@@ -580,6 +582,7 @@ struct ufs_qcom_host {
 
 	struct ufs_qcom_dev_params host_pwr_cap;
 
+	struct ufs_host_params host_params;
 	u32 phy_gear;
 
 	bool disable_lpm;
