@@ -4215,9 +4215,6 @@ static void walt_sched_init_rq(struct rq *rq)
 	int j;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
-	if (cpu_of(rq) == 0)
-		walt_init_once();
-
 	cpumask_set_cpu(cpu_of(rq), &wrq->freq_domain_cpumask);
 
 	wrq->walt_stats.cumulative_runnable_avg_scaled = 0;
@@ -5008,15 +5005,22 @@ static int walt_init_stop_handler(void *data)
 		level++;
 	}
 
+	/* existing tasks get a demand of 0, including idle task */
 	for_each_process_thread(g, p) {
 		init_new_task_load(p);
 	}
 
 	for_each_possible_cpu(cpu) {
+		/* Create task members for idle thread */
+		init_new_task_load(cpu_rq(cpu)->idle);
+	}
+
+	/* post walt_init_once() a new task will get a non zero demand */
+	walt_init_once();
+
+	for_each_possible_cpu(cpu) {
 		struct rq *rq = cpu_rq(cpu);
 
-		/* Create task members for idle thread */
-		init_new_task_load(rq->idle);
 
 		walt_sched_init_rq(rq);
 
