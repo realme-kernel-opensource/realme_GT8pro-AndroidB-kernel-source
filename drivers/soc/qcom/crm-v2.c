@@ -4,6 +4,7 @@
  */
 #define pr_fmt(fmt) "%s " fmt, KBUILD_MODNAME
 
+#include <linux/bitfield.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
@@ -28,6 +29,8 @@
 #define CREATE_TRACE_POINTS
 #include "trace-crm.h"
 
+#define field_get(_mask, _reg) (((_reg) & (_mask)) >> (ffs(_mask) - 1))
+
 #define CRM_DRV_IPC_LOG_SIZE		2
 #define MAX_NAME_LENGTH			20
 
@@ -42,41 +45,6 @@
 #define BW_PT_VOTING_FLAG	BIT(2)
 
 #define VPAGE_SHIFT_BITS		0xFFF
-
-/* Common CRM Registers */
-
-#define CRM_VERSION			0
-/* Offsets for CRM_VERSION Register */
-#define MAJOR_VER_MASK			0xFF
-#define MAJOR_VER_SHIFT			16
-#define MINOR_VER_MASK			0xFF
-#define MINOR_VER_SHIFT			8
-
-#define CRM_CFG_PARAM_1			0x4
-/* Offsets for CRM_CFG_PARAM_1 Register */
-#define NUM_SW_DRVS_MASK		0xF
-#define NUM_SW_DRVS_SHIFT		20
-#define NUM_HW_DRVS_MASK		0xF
-#define NUM_HW_DRVS_SHIFT		16
-#define NUM_VCD_VOTED_BY_BW_MASK	0x7
-#define NUM_VCD_VOTED_BY_BW_SHIFT	24
-#define NUM_OF_RAILS_MASK		0xF
-#define NUM_OF_RAILS_SHIFT		12
-#define NUM_VCD_VOTED_BY_PERF_OL_MASK	0xF
-#define NUM_VCD_VOTED_BY_PERF_OL_SHIFT	8
-#define NUM_CH_MASK			0xF
-#define NUM_CH_SHIFT			4
-#define NUM_PWR_STATES_PER_CH_MASK	0xF
-#define NUM_PWR_STATES_PER_CH_SHIFT	0
-#define NUM_OF_NODES_PT_MASK	0x1F
-#define NUM_OF_NODES_PT_SHIFT	27
-
-#define CRM_CFG_PARAM_2			0x8
-/* Offsets for CRM_CFG_PARAM_2 Register */
-#define NUM_OF_NODES_MASK		0x1F
-#define NUM_OF_NODES_SHIFT		26
-
-#define CRM_ENABLE			0xC
 
 /* Applicable for HW & SW DRVs BW Registers */
 #define PERF_OL_VALUE_BITS		0x7
@@ -121,6 +89,25 @@
 			pr_warn("drv:%d, %s:%d, pwr_st:%d, addr:0x%x, val:0x%x\n",\
 						drv_num, res_type == PERF_OL_VCD ?\
 						"vcd" : "node", res_num, pwr_st, addr, val)
+
+enum {
+	CRM_VERSION,
+	MAJOR_VERSION,
+	MINOR_VERSION,
+	CRM_CFG_PARAM_1,
+	NUM_OF_NODES_PT,
+	NUM_VCD_VOTED_BY_BW,
+	NUM_SW_DRVS,
+	NUM_HW_DRVS,
+	NUM_OF_RAILS,
+	NUM_VCD_VOTED_BY_PERF_OL,
+	NUM_CHANNELS,
+	NUM_PWR_STATES_PER_CH,
+	CRM_CFG_PARAM_2,
+	NUM_OF_NODES,
+	CRM_ENABLE,
+	CFG_REG_MAX,
+};
 
 enum {
 /* CRM DRV Register */
@@ -231,6 +218,7 @@ struct crm_desc {
 	bool set_chn_behave;
 	bool set_hw_chn_switch_ctrl;
 	u32 crm_capability;
+	u32 cfg_regs[CFG_REG_MAX];
 	u32 chn_regs[CHN_REG_MAX];
 	u32 crmb_regs[CRMB_REG_MAX];
 	u32 crmb_pt_regs[CRMB_PT_REG_MAX];
@@ -1486,27 +1474,12 @@ static int crm_probe_set_vcd_caches(struct crm_drv_top *crm, u32 crm_cfg, u32 cr
 	u32 num_bw_vote_vcds, num_nds_pt, num_rails;
 	int i, j, ret;
 
-	num_perf_ol_vcds = crm_cfg & (NUM_VCD_VOTED_BY_PERF_OL_MASK <<
-				      NUM_VCD_VOTED_BY_PERF_OL_SHIFT);
-	num_perf_ol_vcds >>= NUM_VCD_VOTED_BY_PERF_OL_SHIFT;
-
-	num_bw_vote_vcds = crm_cfg & (NUM_VCD_VOTED_BY_BW_MASK <<
-				      NUM_VCD_VOTED_BY_BW_SHIFT);
-	num_bw_vote_vcds >>= NUM_VCD_VOTED_BY_BW_SHIFT;
-
-	num_pwr_states = crm_cfg & (NUM_PWR_STATES_PER_CH_MASK <<
-				    NUM_PWR_STATES_PER_CH_SHIFT);
-	num_pwr_states >>= NUM_PWR_STATES_PER_CH_SHIFT;
-
-	num_nds_pt = crm_cfg & (NUM_OF_NODES_PT_MASK <<
-					NUM_OF_NODES_PT_SHIFT);
-	num_nds_pt >>= NUM_OF_NODES_PT_SHIFT;
-
-	num_nds = crm_cfg_2 & (NUM_OF_NODES_MASK << NUM_OF_NODES_SHIFT);
-	num_nds >>= NUM_OF_NODES_SHIFT;
-
-	num_rails = crm_cfg & (NUM_OF_RAILS_MASK << NUM_OF_RAILS_SHIFT);
-	num_rails >>= NUM_OF_RAILS_SHIFT;
+	num_perf_ol_vcds = field_get(crm->desc->cfg_regs[NUM_VCD_VOTED_BY_PERF_OL], crm_cfg);
+	num_bw_vote_vcds = field_get(crm->desc->cfg_regs[NUM_VCD_VOTED_BY_BW], crm_cfg);
+	num_pwr_states = field_get(crm->desc->cfg_regs[NUM_PWR_STATES_PER_CH], crm_cfg);
+	num_nds_pt = field_get(crm->desc->cfg_regs[NUM_OF_NODES_PT], crm_cfg);
+	num_rails = field_get(crm->desc->cfg_regs[NUM_OF_RAILS], crm_cfg);
+	num_nds = field_get(crm->desc->cfg_regs[NUM_OF_NODES], crm_cfg_2);
 
 	for (i = 0; i < crm->num_hw_drvs; i++) {
 		drv = &crm->hw_drvs[i];
@@ -1642,22 +1615,14 @@ static int crm_probe_drvs(struct crm_drv_top *crm, struct device_node *dn)
 	u32 crm_cfg, crm_cfg_2;
 	int num_hw_drvs, num_sw_drvs;
 
-	crm_ver = readl_relaxed(crm->common + CRM_VERSION);
-	major_ver = crm_ver & (MAJOR_VER_MASK << MAJOR_VER_SHIFT);
-	major_ver >>= MAJOR_VER_SHIFT;
-	minor_ver = crm_ver & (MINOR_VER_MASK << MINOR_VER_SHIFT);
-	minor_ver >>= MINOR_VER_SHIFT;
+	crm_ver = readl_relaxed(crm->common + crm->desc->cfg_regs[CRM_VERSION]);
+	major_ver = field_get(crm->desc->cfg_regs[MAJOR_VERSION], crm_ver);
+	minor_ver = field_get(crm->desc->cfg_regs[MINOR_VERSION], crm_ver);
 
-	pr_debug("CRM %s running version = %u.%u\n", crm->name, major_ver, minor_ver);
-
-	crm_cfg = readl_relaxed(crm->common + CRM_CFG_PARAM_1);
-	num_hw_drvs = crm_cfg & (NUM_HW_DRVS_MASK << NUM_HW_DRVS_SHIFT);
-	num_hw_drvs >>= NUM_HW_DRVS_SHIFT;
-	num_sw_drvs = crm_cfg & (NUM_SW_DRVS_MASK << NUM_SW_DRVS_SHIFT);
-	num_sw_drvs >>= NUM_SW_DRVS_SHIFT;
-
-	crm->num_channels = crm_cfg & (NUM_CH_MASK << NUM_CH_SHIFT);
-	crm->num_channels >>= NUM_CH_SHIFT;
+	crm_cfg = readl_relaxed(crm->common + crm->desc->cfg_regs[CRM_CFG_PARAM_1]);
+	num_hw_drvs = field_get(crm->desc->cfg_regs[NUM_HW_DRVS], crm_cfg);
+	num_sw_drvs = field_get(crm->desc->cfg_regs[NUM_SW_DRVS], crm_cfg);
+	crm->num_channels = field_get(crm->desc->cfg_regs[NUM_CHANNELS], crm_cfg);
 
 	crm->num_hw_drvs = of_property_count_u32_elems(dn, "qcom,hw-drv-ids");
 	if (crm->num_hw_drvs < 0) {
@@ -1686,7 +1651,7 @@ skip_sw_drvs:
 	    (!crm->num_sw_drvs && !crm->num_hw_drvs))
 		return -EINVAL;
 
-	crm_cfg_2 = readl_relaxed(crm->common + CRM_CFG_PARAM_2);
+	crm_cfg_2 = readl_relaxed(crm->common + crm->desc->cfg_regs[CRM_CFG_PARAM_2]);
 
 	return crm_probe_set_vcd_caches(crm, crm_cfg, crm_cfg_2);
 }
@@ -1754,7 +1719,7 @@ static int crm_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	crm_en = readl_relaxed(crm->common + CRM_ENABLE);
+	crm_en = readl_relaxed(crm->common + crm->desc->cfg_regs[CRM_ENABLE]);
 	if (!crm_en) {
 		pr_err("%s: %s not enabled\n", __func__, crm->name);
 		return -EINVAL;
@@ -1778,10 +1743,27 @@ static int crm_probe(struct platform_device *pdev)
 	return ret;
 }
 
-struct crm_desc pcie_crm_desc_v2 = {
+static const struct crm_desc pcie_crm_desc_v2 = {
 	.set_chn_behave = false,
 	.set_hw_chn_switch_ctrl = false,
 	.crm_capability = PERF_OL_VOTING_FLAG | BW_PT_VOTING_FLAG,
+	.cfg_regs = {
+		[CRM_VERSION]			= 0x0,
+		[MAJOR_VERSION]			= GENMASK(23, 16),
+		[MINOR_VERSION]			= GENMASK(15, 8),
+		[CRM_CFG_PARAM_1]		= 0x4,
+		[NUM_OF_NODES_PT]		= GENMASK(31, 27),
+		[NUM_VCD_VOTED_BY_BW]		= GENMASK(26, 24),
+		[NUM_SW_DRVS]			= GENMASK(23, 20),
+		[NUM_HW_DRVS]			= GENMASK(19, 16),
+		[NUM_OF_RAILS]			= GENMASK(15, 12),
+		[NUM_VCD_VOTED_BY_PERF_OL]	= GENMASK(11, 8),
+		[NUM_CHANNELS]			= GENMASK(7, 4),
+		[NUM_PWR_STATES_PER_CH]		= GENMASK(3, 0),
+		[CRM_CFG_PARAM_2]		= 0x8,
+		[NUM_OF_NODES]			= GENMASK(30, 26),
+		[CRM_ENABLE]			= 0xC,
+	},
 	.chn_regs = {
 		[CHN_BUSY]			 = 0x370,
 		[CHN_UPDATE]			 = 0x374,
@@ -1903,10 +1885,27 @@ struct crm_desc pcie_crm_desc_v2 = {
 	},
 };
 
-struct crm_desc cam_crm_desc_v2 = {
+static const struct crm_desc cam_crm_desc_v2 = {
 	.set_chn_behave = true,
 	.set_hw_chn_switch_ctrl = false,
 	.crm_capability = PERF_OL_VOTING_FLAG | BW_VOTING_FLAG,
+	.cfg_regs = {
+		[CRM_VERSION]			= 0x0,
+		[MAJOR_VERSION]			= GENMASK(23, 16),
+		[MINOR_VERSION]			= GENMASK(15, 8),
+		[CRM_CFG_PARAM_1]		= 0x4,
+		[NUM_OF_NODES_PT]		= GENMASK(31, 27),
+		[NUM_VCD_VOTED_BY_BW]		= GENMASK(26, 24),
+		[NUM_SW_DRVS]			= GENMASK(23, 20),
+		[NUM_HW_DRVS]			= GENMASK(19, 16),
+		[NUM_OF_RAILS]			= GENMASK(15, 12),
+		[NUM_VCD_VOTED_BY_PERF_OL]	= GENMASK(11, 8),
+		[NUM_CHANNELS]			= GENMASK(7, 4),
+		[NUM_PWR_STATES_PER_CH]		= GENMASK(3, 0),
+		[CRM_CFG_PARAM_2]		= 0x8,
+		[NUM_OF_NODES]			= GENMASK(30, 26),
+		[CRM_ENABLE]			= 0xC,
+	},
 	.chn_regs = {
 		[CHN_BUSY]			 = 0xDC,
 		[CHN_UPDATE]			 = 0xE0,
@@ -2010,10 +2009,27 @@ struct crm_desc cam_crm_desc_v2 = {
 	},
 };
 
-struct crm_desc disp_crm_desc_v2 = {
+static const struct crm_desc disp_crm_desc_v2 = {
 	.set_chn_behave = false,
 	.set_hw_chn_switch_ctrl = true,
 	.crm_capability = PERF_OL_VOTING_FLAG | BW_VOTING_FLAG | BW_PT_VOTING_FLAG,
+	.cfg_regs = {
+		[CRM_VERSION]			= 0x0,
+		[MAJOR_VERSION]			= GENMASK(23, 16),
+		[MINOR_VERSION]			= GENMASK(15, 8),
+		[CRM_CFG_PARAM_1]		= 0x4,
+		[NUM_OF_NODES_PT]		= GENMASK(31, 27),
+		[NUM_VCD_VOTED_BY_BW]		= GENMASK(26, 24),
+		[NUM_SW_DRVS]			= GENMASK(23, 20),
+		[NUM_HW_DRVS]			= GENMASK(19, 16),
+		[NUM_OF_RAILS]			= GENMASK(15, 12),
+		[NUM_VCD_VOTED_BY_PERF_OL]	= GENMASK(11, 8),
+		[NUM_CHANNELS]			= GENMASK(7, 4),
+		[NUM_PWR_STATES_PER_CH]		= GENMASK(3, 0),
+		[CRM_CFG_PARAM_2]		= 0x8,
+		[NUM_OF_NODES]			= GENMASK(30, 26),
+		[CRM_ENABLE]			= 0xC,
+	},
 	.chn_regs = {
 		[CHN_BUSY]			 = 0xA0,
 		[CHN_UPDATE]			 = 0xA4,
