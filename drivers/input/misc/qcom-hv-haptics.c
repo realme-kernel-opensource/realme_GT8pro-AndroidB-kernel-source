@@ -75,7 +75,7 @@
 #define AUTO_RES_ERROR_BIT			BIT(1)
 #define HPRW_RDY_FAULT_BIT			BIT(0)
 
-/* Only for HAP525_HV */
+/* For HAP525_HV and later */
 #define HAP_CFG_HPWR_INTF_REG                   0x0B
 #define HPWR_INTF_STATUS_MASK                   GENMASK(1, 0)
 #define HPWR_DISABLED                           0
@@ -83,6 +83,7 @@
 
 #define HAP_CFG_REAL_TIME_LRA_IMPEDANCE_REG	0x0E
 #define LRA_IMPEDANCE_MOHMS_LSB			250
+#define HAP530_LRA_IMPEDANCE_MOHMS_LSB		200
 
 #define HAP_CFG_INT_RT_STS_REG			0x10
 #define FIFO_EMPTY_BIT				BIT(1)
@@ -4798,7 +4799,7 @@ static u32 get_lra_impedance_capable_max(struct haptics_chip *chip)
 #define RT_IMPD_DET_VMAX_DEFAULT_MV		4500
 static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 {
-	u32 vmax_mv, nominal_ohm, current_ma, vmax_margin_mv, play_length_us;
+	u32 vmax_mv, nominal_ohm, current_ma, vmax_margin_mv, play_length_us, lsb_mohm;
 	u8 samples[4] = {0x7f, 0x7f, 0x7f, 0x7f};
 	struct pattern_cfg pattern = {
 		.samples = {
@@ -4924,7 +4925,11 @@ static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 	if (rc < 0)
 		goto restore;
 
-	chip->config.lra_measured_mohms = val * LRA_IMPEDANCE_MOHMS_LSB;
+	lsb_mohm = LRA_IMPEDANCE_MOHMS_LSB;
+	if (chip->hw_type >= HAP530_HV)
+		lsb_mohm = HAP530_LRA_IMPEDANCE_MOHMS_LSB;
+
+	chip->config.lra_measured_mohms = val * lsb_mohm;
 	dev_dbg(chip->dev, "measured LRA impedance: %u mohm",
 			chip->config.lra_measured_mohms);
 	/* store the detected LRA impedance into SDAM for future usage */
