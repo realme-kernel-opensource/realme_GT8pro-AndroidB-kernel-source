@@ -79,6 +79,11 @@ unsigned int __read_mostly sched_init_task_load_windows;
  */
 unsigned int __read_mostly sched_load_granule;
 
+bool walt_is_idle_task(struct task_struct *p)
+{
+	return walt_flag_test(p, WALT_IDLE_TASK_BIT);
+}
+
 u64 walt_sched_clock(void)
 {
 	if (unlikely(walt_clock_suspended))
@@ -1379,7 +1384,7 @@ static void update_task_pred_demand(struct rq *rq, struct task_struct *p, int ev
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	u16 curr_window_scaled;
 
-	if (is_idle_task(p))
+	if (walt_is_idle_task(p))
 		return;
 
 	if (event != PUT_PREV_TASK && event != TASK_UPDATE &&
@@ -1585,7 +1590,7 @@ static inline int cpu_is_waiting_on_io(struct rq *rq)
 static int account_busy_for_cpu_time(struct rq *rq, struct task_struct *p,
 				     u64 irqtime, int event)
 {
-	if (is_idle_task(p)) {
+	if (walt_is_idle_task(p)) {
 		/* TASK_WAKE && TASK_MIGRATE is not possible on idle task! */
 		if (event == PICK_NEXT_TASK)
 			return 0;
@@ -1760,7 +1765,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 	 * idle task.
 	 */
 	if (new_window) {
-		if (!is_idle_task(p))
+		if (!walt_is_idle_task(p))
 			rollover_task_window(p, full_window);
 		wts->window_start = window_start;
 	}
@@ -1796,7 +1801,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 		 * same window.
 		 */
 
-		if (!irqtime || !is_idle_task(p) || cpu_is_waiting_on_io(rq))
+		if (!irqtime || !walt_is_idle_task(p) || cpu_is_waiting_on_io(rq))
 			delta = wallclock - mark_start;
 		else
 			delta = irqtime;
@@ -1805,7 +1810,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 		if (new_task)
 			*nt_curr_runnable_sum += delta;
 
-		if (!is_idle_task(p)) {
+		if (!walt_is_idle_task(p)) {
 			wts->curr_window += delta;
 			wts->curr_window_cpu[cpu] += delta;
 		}
@@ -1872,7 +1877,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 		goto done;
 	}
 
-	if (!irqtime || !is_idle_task(p) || cpu_is_waiting_on_io(rq)) {
+	if (!irqtime || !walt_is_idle_task(p) || cpu_is_waiting_on_io(rq)) {
 		/*
 		 * account_busy_for_cpu_time() = 1 so busy time needs
 		 * to be accounted to the current window. A new window
@@ -1892,7 +1897,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 			 * contribution to previous completed window.
 			 */
 			delta = scale_exec_time(window_start - mark_start, rq, wts);
-			if (!is_idle_task(p)) {
+			if (!walt_is_idle_task(p)) {
 				wts->prev_window += delta;
 				wts->prev_window_cpu[cpu] += delta;
 			}
@@ -1903,7 +1908,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 			 * full window (window_size).
 			 */
 			delta = scale_exec_time(window_size, rq, wts);
-			if (!is_idle_task(p)) {
+			if (!walt_is_idle_task(p)) {
 				wts->prev_window = delta;
 				wts->prev_window_cpu[cpu] = delta;
 			}
@@ -1919,7 +1924,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 		if (new_task)
 			*nt_curr_runnable_sum += delta;
 
-		if (!is_idle_task(p)) {
+		if (!walt_is_idle_task(p)) {
 			wts->curr_window = delta;
 			wts->curr_window_cpu[cpu] = delta;
 		}
@@ -1940,7 +1945,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 		 * started at wallclock - irqtime.
 		 */
 
-		WALT_PANIC(!is_idle_task(p));
+		WALT_PANIC(!walt_is_idle_task(p));
 		/* mark_start here becomes the starting time of interrupt */
 		mark_start = wallclock - irqtime;
 
@@ -1971,7 +1976,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 	}
 
 done:
-	if (!is_idle_task(p))
+	if (!walt_is_idle_task(p))
 		update_top_tasks(p, rq, old_curr_window,
 					new_window, full_window);
 }
@@ -1995,7 +2000,7 @@ account_busy_for_task_demand(struct rq *rq, struct task_struct *p, int event)
 	/*
 	 * No need to bother updating task demand for the idle task.
 	 */
-	if (is_idle_task(p))
+	if (walt_is_idle_task(p))
 		return 0;
 
 	/*
@@ -2108,7 +2113,7 @@ static void update_history(struct rq *rq, struct task_struct *p,
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
 	/* Ignore windows where task had no activity */
-	if (!runtime || is_idle_task(p) || !samples)
+	if (!runtime || walt_is_idle_task(p) || !samples)
 		goto done;
 
 	runtime_scaled = scale_time_to_util(runtime);
@@ -2344,7 +2349,7 @@ update_task_rq_cpu_cycles(struct task_struct *p, struct rq *rq, int event,
 	 * for IO wait time accounting.  Use the previously
 	 * calculated frequency in such a case.
 	 */
-	if (!is_idle_task(rq->curr) || irqtime) {
+	if (!walt_is_idle_task(rq->curr) || irqtime) {
 		if (unlikely(cur_cycles < wts->cpu_cycles))
 			cycles_delta = cur_cycles + (U64_MAX -
 				wts->cpu_cycles);
@@ -2352,7 +2357,7 @@ update_task_rq_cpu_cycles(struct task_struct *p, struct rq *rq, int event,
 			cycles_delta = cur_cycles - wts->cpu_cycles;
 		cycles_delta = cycles_delta * NSEC_PER_MSEC;
 
-		if (event == IRQ_UPDATE && is_idle_task(p))
+		if (event == IRQ_UPDATE && walt_is_idle_task(p))
 			/*
 			 * Time between mark_start of idle task and IRQ handler
 			 * entry time is CPU cycle counter stall period.
@@ -4362,7 +4367,7 @@ static void android_rvh_account_irq(void *unused, struct task_struct *curr, int 
 	if (unlikely(walt_disabled))
 		return;
 
-	if (!is_idle_task(curr))
+	if (!walt_is_idle_task(curr))
 		return;
 
 	rq = cpu_rq(cpu);
@@ -4570,7 +4575,7 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 	old_load = task_load(p);
 	wallclock = walt_sched_clock();
 
-	if (is_idle_task(rq->curr) && p->in_iowait)
+	if (walt_is_idle_task(rq->curr) && p->in_iowait)
 		walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
 	walt_update_task_ravg(p, rq, TASK_WAKE, wallclock, 0);
 	note_task_waking(p, wallclock);
@@ -5013,6 +5018,7 @@ static int walt_init_stop_handler(void *data)
 	for_each_possible_cpu(cpu) {
 		/* Create task members for idle thread */
 		init_new_task_load(cpu_rq(cpu)->idle);
+		walt_flag_set(cpu_rq(cpu)->idle, WALT_IDLE_TASK_BIT, 1);
 	}
 
 	/* post walt_init_once() a new task will get a non zero demand */

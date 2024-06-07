@@ -95,6 +95,7 @@ extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 /*wts->flags bits*/
 #define	WALT_INIT_BIT			BIT(0)
 #define WALT_TRAILBLAZER_BIT		BIT(1)
+#define WALT_IDLE_TASK_BIT		BIT(2)
 
 #define WALT_LOW_LATENCY_PROCFS_BIT	BIT(0)
 #define WALT_LOW_LATENCY_BINDER_BIT	BIT(1)
@@ -576,6 +577,7 @@ int waltgov_register(void);
 extern void walt_lb_init(void);
 extern unsigned int walt_rotation_enabled;
 
+extern bool walt_is_idle_task(struct task_struct *p);
 /*
  * Returns the current capacity of cpu after applying both
  * cpu and freq scaling.
@@ -1100,7 +1102,7 @@ static inline struct task_group *css_tg(struct cgroup_subsys_state *css)
  */
 static inline bool walt_fair_task(struct task_struct *p)
 {
-	return p->prio >= MAX_RT_PRIO && !is_idle_task(p);
+	return p->prio >= MAX_RT_PRIO && !walt_is_idle_task(p);
 }
 
 extern int sched_long_running_rt_task_ms_handler(struct ctl_table *table, int write,
