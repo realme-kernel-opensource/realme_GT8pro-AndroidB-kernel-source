@@ -4026,6 +4026,30 @@ static void check_obet_set_boost(void)
 	prev_is_obet = now_is_obet;
 }
 
+#define CORE_UTIL_PERIOD 1000000000
+static void walt_core_utilization(int cpu)
+{
+	static u64 sum[WALT_NR_CPUS];
+	static u64 timestamp;
+	static int nr_windows[WALT_NR_CPUS];
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
+	u64 max_capacity = arch_scale_cpu_capacity(cpu);
+
+	if (wrq->window_start > timestamp + CORE_UTIL_PERIOD) {
+		sysctl_sched_walt_core_util[cpu] = sum[cpu] / nr_windows[cpu];
+		sum[cpu] = 0;
+		nr_windows[cpu] = 0;
+		if (cpu == cpumask_last(cpu_online_mask))
+			timestamp = wrq->window_start;
+	}
+
+	nr_windows[cpu]++;
+	if (max_capacity < wrq->walt_stats.cumulative_runnable_avg_scaled)
+		sum[cpu] += max_capacity;
+	else
+		sum[cpu] += wrq->walt_stats.cumulative_runnable_avg_scaled;
+}
+
 DEFINE_PER_CPU(u32, wakeup_ctr);
 /**
  * walt_irq_work() - perform walt irq work for rollover and migration
@@ -4088,6 +4112,8 @@ static void walt_irq_work(struct irq_work *irq_work)
 		for_each_cpu(cpu, cpu_online_mask) {
 			wakeup_ctr_sum += per_cpu(wakeup_ctr, cpu);
 			per_cpu(wakeup_ctr, cpu) = 0;
+
+			walt_core_utilization(cpu);
 		}
 
 		check_obet();

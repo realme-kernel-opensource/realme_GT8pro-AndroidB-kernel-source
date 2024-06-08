@@ -1291,6 +1291,8 @@ extern bool should_oscillate(void);
 extern bool now_is_sbt;
 extern bool is_sbt_or_oscillate(void);
 
+extern unsigned int sysctl_sched_walt_core_util[WALT_NR_CPUS];
+
 enum WALT_DEBUG_FEAT {
 	WALT_BUG_UPSTREAM,
 	WALT_BUG_WALT,
