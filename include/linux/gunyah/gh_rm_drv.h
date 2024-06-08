@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -143,10 +143,10 @@ struct gh_acl_desc {
 } __packed;
 
 struct gh_sgl_desc {
-	u16 n_sgl_entries;
+	u32 n_sgl_entries;
 	u16 reserved;
 	struct gh_sgl_entry sgl_entries[];
-} __packed;
+};
 
 struct gh_mem_attr_desc {
 	u16 n_mem_attr_entries;

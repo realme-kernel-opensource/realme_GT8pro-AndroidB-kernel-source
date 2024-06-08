@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -1495,7 +1495,7 @@ static void gh_rm_populate_acl_desc(struct gh_acl_desc *dst_desc,
 	}
 }
 
-static void gh_rm_populate_sgl_desc(struct gh_sgl_desc *dst_desc,
+static void gh_rm_populate_sgl_desc(struct gh_sgl_desc_intf *dst_desc,
 				    struct gh_sgl_desc *src_desc,
 				    u16 reserved_param)
 {
@@ -1532,7 +1532,7 @@ static void gh_rm_populate_mem_request(void *req_buf, u32 fn_id,
 				       struct gh_mem_attr_desc *src_mem_attrs)
 {
 	struct gh_acl_desc *dst_acl_desc;
-	struct gh_sgl_desc *dst_sgl_desc;
+	struct gh_sgl_desc_intf *dst_sgl_desc;
 	struct gh_mem_attr_desc *dst_mem_attrs;
 	size_t req_hdr_size, req_acl_size, req_sgl_size;
 	u32 n_acl_entries = src_acl_desc ? src_acl_desc->n_acl_entries : 0;
@@ -1560,7 +1560,7 @@ static void gh_rm_populate_mem_request(void *req_buf, u32 fn_id,
 	}
 
 	req_acl_size = offsetof(struct gh_acl_desc, acl_entries[n_acl_entries]);
-	req_sgl_size = offsetof(struct gh_sgl_desc, sgl_entries[n_sgl_entries]);
+	req_sgl_size = offsetof(struct gh_sgl_desc_intf, sgl_entries[n_sgl_entries]);
 
 	dst_acl_desc = req_buf + req_hdr_size;
 	dst_sgl_desc = req_buf + req_hdr_size + req_acl_size;
@@ -1599,7 +1599,7 @@ static void *gh_rm_alloc_mem_request_buf(u32 fn_id, size_t n_acl_entries,
 	}
 
 	req_acl_size = offsetof(struct gh_acl_desc, acl_entries[n_acl_entries]);
-	req_sgl_size = offsetof(struct gh_sgl_desc, sgl_entries[n_sgl_entries]);
+	req_sgl_size = offsetof(struct gh_sgl_desc_intf, sgl_entries[n_sgl_entries]);
 	req_mem_attr_size = offsetof(struct gh_mem_attr_desc,
 				     attr_entries[n_mem_attr_entries]);
 	req_payload_size += req_acl_size + req_sgl_size + req_mem_attr_size;
@@ -1803,12 +1803,12 @@ static struct gh_sgl_fragment *gh_sgl_fragment_init(void)
 }
 
 static int gh_sgl_fragment_append(struct gh_sgl_fragment *gather,
-				struct gh_sgl_desc *sgl_desc)
+				struct gh_sgl_desc_intf *sgl_desc)
 {
 	struct gh_sgl_frag_entry *entry;
 
 	/* Check for overflow */
-	if (sgl_desc->n_sgl_entries > (U16_MAX - gather->n_sgl_entries)) {
+	if (sgl_desc->n_sgl_entries > (U32_MAX - gather->n_sgl_entries)) {
 		pr_err("%s: Too many sgl_entries\n", __func__);
 		return -EINVAL;
 	}
@@ -1884,7 +1884,7 @@ gh_rm_mem_accept_prepare_request(gh_memparcel_handle_t handle, u8 mem_type,
 {
 	void *req_buf;
 	struct gh_mem_accept_req_payload_hdr *req_payload_hdr;
-	u16 req_sgl_entries = 0, req_mem_attr_entries = 0;
+	u32 req_sgl_entries = 0, req_mem_attr_entries = 0;
 	u32 req_acl_entries = 0;
 	u32 fn_id = GH_RM_RPC_MSG_ID_CALL_MEM_ACCEPT;
 
@@ -2029,7 +2029,7 @@ struct gh_sgl_desc *gh_rm_mem_accept(gh_memparcel_handle_t handle, u8 mem_type,
 		if (!resp_payload_size)
 			break;
 
-		if (gh_sgl_fragment_append(gather, (struct gh_sgl_desc *)resp_payload)) {
+		if (gh_sgl_fragment_append(gather, (struct gh_sgl_desc_intf *)resp_payload)) {
 			ret = -ENOMEM;
 			kfree(resp_payload);
 			goto err_rm_call;
@@ -2092,14 +2092,14 @@ int gh_rm_mem_append(gh_memparcel_handle_t handle, u8 flags,
 	size_t req_payload_size, resp_payload_size;
 	void *req_buf, *resp_payload;
 	struct gh_mem_append_req_payload_hdr *req_hdr;
-	struct gh_sgl_desc *req_sgl_desc;
+	struct gh_sgl_desc_intf *req_sgl_desc;
 
 	if ((flags & ~GH_RM_MEM_APPEND_VALID_FLAGS) ||
 	     n_sgl_entries > GH_RM_MEM_MAX_SGL_ENTRIES)
 		return -EINVAL;
 
 	req_payload_size = sizeof(*req_hdr);
-	req_payload_size += offsetof(struct gh_sgl_desc, sgl_entries[n_sgl_entries]);
+	req_payload_size += offsetof(struct gh_sgl_desc_intf, sgl_entries[n_sgl_entries]);
 	req_buf = kmalloc(req_payload_size, GFP_KERNEL);
 	if (!req_buf)
 		return -ENOMEM;
@@ -2146,9 +2146,9 @@ static int gh_rm_mem_share_lend_helper(u32 fn_id, u8 mem_type, u8 flags,
 	struct gh_mem_share_resp_payload *resp_payload;
 	void *req_buf;
 	size_t req_payload_size, resp_payload_size;
-	u16 req_sgl_entries, req_acl_entries, req_mem_attr_entries = 0;
+	u32 req_sgl_entries, req_acl_entries, req_mem_attr_entries = 0;
 	int ret = 0;
-	int idx, next;
+	u32 idx, next;
 
 	if ((mem_type != GH_RM_MEM_TYPE_NORMAL &&
 	     mem_type != GH_RM_MEM_TYPE_IO) ||

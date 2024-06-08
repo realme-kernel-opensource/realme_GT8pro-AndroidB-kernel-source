@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -54,8 +54,8 @@ struct gh_sgl_desc *mem_buf_sgt_to_gh_sgl_desc(struct sg_table *sgt)
 	int i;
 	struct scatterlist *sg;
 
-	/* gh_sgl_desc uses u16. Use struct scatterlist instead in future */
-	if (WARN(sgt->orig_nents > U16_MAX, "Too many sgl_entries\n"))
+	/* gh_sgl_desc uses u32. Use struct scatterlist instead in future */
+	if (WARN(sgt->orig_nents > U32_MAX, "Too many sgl_entries\n"))
 		return ERR_PTR(-EINVAL);
 
 	size = offsetof(struct gh_sgl_desc, sgl_entries[sgt->orig_nents]);
