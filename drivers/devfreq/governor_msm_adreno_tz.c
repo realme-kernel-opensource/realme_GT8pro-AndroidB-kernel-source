@@ -9,6 +9,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/math64.h>
+#include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>

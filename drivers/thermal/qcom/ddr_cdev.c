@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/of_device.h>
 #include <linux/interconnect.h>
+#include <linux/platform_device.h>
 
 #define DDR_CDEV_NAME "ddr-cdev"
 

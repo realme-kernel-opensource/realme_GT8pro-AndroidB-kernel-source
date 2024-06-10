@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/cpu.h>
 #include <linux/of_device.h>
+#include <linux/platform_device.h>
 #include <linux/suspend.h>
 #include <linux/cpumask.h>
 #include <linux/sched/walt.h>

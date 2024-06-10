@@ -13,6 +13,7 @@
 #include <linux/wait.h>
 #include <linux/rwsem.h>
 #include <linux/uidgid.h>
+#include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/pm_wakeup.h>
 #include <linux/completion.h>
