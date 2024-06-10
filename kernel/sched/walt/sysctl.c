@@ -920,7 +920,6 @@ static struct ctl_table input_boost_sysctls[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_INT_MAX,
 	},
-	{ }
 };
 
 static struct ctl_table walt_table[] = {
@@ -1498,7 +1497,6 @@ static struct ctl_table walt_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_INT_MAX,
 	},
-	{ }
 };
 
 void walt_register_sysctl(void)
