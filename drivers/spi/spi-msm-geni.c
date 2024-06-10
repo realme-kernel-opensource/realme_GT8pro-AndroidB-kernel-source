@@ -505,10 +505,32 @@ static void spi_setup_word_len(struct spi_geni_master *mas, u32 mode,
 		bits_per_word, pack_words);
 }
 
+/**
+ * spi_geni_get_chip_select_num() - Get the chip select number for the spi device
+ * @spi_slv: Spi slave device structure as a pointer
+ * @cs_num: Stores the valid chip select number on success
+ *
+ * Return: Zero for success -1 for failure.
+ */
+static int spi_geni_get_chip_select_num(struct spi_device *spi_slv, u8 *cs_num)
+{
+	int j;
+
+	for (j = 0; j < SPI_NUM_CHIPSELECT; j++) {
+		if (spi_slv->chip_select[j] != 0xFF && spi_slv->chip_select[j] < SPI_CS_CNT_MAX) {
+		/* Geni SE doesn't support mutliple CS by same client, hence use only one CS */
+			*cs_num = spi_slv->chip_select[j];
+			return 0;
+		}
+	}
+	return -1;
+}
+
 static int setup_fifo_params(struct spi_device *spi_slv,
 					struct spi_master *spi)
 {
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
+	u8 chip_select;
 	u16 mode = spi_slv->mode;
 	u32 loopback_cfg = geni_read_reg(mas->base, SE_SPI_LOOPBACK);
 	u32 cpol = geni_read_reg(mas->base, SE_SPI_CPOL);
@@ -523,6 +545,12 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 	struct spi_geni_qcom_ctrl_data *delay_params = NULL;
 	u32 spi_delay_params = 0;
 
+	ret = spi_geni_get_chip_select_num(spi_slv, &chip_select);
+	if (ret) {
+		SPI_LOG_DBG(mas->ipc, true, mas->dev,
+			    "%s Failed to get the chip select number\n", __func__);
+		return ret;
+	}
 	loopback_cfg &= ~LOOPBACK_MSK;
 	cpol &= ~CPOL;
 	cpha &= ~CPHA;
@@ -537,7 +565,7 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 		cpha |= CPHA;
 
 	if (spi_slv->mode & SPI_CS_HIGH)
-		demux_output_inv |= BIT(spi_slv->chip_select);
+		demux_output_inv |= BIT(chip_select);
 
 	if (spi_slv->controller_data) {
 		u32 cs_clk_delay = 0;
@@ -555,7 +583,7 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 		(inter_words_delay | cs_clk_delay);
 	}
 
-	demux_sel = spi_slv->chip_select;
+	demux_sel = chip_select;
 	mas->cur_speed_hz = spi_slv->max_speed_hz;
 	mas->cur_word_len = spi_slv->bits_per_word;
 
@@ -1026,12 +1054,20 @@ static int setup_gsi_xfer(struct spi_transfer *xfer,
 	int tx_nent = 0;
 	u8 cmd = 0;
 	u8 cs = 0;
+	u8 chip_select = 0;
 	u32 rx_len = 0;
 	int go_flags = 0;
 	unsigned long flags = DMA_PREP_INTERRUPT | DMA_CTRL_ACK;
 	struct spi_geni_qcom_ctrl_data *delay_params = NULL;
 	u32 cs_clk_delay = 0;
 	u32 inter_words_delay = 0;
+
+	ret = spi_geni_get_chip_select_num(spi_slv, &chip_select);
+	if (ret) {
+		SPI_LOG_DBG(mas->ipc, true, mas->dev,
+			    "%s Failed to get the chip select number\n", __func__);
+		return ret;
+	}
 
 	if (mas->is_le_vm && mas->le_gpi_reset_done) {
 		SPI_LOG_DBG(mas->ipc, false, mas->dev,
@@ -1091,7 +1127,7 @@ static int setup_gsi_xfer(struct spi_transfer *xfer,
 		rx_nent++;
 	}
 
-	cs |= spi_slv->chip_select;
+	cs |= chip_select;
 	if (!xfer->cs_change) {
 		if (!list_is_last(&xfer->transfer_list,
 					&spi->cur_msg->transfers))
