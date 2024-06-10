@@ -148,7 +148,7 @@ static bool __dynamic_pool_zone_watermark_ok(struct zone *z, unsigned int order,
 		return true;
 
 	/* For a high-order request, check at least one suitable page is free */
-	for (o = order; o < MAX_ORDER; o++) {
+	for (o = order; o < MAX_PAGE_ORDER; o++) {
 		struct free_area *area = &z->free_area[o];
 		int mt;
 

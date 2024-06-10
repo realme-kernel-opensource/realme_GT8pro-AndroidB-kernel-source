@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/qcom-iommu-util.h>
 #include <linux/qcom-io-pgtable.h>
+#include "iommu-priv.h"
 #include "qcom-dma-iommu-generic.h"
 #include "qcom-io-pgtable-alloc.h"
 
@@ -225,7 +226,7 @@ EXPORT_SYMBOL(qcom_iommu_generate_resv_regions);
 
 void qcom_iommu_get_resv_regions(struct device *dev, struct list_head *list)
 {
-	const struct iommu_ops *ops = dev->bus->iommu_ops;
+	const struct iommu_ops *ops = dev_iommu_ops(dev);
 
 	if (ops && ops->get_resv_regions)
 		ops->get_resv_regions(dev, list);

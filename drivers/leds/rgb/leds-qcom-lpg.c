@@ -739,9 +739,9 @@ static int lpg_parse_dtest(struct lpg *lpg)
 		ret = count;
 		goto err_malformed;
 	} else if (count != lpg->data->num_channels * 2) {
-		dev_err(lpg->dev, "qcom,dtest needs to be %d items\n",
-			lpg->data->num_channels * 2);
-		return -EINVAL;
+		return dev_err_probe(lpg->dev, -EINVAL,
+				     "qcom,dtest needs to be %d items\n",
+				     lpg->data->num_channels * 2);
 	}
 
 	for (i = 0; i < lpg->data->num_channels; i++) {
@@ -761,8 +761,7 @@ static int lpg_parse_dtest(struct lpg *lpg)
 	return 0;
 
 err_malformed:
-	dev_err(lpg->dev, "malformed qcom,dtest\n");
-	return ret;
+	return dev_err_probe(lpg->dev, ret, "malformed qcom,dtest\n");
 }
 
 static void lpg_apply_dtest(struct lpg_channel *chan)
@@ -1198,9 +1197,14 @@ static int lpg_pattern_mc_clear(struct led_classdev *cdev)
 	return lpg_pattern_clear(led);
 }
 
+static inline struct lpg *lpg_pwm_from_chip(struct pwm_chip *chip)
+{
+	return container_of(chip, struct lpg, pwm);
+}
+
 static int lpg_pwm_request(struct pwm_chip *chip, struct pwm_device *pwm)
 {
-	struct lpg *lpg = container_of(chip, struct lpg, pwm);
+	struct lpg *lpg = lpg_pwm_from_chip(chip);
 	struct lpg_channel *chan = &lpg->channels[pwm->hwpwm];
 
 	return chan->in_use ? -EBUSY : 0;
@@ -1216,7 +1220,7 @@ static int lpg_pwm_request(struct pwm_chip *chip, struct pwm_device *pwm)
 static int lpg_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 			 const struct pwm_state *state)
 {
-	struct lpg *lpg = container_of(chip, struct lpg, pwm);
+	struct lpg *lpg = lpg_pwm_from_chip(chip);
 	struct lpg_channel *chan = &lpg->channels[pwm->hwpwm];
 	int ret = 0;
 
@@ -1247,7 +1251,7 @@ out_unlock:
 static int lpg_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
 			     struct pwm_state *state)
 {
-	struct lpg *lpg = container_of(chip, struct lpg, pwm);
+	struct lpg *lpg = lpg_pwm_from_chip(chip);
 	struct lpg_channel *chan = &lpg->channels[pwm->hwpwm];
 	unsigned int resolution;
 	unsigned int pre_div;
@@ -1316,9 +1320,9 @@ static int lpg_add_pwm(struct lpg *lpg)
 	lpg->pwm.npwm = lpg->num_channels;
 	lpg->pwm.ops = &lpg_pwm_ops;
 
-	ret = pwmchip_add(&lpg->pwm);
+	ret = devm_pwmchip_add(lpg->dev, &lpg->pwm);
 	if (ret)
-		dev_err(lpg->dev, "failed to add PWM chip: ret %d\n", ret);
+		dev_err_probe(lpg->dev, ret, "failed to add PWM chip\n");
 
 	return ret;
 }
@@ -1332,19 +1336,16 @@ static int lpg_parse_channel(struct lpg *lpg, struct device_node *np,
 	int ret;
 
 	ret = of_property_read_u32(np, "reg", &reg);
-	if (ret || !reg || reg > lpg->num_channels) {
-		dev_err(lpg->dev, "invalid \"reg\" of %pOFn\n", np);
-		return -EINVAL;
-	}
+	if (ret || !reg || reg > lpg->num_channels)
+		return dev_err_probe(lpg->dev, -EINVAL, "invalid \"reg\" of %pOFn\n", np);
 
 	chan = &lpg->channels[reg - 1];
 	chan->in_use = true;
 
 	ret = of_property_read_u32(np, "color", &color);
-	if (ret < 0 && ret != -EINVAL) {
-		dev_err(lpg->dev, "failed to parse \"color\" of %pOF\n", np);
-		return ret;
-	}
+	if (ret < 0 && ret != -EINVAL)
+		return dev_err_probe(lpg->dev, ret,
+				     "failed to parse \"color\" of %pOF\n", np);
 
 	chan->color = color;
 
@@ -1367,10 +1368,9 @@ static int lpg_add_led(struct lpg *lpg, struct device_node *np)
 	int i;
 
 	ret = of_property_read_u32(np, "color", &color);
-	if (ret < 0 && ret != -EINVAL) {
-		dev_err(lpg->dev, "failed to parse \"color\" of %pOF\n", np);
-		return ret;
-	}
+	if (ret < 0 && ret != -EINVAL)
+		return dev_err_probe(lpg->dev, ret,
+			      "failed to parse \"color\" of %pOF\n", np);
 
 	if (color == LED_COLOR_ID_RGB)
 		num_channels = of_get_available_child_count(np);
@@ -1451,7 +1451,7 @@ static int lpg_add_led(struct lpg *lpg, struct device_node *np)
 	else
 		ret = devm_led_classdev_register_ext(lpg->dev, &led->cdev, &init_data);
 	if (ret)
-		dev_err(lpg->dev, "unable to register %s\n", cdev->name);
+		dev_err_probe(lpg->dev, ret, "unable to register %s\n", cdev->name);
 
 	return ret;
 }
@@ -1498,10 +1498,9 @@ static int lpg_init_triled(struct lpg *lpg)
 
 	if (lpg->triled_has_src_sel) {
 		ret = of_property_read_u32(np, "qcom,power-source", &lpg->triled_src);
-		if (ret || lpg->triled_src == 2 || lpg->triled_src > 3) {
-			dev_err(lpg->dev, "invalid power source\n");
-			return -EINVAL;
-		}
+		if (ret || lpg->triled_src == 2 || lpg->triled_src > 3)
+			return dev_err_probe(lpg->dev, -EINVAL,
+					     "invalid power source\n");
 	}
 
 	/* Disable automatic trickle charge LED */
@@ -1604,8 +1603,6 @@ static int lpg_probe(struct platform_device *pdev)
 	if (!lpg->data)
 		return -EINVAL;
 
-	platform_set_drvdata(pdev, lpg);
-
 	lpg->dev = &pdev->dev;
 	mutex_init(&lpg->lock);
 
@@ -1645,13 +1642,6 @@ static int lpg_probe(struct platform_device *pdev)
 		lpg_apply_dtest(&lpg->channels[i]);
 
 	return lpg_add_pwm(lpg);
-}
-
-static void lpg_remove(struct platform_device *pdev)
-{
-	struct lpg *lpg = platform_get_drvdata(pdev);
-
-	pwmchip_remove(&lpg->pwm);
 }
 
 static const struct lpg_data pm8916_pwm_data = {
@@ -1817,7 +1807,6 @@ MODULE_DEVICE_TABLE(of, lpg_of_table);
 
 static struct platform_driver lpg_driver = {
 	.probe = lpg_probe,
-	.remove_new = lpg_remove,
 	.driver = {
 		.name = "qcom-spmi-lpg",
 		.of_match_table = lpg_of_table,

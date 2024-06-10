@@ -1698,9 +1698,9 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 	u32 channel, ee, hw_ver;
 	int err;
 
-	ctrl = spmi_controller_alloc(&pdev->dev, sizeof(*pmic_arb));
-	if (!ctrl)
-		return -ENOMEM;
+	ctrl = devm_spmi_controller_alloc(&pdev->dev, sizeof(*pmic_arb));
+	if (IS_ERR(ctrl))
+		return PTR_ERR(ctrl);
 
 	pmic_arb = spmi_controller_get_drvdata(ctrl);
 	pmic_arb->spmic = ctrl;
@@ -1716,26 +1716,20 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 	 * which does not result in a devm_request_mem_region() call.
 	 */
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "core");
-	if (!res) {
-		err = -EINVAL;
-		goto err_put_ctrl;
-	}
+	if (!res)
+		return -EINVAL;
 
 	core = devm_ioremap(&ctrl->dev, res->start, resource_size(res));
-	if (IS_ERR(core)) {
-		err = PTR_ERR(core);
-		goto err_put_ctrl;
-	}
+	if (IS_ERR(core))
+		return PTR_ERR(core);
 
 	pmic_arb->core_size = resource_size(res);
 
 	pmic_arb->ppid_to_apid = devm_kcalloc(&ctrl->dev, PMIC_ARB_MAX_PPID,
 					      sizeof(*pmic_arb->ppid_to_apid),
 					      GFP_KERNEL);
-	if (!pmic_arb->ppid_to_apid) {
-		err = -ENOMEM;
-		goto err_put_ctrl;
-	}
+	if (!pmic_arb->ppid_to_apid)
+		return -ENOMEM;
 
 	hw_ver = readl_relaxed(core + PMIC_ARB_VERSION);
 
@@ -1758,31 +1752,23 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						   "obsrvr");
-		if (!res) {
-			err = -EINVAL;
-			goto err_put_ctrl;
-		}
+		if (!res)
+			return -EINVAL;
 
 		pmic_arb->rd_base = devm_ioremap(&ctrl->dev, res->start,
 						 resource_size(res));
-		if (IS_ERR(pmic_arb->rd_base)) {
-			err = PTR_ERR(pmic_arb->rd_base);
-			goto err_put_ctrl;
-		}
+		if (IS_ERR(pmic_arb->rd_base))
+			return PTR_ERR(pmic_arb->rd_base);
 
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						   "chnls");
-		if (!res) {
-			err = -EINVAL;
-			goto err_put_ctrl;
-		}
+		if (!res)
+			return -EINVAL;
 
 		pmic_arb->wr_base = devm_ioremap(&ctrl->dev, res->start,
 						 resource_size(res));
-		if (IS_ERR(pmic_arb->wr_base)) {
-			err = PTR_ERR(pmic_arb->wr_base);
-			goto err_put_ctrl;
-		}
+		if (IS_ERR(pmic_arb->wr_base))
+			return PTR_ERR(pmic_arb->wr_base);
 		pmic_arb->wr_base_phys = res->start;
 	}
 
@@ -1794,10 +1780,9 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 		of_property_read_u32(pdev->dev.of_node, "qcom,bus-id",
 					&pmic_arb->bus_instance);
 		if (pmic_arb->bus_instance > 1) {
-			err = -EINVAL;
 			dev_err(&pdev->dev, "invalid bus instance (%u) specified\n",
 				pmic_arb->bus_instance);
-			goto err_put_ctrl;
+			return -EINVAL;
 		}
 
 		if (pmic_arb->bus_instance == 0) {
@@ -1815,10 +1800,9 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 		}
 
 		if (pmic_arb->base_apid + pmic_arb->apid_count > pmic_arb->max_periphs) {
-			err = -EINVAL;
 			dev_err(&pdev->dev, "Unsupported APID count %d detected\n",
 				pmic_arb->base_apid + pmic_arb->apid_count);
-			goto err_put_ctrl;
+			return -EINVAL;
 		}
 	} else if (hw_ver >= PMIC_ARB_VERSION_V5_MIN) {
 		pmic_arb->base_apid = 0;
@@ -1826,67 +1810,53 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 					PMIC_ARB_FEATURES_PERIPH_MASK;
 
 		if (pmic_arb->apid_count > pmic_arb->max_periphs) {
-			err = -EINVAL;
 			dev_err(&pdev->dev, "Unsupported APID count %d detected\n",
 				pmic_arb->apid_count);
-			goto err_put_ctrl;
+			return -EINVAL;
 		}
 	}
 
 	pmic_arb->apid_data = devm_kcalloc(&ctrl->dev, pmic_arb->max_periphs,
 					   sizeof(*pmic_arb->apid_data),
 					   GFP_KERNEL);
-	if (!pmic_arb->apid_data) {
-		err = -ENOMEM;
-		goto err_put_ctrl;
-	}
+	if (!pmic_arb->apid_data)
+		return -ENOMEM;
 
 	dev_info(&ctrl->dev, "PMIC arbiter version %s (0x%x)\n",
 		 pmic_arb->ver_ops->ver_str, hw_ver);
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "intr");
-	if (!res) {
-		err = -EINVAL;
-		goto err_put_ctrl;
-	}
+	if (!res)
+		return -EINVAL;
 
 	pmic_arb->intr = devm_ioremap_resource(&ctrl->dev, res);
-	if (IS_ERR(pmic_arb->intr)) {
-		err = PTR_ERR(pmic_arb->intr);
-		goto err_put_ctrl;
-	}
+	if (IS_ERR(pmic_arb->intr))
+		return PTR_ERR(pmic_arb->intr);
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "cnfg");
-	if (!res) {
-		err = -EINVAL;
-		goto err_put_ctrl;
-	}
+	if (!res)
+		return -EINVAL;
 
 	pmic_arb->cnfg = devm_ioremap_resource(&ctrl->dev, res);
-	if (IS_ERR(pmic_arb->cnfg)) {
-		err = PTR_ERR(pmic_arb->cnfg);
-		goto err_put_ctrl;
-	}
+	if (IS_ERR(pmic_arb->cnfg))
+		return PTR_ERR(pmic_arb->cnfg);
 
 	if (of_find_property(pdev->dev.of_node, "interrupt-names", NULL)) {
 		pmic_arb->irq = platform_get_irq_byname(pdev, "periph_irq");
-		if (pmic_arb->irq < 0) {
-			err = pmic_arb->irq;
-			goto err_put_ctrl;
-		}
+		if (pmic_arb->irq < 0)
+			return pmic_arb->irq;
 	}
 
 	err = of_property_read_u32(pdev->dev.of_node, "qcom,channel", &channel);
 	if (err) {
 		dev_err(&pdev->dev, "channel unspecified.\n");
-		goto err_put_ctrl;
+		return err;
 	}
 
 	if (channel > 5) {
 		dev_err(&pdev->dev, "invalid channel (%u) specified.\n",
 			channel);
-		err = -EINVAL;
-		goto err_put_ctrl;
+		return -EINVAL;
 	}
 
 	pmic_arb->channel = channel;
@@ -1894,22 +1864,19 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 	err = of_property_read_u32(pdev->dev.of_node, "qcom,ee", &ee);
 	if (err) {
 		dev_err(&pdev->dev, "EE unspecified.\n");
-		goto err_put_ctrl;
+		return err;
 	}
 
 	if (ee > 5) {
 		dev_err(&pdev->dev, "invalid EE (%u) specified\n", ee);
-		err = -EINVAL;
-		goto err_put_ctrl;
+		return -EINVAL;
 	}
 
 	pmic_arb->ee = ee;
 	mapping_table = devm_kcalloc(&ctrl->dev, pmic_arb->max_periphs,
 					sizeof(*mapping_table), GFP_KERNEL);
-	if (!mapping_table) {
-		err = -ENOMEM;
-		goto err_put_ctrl;
-	}
+	if (!mapping_table)
+		return -ENOMEM;
 
 	pmic_arb->mapping_table = mapping_table;
 	/* Initialize max_apid/min_apid to the opposite bounds, during
@@ -1929,7 +1896,7 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 		if (err) {
 			dev_err(&pdev->dev, "could not read APID->PPID mapping table, rc= %d\n",
 				err);
-			goto err_put_ctrl;
+			return err;
 		}
 	}
 
@@ -1939,8 +1906,7 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 					    &pmic_arb_irq_domain_ops, pmic_arb);
 		if (!pmic_arb->domain) {
 			dev_err(&pdev->dev, "unable to create irq_domain\n");
-			err = -ENOMEM;
-			goto err_put_ctrl;
+			return -ENOMEM;
 		}
 
 		irq_set_chained_handler_and_data(pmic_arb->irq,
@@ -1962,8 +1928,7 @@ err_domain_remove:
 		irq_set_chained_handler_and_data(pmic_arb->irq, NULL, NULL);
 		irq_domain_remove(pmic_arb->domain);
 	}
-err_put_ctrl:
-	spmi_controller_put(ctrl);
+
 	return err;
 }
 
@@ -1977,7 +1942,6 @@ static void spmi_pmic_arb_remove(struct platform_device *pdev)
 		irq_set_chained_handler_and_data(pmic_arb->irq, NULL, NULL);
 		irq_domain_remove(pmic_arb->domain);
 	}
-	spmi_controller_put(ctrl);
 }
 
 static const struct of_device_id spmi_pmic_arb_match_table[] = {
