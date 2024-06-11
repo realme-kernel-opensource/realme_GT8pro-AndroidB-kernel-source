@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #undef TRACE_SYSTEM
@@ -949,7 +949,7 @@ TRACE_EVENT(walt_lb_cpu_util,
 		__entry->nr_big			= wrq->walt_stats.nr_big_tasks;
 		__entry->nr_rtg_high_prio_tasks	= walt_nr_rtg_high_prio(cpu);
 		__entry->cpu_util		= cpu_util(cpu);
-		__entry->capacity_orig		= arch_scale_cpu_capacity(cpu);
+		__entry->capacity_orig		= capacity_orig_of(cpu);
 	),
 
 	TP_printk("cpu=%d nr_running=%u cfs_nr_running=%u nr_big=%u nr_rtg_hp=%u cpu_util=%u capacity_orig=%u",
@@ -994,7 +994,7 @@ TRACE_EVENT(sched_cpu_util,
 		__entry->cpu_util_cum	= cpu_util_cum(cpu);
 		__entry->capacity_curr	= capacity_curr_of(cpu);
 		__entry->capacity	= capacity_of(cpu);
-		__entry->capacity_orig	= arch_scale_cpu_capacity(cpu);
+		__entry->capacity_orig	= capacity_orig_of(cpu);
 		__entry->idle_exit_latency	= walt_get_idle_exit_latency(cpu_rq(cpu));
 		__entry->irqload		= sched_irqload(cpu);
 		__entry->online			= cpu_online(cpu);
