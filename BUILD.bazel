@@ -42,13 +42,6 @@ _GKI_AARCH64_MAKE_GOALS = [
     "modules",
 ]
 
-_GKI_RISCV64_MAKE_GOALS = [
-    "Image",
-    "Image.lz4",
-    "Image.gz",
-    "modules",
-]
-
 _GKI_X86_64_MAKE_GOALS = [
     "bzImage",
     "modules",
@@ -98,32 +91,24 @@ write_file(
     ],
 )
 
-write_file(
-    name = "gki_system_dlkm_modules_risc64",
-    out = "android/gki_system_dlkm_modules_riscv64",
-    content = get_gki_modules_list("riscv64") + [
-        # Ensure new line at the end.
-        "",
-    ],
-)
-
 define_common_kernels(target_configs = {
     "kernel_aarch64": {
         "module_implicit_outs": get_gki_modules_list("arm64"),
         "make_goals": _GKI_AARCH64_MAKE_GOALS,
         "ddk_headers_archive": ":kernel_aarch64_ddk_headers_archive",
-        "extra_dist": [":test_mappings_zip"],
-    },
-    "kernel_riscv64": {
-        "module_implicit_outs": get_gki_modules_list("riscv64"),
-        "make_goals": _GKI_RISCV64_MAKE_GOALS,
-        "extra_dist": [":test_mappings_zip"],
+        "extra_dist": [
+            ":test_mappings_zip",
+            ":tests_zip_arm64",
+        ],
     },
     "kernel_x86_64": {
         "kmi_symbol_list_strict_mode": False,
         "module_implicit_outs": get_gki_modules_list("x86_64"),
         "make_goals": _GKI_X86_64_MAKE_GOALS,
-        "extra_dist": [":test_mappings_zip"],
+        "extra_dist": [
+            ":test_mappings_zip",
+            ":tests_zip_x86_64",
+        ],
     },
 })
 
@@ -318,6 +303,7 @@ _DB845C_MODULE_OUTS = [
     "drivers/phy/qualcomm/phy-qcom-qmp-pcie-msm8996.ko",
     "drivers/phy/qualcomm/phy-qcom-qmp-ufs.ko",
     "drivers/phy/qualcomm/phy-qcom-qmp-usb.ko",
+    "drivers/phy/qualcomm/phy-qcom-qmp-usbc.ko",
     "drivers/phy/qualcomm/phy-qcom-qusb2.ko",
     "drivers/phy/qualcomm/phy-qcom-snps-eusb2.ko",
     "drivers/phy/qualcomm/phy-qcom-snps-femto-v2.ko",
@@ -754,7 +740,7 @@ _KUNIT_COMMON_MODULES = [
     "kernel/time/time_test.ko",
     "lib/kunit/kunit-example-test.ko",
     "lib/kunit/kunit-test.ko",
-    "mm/kfence/kfence_test.ko",
+    #"mm/kfence/kfence_test.ko",
     "net/core/dev_addr_lists_test.ko",
     "sound/soc/soc-topology-test.ko",
     "sound/soc/soc-utils-test.ko",
@@ -807,29 +793,6 @@ copy_to_dist_dir(
     name = "kunit_x86_64_dist",
     data = [":kunit_x86_64"],
     dist_dir = "out/kunit_x86_64/dist",
-    flat = True,
-    log = "info",
-)
-
-kernel_build(
-    name = "kunit_riscv64",
-    srcs = [":kernel_riscv64_sources"],
-    outs = [],
-    arch = "riscv64",
-    base_kernel = ":kernel_riscv64",
-    build_config = "build.config.kunit.riscv64",
-    defconfig_fragments = [
-        "tools/testing/kunit/configs/android/kunit_defconfig",
-        "tools/testing/kunit/configs/android/kunit_clk_defconfig",
-    ],
-    make_goals = ["modules"],
-    module_outs = _KUNIT_COMMON_MODULES + _KUNIT_CLK_MODULES,
-)
-
-copy_to_dist_dir(
-    name = "kunit_riscv64_dist",
-    data = [":kunit_riscv64"],
-    dist_dir = "out/kunit_riscv64/dist",
     flat = True,
     log = "info",
 )
@@ -945,15 +908,6 @@ ddk_headers(
 )
 
 ddk_headers(
-    name = "all_headers_riscv64",
-    hdrs = [":all_headers_allowlist_riscv64"] + select({
-        "//build/kernel/kleaf:allow_ddk_unsafe_headers_set": [":all_headers_unsafe"],
-        "//conditions:default": [],
-    }),
-    visibility = ["//visibility:public"],
-)
-
-ddk_headers(
     name = "all_headers_x86_64",
     hdrs = [":all_headers_allowlist_x86_64"] + select({
         "//build/kernel/kleaf:allow_ddk_unsafe_headers_set": [":all_headers_unsafe"],
@@ -1004,24 +958,6 @@ ddk_headers(
 )
 
 ddk_headers(
-    name = "all_headers_allowlist_riscv64",
-    hdrs = [
-        ":all_headers_allowlist_common_globs",
-        ":all_headers_allowlist_riscv64_globs",
-    ],
-    # The list of include directories where source files can #include headers
-    # from. In other words, these are the `-I` option to the C compiler.
-    # These are prepended to LINUXINCLUDE.
-    linux_includes = [
-        "arch/riscv/include",
-        "arch/riscv/include/uapi",
-        "include",
-        "include/uapi",
-    ],
-    visibility = ["//visibility:private"],
-)
-
-ddk_headers(
     name = "all_headers_allowlist_x86_64",
     hdrs = [
         ":all_headers_allowlist_common_globs",
@@ -1056,13 +992,6 @@ filegroup(
 filegroup(
     name = "all_headers_allowlist_arm_globs",
     srcs = glob(["arch/arm/include/**/*.h"]),
-    visibility = ["//visibility:private"],
-)
-
-# globs() for riscv64 only
-filegroup(
-    name = "all_headers_allowlist_riscv64_globs",
-    srcs = glob(["arch/riscv/include/**/*.h"]),
     visibility = ["//visibility:private"],
 )
 
@@ -1174,6 +1103,10 @@ cc_binary_with_abi(
 cc_binary_with_abi(
     name = "kselftest_rtc_rtctest",
     srcs = ["tools/testing/selftests/rtc/rtctest.c"],
+    copts = select({
+        ":arm": ["-mcpu=cortex-a8"],
+        "//conditions:default": [],
+    }),
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
     visibility = ["//visibility:private"],
@@ -1249,7 +1182,7 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/futex/functional/futex_requeue_pi_mismatched_ops.c"],
     out = "futex_requeue_pi_mismatched_ops",
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
         "-pthread",
     ],
     includes = [
@@ -1270,7 +1203,7 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/futex/functional/futex_requeue_pi_signal_restart.c"],
     out = "futex_requeue_pi_signal_restart",
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
         "-pthread",
     ],
     includes = [
@@ -1291,7 +1224,7 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/futex/functional/futex_requeue_pi.c"],
     out = "futex_requeue_pi",
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
         "-pthread",
     ],
     includes = [
@@ -1312,7 +1245,7 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/futex/functional/futex_requeue.c"],
     out = "futex_requeue",
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
         "-pthread",
     ],
     includes = [
@@ -1333,7 +1266,7 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/futex/functional/futex_wait_private_mapped_file.c"],
     out = "futex_wait_private_mapped_file",
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
         "-pthread",
     ],
     includes = [
@@ -1354,7 +1287,7 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/futex/functional/futex_wait_timeout.c"],
     out = "futex_wait_timeout",
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
         "-pthread",
     ],
     includes = [
@@ -1375,7 +1308,7 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/futex/functional/futex_wait_uninitialized_heap.c"],
     out = "futex_wait_uninitialized_heap",
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
         "-pthread",
     ],
     includes = [
@@ -1396,7 +1329,7 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/futex/functional/futex_wait_wouldblock.c"],
     out = "futex_wait_wouldblock",
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
         "-pthread",
     ],
     includes = [
@@ -1417,7 +1350,7 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/futex/functional/futex_wait.c"],
     out = "futex_wait",
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
         "-pthread",
     ],
     includes = [
@@ -1571,7 +1504,7 @@ cc_library(
         "tools/testing/selftests/mm/vm_util.h",
     ],
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
     ],
     includes = [
         "include/uapi/",
@@ -1586,11 +1519,11 @@ cc_library(
 cc_binary_with_abi(
     name = "kselftest_mm_thuge_gen",
     srcs = [
-        "tools/testing/selftests/mm/mlock2.h",
         "tools/testing/selftests/mm/thuge-gen.c",
     ],
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
+        "-Wno-macro-redefined",
     ],
     includes = ["tools/testing/selftests"],
     path_prefix = _KSELFTEST_DIR,
@@ -1606,11 +1539,10 @@ cc_binary_with_abi(
 cc_binary_with_abi(
     name = "kselftest_mm_transhuge_stress",
     srcs = [
-        "tools/testing/selftests/mm/mlock2.h",
         "tools/testing/selftests/mm/transhuge-stress.c",
     ],
     copts = [
-        "-D_GNU_SOURCE",
+        "-D_GNU_SOURCE=",
     ],
     includes = [
         "tools/testing/selftests",
@@ -1688,7 +1620,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/adjtick.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1701,7 +1632,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/alarmtimer-suspend.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1714,7 +1644,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/change_skew.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1732,7 +1661,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/clocksource-switch.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1749,7 +1677,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/freq-step.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1763,7 +1690,6 @@ cc_binary_with_abi(
     out = "inconsistency-check",
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1776,7 +1702,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/leap-a-day.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1789,7 +1714,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/leapcrash.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1803,7 +1727,6 @@ cc_binary_with_abi(
     out = "nanosleep",
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1817,7 +1740,6 @@ cc_binary_with_abi(
     out = "nsleep-lat",
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1830,7 +1752,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/posix_timers.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1844,7 +1765,6 @@ cc_binary_with_abi(
     out = "raw_skew",
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1857,7 +1777,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/set-2038.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1875,7 +1794,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/set-tai.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1888,7 +1806,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/set-timer-lat.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1901,7 +1818,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/set-tz.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1914,7 +1830,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/skew_consistency.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1930,7 +1845,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/threadtest.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -1943,7 +1857,6 @@ cc_binary_with_abi(
     srcs = ["tools/testing/selftests/timers/valid-adjtimex.c"],
     copts = [
         "-O3",
-        "-DKTEST",
     ],
     path_prefix = _KSELFTEST_DIR,
     target_compatible_with = ["@platforms//os:android"],
@@ -2494,6 +2407,7 @@ pkg_zip(
         ":kunit_tests_x86_64_pkg_files",
     ],
     out = "x86_64/tests.zip",
+    visibility = ["//visibility:public"],
 )
 
 pkg_zip(
@@ -2503,6 +2417,7 @@ pkg_zip(
         ":kunit_tests_arm64_pkg_files",
     ],
     out = "arm64/tests.zip",
+    visibility = ["//visibility:public"],
 )
 
 copy_to_dist_dir(
