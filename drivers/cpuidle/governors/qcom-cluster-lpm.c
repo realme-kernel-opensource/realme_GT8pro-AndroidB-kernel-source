@@ -56,6 +56,7 @@ static enum hrtimer_restart clusttimer_fn(struct hrtimer *h)
 	cluster_gov->predicted = false;
 	cluster_gov->restrict_idx = -1;
 	cluster_gov->pred_residency = 0;
+	cluster_gov->is_timer_expired = true;
 
 	return HRTIMER_NORESTART;
 }
@@ -271,7 +272,7 @@ static void update_cluster_history(struct lpm_cluster *cluster_gov)
  *			structure.
  * @cluster_gov:  cluster's lpm data structure
  */
-static void cluster_power_down(struct lpm_cluster *cluster_gov)
+static int cluster_power_down(struct lpm_cluster *cluster_gov)
 {
 	struct generic_pm_domain *genpd = cluster_gov->genpd;
 	struct genpd_governor_data *gd = genpd->gd;
@@ -279,21 +280,35 @@ static void cluster_power_down(struct lpm_cluster *cluster_gov)
 	uint32_t residency;
 
 	if (idx < 0)
-		return;
+		return 0;
 
 	cluster_gov->entry_time = cluster_gov->now;
 	cluster_gov->entry_idx = idx;
 	trace_cluster_pred_select(genpd->state_idx, gd->next_wakeup, cluster_gov->restrict_idx,
 				  cluster_gov->predicted, cluster_gov->pred_residency);
 
+	if (cluster_gov->use_bias_timer &&
+	    num_possible_cpus() != cpumask_weight(cluster_gov->genpd->cpus)) {
+		if (!cluster_gov->is_timer_expired) {
+			clusttimer_cancel(cluster_gov);
+			clusttimer_start(cluster_gov, NSEC_PER_MSEC *
+					 CLUST_BIAS_TIME_MSEC);
+			return -1;
+		}
+		cluster_gov->is_timer_expired = false;
+		return 0;
+	}
 
 	if ((idx == genpd->state_count - 1 && cluster_gov->restrict_idx == -1) ||
 	    !cluster_gov->predicted)
-		return;
+		return 0;
 
 	if (cluster_gov->pred_wakeup != KTIME_MAX &&
 	    ktime_before(cluster_gov->next_wakeup, cluster_gov->pred_wakeup))
-		return;
+		return 0;
+
+	if (!cluster_gov->is_timer_expired)
+		clusttimer_cancel(cluster_gov);
 
 	if (idx != genpd->state_count - 1)
 		residency = genpd->states[idx + 1].residency_ns;
@@ -301,6 +316,9 @@ static void cluster_power_down(struct lpm_cluster *cluster_gov)
 		residency = genpd->states[idx].residency_ns;
 
 	clusttimer_start(cluster_gov, residency + PRED_TIMER_ADD * NSEC_PER_USEC);
+	cluster_gov->is_timer_expired = false;
+
+	return 0;
 }
 
 /**
@@ -318,7 +336,7 @@ static int cluster_power_cb(struct notifier_block *nb,
 	struct generic_pm_domain *pd = cluster_gov->genpd;
 	struct genpd_power_state *state = &pd->states[pd->state_idx];
 	struct lpm_cpu *cpu_gov;
-	int cpu;
+	int cpu, ret;
 	u32 *suspend_param = state->data;
 
 	switch (action) {
@@ -354,7 +372,9 @@ static int cluster_power_cb(struct notifier_block *nb,
 		}
 
 		cluster_gov->now = ktime_get();
-		cluster_power_down(cluster_gov);
+		ret = cluster_power_down(cluster_gov);
+		if (ret)
+			return NOTIFY_BAD;
 
 		if (cluster_gov->restrict_idx != -1 &&
 		    pd->state_idx >= cluster_gov->restrict_idx)
@@ -510,6 +530,9 @@ static int lpm_cluster_gov_probe(struct platform_device *pdev)
 				   &cluster_gov->samples_invalid_time);
 	if (ret)
 		cluster_gov->samples_invalid_time = CLUST_SMPL_INVLD_TIME;
+
+	cluster_gov->use_bias_timer = of_property_read_bool(dn,
+					"qcom,use-cluster-bias-timer");
 
 	spin_lock_init(&cluster_gov->lock);
 	cluster_gov->dev = &pdev->dev;

@@ -13,6 +13,7 @@
 #define PRED_PREMATURE_CNT	3
 #define PRED_REF_STDDEV		500
 #define CLUST_SMPL_INVLD_TIME	40000
+#define CLUST_BIAS_TIME_MSEC	10
 #define MAX_CLUSTER_STATES	4
 
 extern bool sleep_disabled;
@@ -98,6 +99,8 @@ struct lpm_cluster {
 	spinlock_t lock;
 	bool predicted;
 	bool initialized;
+	bool is_timer_expired;
+	bool use_bias_timer;
 };
 
 struct cluster_governor {
