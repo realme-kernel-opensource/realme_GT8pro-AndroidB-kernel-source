@@ -352,20 +352,20 @@
 			"ERR:%s: " fmt, __func__, ##arg); \
 		ipc_log_string((dev)->ipc_log, "%s: " fmt, __func__, ##arg); \
 	} \
-	pr_err("%s: " fmt, __func__, arg);  \
+	pr_err("%s: " fmt, __func__, ##arg);  \
 	} while (0)
 
 #else
-#define PCIE_DBG(dev, fmt, arg...)
-#define PCIE_DBG2(dev, fmt, arg...)
-#define PCIE_DBG3(dev, fmt, arg...)
-#define PCIE_DUMP(dev, fmt, arg...)
+#define PCIE_DBG(dev, fmt, arg...) no_printk(fmt, ##arg)
+#define PCIE_DBG2(dev, fmt, arg...) no_printk(fmt, ##arg)
+#define PCIE_DBG3(dev, fmt, arg...) no_printk(fmt, ##arg)
+#define PCIE_DUMP(dev, fmt, arg...) no_printk(fmt, ##arg)
 
-#define PCIE_DBG_FS(dev, fmt, arg...) pr_alert("%s: " fmt, __func__, arg)
+#define PCIE_DBG_FS(dev, fmt, arg...) pr_alert("%s: " fmt, __func__, ##arg)
 
-#define PCIE_INFO(dev, fmt, arg...) pr_info("%s: " fmt, __func__, arg)
+#define PCIE_INFO(dev, fmt, arg...) pr_info("%s: " fmt, __func__, ##arg)
 
-#define PCIE_ERR(dev, fmt, arg...) pr_err("%s: " fmt, __func__, arg)
+#define PCIE_ERR(dev, fmt, arg...) pr_err("%s: " fmt, __func__, ##arg)
 
 #endif /* CONFIG_IPC_LOGGING */
 
