@@ -4009,6 +4009,18 @@ static void check_obet(void)
 	}
 }
 
+static void check_obet_set_boost(void)
+{
+	static bool prev_is_obet;
+	bool now_is_obet;
+
+	//Determine if core_ctl boost is needed
+	now_is_obet = is_obet;
+	if (prev_is_obet != now_is_obet)
+		core_ctl_set_cluster_boost(num_sched_clusters - 1, is_obet);
+	prev_is_obet = now_is_obet;
+}
+
 DEFINE_PER_CPU(u32, wakeup_ctr);
 /**
  * walt_irq_work() - perform walt irq work for rollover and migration
@@ -4088,6 +4100,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 		pipeline_check(wrq);
 		core_ctl_check(wrq->window_start, wakeup_ctr_sum,
 				prime_wakeup_ctr_sum);
+		check_obet_set_boost();
 	}
 }
 

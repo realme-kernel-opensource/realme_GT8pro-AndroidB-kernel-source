@@ -1346,11 +1346,11 @@ void sbt_ctl_check(u32 prime_wakeup_ctr_sum)
 		if (prev_is_sbt == now_is_sbt) {
 			if (prev_is_sbt_windows < sysctl_sched_sbt_delay_windows)
 				prev_is_sbt_windows = sysctl_sched_sbt_delay_windows;
-			goto out;
+			return;
 		}
 
 		if (now_is_sbt && prev_is_sbt_windows-- > 0)
-			goto out;
+			return;
 
 		cpumask_copy(&local_cpus, &cpus_for_sbt_pause);
 
@@ -1364,8 +1364,6 @@ void sbt_ctl_check(u32 prime_wakeup_ctr_sum)
 		prev_is_sbt_windows = sysctl_sched_sbt_delay_windows;
 	}
 	prev_is_sbt = now_is_sbt;
-out:
-	core_ctl_set_cluster_boost(num_sched_clusters - 1, is_obet);
 }
 
 /*
