@@ -38,12 +38,6 @@
 #define BEAC_MC_WR_BEAT_FIL0		25
 #define BEAC_MC_RD_BEAT_FIL1		38
 #define BEAC_MC_WR_BEAT_FIL1		39
-#define DRP2EWB_EVICT			0
-#define DRP2EWB_BEAT_1			10
-#define LCP2EWB_EVICT			11
-#define LCP2EWB_BEAT_1			16
-#define WB2EWB_DRAMBWR			17
-#define WB2EWB_BEAT_1			20
 
 #define MCPROF_FEAC_FLTR_0		0
 #define MCPROF_FEAC_FLTR_1		1
@@ -1201,7 +1195,7 @@ static bool feac_event_config(struct llcc_perfmon_private *llcc_priv, unsigned i
 	if (llcc_priv->version >= LLCC_VERSION_2) {
 		mask_val = EVENT_SEL_MASK7;
 
-		if (llcc_priv->version == LLCC_VERSION_5)
+		if (llcc_priv->version >= LLCC_VERSION_5)
 			mask_val = EVENT_SEL_MASK8;
 	}
 
@@ -1571,15 +1565,18 @@ static bool fewc_event_config(struct llcc_perfmon_private *llcc_priv, unsigned i
 	}
 
 	mask_val = EVENT_SEL_MASK;
-	if (filter_en)
-		mask_val |= FILTER_SEL_MASK | FILTER_EN_MASK;
+	if (llcc_priv->version >= LLCC_VERSION_6)
+		mask_val = EVENT_SEL_MASK7;
 
 	if (enable) {
-		val = (event_type << EVENT_SEL_SHIFT) & EVENT_SEL_MASK;
+		val = (event_type << EVENT_SEL_SHIFT) & mask_val;
 		if (filter_en)
 			val |= (filter_sel << FILTER_SEL_SHIFT) | FILTER_EN;
 
 	}
+
+	if (filter_en)
+		mask_val |= FILTER_SEL_MASK | FILTER_EN_MASK;
 
 	offset = FEWC_PROF_EVENT_n_CFG(llcc_priv->version, *counter_num);
 	llcc_bcast_modify(llcc_priv, offset, val, mask_val);
@@ -2006,8 +2003,6 @@ static bool trp_event_config(struct llcc_perfmon_private *llcc_priv, unsigned in
 
 	if (enable) {
 		val = (event_type << EVENT_SEL_SHIFT) & mask_val;
-		if (llcc_priv->version >= LLCC_VERSION_2)
-			val = (event_type << EVENT_SEL_SHIFT) & EVENT_SEL_MASK7;
 
 		if (filter_en)
 			val |= (filter_sel << FILTER_SEL_SHIFT) | FILTER_EN;
