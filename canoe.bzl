@@ -31,6 +31,7 @@ def define_canoe():
         "drivers/soc/qcom/cmd-db.ko",
         "drivers/soc/qcom/crm-v2.ko",
         "drivers/soc/qcom/eud.ko",
+        "drivers/soc/qcom/pcie-pdc.ko",
         "drivers/soc/qcom/qcom_ramdump.ko",
         "drivers/soc/qcom/qcom_rpmh.ko",
         "drivers/usb/dwc3/dwc3-msm.ko",
