@@ -32,6 +32,7 @@ qnoc-sm8350-objs			:= sm8350.o
 qnoc-sm8450-objs			:= sm8450.o
 qnoc-sun-objs                        	:= sun.o
 qnoc-pineapple-objs                     := pineapple.o
+qnoc-canoe-objs                     := canoe.o
 qnoc-sm8550-objs			:= sm8550.o
 qnoc-sm8650-objs			:= sm8650.o
 qnoc-x1e80100-objs			:= x1e80100.o
@@ -39,6 +40,7 @@ icc-smd-rpm-objs			:= smd-rpm.o icc-rpm.o icc-rpm-clocks.o
 qnoc-qos-obj				:= qnoc-qos.o
 
 obj-$(CONFIG_INTERCONNECT_QCOM_BCM_VOTER) += icc-bcm-voter.o
+obj-$(CONFIG_INTERCONNECT_QCOM_CANOE) += qnoc-canoe.o
 obj-$(CONFIG_INTERCONNECT_QCOM_MSM8916) += qnoc-msm8916.o
 obj-$(CONFIG_INTERCONNECT_QCOM_MSM8939) += qnoc-msm8939.o
 obj-$(CONFIG_INTERCONNECT_QCOM_MSM8974) += qnoc-msm8974.o
