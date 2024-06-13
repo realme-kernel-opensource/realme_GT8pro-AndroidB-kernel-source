@@ -5269,6 +5269,10 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	if (ret)
 		dev_err(&pdev->dev, "Failed to register uart_port: %d\n", ret);
 
+	/* Ignore dependencies on children by runtime PM framework */
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,suspend-ignore-children"))
+		pm_suspend_ignore_children(uport->dev, true);
+
 	if (is_console)
 		pr_info("boot_kpi: M - DRIVER GENI_CONSOLE_%d Ready\n", line);
 	else
