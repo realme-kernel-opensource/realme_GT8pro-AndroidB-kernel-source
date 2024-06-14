@@ -3678,9 +3678,6 @@ static int msm_pcie_rd_conf(struct pci_bus *bus, u32 devfn, int where,
 {
 	int ret = msm_pcie_oper_conf(bus, devfn, RD, where, size, val);
 
-	if ((bus->number == 0) && (where == PCI_CLASS_REVISION))
-		*val = (*val & 0xff) | (PCI_CLASS_BRIDGE_PCI << 16);
-
 	return ret;
 }
 
@@ -5828,6 +5825,19 @@ static int msm_pcie_check_ep_access(struct msm_pcie_dev_t *dev,
 	return ret;
 }
 
+/* RC do not represent the right class; set it to PCI_CLASS_BRIDGE_PCI_NORMAL */
+static void msm_pcie_set_root_port_class(struct msm_pcie_dev_t *dev)
+{
+	/* enable write access to RO register */
+	msm_pcie_write_mask(dev->dm_core + PCIE_GEN3_MISC_CONTROL, 0, BIT(0));
+
+	msm_pcie_write_mask(dev->dm_core + PCI_CLASS_REVISION,
+			0xFFFFFF << 8, PCI_CLASS_BRIDGE_PCI_NORMAL << 8);
+
+	/* disable write access to RO register */
+	msm_pcie_write_mask(dev->dm_core + PCIE_GEN3_MISC_CONTROL, BIT(0), 0);
+}
+
 static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 {
 	int ret = 0;
@@ -5913,6 +5923,8 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 		if (ret)
 			return ret;
 	}
+
+	msm_pcie_set_root_port_class(dev);
 
 	/* Disable override for fal10_veto logic to de-assert Qactive signal */
 	msm_pcie_write_mask(dev->parf + PCIE20_PARF_CFG_BITS_3, BIT(0), 0);
@@ -9006,13 +9018,7 @@ static int msm_pci_probe(struct pci_dev *pci_dev,
 }
 
 static struct pci_device_id msm_pci_device_id[] = {
-	{PCI_DEVICE(0x17cb, 0x0108)},
-	{PCI_DEVICE(0x17cb, 0x010b)},
-	{PCI_DEVICE(0x17cb, 0x010c)},
-	{PCI_DEVICE(0x17cb, 0x0110)},
-	{PCI_DEVICE(0x17cb, 0x0113)},
-	{PCI_DEVICE(0x17cb, 0x011c)},
-	{PCI_DEVICE(0x17cb, 0x0123)},
+	{PCI_DEVICE_CLASS(PCI_CLASS_BRIDGE_PCI_NORMAL, ~0x0)},
 	{0},
 };
 
@@ -9365,15 +9371,6 @@ static void __exit pcie_exit(void)
 
 subsys_initcall_sync(pcie_init);
 module_exit(pcie_exit);
-
-/* RC do not represent the right class; set it to PCI_CLASS_BRIDGE_PCI */
-static void msm_pcie_fixup_early(struct pci_dev *dev)
-{
-	if (pci_is_root_bus(dev->bus))
-		dev->class = (dev->class & 0xff) | (PCI_CLASS_BRIDGE_PCI << 8);
-}
-DECLARE_PCI_FIXUP_EARLY(PCIE_VENDOR_ID_QCOM, PCI_ANY_ID,
-			msm_pcie_fixup_early);
 
 static void __msm_pcie_l1ss_timeout_disable(struct msm_pcie_dev_t *pcie_dev)
 {
