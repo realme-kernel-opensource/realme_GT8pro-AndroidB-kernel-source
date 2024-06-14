@@ -861,6 +861,17 @@ config CMA_BEST_FIT
 
 source "$(KCONFIG_EXT_PREFIX)drivers/soc/qcom/mem_buf/Kconfig"
 
+config QCOM_FSA4480_I2C
+	tristate "Fairchild FSA4480 chip with I2C"
+	select REGMAP_I2C
+	depends on I2C
+	help
+	  Support for the Fairchild FSA4480 IC switch chip controlled
+	  using I2C. This driver provides common support
+	  for accessing the device, switching between USB and Audio
+	  modes, changing orientation.
+
+
 config QCOM_MEM_OFFLINE
 	tristate "Dynamic Memory Region Offline driver"
 	depends on MEMORY_HOTPLUG
