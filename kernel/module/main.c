@@ -1113,6 +1113,8 @@ static const struct kernel_symbol *resolve_symbol(struct module *mod,
 						  const char *name,
 						  char ownername[])
 {
+	bool is_vendor_module;
+	bool is_vendor_exported_symbol;
 	struct find_symbol_arg fsa = {
 		.name	= name,
 		.gplok	= !(mod->taints & (1 << TAINT_PROPRIETARY_MODULE)),
@@ -1150,16 +1152,19 @@ static const struct kernel_symbol *resolve_symbol(struct module *mod,
 	}
 
 	/*
-	 * ANDROID: GKI:
-	 * In case of an unsigned module symbol resolves only if:
-	 * 1. Symbol is in the list of unprotected symbol list OR
-	 * 2. If symbol owner is not NULL i.e. owner is another module;
-	 *    it has to be an unsigned module and not signed GKI module
-	 *    to protect symbols exported by signed GKI modules.
+	 * ANDROID GKI
+	 *
+	 * Vendor (i.e., unsigned) modules are only permitted to use:
+	 *
+	 * 1. symbols exported by other vendor (unsigned) modules
+	 * 2. unprotected symbols
 	 */
-	if (!mod->sig_ok &&
-	    !gki_is_module_unprotected_symbol(name) &&
-	    fsa.owner && fsa.owner->sig_ok) {
+	is_vendor_module = !mod->sig_ok;
+	is_vendor_exported_symbol = fsa.owner && !fsa.owner->sig_ok;
+
+	if (is_vendor_module &&
+	    !is_vendor_exported_symbol &&
+	    !gki_is_module_unprotected_symbol(name)) {
 		fsa.sym = ERR_PTR(-EACCES);
 		goto getname;
 	}
@@ -2522,6 +2527,11 @@ static void do_free_init(struct work_struct *w)
 	}
 }
 
+void flush_module_init_free_work(void)
+{
+	flush_work(&init_free_wq);
+}
+
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX "module."
 /* Default value for module->async_probe_requested */
@@ -2604,7 +2614,9 @@ static noinline int do_init_module(struct module *mod)
 	/* Switch to core kallsyms now init is done: kallsyms may be walking! */
 	rcu_assign_pointer(mod->kallsyms, &mod->core_kallsyms);
 #endif
-	module_enable_ro(mod, true);
+	ret = module_enable_rodata_ro(mod, true);
+	if (ret)
+		goto fail_mutex_unlock;
 	mod_tree_remove_init(mod);
 	module_arch_freeing_init(mod);
 	for_class_mod_mem_type(type, init) {
@@ -2626,8 +2638,8 @@ static noinline int do_init_module(struct module *mod)
 	 * Note that module_alloc() on most architectures creates W+X page
 	 * mappings which won't be cleaned up until do_free_init() runs.  Any
 	 * code such as mark_rodata_ro() which depends on those mappings to
-	 * be cleaned up needs to sync with the queued work - ie
-	 * rcu_barrier()
+	 * be cleaned up needs to sync with the queued work by invoking
+	 * flush_module_init_free_work().
 	 */
 	if (llist_add(&freeinit->node, &init_free_list))
 		schedule_work(&init_free_wq);
@@ -2642,6 +2654,8 @@ static noinline int do_init_module(struct module *mod)
 
 	return 0;
 
+fail_mutex_unlock:
+	mutex_unlock(&module_mutex);
 fail_free_freeinit:
 	kfree(freeinit);
 fail:
@@ -2769,9 +2783,15 @@ static int complete_formation(struct module *mod, struct load_info *info)
 	module_bug_finalize(info->hdr, info->sechdrs, mod);
 	module_cfi_finalize(info->hdr, info->sechdrs, mod);
 
-	module_enable_ro(mod, false);
-	module_enable_nx(mod);
-	module_enable_x(mod);
+	err = module_enable_rodata_ro(mod, false);
+	if (err)
+		goto out_strict_rwx;
+	err = module_enable_data_nx(mod);
+	if (err)
+		goto out_strict_rwx;
+	err = module_enable_text_rox(mod);
+	if (err)
+		goto out_strict_rwx;
 
 	/*
 	 * Mark state as coming so strong_try_module_get() ignores us,
@@ -2782,6 +2802,8 @@ static int complete_formation(struct module *mod, struct load_info *info)
 
 	return 0;
 
+out_strict_rwx:
+	module_bug_cleanup(mod);
 out:
 	mutex_unlock(&module_mutex);
 	return err;
