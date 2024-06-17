@@ -8,6 +8,9 @@ crm-v2.ko
 debug-regulator.ko
 gcc-canoe.ko
 gdsc-regulator.ko
+icc-bcm-voter.ko
+icc-debug.ko
+icc-rpmh.ko
 proxy-consumer.ko
 stub-regulator.ko
 qcom-pdc.ko
@@ -20,3 +23,5 @@ qcom_hwspinlock.ko
 dwc3-msm.ko
 phy-generic.ko
 phy-qcom-emu.ko
+qnoc-qos.ko
+qnoc-canoe.ko
