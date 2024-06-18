@@ -1397,15 +1397,16 @@ extern unsigned int sysctl_sched_trailblazer_hyst_enable_cpus;
 #define SMART_FREQ_IPC_TUPLE_SIZE		3
 
 extern char reason_dump[1024];
-extern unsigned int sysctl_freq_legacy_reason_cfg[SMART_FREQ_LEGACY_TUPLE_SIZE];
-extern unsigned int sysctl_freq_ipc_reason_cfg[SMART_FREQ_IPC_TUPLE_SIZE];
 extern void update_smart_freq_capacities_one_cluster(struct walt_sched_cluster *cluster);
-extern int sched_smart_freq_ipc_config_handler(struct ctl_table *table, int write,
-					     void __user *buffer, size_t *lenp, loff_t *ppos);
-extern int sched_smart_freq_legacy_config_handler(struct ctl_table *table, int write,
-						void __user *buffer, size_t *lenp, loff_t *ppos);
 extern int sched_smart_freq_legacy_dump_handler(struct ctl_table *table, int write,
 					      void __user *buffer, size_t *lenp, loff_t *ppos);
 extern int sched_smart_freq_ipc_dump_handler(struct ctl_table *table, int write,
 					   void __user *buffer, size_t *lenp, loff_t *ppos);
+extern unsigned int sysctl_ipc_freq_levels_cluster0[SMART_FMAX_IPC_MAX];
+extern unsigned int sysctl_ipc_freq_levels_cluster1[SMART_FMAX_IPC_MAX];
+extern unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];
+extern unsigned int sysctl_ipc_freq_levels_cluster3[SMART_FMAX_IPC_MAX];
+extern int sched_smart_freq_ipc_handler(struct ctl_table *table, int write,
+				      void __user *buffer, size_t *lenp,
+				      loff_t *ppos);
 #endif /* _WALT_H */

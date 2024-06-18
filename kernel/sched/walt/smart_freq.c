@@ -8,14 +8,8 @@
 #include "trace.h"
 
 bool smart_freq_init_done;
-
-/* sysctl  handlers */
-unsigned int sysctl_freq_legacy_reason_cfg[SMART_FREQ_LEGACY_TUPLE_SIZE];
-unsigned int sysctl_freq_ipc_reason_cfg[SMART_FREQ_IPC_TUPLE_SIZE];
 char reason_dump[1024];
-
 static DEFINE_MUTEX(freq_reason_mutex);
-
 
 int sched_smart_freq_legacy_dump_handler(struct ctl_table *table, int write,
 					 void __user *buffer, size_t *lenp,
@@ -71,158 +65,69 @@ int sched_smart_freq_ipc_dump_handler(struct ctl_table *table, int write,
 	return ret;
 }
 
-int sched_smart_freq_legacy_config_handler(struct ctl_table *table, int write,
-					 void __user *buffer, size_t *lenp,
-					 loff_t *ppos)
-{
-	int ret = -EINVAL, reason_idx, cluster_id;
-	int i;
-	unsigned int *data = (unsigned int *)table->data;
-	int val[SMART_FREQ_LEGACY_TUPLE_SIZE];
-	struct ctl_table tmp = {
-		.data	= &val,
-		.maxlen	= sizeof(int) * SMART_FREQ_LEGACY_TUPLE_SIZE,
-		.mode	= table->mode,
-	};
-	unsigned long reason_freq;
-	unsigned long no_reason_freq;
-
-	if (!smart_freq_init_done)
-		return -EINVAL;
-
-	mutex_lock(&freq_reason_mutex);
-
-	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
-	if (ret)
-		goto unlock;
-	ret = -EINVAL;
-
-	cluster_id = val[0];
-	reason_idx = val[1];
-	reason_freq = val[2];
-
-	/*Sanity out of bounds error check*/
-	if ((cluster_id < 0) || (cluster_id >= num_sched_clusters))
-		goto unlock;
-	if ((reason_idx < 0) || (reason_idx >= LEGACY_SMART_FREQ))
-		goto unlock;
-
-	/* Make sure that NO_REASON freq is less than any of the ones in legacy */
-	if (reason_idx == NO_REASON_SMART_FREQ) {
-		for (i = reason_idx + 1; i < LEGACY_SMART_FREQ; i++) {
-			if (!(default_freq_config[cluster_id].smart_freq_participation_mask &
-								BIT(i)))
-				continue;
-			if (reason_freq >
-			default_freq_config[cluster_id].legacy_reason_config[i].freq_allowed)
-				goto unlock;
-		}
-	}
-
-	no_reason_freq =
-	default_freq_config[cluster_id].legacy_reason_config[NO_REASON_SMART_FREQ].freq_allowed;
-	/* Make sure all reasons freq are larger than NO_REASON */
-	if (reason_idx > NO_REASON_SMART_FREQ) {
-		if (reason_freq < no_reason_freq)
-			goto unlock;
-	}
-
-	default_freq_config[cluster_id].legacy_reason_config[reason_idx].freq_allowed =
-		reason_freq;
-	/*
-	 * Update IPC_A as well, though we don't use IPC_A config but reading
-	 * from sysfs will give a consistent view.
-	 */
-	if (reason_idx == NO_REASON_SMART_FREQ)
-		default_freq_config[cluster_id].ipc_reason_config[0].freq_allowed = reason_freq;
-
-	for (i = 0; i < SMART_FREQ_LEGACY_TUPLE_SIZE; i++)
-		data[i] = val[i];
-
-	ret = 0;
-
-unlock:
-	mutex_unlock(&freq_reason_mutex);
-	return ret;
-}
-
-int sched_smart_freq_ipc_config_handler(struct ctl_table *table, int write,
+int sched_smart_freq_ipc_handler(struct ctl_table *table, int write,
 				      void __user *buffer, size_t *lenp,
 				      loff_t *ppos)
 {
-	int ret = -EINVAL, i, reason_idx, cluster_id, lower_index, higher_index;
+	int ret;
+	int cluster_id = -1;
 	unsigned long no_reason_freq;
+	int i;
 	unsigned int *data = (unsigned int *)table->data;
-	int val[SMART_FREQ_IPC_TUPLE_SIZE];
+	int val[SMART_FMAX_IPC_MAX];
 	struct ctl_table tmp = {
 		.data	= &val,
-		.maxlen	= sizeof(int) * SMART_FREQ_IPC_TUPLE_SIZE,
+		.maxlen	= sizeof(int) * SMART_FMAX_IPC_MAX,
 		.mode	= table->mode,
 	};
-	unsigned long ipc_freq;
 
 	if (!smart_freq_init_done)
 		return -EINVAL;
 
 	mutex_lock(&freq_reason_mutex);
 
-	if (!write)
+	if (!write) {
+		tmp.data = table->data;
+		ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
 		goto unlock;
+	}
 
 	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
 	if (ret)
 		goto unlock;
+
 	ret = -EINVAL;
 
-	cluster_id = val[0];
-	reason_idx = val[1];
-	ipc_freq = val[2];
-	no_reason_freq =
-	default_freq_config[cluster_id].legacy_reason_config[NO_REASON_SMART_FREQ].freq_allowed;
+	if (data == &sysctl_ipc_freq_levels_cluster0[0])
+		cluster_id = 0;
+	if (data == &sysctl_ipc_freq_levels_cluster1[0])
+		cluster_id = 1;
+	if (data == &sysctl_ipc_freq_levels_cluster2[0])
+		cluster_id = 2;
+	if (data == &sysctl_ipc_freq_levels_cluster3[0])
+		cluster_id = 3;
+	if (cluster_id == -1)
+		goto unlock;
 
-	/*Sanity out of bounds error check*/
-	if ((cluster_id < 0) || (cluster_id >= num_sched_clusters))
+	if (val[0] < 0)
 		goto unlock;
-	if ((reason_idx < 0) || (reason_idx >= SMART_FMAX_IPC_MAX))
-		goto unlock;
+
+	no_reason_freq = val[0];
+
 	/* Make sure all reasons freq are larger than NO_REASON */
-	if (ipc_freq < no_reason_freq)
-		goto unlock;
-
 	/* IPC/freq should be in increasing order */
-	for (i = reason_idx - 1; i > 0; i--)
-		if (!!(default_freq_config[cluster_id].smart_freq_ipc_participation_mask &
-								BIT(i)))
-			break;
-	lower_index = i;
-
-	for (i = reason_idx + 1; i < SMART_FMAX_IPC_MAX; i++)
-		if (!!(default_freq_config[cluster_id].smart_freq_ipc_participation_mask &
-								BIT(i)))
-			break;
-
-	higher_index = i;
-
-	if (higher_index < SMART_FMAX_IPC_MAX) {
-		if (ipc_freq >
-		    default_freq_config[cluster_id].ipc_reason_config[higher_index].freq_allowed)
+	for (i = 1; i < SMART_FMAX_IPC_MAX; i++) {
+		if (val[i] < val[i-1])
 			goto unlock;
 	}
 
-	if (reason_idx == IPC_A) {
-		if (ipc_freq != no_reason_freq)
-			goto unlock;
-	} else {
-		if (ipc_freq <
-		    default_freq_config[cluster_id].ipc_reason_config[lower_index].freq_allowed)
-			goto unlock;
-	}
+	default_freq_config[cluster_id].legacy_reason_config[NO_REASON_SMART_FREQ].freq_allowed =
+		no_reason_freq;
 
-	default_freq_config[cluster_id].ipc_reason_config[reason_idx].freq_allowed = ipc_freq;
-
-	for (i = 0; i < SMART_FREQ_IPC_TUPLE_SIZE; i++)
+	for (i = 0; i < SMART_FMAX_IPC_MAX; i++) {
+		default_freq_config[cluster_id].ipc_reason_config[i].freq_allowed = val[i];
 		data[i] = val[i];
-
+	}
 	ret = 0;
 
 unlock:
@@ -548,6 +453,10 @@ void smart_freq_init(const char *name)
 		for (j = 0; j < SMART_FMAX_IPC_MAX; j++) {
 			cluster->smart_freq_info->ipc_reason_config[j].freq_allowed =
 				FREQ_QOS_MAX_DEFAULT_VALUE;
+			sysctl_ipc_freq_levels_cluster0[j] = FREQ_QOS_MAX_DEFAULT_VALUE;
+			sysctl_ipc_freq_levels_cluster1[j] = FREQ_QOS_MAX_DEFAULT_VALUE;
+			sysctl_ipc_freq_levels_cluster2[j] = FREQ_QOS_MAX_DEFAULT_VALUE;
+			sysctl_ipc_freq_levels_cluster3[j] = FREQ_QOS_MAX_DEFAULT_VALUE;
 		}
 
 		i++;

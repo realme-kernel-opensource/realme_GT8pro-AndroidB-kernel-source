@@ -97,6 +97,10 @@ unsigned int sysctl_sched_pipeline_cpus;
 unsigned int freq_cap[MAX_FREQ_CAP][MAX_CLUSTERS];
 unsigned int sysctl_sched_pipeline_special;
 unsigned int sysctl_sched_pipeline_util_thres;
+unsigned int sysctl_ipc_freq_levels_cluster0[SMART_FMAX_IPC_MAX];
+unsigned int sysctl_ipc_freq_levels_cluster1[SMART_FMAX_IPC_MAX];
+unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];
+unsigned int sysctl_ipc_freq_levels_cluster3[SMART_FMAX_IPC_MAX];
 
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
@@ -896,7 +900,104 @@ unlock_mutex:
 
 	return ret;
 }
+
 #endif /* CONFIG_PROC_SYSCTL */
+
+static struct ctl_table smart_freq_cluster0[] = {
+	{
+		.procname	= "ipc_freq_levels",
+		.data		= &sysctl_ipc_freq_levels_cluster0,
+		.maxlen		= SMART_FMAX_IPC_MAX * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_ipc_handler,
+	},
+	{
+		.procname	= "sched_smart_freq_dump_legacy_reason",
+		.data		= &reason_dump,
+		.maxlen		= 1024 * sizeof(char),
+		.mode		= 0444,
+		.proc_handler	= sched_smart_freq_legacy_dump_handler,
+	},
+	{
+		.procname	= "sched_smart_freq_dump_ipc_reason",
+		.data		= &reason_dump,
+		.maxlen		= 1024 * sizeof(char),
+		.mode		= 0444,
+		.proc_handler	= sched_smart_freq_ipc_dump_handler,
+	},
+};
+
+static struct ctl_table smart_freq_cluster1[] = {
+	{
+		.procname	= "ipc_freq_levels",
+		.data		= &sysctl_ipc_freq_levels_cluster1,
+		.maxlen		= SMART_FMAX_IPC_MAX * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_ipc_handler,
+	},
+	{
+		.procname	= "sched_smart_freq_dump_legacy_reason",
+		.data		= &reason_dump,
+		.maxlen		= 1024 * sizeof(char),
+		.mode		= 0444,
+		.proc_handler	= sched_smart_freq_legacy_dump_handler,
+	},
+	{
+		.procname	= "sched_smart_freq_dump_ipc_reason",
+		.data		= &reason_dump,
+		.maxlen		= 1024 * sizeof(char),
+		.mode		= 0444,
+		.proc_handler	= sched_smart_freq_ipc_dump_handler,
+	},
+};
+
+static struct ctl_table smart_freq_cluster2[] = {
+	{
+		.procname	= "ipc_freq_levels",
+		.data		= &sysctl_ipc_freq_levels_cluster2,
+		.maxlen		= SMART_FMAX_IPC_MAX * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_ipc_handler,
+	},
+	{
+		.procname	= "sched_smart_freq_dump_legacy_reason",
+		.data		= &reason_dump,
+		.maxlen		= 1024 * sizeof(char),
+		.mode		= 0444,
+		.proc_handler	= sched_smart_freq_legacy_dump_handler,
+	},
+	{
+		.procname	= "sched_smart_freq_dump_ipc_reason",
+		.data		= &reason_dump,
+		.maxlen		= 1024 * sizeof(char),
+		.mode		= 0444,
+		.proc_handler	= sched_smart_freq_ipc_dump_handler,
+	},
+};
+
+static struct ctl_table smart_freq_cluster3[] = {
+	{
+		.procname	= "ipc_freq_levels",
+		.data		= &sysctl_ipc_freq_levels_cluster3,
+		.maxlen		= SMART_FMAX_IPC_MAX * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_ipc_handler,
+	},
+	{
+		.procname	= "sched_smart_freq_dump_legacy_reason",
+		.data		= &reason_dump,
+		.maxlen		= 1024 * sizeof(char),
+		.mode		= 0444,
+		.proc_handler	= sched_smart_freq_legacy_dump_handler,
+	},
+	{
+		.procname	= "sched_smart_freq_dump_ipc_reason",
+		.data		= &reason_dump,
+		.maxlen		= 1024 * sizeof(char),
+		.mode		= 0444,
+		.proc_handler	= sched_smart_freq_ipc_dump_handler,
+	},
+};
 
 static struct ctl_table input_boost_sysctls[] = {
 	{
@@ -1532,43 +1633,38 @@ static struct ctl_table walt_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_INT_MAX,
 	},
-	{
-		.procname	= "sched_smart_freq_legacy_reason_config",
-		.data		= &sysctl_freq_legacy_reason_cfg,
-		.maxlen		= SMART_FREQ_LEGACY_TUPLE_SIZE * sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= sched_smart_freq_legacy_config_handler,
-	},
-	{
-		.procname	= "sched_smart_freq_dump_legacy_reason",
-		.data		= &reason_dump,
-		.maxlen		= 1024 * sizeof(char),
-		.mode		= 0444,
-		.proc_handler	= sched_smart_freq_legacy_dump_handler,
-	},
-	{
-		.procname	= "sched_smart_freq_ipc_reason_config",
-		.data		= &sysctl_freq_ipc_reason_cfg,
-		.maxlen		= SMART_FREQ_IPC_TUPLE_SIZE * sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= sched_smart_freq_ipc_config_handler,
-	},
-	{
-		.procname	= "sched_smart_freq_dump_ipc_reason",
-		.data		= &reason_dump,
-		.maxlen		= 1024 * sizeof(char),
-		.mode		= 0444,
-		.proc_handler	= sched_smart_freq_ipc_dump_handler,
-	},
 	{ }
 };
 
 void walt_register_sysctl(void)
 {
-	struct ctl_table_header *hdr, *hdr2;
+	struct ctl_table_header *hdr, *hdr2,
+		*hdr3 = NULL, *hdr4 = NULL,
+		*hdr5 = NULL, *hdr6 = NULL;
 
 	hdr = register_sysctl("walt", walt_table);
 	hdr2 = register_sysctl("walt/input_boost", input_boost_sysctls);
+
+	if (num_sched_clusters >= 1) {
+		hdr3 = register_sysctl("walt/cluster0/smart_freq",
+				smart_freq_cluster0);
+		kmemleak_not_leak(hdr3);
+	}
+	if (num_sched_clusters >= 2) {
+		hdr4 = register_sysctl("walt/cluster1/smart_freq",
+				smart_freq_cluster1);
+		kmemleak_not_leak(hdr4);
+	}
+	if (num_sched_clusters >= 3) {
+		hdr5 = register_sysctl("walt/cluster2/smart_freq",
+				smart_freq_cluster2);
+		kmemleak_not_leak(hdr5);
+	}
+	if (num_sched_clusters >= 4) {
+		hdr6 = register_sysctl("walt/cluster3/smart_freq",
+				smart_freq_cluster3);
+		kmemleak_not_leak(hdr6);
+	}
 
 	kmemleak_not_leak(hdr);
 	kmemleak_not_leak(hdr2);
