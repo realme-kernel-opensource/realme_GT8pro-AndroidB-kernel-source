@@ -18,6 +18,7 @@
 
 static DEFINE_PER_CPU(u64, nr_prod_sum);
 static DEFINE_PER_CPU(u64, last_time);
+static DEFINE_PER_CPU(int, last_time_cpu);
 static DEFINE_PER_CPU(u64, nr_big_prod_sum);
 static DEFINE_PER_CPU(u64, nr_trailblazer_prod_sum);
 static DEFINE_PER_CPU(u64, nr);
@@ -97,7 +98,12 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 		spin_lock_irqsave(&per_cpu(nr_lock, cpu), flags);
 		curr_time = sched_clock();
 		diff = curr_time - per_cpu(last_time, cpu);
-		BUG_ON((s64)diff < 0);
+		if ((s64)diff < 0) {
+			printk_deferred("WALT-BUG CPU%d; curr_time=%llu(0x%llx) is lesser than per_cpu_last_time=%llu(0x%llx) last_time_cpu=%d",
+				cpu, curr_time, curr_time, per_cpu(last_time, cpu),
+				per_cpu(last_time, cpu), per_cpu(last_time_cpu, cpu));
+			WALT_PANIC(1);
+		}
 
 		tmp_nr = per_cpu(nr_prod_sum, cpu);
 		tmp_nr += per_cpu(nr, cpu) * diff;
@@ -131,6 +137,7 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 				stats[cpu].nr_scaled, trailblazer_cpu);
 
 		per_cpu(last_time, cpu) = curr_time;
+		per_cpu(last_time_cpu, cpu) = raw_smp_processor_id();
 		per_cpu(nr_prod_sum, cpu) = 0;
 		per_cpu(nr_big_prod_sum, cpu) = 0;
 		per_cpu(nr_trailblazer_prod_sum, cpu) = 0;
@@ -314,8 +321,14 @@ void sched_update_nr_prod(int cpu, int enq)
 	nr_running = per_cpu(nr, cpu);
 	curr_time = sched_clock();
 	diff = curr_time - per_cpu(last_time, cpu);
-	BUG_ON((s64)diff < 0);
+	if ((s64)diff < 0) {
+		printk_deferred("WALT-BUG CPU%d; curr_time=%llu(0x%llx) is lesser than per_cpu_last_time=%llu(0x%llx) last_time_cpu=%d",
+			cpu, curr_time, curr_time, per_cpu(last_time, cpu),
+			per_cpu(last_time, cpu), per_cpu(last_time_cpu, cpu));
+		WALT_PANIC(1);
+	}
 	per_cpu(last_time, cpu) = curr_time;
+	per_cpu(last_time_cpu, cpu) = raw_smp_processor_id();
 	per_cpu(nr, cpu) = cpu_rq(cpu)->nr_running + enq;
 
 	if (per_cpu(nr, cpu) > per_cpu(nr_max, cpu))
