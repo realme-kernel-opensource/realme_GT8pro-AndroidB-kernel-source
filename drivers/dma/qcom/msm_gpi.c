@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/atomic.h>
@@ -464,6 +464,7 @@ struct gpi_dev {
 	u32 klog_lvl;
 	struct dentry *dentry;
 	bool is_le_vm;
+	struct mutex qup_se_lock; /* qup SE instance lock */
 };
 
 static struct gpi_dev *gpi_dev_dbg[5];
@@ -3563,6 +3564,7 @@ static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
 	u32 seid, chid;
 	int gpii, static_gpii_no;
 	struct gpii_chan *gpii_chan;
+	struct dma_chan *dma_chan;
 
 	if (args->args_count < REQ_OF_DMA_ARGS) {
 		GPI_ERR(gpi_dev,
@@ -3577,6 +3579,7 @@ static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
 		return NULL;
 	}
 
+	mutex_lock(&gpi_dev->qup_se_lock);
 	seid = args->args[1];
 	static_gpii_no = (args->args[4] & STATIC_GPII_BMSK) >> STATIC_GPII_SHFT;
 
@@ -3587,6 +3590,7 @@ static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
 
 	if (gpii < 0) {
 		GPI_ERR(gpi_dev, "no available gpii instances\n");
+		mutex_unlock(&gpi_dev->qup_se_lock);
 		return NULL;
 	}
 
@@ -3594,6 +3598,7 @@ static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
 	if (gpii_chan->vc.chan.client_count) {
 		GPI_ERR(gpi_dev, "gpii:%d chid:%d seid:%d already configured\n",
 			gpii, chid, gpii_chan->seid);
+		mutex_unlock(&gpi_dev->qup_se_lock);
 		return NULL;
 	}
 
@@ -3609,8 +3614,9 @@ static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
 		"client req gpii:%u chid:%u #_tre:%u prio:%u proto:%u SE:%d init_config:%d\n",
 		gpii, chid, gpii_chan->req_tres, gpii_chan->priority,
 		gpii_chan->protocol, gpii_chan->seid, gpii_chan->init_config);
-
-	return dma_get_slave_channel(&gpii_chan->vc.chan);
+	dma_chan = dma_get_slave_channel(&gpii_chan->vc.chan);
+	mutex_unlock(&gpi_dev->qup_se_lock);
+	return dma_chan;
 }
 
 /* gpi_setup_debug - setup debug capabilities */
@@ -3746,6 +3752,7 @@ static int gpi_probe(struct platform_device *pdev)
 	if (!gpi_dev->gpiis)
 		return -ENOMEM;
 
+	mutex_init(&gpi_dev->qup_se_lock);
 	gpi_dev->is_le_vm = of_property_read_bool(pdev->dev.of_node, "qcom,le-vm");
 	if (gpi_dev->is_le_vm)
 		GPI_LOG(gpi_dev, "LE-VM usecase\n");
