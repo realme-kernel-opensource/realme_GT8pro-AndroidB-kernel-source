@@ -542,12 +542,19 @@ static int prepare_msg(struct si_object_invoke_ctx *oic,
 		return -ENOSPC;
 
 	arg_for_each_input_buffer(i, u) {
+		void *msg_ptr;
+
 		msg->args[ib].b.offset = offset;
 		msg->args[ib].b.size = u[i].b.size;
 		if (!arg_in_bounds(&msg->args[ib], msg_size))
 			return -ENOMEM;
 
-		memcpy(OFFSET_TO_PTR(msg, offset), u[i].b.addr, u[i].b.size);
+		msg_ptr = OFFSET_TO_PTR(msg, offset);
+
+		if (!u[i].flags)
+			memcpy(msg_ptr, u[i].b.addr, u[i].b.size);
+		else if (copy_from_user(msg_ptr, u[i].b.uaddr, u[i].b.size))
+			return -EFAULT;
 
 		offset = align_offset(u[i].b.size + offset);
 		ib++;
@@ -606,9 +613,14 @@ static int update_args(struct si_arg u[], struct si_object_invoke_ctx *oic)
 
 	ob = ib;
 	arg_for_each_output_buffer(i, u) {
+		void *msg_ptr = OFFSET_TO_PTR(msg, msg->args[ob].b.offset);
 
-		memcpy(u[i].b.addr, OFFSET_TO_PTR(msg, msg->args[ob].b.offset),
-			msg->args[ob].b.size);
+		if (!u[i].flags) {
+			memcpy(u[i].b.addr, msg_ptr, msg->args[ob].b.size);
+		} else if (copy_to_user(u[i].b.uaddr, msg_ptr, msg->args[ob].b.size)) {
+			/* On failour, continue so that we process output objects for RELEASE.*/
+			ret = -EFAULT;
+		}
 
 		u[i].b.size = msg->args[ob].b.size;
 		ob++;

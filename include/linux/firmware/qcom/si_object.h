@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _LINUX_SI_OBJECT_H__
@@ -41,6 +41,7 @@ struct si_object;
 /**
  * struct si_arg - argument for QTEE object invocation.
  * @type: type of argument
+ * @flags: extra flags.
  * @b: address and size if type of argument is buffer
  * @o: si_object instance if type of argument is object
  */
@@ -52,9 +53,16 @@ struct si_arg {
 		SI_AT_IO,	/* Input Object.  */
 		SI_AT_OO	/* Output Object. */
 	} type;
+
+/* 'uaddr' holds a __user address. */
+#define SI_ARG_FLAGS_UADDR 1
+	char flags;
 	union {
 		struct si_buffer {
-			void *addr;
+			union {
+				void *addr;
+				void __user *uaddr;
+			};
 			size_t size;
 		} b;
 		struct si_object *o;

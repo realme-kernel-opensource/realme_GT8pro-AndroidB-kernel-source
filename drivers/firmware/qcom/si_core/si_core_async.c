@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kobject.h>
@@ -81,14 +81,14 @@ static struct si_buffer async_si_buffer(struct si_object_invoke_ctx *oic)
 	if (oic->out.msg.size > offset) {
 		return (struct si_buffer)
 			{
-				oic->out.msg.addr + offset,
+				{ oic->out.msg.addr + offset },
 				oic->out.msg.size - offset
 			};
 	}
 
 	pr_err("no space left for async messages! or malformed message.\n");
 
-	return (struct si_buffer) { 0, 0 };
+	return (struct si_buffer) { { 0 }, 0 };
 }
 
 #ifndef CONFIG_QCOM_SI_CORE_WQ
