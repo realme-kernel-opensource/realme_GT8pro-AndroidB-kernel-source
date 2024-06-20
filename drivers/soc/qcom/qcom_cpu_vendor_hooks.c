@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "VendorHooks: " fmt
@@ -93,16 +93,16 @@ struct kretprobe spin_bug_probe = {
 	.kp.symbol_name = "spin_bug",
 };
 
-static void register_spinlock_bug_hook(struct platform_device *pdev)
+static void register_spinlock_bug_hook(void)
 {
 	int ret;
 
 	ret = register_kretprobe(&spin_bug_probe);
 	if (ret)
-		dev_err(&pdev->dev, "Failed to register spin_bug_probe: %x\n", ret);
+		pr_err("Failed to register spin_bug_probe: %x\n", ret);
 }
 #else
-static inline void register_spinlock_bug_hook(struct platform_device *pdev) { }
+static inline void register_spinlock_bug_hook(void) { }
 #endif
 
 #ifdef CONFIG_RANDOMIZE_BASE
@@ -149,7 +149,7 @@ static struct syscore_ops kaslr_offset_restore_syscore_ops = {
 static void store_kaslr_offset(void) {}
 #endif /* CONFIG_RANDOMIZE_BASE */
 
-static int cpu_vendor_hooks_driver_probe(struct platform_device *pdev)
+static int __init qcom_vendor_hook_driver_init(void)
 {
 	int ret;
 
@@ -163,69 +163,43 @@ static int cpu_vendor_hooks_driver_probe(struct platform_device *pdev)
 
 	ret = register_trace_android_vh_ipi_stop(trace_ipi_stop, NULL);
 	if (ret) {
-		dev_err(&pdev->dev, "Failed to register android_vh_ipi_stop hook\n");
+		pr_err("Failed to register android_vh_ipi_stop hook\n");
 		return ret;
 	}
 
 	ret = register_trace_android_vh_printk_hotplug(printk_hotplug, NULL);
 	if (ret) {
-		dev_err(&pdev->dev, "Failed to android_vh_printk_hotplug hook\n");
+		pr_err("Failed to android_vh_printk_hotplug hook\n");
 		unregister_trace_android_vh_ipi_stop(trace_ipi_stop, NULL);
 		return ret;
 	}
 
 	ret = register_trace_android_vh_timer_calc_index(timer_recalc_index, NULL);
 	if (ret) {
-		dev_err(&pdev->dev, "Failed to android_vh_timer_calc_index hook\n");
+		pr_err("Failed to android_vh_timer_calc_index hook\n");
 		unregister_trace_android_vh_ipi_stop(trace_ipi_stop, NULL);
 		unregister_trace_android_vh_printk_hotplug(printk_hotplug, NULL);
 		return ret;
 	}
 
-	register_spinlock_bug_hook(pdev);
+	register_spinlock_bug_hook();
 
 	return ret;
 }
 
-static int cpu_vendor_hooks_driver_remove(struct platform_device *pdev)
+static void __exit qcom_vendor_hook_driver_exit(void)
 {
 	/* Reset all initialized global variables and unregister callbacks. */
 	unregister_trace_android_vh_ipi_stop(trace_ipi_stop, NULL);
 	unregister_trace_android_vh_printk_hotplug(printk_hotplug, NULL);
 	unregister_trace_android_vh_timer_calc_index(timer_recalc_index, NULL);
-	return 0;
 }
 
-static const struct of_device_id cpu_vendor_hooks_of_match[] = {
-	{ .compatible = "qcom,cpu-vendor-hooks" },
-	{ }
-};
-MODULE_DEVICE_TABLE(of, cpu_vendor_hooks_of_match);
-
-static struct platform_driver cpu_vendor_hooks_driver = {
-	.driver = {
-		.name = "qcom-cpu-vendor-hooks",
-		.of_match_table = cpu_vendor_hooks_of_match,
-	},
-	.probe = cpu_vendor_hooks_driver_probe,
-	.remove = cpu_vendor_hooks_driver_remove,
-};
-
-static int __init qcom_vendor_hook_driver_init(void)
-{
-	return platform_driver_register(&cpu_vendor_hooks_driver);
-}
 #if IS_MODULE(CONFIG_QCOM_CPU_VENDOR_HOOKS)
 module_init(qcom_vendor_hook_driver_init);
 #else
 pure_initcall(qcom_vendor_hook_driver_init);
 #endif
-
-static void __exit qcom_vendor_hook_driver_exit(void)
-{
-	return platform_driver_unregister(&cpu_vendor_hooks_driver);
-}
 module_exit(qcom_vendor_hook_driver_exit);
-
 MODULE_DESCRIPTION("QCOM CPU Vendor Hooks Driver");
 MODULE_LICENSE("GPL");
