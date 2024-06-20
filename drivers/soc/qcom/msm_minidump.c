@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "Minidump: " fmt
@@ -180,6 +180,9 @@ static inline int md_elf_entry_number(const struct md_region *entry)
 		shdr = elf_section(minidump_elfheader.ehdr, i);
 		hdr_name = elf_lookup_string(minidump_elfheader.ehdr,
 					     shdr->sh_name);
+		if (!hdr_name)
+			return -EINVAL;
+
 		if (!strcmp(hdr_name, entry->name))
 			return i;
 	}
