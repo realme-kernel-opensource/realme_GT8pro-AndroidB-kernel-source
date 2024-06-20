@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+arm_smmu.ko
 clk-dummy.ko
 clk-qcom.ko
 cmd-db.ko
@@ -25,3 +26,6 @@ phy-generic.ko
 phy-qcom-emu.ko
 qnoc-qos.ko
 qnoc-canoe.ko
+qcom_iommu_debug.ko
+iommu-logger.ko
+qcom_iommu_util.ko
