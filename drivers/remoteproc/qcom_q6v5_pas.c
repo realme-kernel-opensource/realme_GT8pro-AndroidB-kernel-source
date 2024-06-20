@@ -636,7 +636,7 @@ static int adsp_start(struct rproc *rproc)
 	ret = qcom_mdt_pas_init(adsp->dev, adsp->firmware, rproc->firmware, adsp->pas_id,
 				adsp->mem_phys, &adsp->pas_metadata, adsp->dma_phys_below_32b);
 	if (ret)
-		goto disable_px_supply;
+		goto release_dtb_pas_id;
 
 	ret = qcom_mdt_load_no_init(adsp->dev, adsp->firmware, rproc->firmware, adsp->pas_id,
 				    adsp->mem_region, adsp->mem_phys, adsp->mem_size,
@@ -679,8 +679,11 @@ static int adsp_start(struct rproc *rproc)
 
 release_pas_metadata:
 	qcom_scm_pas_metadata_release(&adsp->pas_metadata, dev);
-	if (adsp->dtb_pas_id)
+release_dtb_pas_id:
+	if (adsp->dtb_pas_id) {
+		qcom_scm_pas_shutdown(adsp->dtb_pas_id);
 		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
+	}
 disable_px_supply:
 	if (adsp->px_supply)
 		regulator_disable(adsp->px_supply);
