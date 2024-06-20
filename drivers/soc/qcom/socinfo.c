@@ -305,6 +305,8 @@ struct smem_image_version {
 		int str_pos = 0, i = 0; \
 		num_parts = socinfo_get_part_count(part_enum); \
 		part_info = kmalloc_array(num_parts, sizeof(*part_info), GFP_KERNEL); \
+		if (!part_info)							      \
+			return -ENOMEM;						      \
 		socinfo_get_subpart_info(part_enum, part_info, num_parts); \
 		for (i = 0; i < num_parts; i++) { \
 			str_pos += scnprintf(buf+str_pos, PAGE_SIZE-str_pos, "0x%x", \
