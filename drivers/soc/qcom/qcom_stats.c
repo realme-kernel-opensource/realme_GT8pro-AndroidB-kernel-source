@@ -60,9 +60,6 @@
 #define SUBSYSTEM_STATS_MAGIC_NUM		(0x9d)
 #define SUBSYSTEM_STATS_OTHERS_NUM		(-2)
 
-#define DDR_HISTORY_MC_ADDR			0x0
-#define DDR_HISTORY_SHUB_ADDR			0x4
-
 #define APSS_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 0, \
 				     struct sleep_stats *)
 #define MODEM_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 1, \
@@ -749,9 +746,7 @@ int ddr_stats_get_change_his(struct ddr_stats_change_his_info *ddr_his_info)
 		return -EINVAL;
 	}
 
-	ddr_his_info->mc_his = readl_relaxed(reg + DDR_HISTORY_MC_ADDR);
-	ddr_his_info->shub_his = readl_relaxed(reg + DDR_HISTORY_SHUB_ADDR);
-
+	memcpy_fromio(ddr_his_info, reg, sizeof(struct ddr_stats_change_his_info));
 	mutex_unlock(&drv->lock);
 	return 0;
 }

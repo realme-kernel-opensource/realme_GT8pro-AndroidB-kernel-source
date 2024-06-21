@@ -7,9 +7,11 @@
 #ifndef __QCOM_STATS_H__
 #define __QCOM_STATS_H__
 
+#define DDR_HISTORY_MAX_ELEMENTS	0x2
+
 struct ddr_freq_residency {
-	uint32_t freq;
-	uint64_t residency;
+	u32 freq;
+	u64 residency;
 };
 
 struct ddr_stats_ss_vote_info {
@@ -20,6 +22,14 @@ struct ddr_stats_ss_vote_info {
 struct ddr_stats_change_his_info {
 	u32 mc_his; /* mc change history */
 	u32 shub_his; /* shub change history */
+	/* upper 24 bits of last max elements mc changes timestamp */
+	u32 last_2_mc_changes_hi[DDR_HISTORY_MAX_ELEMENTS];
+	/* lower 32 bits of last max elements mc changes timestamp */
+	u32 last_2_mc_changes_lo[DDR_HISTORY_MAX_ELEMENTS];
+	/* upper 24 bits of last max elements shub changes timestamp */
+	u32 last_2_shub_changes_hi[DDR_HISTORY_MAX_ELEMENTS];
+	/* lower 32 bits of last max elements shub changes timestamp */
+	u32 last_2_shub_changes_lo[DDR_HISTORY_MAX_ELEMENTS];
 };
 
 struct qcom_stats_cx_vote_info {
