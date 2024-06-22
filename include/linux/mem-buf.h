@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  *  Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- *  Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ *  Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MEM_BUF_H
@@ -17,36 +17,7 @@
 /* For in-kernel use only, not allowed for userspace ioctl */
 #define MEM_BUF_BUDDY_MEM_TYPE (MEM_BUF_ION_MEM_TYPE + 2)
 
-/* Used to obtain the underlying vmperm struct of a DMA-BUF */
-struct mem_buf_vmperm *to_mem_buf_vmperm(struct dma_buf *dmabuf);
-
-/* Returns true if the local VM has exclusive access and is the owner */
-bool mem_buf_dma_buf_exclusive_owner(struct dma_buf *dmabuf);
-
-/*
- * Returns the Virtual Machine vmids & permissions of the dmabuf. Can't be
- * modified.
- */
-int mem_buf_dma_buf_get_vmperm(struct dma_buf *dmabuf, const int **vmids,
-		const int **perms, int *nr_acl_entries);
-/*
- * Returns a copy of the Virtual Machine vmids & permissions of the dmabuf.
- * The caller must kfree() when finished.
- */
-int mem_buf_dma_buf_copy_vmperm(struct dma_buf *dmabuf, int **vmids, int **perms,
-		int *nr_acl_entries);
-
-/*
- * Returns 0 if @dmabuf has a valid memparcel handle and stores it in
- * memparcel_hdl
- */
-int mem_buf_dma_buf_get_memparcel_hdl(struct dma_buf *dmabuf,
-				      gh_memparcel_handle_t *memparcel_hdl);
-
 typedef int (*mem_buf_dma_buf_destructor)(void *dtor_data);
-int mem_buf_dma_buf_set_destructor(struct dma_buf *dmabuf,
-				   mem_buf_dma_buf_destructor dtor,
-				   void *dtor_data);
 
 /**
  * struct mem_buf_allocation_data - Data structure that contains information
@@ -88,8 +59,34 @@ struct mem_buf_lend_kernel_arg {
 	u64 label;
 };
 
+
+struct mem_buf_retrieve_kernel_arg {
+	int sender_vmid;
+	unsigned int nr_acl_entries;
+	int *vmids;
+	int *perms;
+	gh_memparcel_handle_t memparcel_hdl;
+	int fd_flags;
+};
+#if IS_ENABLED(CONFIG_QCOM_MEM_BUF)
+
+void *mem_buf_alloc(struct mem_buf_allocation_data *alloc_data);
+void mem_buf_free(void *membuf);
+struct gh_sgl_desc *mem_buf_get_sgl(void *membuf);
+int mem_buf_current_vmid(void);
+/*
+ * Returns a copy of the Virtual Machine vmids & permissions of the dmabuf.
+ * The caller must kfree() when finished.
+ */
+int mem_buf_dma_buf_copy_vmperm(struct dma_buf *dmabuf, int **vmids, int **perms,
+		int *nr_acl_entries);
+
 int mem_buf_lend(struct dma_buf *dmabuf,
 		struct mem_buf_lend_kernel_arg *arg);
+
+struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg);
+
+int mem_buf_reclaim(struct dma_buf *dmabuf);
 
 /*
  * mem_buf_share
@@ -101,23 +98,29 @@ int mem_buf_share(struct dma_buf *dmabuf,
 		struct mem_buf_lend_kernel_arg *arg);
 
 
-struct mem_buf_retrieve_kernel_arg {
-	int sender_vmid;
-	unsigned int nr_acl_entries;
-	int *vmids;
-	int *perms;
-	gh_memparcel_handle_t memparcel_hdl;
-	int fd_flags;
-};
-struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg);
-int mem_buf_reclaim(struct dma_buf *dmabuf);
+/* Used to obtain the underlying vmperm struct of a DMA-BUF */
+struct mem_buf_vmperm *to_mem_buf_vmperm(struct dma_buf *dmabuf);
 
-#if IS_ENABLED(CONFIG_QCOM_MEM_BUF)
+/* Returns true if the local VM has exclusive access and is the owner */
+bool mem_buf_dma_buf_exclusive_owner(struct dma_buf *dmabuf);
 
-void *mem_buf_alloc(struct mem_buf_allocation_data *alloc_data);
-void mem_buf_free(void *membuf);
-struct gh_sgl_desc *mem_buf_get_sgl(void *membuf);
-int mem_buf_current_vmid(void);
+/*
+ * Returns the Virtual Machine vmids & permissions of the dmabuf. Can't be
+ * modified.
+ */
+int mem_buf_dma_buf_get_vmperm(struct dma_buf *dmabuf, const int **vmids,
+		const int **perms, int *nr_acl_entries);
+/*
+ * Returns 0 if @dmabuf has a valid memparcel handle and stores it in
+ * memparcel_hdl
+ */
+int mem_buf_dma_buf_get_memparcel_hdl(struct dma_buf *dmabuf,
+				      gh_memparcel_handle_t *memparcel_hdl);
+
+int mem_buf_dma_buf_set_destructor(struct dma_buf *dmabuf,
+				   mem_buf_dma_buf_destructor dtor,
+				   void *dtor_data);
+
 #else
 
 static inline void *mem_buf_alloc(struct mem_buf_allocation_data *alloc_data)
@@ -131,9 +134,66 @@ static inline struct gh_sgl_desc *mem_buf_get_sgl(void *membuf)
 {
 	return ERR_PTR(-EINVAL);
 }
+
 static inline int mem_buf_current_vmid(void)
 {
 	return -EINVAL;
 }
+
+int mem_buf_dma_buf_copy_vmperm(struct dma_buf *dmabuf, int **vmids, int **perms,
+				int *nr_acl_entries)
+{
+	return -EINVAL;
+}
+
+int mem_buf_lend(struct dma_buf *dmabuf, struct mem_buf_lend_kernel_arg *arg)
+{
+	return -EINVAL;
+}
+
+struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
+{
+	return ERR_PTR(-EINVAL);
+}
+
+int mem_buf_reclaim(struct dma_buf *dmabuf)
+{
+	return -EINVAL;
+}
+
+int mem_buf_share(struct dma_buf *dmabuf, struct mem_buf_lend_kernel_arg *arg)
+{
+	return -EINVAL;
+}
+
+struct mem_buf_vmperm *to_mem_buf_vmperm(struct dma_buf *dmabuf)
+{
+	return ERR_PTR(-EINVAL);
+}
+
+bool mem_buf_dma_buf_exclusive_owner(struct dma_buf *dmabuf)
+{
+	return false;
+}
+
+int mem_buf_dma_buf_get_vmperm(struct dma_buf *dmabuf, const int **vmids,
+				const int **perms, int *nr_acl_entries)
+{
+	return -EINVAL;
+}
+
+int mem_buf_dma_buf_get_memparcel_hdl(struct dma_buf *dmabuf,
+					gh_memparcel_handle_t *memparcel_hdl)
+{
+	return -EINVAL;
+}
+
+int mem_buf_dma_buf_set_destructor(struct dma_buf *dmabuf,
+				   mem_buf_dma_buf_destructor dtor,
+				   void *dtor_data)
+{
+	return -EINVAL;
+}
+
 #endif /* CONFIG_QCOM_MEM_BUF */
 #endif /* _MEM_BUF_H */
