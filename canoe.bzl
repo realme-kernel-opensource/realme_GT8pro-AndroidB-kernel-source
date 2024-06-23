@@ -62,6 +62,7 @@ def define_canoe():
         "drivers/usb/gadget/function/usb_f_qdss.ko",
         "drivers/usb/phy/phy-generic.ko",
         "drivers/usb/phy/phy-qcom-emu.ko",
+        "kernel/trace/qcom_ipc_logging.ko",
         "net/mac80211/mac80211.ko",
         "net/wireless/cfg80211.ko",
     ]

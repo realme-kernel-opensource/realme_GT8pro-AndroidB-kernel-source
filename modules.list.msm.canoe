@@ -30,6 +30,7 @@ phy-qcom-emu.ko
 qnoc-qos.ko
 qnoc-canoe.ko
 qcom_iommu_debug.ko
+qcom_ipc_logging.ko
 iommu-logger.ko
 qcom_iommu_util.ko
 secure_buffer.ko
