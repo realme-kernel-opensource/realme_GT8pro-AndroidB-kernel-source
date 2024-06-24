@@ -1744,6 +1744,7 @@ static int qcom_glink_announce_create(struct rpmsg_device *rpdev)
 	unsigned long flags;
 	int iid;
 	int size;
+	int rc = 0;
 
 	CH_INFO(channel, "Entered\n");
 	if (!completion_done(&channel->open_ack))
@@ -1780,11 +1781,14 @@ static int qcom_glink_announce_create(struct rpmsg_device *rpdev)
 	}
 
 	channel->rx_task = kthread_run(qcom_glink_rx_thread, channel, "glink-%s", channel->name);
-	if (IS_ERR(channel->rx_task))
-		return PTR_ERR(channel->rx_task);
+	if (IS_ERR(channel->rx_task)) {
+		CH_ERR(channel, "channel thread failed to run\n");
+		rc = PTR_ERR(channel->rx_task);
+		channel->rx_task = NULL;
+	}
 
 	CH_INFO(channel, "Exit\n");
-	return 0;
+	return rc;
 }
 
 static void qcom_glink_destroy_ept(struct rpmsg_endpoint *ept)
