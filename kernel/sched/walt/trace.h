@@ -1786,6 +1786,7 @@ TRACE_EVENT(sched_pipeline_tasks,
 		__field(int, pipeline_cpu)
 		__field(int, low_latency)
 		__field(int, nr)
+		__field(int, special_pid)
 	),
 
 	TP_fast_assign(
@@ -1798,12 +1799,14 @@ TRACE_EVENT(sched_pipeline_tasks,
 		__entry->pipeline_cpu	= heavy_wts->pipeline_cpu;
 		__entry->low_latency	= heavy_wts->low_latency;
 		__entry->nr		= nr;
+		__entry->special_pid	= pipeline_special_task ? pipeline_special_task->pid : -1;
 	),
 
-	TP_printk("type=%d index=%d pid=%d comm=(%s) demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d",
+	TP_printk("type=%d index=%d pid=%d comm=(%s) demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d special_pid=%d",
 			__entry->type, __entry->index, __entry->pid,
 			__entry->comm, __entry->demand_scaled, __entry->coloc_demand,
-			__entry->pipeline_cpu, __entry->low_latency, __entry->nr)
+			__entry->pipeline_cpu, __entry->low_latency, __entry->nr,
+			__entry->special_pid)
 );
 
 TRACE_EVENT(sched_pipeline_swapped,

@@ -180,7 +180,7 @@ bool find_heaviest_topapp(u64 window_start)
 	struct walt_task_struct *wts;
 	unsigned long flags;
 	static u64 last_rearrange_ns;
-	int i, j;
+	int i, j, start;
 	struct walt_task_struct *heavy_wts_to_drop[MAX_NR_PIPELINE];
 	u32 total_util = 0;
 
@@ -223,9 +223,9 @@ bool find_heaviest_topapp(u64 window_start)
 	if (pipeline_special_task) {
 		heavy_wts[0] = (struct walt_task_struct *)
 					pipeline_special_task->android_vendor_data1;
-		j = 1;
+		start = 1;
 	} else {
-		j = 0;
+		start = 0;
 	}
 
 	/*
@@ -243,7 +243,7 @@ bool find_heaviest_topapp(u64 window_start)
 		if (pipeline_special_task && (wts == heavy_wts[0]))
 			continue;
 
-		for (i = 0; i < MAX_NR_PIPELINE; i++) {
+		for (i = start; i < MAX_NR_PIPELINE; i++) {
 			if (!heavy_wts[i]) {
 				heavy_wts[i] = to_be_placed_wts;
 				break;

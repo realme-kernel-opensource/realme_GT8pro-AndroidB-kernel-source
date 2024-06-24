@@ -282,6 +282,8 @@ static int sched_pipeline_special_handler(struct ctl_table *table,
 	pipeline_special_local =
 		get_pid_task(find_vpid(sysctl_sched_pipeline_special), PIDTYPE_PID);
 	if (!pipeline_special_local) {
+		remove_special_task();
+		sysctl_sched_pipeline_special = 0;
 		ret = -ENOENT;
 		goto unlock;
 	}
