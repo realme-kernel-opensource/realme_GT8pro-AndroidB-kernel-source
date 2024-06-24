@@ -971,6 +971,10 @@ static inline bool task_fits_capacity(struct task_struct *p,
 static inline bool task_fits_max(struct task_struct *p, int dst_cpu)
 {
 	unsigned long task_boost = per_task_boost(p);
+	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+
+	if (wts->pipeline_cpu != -1)
+		return true;
 
 	if (is_max_possible_cluster_cpu(dst_cpu))
 		return true;
