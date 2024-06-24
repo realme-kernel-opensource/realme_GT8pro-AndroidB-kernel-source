@@ -78,15 +78,12 @@ release_sem:
 
 bool is_sched_lib_task(void)
 {
-	struct task_struct *g, *p;
-
 	if (strnlen(sched_lib_task, LIB_PATH_LENGTH) == 0)
 		return false;
 
-	for_each_process_thread(g, p) {
-		if (strnstr(p->comm, sched_lib_task, strnlen(p->comm, LIB_PATH_LENGTH)))
-			return true;
-	}
+	if (strnstr(current->comm, sched_lib_task, strnlen(current->comm, LIB_PATH_LENGTH)))
+		return true;
+
 	return false;
 }
 
