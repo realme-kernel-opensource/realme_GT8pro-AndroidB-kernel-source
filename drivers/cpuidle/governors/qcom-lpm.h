@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_LPM_H__
@@ -13,6 +13,7 @@
 #define PRED_PREMATURE_CNT	3
 #define PRED_REF_STDDEV		500
 #define CLUST_SMPL_INVLD_TIME	40000
+#define CLUST_BIAS_TIME_MSEC	10
 #define MAX_CLUSTER_STATES	4
 
 extern bool sleep_disabled;
@@ -76,7 +77,10 @@ struct lpm_cluster {
 	bool history_invalid;
 	bool htmr_wkup;
 	int entry_idx;
+	int restrict_idx;
 	int nsamp;
+	u32 samples_invalid_time;
+	u32 pred_premature_cnt;
 	struct cluster_history history[MAXSAMPLES];
 	struct generic_pm_domain *genpd;
 	struct qcom_cluster_node *dev_node[MAX_CLUSTER_STATES];
@@ -88,12 +92,15 @@ struct lpm_cluster {
 	ktime_t next_wakeup;
 	ktime_t pred_wakeup;
 	ktime_t now;
+	u64 pred_residency;
 	ktime_t cpu_next_wakeup[MAX_LPM_CPUS];
 	bool state_allowed[MAX_CLUSTER_STATES];
 	struct list_head list;
 	spinlock_t lock;
 	bool predicted;
 	bool initialized;
+	bool is_timer_expired;
+	bool use_bias_timer;
 };
 
 struct cluster_governor {
