@@ -2,12 +2,16 @@
 /*
  * Copyright (c) 2016, 2019-2021, Linux Foundation. All rights reserved.
  * All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "phy-qcom-ufs-qrbtc-sdm845.h"
 
 #define UFS_PHY_NAME "ufs_phy_qrbtc_sdm845"
+
+/* TCSR_SOC_EMULATION_TYPE register value for type of RUMI platform */
+#define RUMI_PLATFORM_TYPE_VU19P	0xA0000001
+#define RUMI_PLATFORM_TYPE_VU440P	0xB0000001
 
 static
 int ufs_qcom_phy_qrbtc_sdm845_phy_calibrate(struct phy *generic_phy)
@@ -46,6 +50,17 @@ ufs_qcom_phy_qrbtc_sdm845_is_pcs_ready(struct ufs_qcom_phy *phy_common)
 	u32 val;
 
 	/*
+	 * New RH132 UFS Card which suports Gear-1 RATE-B
+	 * does not use QSERDES_COM_RESET_SM
+	 * For VU19P  RUMI Platform Value = 0xA0000001
+	 * For VU440P RUMI Platform Value = 0xB0000001
+	 *
+	 * New RH132 UFS Card available only for VU440P
+	 */
+	if (phy_common->soc_emulation_type == RUMI_PLATFORM_TYPE_VU440P)
+		return 0;
+
+	/*
 	 * The value we are polling for is 0x3D which represents the
 	 * following masks:
 	 * RESET_SM field: 0x5
@@ -78,10 +93,49 @@ static void ufs_qcom_phy_qrbtc_sdm845_start_serdes(struct ufs_qcom_phy *phy)
 	mb();
 }
 
+/*
+ * Dynamically detect whether RH132 card based sequences to be used or
+ * legacy UFS card sequences to be used via reading TCSR_SOC_EMULATION_TYPE
+ */
+static int ufs_qcom_parse_soc_emulation_type(struct ufs_qcom_phy *phy_common)
+{
+	struct device *dev = phy_common->dev;
+	struct device_node *np = dev->of_node;
+	void __iomem *reg_base = NULL;
+	u32 soc_emulation_type_addr = 0;
+	u32 soc_emulation_type_bits = 0;
+	int ret = 0;
+
+	if (!of_property_read_u32(np, "qcom,soc_emulation_type_addr", &soc_emulation_type_addr)) {
+		ret = of_property_read_u32(np, "qcom,soc_emulation_type_bits",
+					&soc_emulation_type_bits);
+		if (ret < 0) {
+			dev_err(phy_common->dev, "can't get soc_emulation_type bits\n");
+			return -EINVAL;
+		}
+
+		reg_base = ioremap(soc_emulation_type_addr, soc_emulation_type_bits);
+		if (!reg_base) {
+			dev_err(phy_common->dev, "can't map soc_emulation_type addr\n");
+			return -EINVAL;
+		}
+
+		phy_common->soc_emulation_type = readl_relaxed(reg_base);
+		dev_dbg(phy_common->dev, "soc_emulation_type value [0x%x]\n",
+				phy_common->soc_emulation_type);
+		iounmap(reg_base);
+	}
+	return ret;
+}
+
 static int ufs_qcom_phy_qrbtc_sdm845_init(struct phy *generic_phy)
 {
 	struct ufs_qcom_phy *phy_common = get_ufs_qcom_phy(generic_phy);
 	int ret;
+
+	ret = ufs_qcom_parse_soc_emulation_type(phy_common);
+	if (ret)
+		dev_dbg(phy_common->dev, "unable to get soc_emulation_type %d\n", ret);
 
 	ret = ufs_qcom_phy_get_reset(phy_common);
 	if (ret)

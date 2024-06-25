@@ -115,6 +115,10 @@ struct ufs_qcom_phy {
 
 	enum phy_mode mode;
 	int submode;
+
+	/* Pre-Sil UFS PHY Card type detection */
+	u32 soc_emulation_type;
+
 	struct reset_control *ufs_reset;
 	struct list_head regs_list_head;
 };
