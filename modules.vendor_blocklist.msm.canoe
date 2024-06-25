@@ -4,9 +4,6 @@
 blocklist 8250_of
 blocklist adc-tm
 blocklist atomic64_test
-blocklist can-bcm
-blocklist can-gw
-blocklist can-raw
 blocklist dummy-cpufreq
 blocklist dummy_hcd
 blocklist dummy_hcd
@@ -17,7 +14,6 @@ blocklist fc0012
 blocklist fc0013
 blocklist fc2580
 blocklist it913x
-blocklist kheaders
 blocklist lkdtm
 blocklist llcc_perfmon
 blocklist locktorture
