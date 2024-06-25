@@ -300,9 +300,21 @@ bool find_heaviest_topapp(u64 window_start)
 	/* start with non-prime cpus chosen for this chipset (e.g. golds) */
 	cpumask_and(&last_available_big_cpus, cpu_online_mask, &cpus_for_pipeline);
 	cpumask_andnot(&last_available_big_cpus, &last_available_big_cpus, cpu_halt_mask);
+
+	if (pipeline_special_task) {
+		heavy_wts[0]->pipeline_cpu =
+			cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
+		heavy_wts[0]->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
+		if (cpumask_test_cpu(heavy_wts[0]->pipeline_cpu, &last_available_big_cpus))
+			cpumask_clear_cpu(heavy_wts[0]->pipeline_cpu, &last_available_big_cpus);
+	}
+
 	for (i = 0; i < MAX_NR_PIPELINE; i++) {
 		wts = heavy_wts[i];
 		if (!wts)
+			continue;
+
+		if (i == 0 && pipeline_special_task)
 			continue;
 
 		if (wts->pipeline_cpu != -1) {
@@ -322,7 +334,7 @@ bool find_heaviest_topapp(u64 window_start)
 			continue;
 
 		if (wts->pipeline_cpu == -1) {
-			wts->pipeline_cpu = cpumask_first(&last_available_big_cpus);
+			wts->pipeline_cpu = cpumask_last(&last_available_big_cpus);
 			if (wts->pipeline_cpu >= nr_cpu_ids) {
 				/* drop from heavy if it can't be assigned */
 				heavy_wts[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY_BIT;
@@ -440,6 +452,9 @@ void rearrange_heavy(u64 window_start, bool force)
 	if (num_sched_clusters < 2)
 		return;
 
+	if (pipeline_special_task)
+		return;
+
 	if (have_heavy_list <= 2) {
 		find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
 
@@ -467,23 +482,15 @@ void rearrange_heavy(u64 window_start, bool force)
 	if (delay_rearrange(window_start, AUTO_PIPELINE, force))
 		return;
 
-	if (!soc_feat(SOC_ENABLE_PIPELINE_SWAPPING_BIT) && !force)
+	if (!soc_feat(SOC_ENABLE_PIPELINE_SWAPPING_BIT))
 		return;
 
 	raw_spin_lock_irqsave(&heavy_lock, flags);
-
-	if (pipeline_special_task) {
-		if (force)
-			heavy_wts[0]->pipeline_cpu =
-				cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
-		goto out;
-	}
 
 	/* swap prime for have_heavy_list >= 3 */
 	find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
 	swap_pipeline_with_prime_locked(prime_wts, other_wts);
 
-out:
 	raw_spin_unlock_irqrestore(&heavy_lock, flags);
 }
 
