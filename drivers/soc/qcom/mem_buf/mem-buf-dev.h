@@ -20,7 +20,6 @@
 #define MEM_BUF_CAP_DUAL (MEM_BUF_CAP_SUPPLIER | MEM_BUF_CAP_CONSUMER)
 extern unsigned char mem_buf_capability;
 extern struct device *mem_buf_dev;
-extern struct gen_pool *dmabuf_mem_pool;
 
 /* Hypervisor Interface */
 int mem_buf_assign_mem(u32 op, struct sg_table *sgt,

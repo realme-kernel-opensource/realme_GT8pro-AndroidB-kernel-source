@@ -17,6 +17,7 @@
 #include <linux/cma.h>
 #include <linux/genalloc.h>
 #include <linux/math.h>
+#include <linux/mem-buf-altmap.h>
 
 #include "../../../../drivers/dma-buf/heaps/qcom_sg_ops.h"
 #include "mem-buf-gh.h"
@@ -133,24 +134,6 @@ struct mem_buf_xfer_dmaheap_mem {
 	char name[MEM_BUF_MAX_DMAHEAP_NAME_LEN];
 	struct dma_buf *dmabuf;
 	struct dma_buf_attachment *attachment;
-};
-
-/*
- * mem_buf_dmabuf_obj
- * A dmabuf object representing memory shared/lent by another Virtual machine
- * and obtained via mem_buf_retrieve().
- * @buffer: data type expected by qcom_sg_buf_ops
- * @pgmap: Arguments to memremap_pages
- * @memmap: alternate memmap for the dmabuf if present
- * @memmap_base: base ipa address of alternate memmap memory
- * @memmap_size: ipa size of alternate memmap memory
- */
-struct mem_buf_dmabuf_obj {
-	struct qcom_sg_buffer buffer;
-	struct dev_pagemap pgmap;
-	void *memmap;
-	unsigned long memmap_base;
-	size_t memmap_size;
 };
 
 static int mem_buf_alloc_obj_id(void)
@@ -1227,7 +1210,7 @@ static void *prepare_memmap_membuf(size_t dmabuf_size, struct gh_sgl_desc *sgl_d
 	return membuf_memmap;
 }
 
-static size_t determine_memmap_size(size_t dmabuf_size)
+size_t determine_memmap_size(size_t dmabuf_size)
 {
 	size_t memmap_size, total_memblock_size;
 	size_t memmap_per_section, remaining_memblock_size;
@@ -1241,8 +1224,9 @@ static size_t determine_memmap_size(size_t dmabuf_size)
 
 	return memmap_size;
 }
+EXPORT_SYMBOL_GPL(determine_memmap_size);
 
-static int prepare_altmap(struct mem_buf_dmabuf_obj *obj,
+int prepare_altmap(struct mem_buf_dmabuf_obj *obj,
 		struct gh_sgl_desc **__sgl_desc, size_t dmabuf_size)
 {
 	struct gh_sgl_desc *gh_sgl;
@@ -1301,6 +1285,7 @@ static int prepare_altmap(struct mem_buf_dmabuf_obj *obj,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(prepare_altmap);
 
 struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
 {
@@ -1355,9 +1340,9 @@ struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
 	 */
 	if (dmabuf_size >= SZ_128M && dmabuf_mem_pool) {
 		ret = prepare_altmap(obj, &sgl_desc, dmabuf_size);
-		memmap_base = PFN_PHYS(obj->pgmap.altmap.base_pfn);
 		if (ret)
 			goto err_altmap;
+		memmap_base = PFN_PHYS(obj->pgmap.altmap.base_pfn);
 	}
 
 	ret = mem_buf_map_mem_s2(op, &arg->memparcel_hdl, acl_desc, &sgl_desc,

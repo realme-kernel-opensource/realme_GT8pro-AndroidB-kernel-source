@@ -15,6 +15,7 @@
 #include <linux/memory_hotplug.h>
 #include <linux/memory.h>
 #include <linux/genalloc.h>
+#include <linux/mem-buf-altmap.h>
 
 #include <linux/mem-buf.h>
 #include "mem-buf-dev.h"

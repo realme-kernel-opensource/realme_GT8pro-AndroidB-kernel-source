@@ -13,6 +13,9 @@
 #include <linux/kref.h>
 #include <linux/qcom_tvm_heap.h>
 #include <linux/memremap.h>
+#include <linux/memory.h>
+#include <linux/math.h>
+#include <linux/mem-buf-altmap.h>
 #include "qcom_dt_parser.h"
 #include "qcom_sg_ops.h"
 
@@ -24,6 +27,7 @@ struct tvm_pool {
 	struct kref kref;
 	struct gen_pool *pool;
 	struct file *filp;
+	struct mem_buf_dmabuf_obj *mem_buf_dmabuf_obj;
 };
 
 struct tvm_heap_obj {
@@ -42,10 +46,12 @@ struct tvm_heap {
 static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_data)
 {
 	struct tvm_pool *pool;
-	struct gh_sgl_desc *sgl_desc;
+	struct gh_sgl_desc *sgl_desc = NULL;
 	struct dev_pagemap *pgmap;
-	phys_addr_t base;
-	size_t size;
+	phys_addr_t base, memmap_base;
+	size_t size, dmabuf_size;
+	uint64_t memmap_size;
+	struct mem_buf_dmabuf_obj *obj;
 	int ret;
 	void *kva;
 
@@ -53,11 +59,40 @@ static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_da
 	if (!pool)
 		return ERR_PTR(-ENOMEM);
 
+	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
+	if (!obj) {
+		ret = -ENOMEM;
+		goto err_obj_alloc;
+	}
+	pool->mem_buf_dmabuf_obj = obj;
+
+	/* check if its large dmabuf and would require alternate memory for memmap. */
+	dmabuf_size = alloc_data->size;
+	memmap_size = determine_memmap_size(dmabuf_size);
+
+	/*
+	 * if dmabuf is large or default memmap allocation would likely fail,
+	 * request for extra memory from Primary VM for hosting the memmap data
+	 * for this large dmabuf.
+	 */
+	if (dmabuf_size >= SZ_128M && dmabuf_mem_pool) {
+		ret = prepare_altmap(obj, &sgl_desc, dmabuf_size);
+		if (ret)
+			goto err_altmap;
+		memmap_base = PFN_PHYS(obj->pgmap.altmap.base_pfn);
+	}
+
+	if (sgl_desc)
+		alloc_data->sgl_desc = sgl_desc;
 	pool->membuf = mem_buf_alloc(alloc_data);
 	if (IS_ERR(pool->membuf)) {
 		ret = PTR_ERR(pool->membuf);
 		goto err_mem_buf_alloc;
 	}
+
+	/* free the sgl_desc if created via prepare_altmap */
+	kfree(sgl_desc);
+	sgl_desc = NULL;
 
 	sgl_desc = mem_buf_get_sgl(pool->membuf);
 	if (sgl_desc->n_sgl_entries != 1) {
@@ -75,9 +110,14 @@ static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_da
 	base = sgl_desc->sgl_entries[0].ipa_base;
 	size = sgl_desc->sgl_entries[0].size;
 	memset(pgmap, 0, sizeof(*pgmap));
+	if (obj->memmap) {
+		memcpy(pgmap, (const void *)&obj->pgmap, sizeof(*pgmap));
+		pgmap->range.start = memmap_base;
+	} else
+		pgmap->range.start = base;
+
 	pgmap->type = MEMORY_DEVICE_GENERIC;
 	pgmap->nr_range = 1;
-	pgmap->range.start = base;
 	pgmap->range.end = base + size - 1;
 	kva = memremap_pages(pgmap, 0);
 	if (IS_ERR(kva)) {
@@ -106,6 +146,14 @@ err_gen_pool_create:
 err_memremap:
 	mem_buf_free(pool->membuf);
 err_mem_buf_alloc:
+	if (obj->memmap)
+		mem_buf_free(obj->memmap);
+	if (obj->memmap_base)
+		gen_pool_free(dmabuf_mem_pool, obj->memmap_base, obj->memmap_size);
+	kfree(sgl_desc);
+err_altmap:
+	kfree(obj);
+err_obj_alloc:
 	kfree(pool);
 	return ERR_PTR(ret);
 }
@@ -114,6 +162,7 @@ static void tvm_pool_release(struct kref *kref)
 {
 	struct tvm_pool *pool;
 	struct gh_sgl_desc *sgl_desc;
+	struct mem_buf_dmabuf_obj *obj;
 
 	pool = container_of(kref, struct tvm_pool, kref);
 
@@ -121,6 +170,12 @@ static void tvm_pool_release(struct kref *kref)
 	sgl_desc = mem_buf_get_sgl(pool->membuf);
 	memunmap_pages(&pool->pgmap);
 	mem_buf_free(pool->membuf);
+	obj = pool->mem_buf_dmabuf_obj;
+	if (obj->memmap)
+		mem_buf_free(obj->memmap);
+	if (obj->memmap_base)
+		gen_pool_free(dmabuf_mem_pool, obj->memmap_base, obj->memmap_size);
+	kfree(obj);
 	kfree(pool);
 }
 
