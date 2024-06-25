@@ -10,6 +10,7 @@ debug-regulator.ko
 gcc-canoe.ko
 gdsc-regulator.ko
 smem.ko
+socinfo.ko
 icc-bcm-voter.ko
 icc-debug.ko
 icc-rpmh.ko
