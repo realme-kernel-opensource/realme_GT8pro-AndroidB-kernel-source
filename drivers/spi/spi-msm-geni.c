@@ -1746,15 +1746,19 @@ setup_ipc:
 		return ret;
 
 	hw_ver = geni_se_get_qup_hw_version(&mas->spi_rsc);
+	if (unlikely(!hw_ver)) {
+		dev_err(mas->dev, "%s:Err getting HW version %d\n", __func__, hw_ver);
+		return -ENXIO;
+	}
+
 	major = GENI_SE_VERSION_MAJOR(hw_ver);
 	minor = GENI_SE_VERSION_MINOR(hw_ver);
 
-	if ((major == 1) && (minor == 0)) {
+	if (major == 1 && minor == 0)
 		mas->oversampling = 2;
-		SPI_LOG_DBG(mas->ipc, false, mas->dev,
-			"%s:Major:%d Minor:%d os%d\n",
-		__func__, major, minor, mas->oversampling);
-	}
+
+	SPI_LOG_DBG(mas->ipc, false, mas->dev, "%s:Major:%d Minor:%d os%d\n",
+		    __func__, major, minor, mas->oversampling);
 	if (mas->set_miso_sampling)
 		spi_geni_set_sampling_rate(mas, major, minor);
 
