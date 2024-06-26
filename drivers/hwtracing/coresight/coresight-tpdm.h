@@ -9,7 +9,7 @@
 /* The max number of the datasets that TPDM supports */
 #define TPDM_DATASETS       7
 
-/* CMB Subunit Registers */
+/* CMB/MCMB Subunit Registers */
 #define TPDM_CMB_CR		(0xA00)
 /* CMB subunit timestamp insertion enable register */
 #define TPDM_CMB_TIER		(0xA04)
@@ -34,12 +34,22 @@
 #define TPDM_CMB_TIER_XTRIG_TSENAB	BIT(1)
 /* For timestamp fo all trace */
 #define TPDM_CMB_TIER_TS_ALL		BIT(2)
+/* MCMB trigger lane select */
+#define TPDM_CMB_CR_XTRIG_LNSEL		GENMASK(20, 18)
+/* MCMB lane enablement */
+#define TPDM_CMB_CR_E_LN		GENMASK(17, 10)
 
 /* Patten register number */
 #define TPDM_CMB_MAX_PATT		2
 
 /* MAX number of DSB MSR */
 #define TPDM_CMB_MAX_MSR 32
+
+/* MAX lanes in the output pattern for MCMB configurations*/
+#define TPDM_MCMB_MAX_LANES 8
+
+/* High performance mode */
+#define TPDM_MCMB_E_LN_MASK		GENMASK(7, 0)
 
 /* DSB Subunit Registers */
 #define TPDM_DSB_CR		(0x780)
@@ -112,11 +122,13 @@
  * PERIPHIDR0[0] : Fix to 1 if ImplDef subunit present, else 0
  * PERIPHIDR0[1] : Fix to 1 if DSB subunit present, else 0
  * PERIPHIDR0[2] : Fix to 1 if CMB subunit present, else 0
+ * PERIPHIDR0[6] : Fix to 1 if MCMB subunit present, else 0
  */
 
 #define TPDM_PIDR0_DS_IMPDEF	BIT(0)
 #define TPDM_PIDR0_DS_DSB	BIT(1)
 #define TPDM_PIDR0_DS_CMB	BIT(2)
+#define TPDM_PIDR0_DS_MCMB	BIT(6)
 
 #define TPDM_DSB_MAX_LINES	256
 /* MAX number of EDCR registers */
@@ -245,6 +257,16 @@ struct dsb_dataset {
 };
 
 /**
+ * struct mcmb_dataset
+ * @mcmb_trig_lane:       Save data for trigger lane
+ * @mcmb_lane_select:     Save data for lane enablement
+ */
+struct mcmb_dataset {
+	uint8_t		mcmb_trig_lane;
+	uint8_t		mcmb_lane_select;
+};
+
+/**
  * struct cmb_dataset
  * @trace_mode:       Dataset collection mode
  * @patt_val:         Save value for pattern
@@ -255,6 +277,7 @@ struct dsb_dataset {
  * @patt_ts:          Indicates if pattern match for timestamp is enabled.
  * @trig_ts:          Indicates if CTI trigger for timestamp is enabled.
  * @ts_all:           Indicates if timestamp is enabled for all packets.
+ * @mcmb:             Save data for mcmb tpdm
  */
 struct cmb_dataset {
 	u32			trace_mode;
@@ -266,6 +289,7 @@ struct cmb_dataset {
 	bool			patt_ts;
 	bool			trig_ts;
 	bool			ts_all;
+	struct mcmb_dataset	*mcmb;
 };
 
 /**
@@ -332,5 +356,10 @@ static bool tpdm_has_dsb_dataset(struct tpdm_drvdata *drvdata)
 static bool tpdm_has_cmb_dataset(struct tpdm_drvdata *drvdata)
 {
 	return (drvdata->datasets & TPDM_PIDR0_DS_CMB);
+}
+
+static bool tpdm_has_mcmb_dataset(struct tpdm_drvdata *drvdata)
+{
+	return (drvdata->datasets & TPDM_PIDR0_DS_MCMB);
 }
 #endif  /* _CORESIGHT_CORESIGHT_TPDM_H */
