@@ -50,6 +50,7 @@ def define_canoe():
         "drivers/soc/qcom/qcom_rpmh.ko",
         "drivers/soc/qcom/secure_buffer.ko",
         "drivers/soc/qcom/smem.ko",
+        "drivers/soc/qcom/socinfo.ko",
         "drivers/usb/dwc3/dwc3-msm.ko",
         "drivers/usb/gadget/function/usb_f_ccid.ko",
         "drivers/usb/gadget/function/usb_f_cdev.ko",
