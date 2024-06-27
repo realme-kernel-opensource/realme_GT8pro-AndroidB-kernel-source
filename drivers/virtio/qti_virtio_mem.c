@@ -362,7 +362,7 @@ static int qvm_oom_notify(struct notifier_block *self,
 		return NOTIFY_OK;
 	}
 
-	pr_info("comm: %s totalram_pages: %lu Normal free_pages: %lu Movable free_pages: %lu\n",
+	pr_info_ratelimited("comm: %s totalram_pages: %lu Normal free_pages: %lu Movable free_pages: %lu\n",
 			current->comm, totalram_pages(), get_zone_free_pages(ZONE_NORMAL),
 			get_zone_free_pages(ZONE_MOVABLE));
 
