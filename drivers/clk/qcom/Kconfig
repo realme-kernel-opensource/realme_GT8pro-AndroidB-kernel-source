@@ -1168,6 +1168,15 @@ config SM_DISPCC_CANOE
 	  Say Y if you want to support display devices and functionality such as
 	  splash screen.
 
+config SM_GPUCC_CANOE
+	tristate "CANOE Graphics Clock Controller"
+	depends on SM_GCC_CANOE
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc
+	  Canoe devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
 config SM_GPUCC_6115
 	tristate "SM6115 Graphics Clock Controller"
 	select SM_GCC_6115
