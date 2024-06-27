@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __DRIVERS_INTERCONNECT_QCOM_ICC_RPMH_H__
@@ -116,10 +116,21 @@ struct qcom_icc_node {
 };
 
 /**
+ * enum qcom_icc_bcm_type - The type of aggregation used by a BCM
+ *
+ * @QCOM_ICC_BCM_TYPE_BW: Aggregates SUM of vote_x and MAX of vote_y
+ * @QCOM_ICC_BCM_TYPE_MASK: Aggregates bitwise OR of vote_y
+ */
+enum qcom_icc_bcm_type {
+	QCOM_ICC_BCM_TYPE_BW,
+	QCOM_ICC_BCM_TYPE_MASK,
+};
+
+/**
  * struct qcom_icc_bcm - Qualcomm specific hardware accelerator nodes
  * known as Bus Clock Manager (BCM)
  * @name: the bcm node name used to fetch BCM data from command db
- * @type: latency or bandwidth bcm
+ * @type: aggregation strategy used by this BCM
  * @addr: address offsets used when voting to RPMH
  * @vote_x: aggregated threshold values, represents sum_bw when @type is bw bcm
  * @vote_y: aggregated threshold values, represents peak_bw when @type is bw bcm
@@ -141,7 +152,7 @@ struct qcom_icc_node {
  */
 struct qcom_icc_bcm {
 	const char *name;
-	u32 type;
+	enum qcom_icc_bcm_type type;
 	u32 addr;
 	u64 vote_x[QCOM_ICC_NUM_BUCKETS];
 	u64 vote_y[QCOM_ICC_NUM_BUCKETS];

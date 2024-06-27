@@ -509,7 +509,7 @@ int qcom_icc_bcm_voter_commit(struct bcm_voter *voter)
 	mutex_lock(&voter->lock);
 
 	list_for_each_entry(bcm, &voter->commit_list, list) {
-		if (bcm->enable_mask)
+		if (bcm->type == QCOM_ICC_BCM_TYPE_MASK || bcm->enable_mask)
 			bcm_aggregate_mask(bcm);
 		else
 			bcm_aggregate(bcm);
