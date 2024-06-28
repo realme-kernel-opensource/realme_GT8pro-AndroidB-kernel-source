@@ -4043,7 +4043,6 @@ static void walt_irq_work(struct irq_work *irq_work)
 	int cpu;
 	bool is_migration = false, is_asym_migration = false, is_pipeline_sync_migration = false;
 	u32 wakeup_ctr_sum = 0;
-	u32 prime_wakeup_ctr_sum = 0;
 
 	if (irq_work == &walt_migration_irq_work)
 		is_migration = true;
@@ -4088,9 +4087,6 @@ static void walt_irq_work(struct irq_work *irq_work)
 	if (!is_migration) {
 		for_each_cpu(cpu, cpu_online_mask) {
 			wakeup_ctr_sum += per_cpu(wakeup_ctr, cpu);
-			if (cpumask_test_cpu(cpu,
-						&cpu_array[0][num_sched_clusters - 1]))
-				prime_wakeup_ctr_sum += per_cpu(wakeup_ctr, cpu);
 			per_cpu(wakeup_ctr, cpu) = 0;
 		}
 
@@ -4103,8 +4099,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 	if (!is_migration) {
 		wrq = &per_cpu(walt_rq, cpu_of(this_rq()));
 		pipeline_check(wrq);
-		core_ctl_check(wrq->window_start, wakeup_ctr_sum,
-				prime_wakeup_ctr_sum);
+		core_ctl_check(wrq->window_start, wakeup_ctr_sum);
 		check_obet_set_boost();
 	}
 }
