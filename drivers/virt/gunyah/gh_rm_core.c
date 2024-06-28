@@ -27,6 +27,7 @@
 #include <linux/gunyah.h>
 
 #include "rsc_mgr.h"
+#include "gh_guest_pops.h"
 #include "gh_rm_drv_private.h"
 
 #define GH_RM_MAX_NUM_FRAGMENTS	62
@@ -1091,12 +1092,17 @@ static int gh_rm_drv_probe(struct auxiliary_device *adev,
 	if (ret < 0 && ret != -ENODEV)
 		return ret;
 
+	ret = gh_guest_pops_init();
+	if (ret < 0 && ret != -ENODEV)
+		return ret;
+
 	return 0;
 
 }
 
 static void gh_rm_drv_remove(struct auxiliary_device *adev)
 {
+	gh_guest_pops_remove();
 	gunyah_rm_notifier_unregister(rm, &gh_rm_core_notifier_blk);
 	idr_destroy(&gh_rm_call_idr);
 }
