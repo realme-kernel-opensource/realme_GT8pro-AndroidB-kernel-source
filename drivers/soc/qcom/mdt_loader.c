@@ -5,7 +5,7 @@
  * Copyright (C) 2016 Linaro Ltd
  * Copyright (C) 2015 Sony Mobile Communications Inc
  * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -258,6 +258,10 @@ int qcom_mdt_pas_init(struct device *dev, const struct firmware *fw,
 		if (ret) {
 			/* Unable to set up relocation */
 			dev_err(dev, "error %d setting up firmware %s\n", ret, fw_name);
+			if (dma_phys_below_32b)
+				qcom_scm_pas_shutdown(pas_id);
+			qcom_scm_pas_metadata_release(ctx,
+						      (dma_phys_below_32b) ? dev : NULL);
 			goto out;
 		}
 	}
