@@ -334,9 +334,10 @@ class BazelBuilder:
                 self.run_targets(targets_to_build)
         finally:
             if self.gki_headers:
-                status = subprocess.Popen(["git", "restore",
+                status = subprocess.Popen(["git", "checkout",
                                      "--pathspec-from-file=files_gki_aarch64.txt"],
                                     cwd=os.path.join(self.workspace, "msm-kernel"))
+                status.wait()
                 if status.returncode != 0:
                     logging.error("Failed to restore headers from symlinks")
                     logging.error("You might want to check your msm-kernel tree")
