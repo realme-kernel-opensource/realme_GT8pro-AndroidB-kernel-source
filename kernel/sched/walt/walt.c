@@ -4745,7 +4745,8 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 	/* IPC based smart FMAX */
 	cluster = cpu_cluster(cpu);
 	smart_freq_info = cluster->smart_freq_info;
-	if (smart_freq_info->smart_freq_ipc_participation_mask & IPC_PARTICIPATION) {
+	if (smart_freq_init_done &&
+		smart_freq_info->smart_freq_ipc_participation_mask & IPC_PARTICIPATION) {
 		last_ipc_level = per_cpu(ipc_level, cpu);
 		last_deactivate_ns = per_cpu(ipc_deactivate_ns, cpu);
 		ipc = calculate_ipc(cpu);

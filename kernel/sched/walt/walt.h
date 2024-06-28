@@ -196,6 +196,7 @@ struct smart_freq_cluster_info {
 	struct smart_freq_ipc_reason_config ipc_reason_config[SMART_FMAX_IPC_MAX];
 };
 
+extern bool smart_freq_init_done;
 extern unsigned int big_task_cnt;
 extern struct smart_freq_cluster_info default_freq_config[MAX_CLUSTERS];
 /*=========================================================================*/

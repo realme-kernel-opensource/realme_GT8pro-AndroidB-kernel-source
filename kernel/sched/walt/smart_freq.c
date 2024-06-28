@@ -7,7 +7,7 @@
 #include "walt.h"
 #include "trace.h"
 
-static bool smart_freq_init_done;
+bool smart_freq_init_done;
 
 /* sysctl  handlers */
 unsigned int sysctl_freq_legacy_reason_cfg[SMART_FREQ_LEGACY_TUPLE_SIZE];
@@ -22,6 +22,9 @@ int sched_smart_freq_legacy_dump_handler(struct ctl_table *table, int write,
 					 loff_t *ppos)
 {
 	int ret = -EINVAL, pos = 0, i, j;
+
+	if (!smart_freq_init_done)
+		return -EINVAL;
 
 	mutex_lock(&freq_reason_mutex);
 	for (j = 0; j < num_sched_clusters; j++) {
@@ -45,6 +48,9 @@ int sched_smart_freq_ipc_dump_handler(struct ctl_table *table, int write,
 					 loff_t *ppos)
 {
 	int ret = -EINVAL, pos = 0, i, j;
+
+	if (!smart_freq_init_done)
+		return -EINVAL;
 
 	mutex_lock(&freq_reason_mutex);
 
@@ -80,6 +86,9 @@ int sched_smart_freq_legacy_config_handler(struct ctl_table *table, int write,
 	};
 	unsigned long reason_freq;
 	unsigned long no_reason_freq;
+
+	if (!smart_freq_init_done)
+		return -EINVAL;
 
 	mutex_lock(&freq_reason_mutex);
 
@@ -152,6 +161,8 @@ int sched_smart_freq_ipc_config_handler(struct ctl_table *table, int write,
 	};
 	unsigned long ipc_freq;
 
+	if (!smart_freq_init_done)
+		return -EINVAL;
 
 	mutex_lock(&freq_reason_mutex);
 
