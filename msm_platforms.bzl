@@ -8,6 +8,7 @@ load(":canoe_tuivm.bzl", "define_canoe_tuivm")
 load(":canoe_oemvm.bzl", "define_canoe_oemvm")
 load(":canoe_vms.bzl", "define_canoe_vms")
 load(":vienna.bzl", "define_vienna")
+load(":gen3auto.bzl", "define_gen3auto")
 load(":msm_common.bzl", "define_signing_keys")
 load("//build:msm_kernel_extensions.bzl", "define_top_level_rules")
 
@@ -24,3 +25,4 @@ def define_msm_platforms():
     define_canoe_oemvm()
     define_canoe_vms()
     define_vienna()
+    define_gen3auto()
