@@ -3823,7 +3823,6 @@ static int geni_i3c_probe(struct platform_device *pdev)
 			goto geni_resources_off;
 		}
 	}
-	gi3c->pm_ctrl_client = false;
 	I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
 		    "Client controls the I3C PM, pm_ctrl_client:%d\n",
 		    gi3c->pm_ctrl_client);
