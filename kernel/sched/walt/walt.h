@@ -981,9 +981,18 @@ static inline bool task_fits_max(struct task_struct *p, int dst_cpu)
 {
 	unsigned long task_boost = per_task_boost(p);
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	cpumask_t other_cluster;
 
 	if (wts->pipeline_cpu != -1)
 		return true;
+
+	/*
+	 * If a task is affined only to cpus of cluster then it cannot be a
+	 * misfit
+	 */
+	cpumask_andnot(&other_cluster, cpu_possible_mask, &cpu_cluster(dst_cpu)->cpus);
+	if (!cpumask_intersects(&other_cluster, p->cpus_ptr))
+		return false;
 
 	if (is_max_possible_cluster_cpu(dst_cpu))
 		return true;
