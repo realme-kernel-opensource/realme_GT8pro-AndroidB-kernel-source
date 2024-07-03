@@ -60,6 +60,8 @@ def define_canoe():
         "drivers/usb/gadget/function/usb_f_qdss.ko",
         "drivers/usb/phy/phy-generic.ko",
         "drivers/usb/phy/phy-qcom-emu.ko",
+        "net/mac80211/mac80211.ko",
+        "net/wireless/cfg80211.ko",
     ]
 
     _canoe_consolidate_in_tree_modules = _canoe_in_tree_modules + [
