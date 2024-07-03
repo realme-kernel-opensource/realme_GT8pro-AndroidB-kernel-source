@@ -500,7 +500,6 @@ static int qti_flash_led_disable(struct flash_node_data *fnode)
 	if (rc < 0)
 		goto out;
 
-	fnode->configured = false;
 	fnode->current_ma = 0;
 	fnode->user_current_ma = 0;
 
@@ -607,11 +606,12 @@ static int qti_flash_config_group_symmetry(struct qti_flash_led *led,
 	return rc;
 }
 
-static int qti_flash_led_symmetry_config(struct flash_switch_data *snode)
+static int qti_flash_led_symmetry_config(struct flash_switch_data *snode,
+					 struct flash_node_data *fnode)
 {
 	struct qti_flash_led *led = snode->led;
 	enum flash_led_type type = FLASH_LED_TYPE_UNKNOWN;
-	int i, rc = 0;
+	int i, rc = 0, led_mask = 0;
 
 	/* Determine which LED type has triggered switch ON */
 	for (i = 0; i < led->num_fnodes; i++) {
@@ -637,14 +637,22 @@ static int qti_flash_led_symmetry_config(struct flash_switch_data *snode)
 						led->snode[i].led_mask);
 				if (rc < 0)
 					return rc;
+
+				if (fnode && (led->snode[i].led_mask & BIT(fnode->id)))
+					led_mask |= led->snode[i].led_mask;
 			}
 		}
 	} else {
 		rc = qti_flash_config_group_symmetry(led, type,
 				snode->led_mask);
+		if (rc < 0)
+			return rc;
+
+		if (fnode && (snode->led_mask & BIT(fnode->id)))
+			led_mask |= snode->led_mask;
 	}
 
-	return rc;
+	return led_mask;
 }
 
 static void qti_flash_led_brightness_set(struct led_classdev *led_cdev,
@@ -653,10 +661,12 @@ static void qti_flash_led_brightness_set(struct led_classdev *led_cdev,
 	struct led_classdev_flash *fdev;
 	struct flash_node_data *fnode;
 	struct qti_flash_led *led;
-	int i, rc;
+	int i, rc, led_mask = 0;
+	bool strobe;
 
 	fdev = container_of(led_cdev, struct led_classdev_flash, led_cdev);
 	fnode = container_of(fdev, struct flash_node_data, fdev);
+	strobe = (brightness && !(fnode->current_ma));
 	led = fnode->led;
 
 	if (is_channel_configured(fnode))
@@ -673,10 +683,24 @@ static void qti_flash_led_brightness_set(struct led_classdev *led_cdev,
 				led->snode[i].symmetry_en,
 				led->snode[i].enabled);
 		if (led->snode[i].symmetry_en && led->snode[i].enabled) {
-			qti_flash_led_symmetry_config(&led->snode[i]);
-			break;
+			rc = qti_flash_led_symmetry_config(&led->snode[i], fnode);
+			if (rc < 0) {
+				pr_err("Failed to set symmetry for snode[%d], rc = %d\n", i, rc);
+				return;
+			}
+			led_mask |= rc;
+		} else if (led->snode[i].enabled) {
+			if (led->snode[i].led_mask & BIT(fnode->id))
+				led_mask |= BIT(fnode->id);
 		}
 	}
+
+	/*
+	 * Restrobe LED if setting brightness to a torch device that is currently off
+	 * and is controlled by an enabled switch device
+	 */
+	if (fnode->type == FLASH_LED_TYPE_TORCH && strobe && led_mask)
+		qti_flash_led_strobe(led, NULL, led_mask, led_mask);
 }
 
 #define FLASH_LMH_TRIGGER_LIMIT_MA 1000
@@ -690,7 +714,7 @@ static int qti_flash_switch_enable(struct flash_switch_data *snode)
 
 	/* If symmetry enabled switch, then turn ON all its LEDs */
 	if (snode->symmetry_en) {
-		rc = qti_flash_led_symmetry_config(snode);
+		rc = qti_flash_led_symmetry_config(snode, NULL);
 		if (rc < 0) {
 			pr_err("Failed to configure switch symmetrically, rc=%d\n",
 				rc);
@@ -774,6 +798,8 @@ static int qti_flash_switch_disable(struct flash_switch_data *snode)
 				led->fnode[i].id);
 			break;
 		}
+
+		led->fnode[i].configured = false;
 	}
 
 	snode->on_time_ms = 0;
@@ -1276,8 +1302,11 @@ static int qti_flash_strobe_set(struct led_classdev_flash *fdev,
 
 	if (!state) {
 		rc = qti_flash_led_disable(fnode);
-		if (rc < 0)
+		if (rc < 0) {
 			pr_err("Failed to disable LED %u\n", fnode->id);
+			return rc;
+		}
+		fnode->configured = false;
 	}
 
 	return rc;
