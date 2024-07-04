@@ -9,6 +9,7 @@
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
+#include <linux/ipc_logging.h>
 #include <linux/kernel.h>
 #include <linux/log2.h>
 #include <linux/math64.h>
@@ -26,6 +27,8 @@
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
 
 static LIST_HEAD(adc_tm_device_list);
+
+#define ADC5_GEN3_REGMAP_ID			0x40
 
 #define ADC5_GEN3_HS				0x45
 #define ADC5_GEN3_HS_BUSY			BIT(7)
@@ -227,6 +230,7 @@ struct adc5_channel_prop {
  * struct adc5_chip - ADC private structure.
  * @regmap: SPMI ADC5 peripheral register map field.
  * @dev: SPMI ADC5 device.
+ * @ipc_log: ipc logging handle.
  * @base: pointer to array of ADC peripheral base and interrupt.
  * @debug_base: base address for the reserved ADC peripheral,
  *	to dump for debug purposes alone.
@@ -248,6 +252,7 @@ struct adc5_channel_prop {
 struct adc5_chip {
 	struct regmap			*regmap;
 	struct device			*dev;
+	void				*ipc_log;
 	struct adc5_base_data		*base;
 	u16				debug_base;
 	unsigned int			num_sdams;
@@ -322,11 +327,11 @@ static int adc5_decimation_from_dt(u32 value,
 
 	return -ENOENT;
 }
-
-#if IS_ENABLED(CONFIG_QCOM_SPMI_ADC5_GEN3_DEBUG_LOGGING)
 #define NUM_BYTES	8
 #define REG_COUNT	32
+#define REG_IPC_COUNT	6
 
+#if IS_ENABLED(CONFIG_QCOM_SPMI_ADC5_GEN3_DEBUG_LOGGING)
 static void adc5_gen3_dump_register(struct regmap *regmap, unsigned int offset)
 {
 	int i, rc;
@@ -361,8 +366,31 @@ static void adc5_gen3_dump_regs_debug(struct adc5_chip *adc)
 	BUG_ON(1);
 }
 #else
-static inline void adc5_gen3_dump_regs_debug(struct adc5_chip *adc)
-{}
+static void adc5_gen3_ipc_dump_register(struct adc5_chip *adc, unsigned int offset)
+{
+	int i, rc;
+	u8 buf[NUM_BYTES];
+
+	for (i = 0; i < REG_IPC_COUNT; i++) {
+		rc = regmap_bulk_read(adc->regmap, offset, buf, sizeof(buf));
+		if (rc < 0) {
+			pr_err("debug register dump failed with rc=%d\n", rc);
+			return;
+		}
+		ipc_log_string(adc->ipc_log, "%#04x: %*ph\n", offset, (int)(sizeof(buf)), buf);
+		offset += NUM_BYTES;
+	}
+}
+
+static void adc5_gen3_dump_regs_debug(struct adc5_chip *adc)
+{
+	u32 i;
+
+	for (i = 0; i < adc->num_sdams; i++) {
+		ipc_log_string(adc->ipc_log, "ADC SDAM%d DUMP\n", i);
+		adc5_gen3_ipc_dump_register(adc, adc->base[i].base_addr + ADC5_GEN3_REGMAP_ID);
+	}
+}
 #endif
 
 static int adc5_gen3_read_voltage_data(struct adc5_chip *adc, u16 *data,
@@ -482,6 +510,9 @@ static int adc5_gen3_poll_wait_hs(struct adc5_chip *adc,
 
 	if (count == ADC5_GEN3_HS_RETRY_COUNT) {
 		pr_err("Setting HS ready bit timed out, status:%#x\n", status);
+		ipc_log_string(adc->ipc_log,
+				"Setting HS ready bit timed out, status:%#x\n",
+				status);
 		return -ETIMEDOUT;
 	}
 
@@ -541,6 +572,9 @@ static int adc5_gen3_do_conversion(struct adc5_chip *adc,
 	if (!rc && !poll_eoc) {
 		pr_err("Reading ADC channel %s timed out\n",
 			prop->datasheet_name);
+		ipc_log_string(adc->ipc_log,
+				"Reading ADC channel %s timed out\n",
+				prop->datasheet_name);
 		adc5_gen3_dump_regs_debug(adc);
 		ret = -ETIMEDOUT;
 		goto unlock;
@@ -636,7 +670,8 @@ static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 	}
 
 	/* CHAN0 is the preconfigured channel for immediate conversion */
-	if (!status && !conv_err && (eoc_status & ADC5_GEN3_EOC_CHAN_0))
+	if ((status & ADC5_GEN3_STATUS1_EOC) && !conv_err &&
+			(eoc_status & ADC5_GEN3_EOC_CHAN_0))
 		complete(&adc->complete);
 
 	pr_debug("Interrupt status:%#x, EOC status:%#x, conv_err:%#x\n",
@@ -644,6 +679,9 @@ static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 
 	if (status & ADC5_GEN3_STATUS1_CONV_FAULT) {
 		pr_err_ratelimited("Unexpected conversion fault, status:%#x, eoc_status:%#x, conv_err:%#x\n",
+					status, eoc_status, conv_err);
+		ipc_log_string(adc->ipc_log,
+				"Unexpected conversion fault, status:%#x, eoc_status:%#x, conv_err:%#x\n",
 					status, eoc_status, conv_err);
 		adc5_gen3_dump_regs_debug(adc);
 
@@ -705,6 +743,9 @@ static void tm_err_handler_work(struct work_struct *work)
 				continue;
 
 			if (conv_err & BIT(adc->chan_props[i].tm_chan_index)) {
+				ipc_log_string(adc->ipc_log,
+					"Reconfiguring %s channel after conversion fault\n",
+					adc->chan_props[i].datasheet_name);
 				mutex_lock(&adc->lock);
 				adc_tm5_gen3_configure(&adc->chan_props[i]);
 				mutex_unlock(&adc->lock);
@@ -1929,6 +1970,10 @@ static int adc5_gen3_probe(struct platform_device *pdev)
 	list_add_tail(&adc->list, &adc_tm_device_list);
 	adc->device_list = &adc_tm_device_list;
 
+	adc->ipc_log = ipc_log_context_create(10, "adc5-gen3", 0);
+	if (!adc->ipc_log)
+		pr_warn("Error in creating ipc_log for adc5-gen3\n");
+
 	return devm_iio_device_register(dev, indio_dev);
 
 fail:
@@ -1978,6 +2023,8 @@ static int adc5_gen3_exit(struct platform_device *pdev)
 	mutex_destroy(&adc->lock);
 
 	list_del(&adc->list);
+
+	ipc_log_context_destroy(adc->ipc_log);
 
 	return 0;
 }
