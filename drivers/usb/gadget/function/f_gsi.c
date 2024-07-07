@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -489,6 +489,12 @@ static int ipa_connect_channels(struct gsi_data_port *d_port)
 	log_event_dbg("IN: num_bufs:=%zu, buf_len=%zu\n",
 		d_port->in_request.num_bufs, d_port->in_request.buf_len);
 
+	/*
+	 * Set DWC3 endpoint mode to GSI for cases where disconnect/connect
+	 * channels occurs w/o bind(). (i.e. RNDIS adapter enable/disable)
+	 */
+	msm_ep_set_mode(d_port->in_ep, USB_EP_GSI);
+
 	ret = usb_gsi_ep_op(d_port->in_ep, &d_port->in_request,
 			GSI_EP_OP_PREPARE_TRBS);
 	if (ret) {
@@ -543,6 +549,13 @@ static int ipa_connect_channels(struct gsi_data_port *d_port)
 		log_event_dbg("OUT: num_bufs:=%zu, buf_len=%zu\n",
 			d_port->out_request.num_bufs,
 			d_port->out_request.buf_len);
+
+		/*
+		 * Set DWC3 endpoint mode to GSI for cases where disconnect/connect
+		 * channels occurs w/o bind(). (i.e. RNDIS adapter enable/disable)
+		 */
+		msm_ep_set_mode(d_port->out_ep, USB_EP_GSI);
+
 		ret = usb_gsi_ep_op(d_port->out_ep, &d_port->out_request,
 			GSI_EP_OP_PREPARE_TRBS);
 		if (ret) {
