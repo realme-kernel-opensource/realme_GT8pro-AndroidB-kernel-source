@@ -1423,7 +1423,7 @@ struct freq_hist {
 	struct freq_log log[FREQ_LOG_MAX];
 };
 
-#ifdef CONFIG_QCOM_MINIDUMP_PANIC_CPUFREQ
+#ifdef CONFIG_QCOM_MINIDUMP_PANIC_CPUFREQ_INFO
 static int max_cluster;
 static struct freq_hist *cpuclk_log;
 
@@ -1456,6 +1456,8 @@ static void register_cpufreq_log(void)
 	freq_hist_sz = sizeof(struct freq_hist) * (max_cluster + 1);
 
 	cpuclk_log = kzalloc(freq_hist_sz, GFP_KERNEL);
+	if (!cpuclk_log)
+		return;
 
 	strscpy(md_entry.name, "FREQ_LOG", sizeof(md_entry.name));
 	md_entry.virt_addr = (uintptr_t)cpuclk_log;
@@ -1463,7 +1465,7 @@ static void register_cpufreq_log(void)
 	md_entry.size = freq_hist_sz;
 
 	if (msm_minidump_add_region(&md_entry) < 0)
-		pr_err("Failed to add pmsg in Minidump\n");
+		pr_err("Failed to add %s in Minidump\n", md_entry.name);
 
 	register_trace_android_vh_cpufreq_resolve_freq(log_cpu_freq, NULL);
 	register_trace_android_vh_cpufreq_fast_switch(log_cpu_freq, NULL);
@@ -1471,7 +1473,7 @@ static void register_cpufreq_log(void)
 }
 #else
 static inline void register_cpufreq_log(void) {}
-#endif /* CONFIG_QCOM_MINIDUMP_PANIC_CPUFREQ */
+#endif /* CONFIG_QCOM_MINIDUMP_PANIC_CPUFREQ_INFO */
 
 #ifdef CONFIG_QCOM_MINIDUMP_PSTORE
 static void register_pstore_info(void)
