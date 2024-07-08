@@ -297,7 +297,7 @@ static int gh_sec_vm_loader_load_fw(struct gh_sec_vm_dev *vm_dev,
 	return ret;
 }
 
-long gh_vm_ioctl_get_reserved_memory_size(struct gh_vm *vm, unsigned long arg)
+long gh_vm_ioctl_get_fw_resv_mem_size(struct gh_vm *vm, unsigned long arg)
 {
 	struct gh_sec_vm_dev *sec_vm_dev;
 	struct gh_fw_name vm_fw_name;
@@ -321,7 +321,7 @@ static bool pages_are_mergeable(struct page *a, struct page *b)
 	return page_to_pfn(a) + 1 == page_to_pfn(b);
 }
 
-long gh_vm_ioctl_set_user_mem_region(struct gh_vm *vm, unsigned long arg)
+long gh_vm_ioctl_set_fw_user_mem_region(struct gh_vm *vm, unsigned long arg)
 {
 	struct gh_userspace_memory_region region;
 	struct page *curr_page, *prev_page;
