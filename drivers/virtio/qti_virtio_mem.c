@@ -391,7 +391,7 @@ static struct notifier_block qvm_oom_nb = {
 		.priority = QVM_OOM_NOTIFY_PRIORITY,
 };
 
-static int __init qti_virtio_mem_init(void)
+int qti_virtio_mem_init(struct platform_device *pdev)
 {
 	int ret;
 	struct device *dev;
@@ -441,16 +441,19 @@ err_class_create:
 err_chrdev_region:
 	return ret;
 }
-module_init(qti_virtio_mem_init);
 
-static void __exit qti_virtio_mem_exit(void)
+void qti_virtio_mem_exit(struct platform_device *pdev)
 {
-	WARN(!list_empty(&qvm_list), "Unloading module with nonzero hint objects\n");
+	struct device *dev;
+
+	WARN(!list_empty(&qvm_list), "Unloading driver with nonzero hint objects\n");
 
 	unregister_oom_notifier(&qvm_oom_nb);
+	dev = class_find_device_by_devt(qvm_class, qvm_dev_no);
+	if (dev)
+		sysfs_remove_group(&dev->kobj, &dev_group);
 	device_destroy(qvm_class, qvm_dev_no);
 	cdev_del(&qvm_char_dev);
 	class_destroy(qvm_class);
 	unregister_chrdev_region(qvm_dev_no, QTI_VIRTIO_MEM_MAX_DEVS);
 }
-module_exit(qti_virtio_mem_exit);

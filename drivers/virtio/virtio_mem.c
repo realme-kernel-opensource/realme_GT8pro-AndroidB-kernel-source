@@ -3,7 +3,7 @@
  * Virtio-mem device driver.
  *
  * Copyright Red Hat, Inc. 2020
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Author(s): David Hildenbrand <david@redhat.com>
  */
@@ -90,6 +90,7 @@ static int virtio_mem_send_plug_request(struct virtio_mem *vm, uint64_t addr,
 					uint64_t size, bool memmap);
 static int virtio_mem_send_unplug_request(struct virtio_mem *vm, uint64_t addr,
 					  uint64_t size, bool memmap);
+static void virtio_mem_deinit_hotplug(struct virtio_mem *vm);
 
 /*
  * Register a virtio-mem device so it will be considered for the online_page
@@ -2800,6 +2801,10 @@ static int virtio_mem_probe(struct platform_device *vdev)
 
 	virtio_mem_dev = vm;
 
+	rc = qti_virtio_mem_init(vdev);
+	if (rc)
+		goto out_deinit_hotplug;
+
 	/* trigger a config update to start processing the requested_size */
 	if (!vm->in_kdump) {
 		atomic_set(&vm->config_changed, 1);
@@ -2808,6 +2813,8 @@ static int virtio_mem_probe(struct platform_device *vdev)
 
 	return 0;
 
+out_deinit_hotplug:
+	virtio_mem_deinit_hotplug(vm);
 out_free_vm:
 	kfree(vm);
 	platform_set_drvdata(vdev, NULL);
@@ -2890,6 +2897,8 @@ static void virtio_mem_deinit_kdump(struct virtio_mem *vm)
 static int virtio_mem_remove(struct platform_device *vdev)
 {
 	struct virtio_mem *vm = platform_get_drvdata(vdev);
+
+	qti_virtio_mem_exit(vdev);
 
 	if (vm->in_kdump)
 		virtio_mem_deinit_kdump(vm);

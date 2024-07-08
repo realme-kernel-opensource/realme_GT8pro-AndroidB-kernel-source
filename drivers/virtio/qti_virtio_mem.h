@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef QTI_VIRTIO_MEM_PRIVATE_H
 #define QTI_VIRTIO_MEM_PRIVATE_H
@@ -233,6 +233,8 @@ struct virtio_mem {
 };
 
 void virtio_mem_config_changed(struct platform_device *vdev);
+int qti_virtio_mem_init(struct platform_device *pdev);
+void qti_virtio_mem_exit(struct platform_device *pdev);
 
 /* For now, only allow one virtio-mem device */
 extern struct virtio_mem *virtio_mem_dev;
