@@ -85,8 +85,8 @@ static int qcom_cpufreq_thermal_driver_probe(struct platform_device *pdev)
 
 		domain->policy = cpufreq_cpu_get(cpu);
 		if (!domain->policy) {
-			dev_err(dev, "Error getting policy for CPU%d\n", i);
-			ret = -EINVAL;
+			dev_dbg(dev, "Error getting policy for CPU%d\n", i);
+			ret = -EPROBE_DEFER;
 			goto err;
 		}
 
