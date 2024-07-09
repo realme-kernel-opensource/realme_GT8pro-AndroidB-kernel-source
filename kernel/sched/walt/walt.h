@@ -1410,4 +1410,6 @@ extern unsigned int sysctl_ipc_freq_levels_cluster3[SMART_FMAX_IPC_MAX];
 extern int sched_smart_freq_ipc_handler(struct ctl_table *table, int write,
 				      void __user *buffer, size_t *lenp,
 				      loff_t *ppos);
+extern unsigned int sysctl_sched_legacy_smart_freq_hyst_cpu_ns[WALT_NR_CPUS];
+extern unsigned int sysctl_sched_legacy_smart_freq_hyst_enable_cpus;
 #endif /* _WALT_H */

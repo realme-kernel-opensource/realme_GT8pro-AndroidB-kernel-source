@@ -33,6 +33,7 @@ static DEFINE_PER_CPU(u64, hyst_time);
 static DEFINE_PER_CPU(u64, coloc_hyst_busy);
 static DEFINE_PER_CPU(u64, coloc_hyst_time);
 static DEFINE_PER_CPU(u64, util_hyst_time);
+static DEFINE_PER_CPU(u64, legacy_smart_freq_time);
 
 #define NR_THRESHOLD_PCT		40
 #define MAX_RTGB_TIME (sysctl_sched_coloc_busy_hyst_max_ms * NSEC_PER_MSEC)
@@ -206,6 +207,9 @@ void sched_update_hyst_times(void)
 		per_cpu(util_hyst_time, cpu) = (BIT(cpu)
 				& sysctl_sched_util_busy_hyst_enable_cpus) ?
 				sysctl_sched_util_busy_hyst_cpu[cpu] : 0;
+		per_cpu(legacy_smart_freq_time, cpu) = (BIT(cpu)
+				& sysctl_sched_legacy_smart_freq_hyst_enable_cpus) ?
+				sysctl_sched_legacy_smart_freq_hyst_cpu_ns[cpu] : 0;
 	}
 }
 
@@ -221,12 +225,15 @@ static inline void update_busy_hyst_end_time(int cpu, int enq,
 	int i;
 	bool hyst_trigger, coloc_trigger;
 	bool dequeue = (enq < 0);
+	struct walt_sched_cluster *cluster;
+	struct smart_freq_cluster_info *smart_freq_info;
+	unsigned int cluster_active_reason;
 
 	if (is_max_possible_cluster_cpu(cpu) && is_obet)
 		return;
 
 	if (!per_cpu(hyst_time, cpu) && !per_cpu(coloc_hyst_time, cpu) &&
-	    !per_cpu(util_hyst_time, cpu))
+	    !per_cpu(util_hyst_time, cpu) && !per_cpu(legacy_smart_freq_time, cpu))
 		return;
 
 	if (prev_nr_run >= BUSY_NR_RUN && per_cpu(nr, cpu) < BUSY_NR_RUN)
@@ -259,6 +266,12 @@ static inline void update_busy_hyst_end_time(int cpu, int enq,
 	agg_hyst_time = max(max(hyst_trigger ? per_cpu(hyst_time, cpu) : 0,
 			    coloc_trigger ? per_cpu(coloc_hyst_time, cpu) : 0),
 			    util_load_trigger ?	per_cpu(util_hyst_time, cpu) : 0);
+	cluster = cpu_cluster(cpu);
+	smart_freq_info = cluster->smart_freq_info;
+	cluster_active_reason = smart_freq_info->cluster_active_reason &
+			~BIT(NO_REASON_SMART_FREQ);
+	agg_hyst_time = max(agg_hyst_time, cluster_active_reason ?
+			per_cpu(legacy_smart_freq_time, cpu) : 0);
 
 	if (agg_hyst_time) {
 		atomic64_set(&per_cpu(busy_hyst_end_time, cpu),
@@ -266,7 +279,8 @@ static inline void update_busy_hyst_end_time(int cpu, int enq,
 		trace_sched_busy_hyst_time(cpu, agg_hyst_time, prev_nr_run,
 					cpu_util(cpu), per_cpu(hyst_time, cpu),
 					per_cpu(coloc_hyst_time, cpu),
-					per_cpu(util_hyst_time, cpu));
+					per_cpu(util_hyst_time, cpu),
+					per_cpu(legacy_smart_freq_time, cpu));
 	}
 }
 
