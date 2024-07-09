@@ -37,12 +37,14 @@
 #include <trace/events/qcom_haptics.h>
 
 /* status register definitions in HAPTICS_CFG module */
+#define HAP_CFG_REVISION1_REG			0x00
 #define HAP_CFG_REVISION2_REG			0x01
 #define HAP_CFG_V1				0x1
 #define HAP_CFG_V2				0x2
 #define HAP_CFG_V3				0x3
 #define HAP_CFG_V4				0x4
 #define HAP_CFG_V5				0x5
+#define MAJOR_REV(rev)				((rev) >> 8)
 
 #define HAP_CFG_STATUS_DATA_MSB_REG		0x09
 /* STATUS_DATA_MSB definitions while MOD_STATUS_SEL is 0 */
@@ -282,12 +284,14 @@
 #define HAP_CFG_ISENSE_PEAK_MSB_MASK		GENMASK(4, 0)
 
 /* version register definitions for HAPTICS_PATTERN module */
+#define HAP_PTN_REVISION1_REG			0x00
 #define HAP_PTN_REVISION2_REG			0x01
 #define HAP_PTN_V1				0x1
 #define HAP_PTN_V2				0x2
 #define HAP_PTN_V3				0x3
 #define HAP_PTN_V4				0x4
 #define HAP_PTN_V5				0x5
+#define HAP_PTN_PATX_PLAY_CFG_SUPPORT_MIN_REV	0x501
 
 /* status register definition for HAPTICS_PATTERN module */
 #define HAP_PTN_FIFO_READY_STS_REG		0x08
@@ -353,6 +357,9 @@
 #define MMAP_PAT1_LEN_MASK			GENMASK(6, 0)
 #define MMAP_PAT2_LEN_MASK			GENMASK(5, 0)
 #define MMAP_PAT3_PAT4_LEN_MASK			GENMASK(4, 0)
+
+#define HAP_PTN_PATX_PLAY_CFG			0xA2
+#define HAP530_V2_MMAP_PAT_LEN_PER_LSB		1
 
 /* HAPTICS_PATTERN registers only present in HAP530_HV */
 #define HAP_PTN_FORCE_TWIND_CAL_MSB		0x30
@@ -646,6 +653,7 @@ struct mmap_partition {
 struct mmap_hw_info {
 	u32	memory_size;
 	u32	pat_mem_step;
+	u32	pat_mem_play_step;
 	u32	fifo_mem_step;
 	u8	fifo_mem_mask;
 };
@@ -754,8 +762,8 @@ struct haptics_chip {
 	u32				clamped_vmax_mv;
 	u32				wa_flags;
 	u32				primitive_duration;
-	u8				cfg_revision;
-	u8				ptn_revision;
+	u16				cfg_revision;
+	u16				ptn_revision;
 	u8				hpwr_intf_ctl;
 	u16				hbst_revision;
 	u16				max_vmax_mv;
@@ -2511,7 +2519,8 @@ static int haptics_load_predefined_effect(struct haptics_chip *chip,
 				return rc;
 
 			pat_sel_mmap = &chip->mmap.pat_sel_mmap[effect->pat_sel];
-			length = pat_sel_mmap->length / HAP530_MMAP_PAT_LEN_PER_LSB;
+			length = pat_sel_mmap->length /
+					chip->mmap.hw_info.pat_mem_play_step;
 			addr = pat_sel_mmap->start_addr / HAP530_MMAP_PAT_LEN_PER_LSB;
 			val[0] = addr & HAP_PTN_PATX_MEM_LEN_LO_MASK;
 			val[1] = (addr >> HAP_PTN_PATX_MEM_LEN_HI_SHIFT)
@@ -3431,6 +3440,7 @@ static int haptics_init_fifo_memory(struct haptics_chip *chip)
 	struct mmap_partition *partitions;
 	int counts;
 	int rc;
+	u8 val;
 
 	/* HAP525_HV haptics module and above support PATx_MEM pattern source */
 	if (chip->hw_type < HAP525_HV) {
@@ -3449,8 +3459,19 @@ static int haptics_init_fifo_memory(struct haptics_chip *chip)
 		counts = chip->mmap_effect_count;
 		chip->mmap.hw_info.memory_size = HAP530_MMAP_NUM_BYTES;
 		chip->mmap.hw_info.pat_mem_step = HAP530_MMAP_PAT_LEN_PER_LSB;
+		chip->mmap.hw_info.pat_mem_play_step = HAP530_MMAP_PAT_LEN_PER_LSB;
 		chip->mmap.hw_info.fifo_mem_step = HAP530_MMAP_FIFO_LEN_PER_LSB;
 		chip->mmap.hw_info.fifo_mem_mask = HAP530_MMAP_FIFO_LEN_MASK;
+
+		if (chip->ptn_revision >= HAP_PTN_PATX_PLAY_CFG_SUPPORT_MIN_REV) {
+			val = HAP530_V2_MMAP_PAT_LEN_PER_LSB;
+			rc = haptics_write(chip, chip->ptn_addr_base,
+					HAP_PTN_PATX_PLAY_CFG, &val, 1);
+			if (rc < 0)
+				return rc;
+			chip->mmap.hw_info.pat_mem_play_step =
+					HAP530_V2_MMAP_PAT_LEN_PER_LSB;
+		}
 	}
 
 	if (!counts) {
@@ -4288,17 +4309,17 @@ static int haptics_get_revision(struct haptics_chip *chip)
 	u8 val[2];
 
 	rc = haptics_read(chip, chip->cfg_addr_base,
-			HAP_CFG_REVISION2_REG, val, 1);
+			HAP_CFG_REVISION1_REG, val, 2);
 	if (rc < 0)
 		return rc;
 
-	chip->cfg_revision = val[0];
+	chip->cfg_revision = (val[1] << 8) | val[0];
 	rc = haptics_read(chip, chip->ptn_addr_base,
-			HAP_PTN_REVISION2_REG, val, 1);
+			HAP_PTN_REVISION1_REG, val, 2);
 	if (rc < 0)
 		return rc;
 
-	chip->ptn_revision = val[0];
+	chip->ptn_revision = (val[1] << 8) | val[0];
 
 	if (is_haptics_external_powered(chip)) {
 		dev_info(chip->dev, "haptics revision: HAP_CFG %#x, HAP_PTN %#x\n",
@@ -4315,20 +4336,20 @@ static int haptics_get_revision(struct haptics_chip *chip)
 
 	}
 
-	if ((chip->cfg_revision == HAP_CFG_V2) &&
-			(chip->ptn_revision == HAP_PTN_V2)) {
+	if ((MAJOR_REV(chip->cfg_revision) == HAP_CFG_V2) &&
+			(MAJOR_REV(chip->ptn_revision) == HAP_PTN_V2)) {
 		chip->hw_type = HAP520;
 		chip->fifo_info = &hap520_fifo;
-	} else if ((chip->cfg_revision == HAP_CFG_V3) &&
-			(chip->ptn_revision == HAP_PTN_V3)) {
+	} else if ((MAJOR_REV(chip->cfg_revision) == HAP_CFG_V3) &&
+			(MAJOR_REV(chip->ptn_revision) == HAP_PTN_V3)) {
 		chip->hw_type = HAP520_MV;
 		chip->fifo_info = &hap520_mv_fifo;
-	} else if ((chip->cfg_revision == HAP_CFG_V4) &&
-			(chip->ptn_revision == HAP_PTN_V4)) {
+	} else if ((MAJOR_REV(chip->cfg_revision) == HAP_CFG_V4) &&
+			(MAJOR_REV(chip->ptn_revision) == HAP_PTN_V4)) {
 		chip->hw_type = HAP525_HV;
 		chip->fifo_info = &hap525_fifo;
-	} else if ((chip->cfg_revision == HAP_CFG_V5) &&
-			(chip->ptn_revision == HAP_PTN_V5)) {
+	} else if ((MAJOR_REV(chip->cfg_revision) == HAP_CFG_V5) &&
+			(MAJOR_REV(chip->ptn_revision) == HAP_PTN_V5)) {
 		chip->hw_type = HAP530_HV;
 		chip->fifo_info = &hap530_fifo;
 	} else {
@@ -5940,7 +5961,7 @@ static int __maybe_unused haptics_suspend(struct device *dev)
 	struct haptics_chip *chip = dev_get_drvdata(dev);
 	int rc = 0;
 
-	if (chip->cfg_revision == HAP_CFG_V1)
+	if (MAJOR_REV(chip->cfg_revision) == HAP_CFG_V1)
 		return 0;
 
 	rc = haptics_suspend_config(dev);
