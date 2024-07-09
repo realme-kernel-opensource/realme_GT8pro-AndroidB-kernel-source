@@ -1298,7 +1298,7 @@ static bool core_ctl_check_masks_set(void)
 }
 
 bool prev_is_sbt;
-#define SBT_LIMIT 15
+#define SBT_LIMIT 45
 /* is the system in a single-big-thread case? */
 static inline bool core_ctl_is_sbt(int prev_is_sbt_windows, u32 wakeup_ctr_sum)
 {
