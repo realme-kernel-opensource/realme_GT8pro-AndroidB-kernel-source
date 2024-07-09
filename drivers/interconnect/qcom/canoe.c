@@ -2523,8 +2523,8 @@ static struct qcom_icc_node qns_mem_noc_hf_disp_crm_hw_5 = {
 
 static struct qcom_icc_bcm bcm_acv = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_HLOS,
-	.enable_mask = 0x1,
 	.perf_mode_mask = 0x2,
 	.num_nodes = 1,
 	.nodes = { &ebi },
@@ -2711,8 +2711,8 @@ static struct qcom_icc_bcm bcm_sn4 = {
 
 static struct qcom_icc_bcm bcm_acv_cam_ife_0 = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_CAM_IFE_0,
-	.enable_mask = 0x1,
 	.num_nodes = 1,
 	.nodes = { &ebi_cam_ife_0 },
 };
@@ -2758,8 +2758,8 @@ static struct qcom_icc_bcm bcm_sh1_cam_ife_0 = {
 
 static struct qcom_icc_bcm bcm_acv_cam_ife_1 = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_CAM_IFE_1,
-	.enable_mask = 0x1,
 	.num_nodes = 1,
 	.nodes = { &ebi_cam_ife_1 },
 };
@@ -2805,8 +2805,8 @@ static struct qcom_icc_bcm bcm_sh1_cam_ife_1 = {
 
 static struct qcom_icc_bcm bcm_acv_cam_ife_2 = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_CAM_IFE_2,
-	.enable_mask = 0x1,
 	.num_nodes = 1,
 	.nodes = { &ebi_cam_ife_2 },
 };
@@ -2852,9 +2852,9 @@ static struct qcom_icc_bcm bcm_sh1_cam_ife_2 = {
 
 static struct qcom_icc_bcm bcm_acv_pcie_crm_hw_0 = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_PCIE_CRM_HW_0,
 	.crm_node = 5,
-	.enable_mask = 0x1,
 	.num_nodes = 1,
 	.nodes = { &ebi_pcie_crm_hw_0 },
 };
@@ -2903,9 +2903,9 @@ static struct qcom_icc_bcm bcm_sn4_pcie_crm_hw_0 = {
 
 static struct qcom_icc_bcm bcm_acv_disp_crm_sw_0 = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_DISP_CRM_SW_0,
 	.crm_node = 4,
-	.enable_mask = 0x1,
 	.num_nodes = 1,
 	.nodes = { &ebi_disp_crm_sw_0 },
 };
@@ -2945,9 +2945,9 @@ static struct qcom_icc_bcm bcm_sh1_disp_crm_sw_0 = {
 
 static struct qcom_icc_bcm bcm_acv_disp_crm_hw_0 = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_DISP_CRM_HW_0,
 	.crm_node = 4,
-	.enable_mask = 0x1,
 	.num_nodes = 1,
 	.nodes = { &ebi_disp_crm_hw_0 },
 };
@@ -2987,9 +2987,9 @@ static struct qcom_icc_bcm bcm_sh1_disp_crm_hw_0 = {
 
 static struct qcom_icc_bcm bcm_acv_disp_crm_hw_1 = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_DISP_CRM_HW_1,
 	.crm_node = 4,
-	.enable_mask = 0x1,
 	.num_nodes = 1,
 	.nodes = { &ebi_disp_crm_hw_1 },
 };
@@ -3029,9 +3029,9 @@ static struct qcom_icc_bcm bcm_sh1_disp_crm_hw_1 = {
 
 static struct qcom_icc_bcm bcm_acv_disp_crm_hw_2 = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_DISP_CRM_HW_2,
 	.crm_node = 4,
-	.enable_mask = 0x1,
 	.num_nodes = 1,
 	.nodes = { &ebi_disp_crm_hw_2 },
 };
@@ -3071,9 +3071,9 @@ static struct qcom_icc_bcm bcm_sh1_disp_crm_hw_2 = {
 
 static struct qcom_icc_bcm bcm_acv_disp_crm_hw_3 = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_DISP_CRM_HW_3,
 	.crm_node = 4,
-	.enable_mask = 0x1,
 	.num_nodes = 1,
 	.nodes = { &ebi_disp_crm_hw_3 },
 };
@@ -3113,9 +3113,9 @@ static struct qcom_icc_bcm bcm_sh1_disp_crm_hw_3 = {
 
 static struct qcom_icc_bcm bcm_acv_disp_crm_hw_4 = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_DISP_CRM_HW_4,
 	.crm_node = 4,
-	.enable_mask = 0x1,
 	.num_nodes = 1,
 	.nodes = { &ebi_disp_crm_hw_4 },
 };
@@ -3155,9 +3155,9 @@ static struct qcom_icc_bcm bcm_sh1_disp_crm_hw_4 = {
 
 static struct qcom_icc_bcm bcm_acv_disp_crm_hw_5 = {
 	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
 	.voter_idx = VOTER_IDX_DISP_CRM_HW_5,
 	.crm_node = 4,
-	.enable_mask = 0x1,
 	.num_nodes = 1,
 	.nodes = { &ebi_disp_crm_hw_5 },
 };
