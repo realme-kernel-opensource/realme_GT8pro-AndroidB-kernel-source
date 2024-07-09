@@ -24,6 +24,10 @@
 #define EVA_CC_XO_CLK						14
 #define EVA_CC_XO_CLK_SRC					15
 
+/* EVA_CC power domains */
+#define EVA_CC_MVS0_GDSC					0
+#define EVA_CC_MVS0C_GDSC					1
+
 /* EVA_CC resets */
 #define EVA_CC_INTERFACE_BCR					0
 #define EVA_CC_MVS0_BCR						1

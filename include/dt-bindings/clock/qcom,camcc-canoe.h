@@ -126,6 +126,14 @@
 #define CAM_CC_TRACENOC_TPDM_1_CMB_CLK				116
 #define CAM_CC_XO_CLK_SRC					117
 
+/* CAM_CC power domains */
+#define CAM_CC_IPE_0_GDSC					0
+#define CAM_CC_OFE_GDSC						1
+#define CAM_CC_TFE_0_GDSC					2
+#define CAM_CC_TFE_1_GDSC					3
+#define CAM_CC_TFE_2_GDSC					4
+#define CAM_CC_TITAN_TOP_GDSC					5
+
 /* CAM_CC resets */
 #define CAM_CC_DRV_BCR						0
 #define CAM_CC_ICP_BCR						1

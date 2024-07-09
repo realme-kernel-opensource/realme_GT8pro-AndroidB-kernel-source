@@ -196,6 +196,14 @@
 #define GCC_VIDEO_AXI1_CLK					186
 #define GCC_VIDEO_XO_CLK					187
 
+/* GCC power domains */
+#define GCC_PCIE_0_GDSC						0
+#define GCC_PCIE_0_PHY_GDSC					1
+#define GCC_UFS_MEM_PHY_GDSC					2
+#define GCC_UFS_PHY_GDSC					3
+#define GCC_USB30_PRIM_GDSC					4
+#define GCC_USB3_PHY_GDSC					5
+
 /* GCC resets */
 #define GCC_CAMERA_BCR						0
 #define GCC_DISPLAY_BCR						1

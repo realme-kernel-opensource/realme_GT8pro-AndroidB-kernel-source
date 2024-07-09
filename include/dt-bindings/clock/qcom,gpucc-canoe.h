@@ -31,6 +31,9 @@
 #define GPU_CC_RSCC_XO_AON_CLK					21
 #define GPU_CC_SLEEP_CLK					22
 
+/* GPU_CC power domains */
+#define GPU_CC_CX_GDSC						0
+
 /* GPU_CC resets */
 #define GPU_CC_CB_BCR						0
 #define GPU_CC_CX_BCR						1
