@@ -133,9 +133,6 @@ int qcom_iommu_set_secure_vmid(struct iommu_domain *domain, enum vmid vmid);
 
 int qcom_iommu_set_fault_model(struct iommu_domain *domain, int fault_model);
 
-int qcom_iommu_set_fault_handler_irq(struct iommu_domain *domain,
-		fault_handler_irq_t handler_irq, void *token);
-
 int qcom_iommu_enable_s1_translation(struct iommu_domain *domain);
 
 int qcom_iommu_get_mappings_configuration(struct iommu_domain *domain);
