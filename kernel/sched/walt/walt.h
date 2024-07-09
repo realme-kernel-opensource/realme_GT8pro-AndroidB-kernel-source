@@ -1392,8 +1392,6 @@ extern void remove_special_task(void);
 extern void set_special_task(struct task_struct *pipeline_special_local);
 extern unsigned int sysctl_sched_pipeline_util_thres;
 #define MAX_NR_PIPELINE 3
-extern unsigned int sysctl_sched_pipeline_hyst_cpu_ns[WALT_NR_CPUS];
-extern unsigned int sysctl_sched_pipeline_hyst_enable_cpus;
 extern int pipeline_nr;
 /* smart freq */
 #define SMART_FREQ_LEGACY_TUPLE_SIZE		3
