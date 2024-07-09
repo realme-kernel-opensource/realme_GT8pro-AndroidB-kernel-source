@@ -1395,9 +1395,6 @@ extern unsigned int sysctl_sched_pipeline_util_thres;
 extern unsigned int sysctl_sched_pipeline_hyst_cpu_ns[WALT_NR_CPUS];
 extern unsigned int sysctl_sched_pipeline_hyst_enable_cpus;
 extern int pipeline_nr;
-extern unsigned int sysctl_sched_trailblazer_hyst_cpu_ns[WALT_NR_CPUS];
-extern unsigned int sysctl_sched_trailblazer_hyst_enable_cpus;
-
 /* smart freq */
 #define SMART_FREQ_LEGACY_TUPLE_SIZE		3
 #define SMART_FREQ_IPC_TUPLE_SIZE		3
