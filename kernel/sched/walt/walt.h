@@ -169,6 +169,7 @@ DECLARE_PER_CPU(unsigned long, intr_cnt);
 DECLARE_PER_CPU(unsigned long, cycle_cnt);
 DECLARE_PER_CPU(u64, last_ipc_update);
 DECLARE_PER_CPU(u64, ipc_deactivate_ns);
+DECLARE_PER_CPU(bool, tickless_mode);
 
 struct smart_freq_legacy_reason_status {
 	u64 deactivate_ns;

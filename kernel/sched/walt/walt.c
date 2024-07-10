@@ -4618,6 +4618,7 @@ DEFINE_PER_CPU(unsigned int, ipc_level);
 DEFINE_PER_CPU(unsigned long, ipc_cnt);
 DEFINE_PER_CPU(u64, last_ipc_update);
 DEFINE_PER_CPU(u64, ipc_deactivate_ns);
+DEFINE_PER_CPU(bool, tickless_mode);
 static unsigned long calculate_ipc(int cpu)
 {
 	unsigned long amu_cnt, delta_cycl = 0, delta_intr = 0;
@@ -4779,7 +4780,7 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 			i = SMART_FMAX_IPC_MAX - 1;
 
 		curr_ipc_level = i;
-		if (curr_ipc_level != last_ipc_level)
+		if ((curr_ipc_level != last_ipc_level) || per_cpu(tickless_mode, cpu))
 			inform_governor = true;
 
 		if ((curr_ipc_level < last_ipc_level) &&

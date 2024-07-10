@@ -148,8 +148,13 @@ unsigned int get_cluster_ipc_level_freq(int curr_cpu, u64 time)
 	for_each_cpu(cpu, &cluster->cpus) {
 		cpu_ipc_level = per_cpu(ipc_level, cpu);
 
-		if ((time - per_cpu(last_ipc_update, cpu)) > 7999999ULL)
+		if ((time - per_cpu(last_ipc_update, cpu)) > 7999999ULL) {
 			cpu_ipc_level = 0;
+			per_cpu(tickless_mode, cpu) = true;
+		} else {
+			per_cpu(tickless_mode, cpu) = false;
+		}
+
 
 		if (cpu_ipc_level >= index) {
 			winning_cpu = cpu;
