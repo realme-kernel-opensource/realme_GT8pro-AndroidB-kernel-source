@@ -44,8 +44,6 @@
 #define ADSP_DECRYPT_SHUTDOWN_DELAY_MS	100
 #define RPROC_HANDOVER_POLL_DELAY_MS	1
 
-#define MAX_ASSIGN_COUNT 2
-
 #define to_rproc(d) container_of(d, struct rproc, dev)
 
 #define SOCCP_SLEEP_US  100
@@ -538,11 +536,11 @@ static int adsp_assign_memory_region(struct qcom_adsp *adsp)
 
 		adsp->region_assign_phys[offset] = r.start;
 		adsp->region_assign_size[offset] = resource_size(&r);
-		adsp->region_assign_perms[offset] = BIT(QCOM_SCM_VMID_HLOS);
+		adsp->region_assign_owners[offset] = BIT(QCOM_SCM_VMID_HLOS);
 
 		ret = qcom_scm_assign_mem(adsp->region_assign_phys[offset],
 					  adsp->region_assign_size[offset],
-					  &adsp->region_assign_perms[offset],
+					  &adsp->region_assign_owners[offset],
 					  perm, perm_size);
 		if (ret < 0) {
 			dev_err(adsp->dev, "assign memory %d failed\n", offset);
@@ -567,7 +565,7 @@ static void adsp_unassign_memory_region(struct qcom_adsp *adsp)
 
 		ret = qcom_scm_assign_mem(adsp->region_assign_phys[offset],
 					  adsp->region_assign_size[offset],
-					  &adsp->region_assign_perms[offset],
+					  &adsp->region_assign_owners[offset],
 					  &perm, 1);
 		if (ret < 0)
 			dev_err(adsp->dev, "unassign memory failed\n");
@@ -1206,10 +1204,6 @@ static int adsp_alloc_memory_region(struct qcom_adsp *adsp)
 
 static int adsp_setup_32b_dma_allocs(struct qcom_adsp *adsp)
 {
-	struct qcom_scm_vmperm perm[MAX_ASSIGN_COUNT];
-	struct device_node *node;
-	unsigned int perm_size;
-	int offset;
 	int ret;
 
 	if (!adsp->dma_phys_below_32b)

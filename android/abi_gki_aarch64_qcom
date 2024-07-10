@@ -760,6 +760,7 @@
   devm_platform_ioremap_resource_byname
   devm_power_supply_register
   __devm_pwmchip_add
+  devm_pwmchip_alloc
   devm_pwm_get
   devm_qcom_smem_state_get
   devm_regmap_add_irq_chip
@@ -782,6 +783,7 @@
   devm_request_threaded_irq
   __devm_reset_control_get
   devm_reset_controller_register
+  devm_rproc_alloc
   devm_rtc_allocate_device
   __devm_rtc_register_device
   devm_snd_soc_register_card
@@ -1135,6 +1137,7 @@
   drm_prime_pages_to_sg
   drm_printf
   __drm_printfn_coredump
+  __drm_printfn_dbg
   __drm_printfn_debug
   drm_property_blob_get
   drm_property_blob_put
@@ -1242,6 +1245,7 @@
   __folio_lock
   __folio_put
   folio_wait_bit
+  __fortify_panic
   fortify_panic
   fput
   fqdir_exit
@@ -3205,8 +3209,10 @@
   single_open
   single_open_size
   single_release
+  sized_strscpy
   sk_alloc
   skb_add_rx_frag
+  skb_add_rx_frag_netmem
   skb_append_pagefrags
   skb_checksum
   skb_checksum_help

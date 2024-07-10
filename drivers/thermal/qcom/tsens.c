@@ -1091,13 +1091,6 @@ err_put_device:
 	return ret;
 }
 
-/* WA to add writable trip_temp_*_hyst sysfs node till core has proper fix */
-static int tsens_set_trip_hyst(
-		struct thermal_zone_device *tz, int trip, int hysteresis)
-{
-	return 0;
-};
-
 static int tsens_get_temp(struct thermal_zone_device *tz, int *temp)
 {
 	struct tsens_sensor *s = thermal_zone_device_priv(tz);
@@ -1179,7 +1172,6 @@ MODULE_DEVICE_TABLE(of, tsens_table);
 static const struct thermal_zone_device_ops tsens_of_ops = {
 	.get_temp = tsens_get_temp,
 	.set_trips = tsens_set_trips,
-	.set_trip_hyst = tsens_set_trip_hyst,
 	.change_mode = qti_tz_change_mode,
 	.get_trend = qti_tz_get_trend,
 };

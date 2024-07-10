@@ -117,15 +117,8 @@ enum {
 #define CH_CLEAR_STATUS			BIT(31)
 
 #define ACCL_TYPE(addr)			((addr >> 16) & 0xF)
-#define VREG_ADDR(addr)			(addr & ~0xF)
 
 #define MAX_RSC_COUNT			5
-
-enum {
-	HW_ACCL_CLK = 0x3,
-	HW_ACCL_VREG,
-	HW_ACCL_BUS,
-};
 
 static const char * const accl_str[] = {
 	"", "", "", "CLK", "VREG", "BUS",
@@ -690,7 +683,6 @@ static int check_for_req_inflight(struct rsc_drv *drv, struct tcs_group *tcs,
 	u32 addr;
 	int j, k;
 	int i = tcs->offset;
-	unsigned long accl;
 
 	for_each_set_bit_from(i, drv->tcs_in_use, tcs->offset + tcs->num_tcs) {
 		curr_enabled = read_tcs_reg(drv, drv->regs[RSC_DRV_CMD_ENABLE], i);
