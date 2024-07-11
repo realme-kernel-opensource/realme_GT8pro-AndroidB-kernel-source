@@ -59,6 +59,7 @@ obj-$(CONFIG_QCOM_HUNG_TASK_ENH) += hung_task_enh.o
 obj-$(CONFIG_QCOM_ICC_BWMON)	+= icc-bwmon.o
 qcom_ice-objs			+= ice.o
 obj-$(CONFIG_QCOM_INLINE_CRYPTO_ENGINE)	+= qcom_ice.o
+obj-$(CONFIG_QTI_PAGE_COMPRESSION_ENGINE) += qpace/
 obj-$(CONFIG_QCOM_PBS) +=	qcom-pbs.o
 obj-$(CONFIG_QCOM_DCVS)	+= dcvs/
 obj-$(CONFIG_QCOM_CPUCP) += qcom_cpucp.o

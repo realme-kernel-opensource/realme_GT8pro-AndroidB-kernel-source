@@ -798,6 +798,17 @@ config QCOM_INLINE_CRYPTO_ENGINE
 	tristate
 	select QCOM_SCM
 
+config QTI_PAGE_COMPRESSION_ENGINE
+	tristate "QTI Page Compression Engine Driver"
+	depends on ARCH_QCOM
+	help
+	  This driver provides support for using the QTI Page Compression Engine.
+	  It provides a DDR-ring-buffer interface for bulk operation submissions
+	  and a register-based interface for single operation submissions. The
+	  device is intended for page-based compression.
+
+	  If unsure, say N.
+
 config QCOM_PBS
 	tristate "PBS trigger support for Qualcomm Technologies, Inc. PMICS"
 	depends on SPMI
