@@ -4704,22 +4704,16 @@ EXPORT_SYMBOL_GPL(should_boost_bus_dcvs);
  * If it is -1, no big task oscillation is occurring.
  */
 int oscillate_cpu = -1;
-static struct hrtimer walt_oscillate_timer;
 
-bool should_oscillate(void)
+bool should_oscillate(unsigned int busy_cpu)
 {
 	int cpu;
 	int is_only_one_cpu_active = 0;
-	int this_cpu = raw_smp_processor_id();
-	int thermal_pressure = arch_scale_hw_pressure(this_cpu);
-
-	if (!thermal_pressure)
-		return false;
 
 	if (!is_obet)
 		return false;
 
-	if (!is_max_possible_cluster_cpu(this_cpu))
+	if (!is_max_possible_cluster_cpu(busy_cpu))
 		return false;
 
 	if (cpumask_weight(&cpu_array[0][num_sched_clusters - 1]) == 1)
@@ -4732,20 +4726,6 @@ bool should_oscillate(void)
 		return false;
 
 	return true;
-}
-
-static void should_oscillate_tick(void)
-{
-	int this_cpu = raw_smp_processor_id();
-
-	if (should_oscillate()) {
-		if (oscillate_cpu == -1) {
-			hrtimer_start(&walt_oscillate_timer,
-					ns_to_ktime(oscillate_period_ns),
-				HRTIMER_MODE_REL_PINNED_HARD);
-			oscillate_cpu = this_cpu;
-		}
-	}
 }
 
 static void android_vh_scheduler_tick(void *unused, struct rq *rq)
@@ -4782,9 +4762,6 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 	rcu_read_unlock();
 
 	walt_lb_tick(rq);
-
-	if (soc_feat(SOC_ENABLE_EXPERIMENT3))
-		should_oscillate_tick();
 
 	/* IPC based smart FMAX */
 	cluster = cpu_cluster(cpu);
@@ -4843,18 +4820,6 @@ static void android_rvh_schedule(void *unused, struct task_struct *prev,
 			wts->last_sleep_ts = wallclock;
 		walt_update_task_ravg(prev, rq, PUT_PREV_TASK, wallclock, 0);
 		walt_update_task_ravg(next, rq, PICK_NEXT_TASK, wallclock, 0);
-		if (soc_feat(SOC_ENABLE_EXPERIMENT3) &&
-				oscillate_cpu == raw_smp_processor_id()) {
-			if (should_oscillate()) {
-				if (!hrtimer_active(&walt_oscillate_timer)) {
-					hrtimer_start(&walt_oscillate_timer,
-						ns_to_ktime(oscillate_period_ns),
-						HRTIMER_MODE_REL_PINNED_HARD);
-				}
-			} else {
-				oscillate_cpu = -1;
-			}
-		}
 	} else {
 		walt_update_task_ravg(prev, rq, TASK_UPDATE, wallclock, 0);
 	}
@@ -5208,11 +5173,6 @@ static void walt_init(struct work_struct *work)
 	if (i >= 0) {
 		static_key_disable(&sched_feat_keys[i]);
 		sysctl_sched_features &= ~(1UL << i);
-	}
-
-	if (soc_feat(SOC_ENABLE_EXPERIMENT3)) {
-		hrtimer_init(&walt_oscillate_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_HARD);
-		walt_oscillate_timer.function = walt_oscillate_timer_cb;
 	}
 
 	topology_clear_scale_freq_source(SCALE_FREQ_SOURCE_ARCH, cpu_online_mask);

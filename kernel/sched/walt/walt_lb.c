@@ -1105,7 +1105,7 @@ static void walt_sched_newidle_balance(void *unused, struct rq *this_rq,
 	walt_newidle_balance(this_rq, rf, pulled_task, done, false);
 }
 
-enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt)
+void sched_walt_oscillate(unsigned int busy_cpu)
 {
 	struct rq *src_rq;
 	struct walt_rq *src_wrq;
@@ -1114,14 +1114,19 @@ enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt)
 	struct walt_task_struct *wts;
 	unsigned long flags;
 
-	src_cpu = raw_smp_processor_id();
 
-	if (!should_oscillate()) {
+	if (busy_cpu >= nr_cpu_ids) {
 		oscillate_cpu = -1;
-		return HRTIMER_NORESTART;
+		return;
 	}
 
-	dst_cpu = src_cpu + 1;
+	if (!should_oscillate(busy_cpu)) {
+		oscillate_cpu = -1;
+		return;
+	}
+
+	src_cpu = busy_cpu;
+	dst_cpu = busy_cpu + 1;
 	if (dst_cpu > cpumask_last(&cpu_array[0][num_sched_clusters - 1]))
 		dst_cpu = cpumask_first(&cpu_array[0][num_sched_clusters - 1]);
 
@@ -1153,7 +1158,7 @@ enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt)
 		wts = (struct walt_task_struct *) p->android_vendor_data1;
 		trace_walt_active_load_balance(p, src_cpu, dst_cpu, wts,
 				oscillate_cpu);
-		oscillate_cpu = dst_cpu;
+		oscillate_cpu = src_cpu;
 		success = stop_one_cpu_nowait(src_cpu,
 				stop_walt_lb_active_migration,
 				src_rq, &src_rq->active_balance_work);
@@ -1164,14 +1169,14 @@ enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt)
 		} else {
 			wake_up_if_idle(dst_cpu);
 		}
-		return HRTIMER_NORESTART;
-
+		return;
 	}
 unlock:
 	raw_spin_unlock_irqrestore(&src_rq->__lock, flags);
 	oscillate_cpu = -1;
-	return HRTIMER_NORESTART;
+	return;
 }
+EXPORT_SYMBOL_GPL(sched_walt_oscillate);
 
 void walt_lb_init(void)
 {

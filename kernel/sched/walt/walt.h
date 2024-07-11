@@ -1317,8 +1317,7 @@ void dec_rq_walt_stats(struct rq *rq, struct task_struct *p);
 extern bool is_obet;
 extern int oscillate_cpu;
 extern int oscillate_period_ns;
-extern enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt);
-extern bool should_oscillate(void);
+extern bool should_oscillate(unsigned int busy_cpu);
 extern bool now_is_sbt;
 extern bool is_sbt_or_oscillate(void);
 
