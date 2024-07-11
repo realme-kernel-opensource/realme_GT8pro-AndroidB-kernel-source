@@ -1430,4 +1430,9 @@ extern int sched_smart_freq_ipc_handler(struct ctl_table *table, int write,
 				      loff_t *ppos);
 extern unsigned int sysctl_sched_legacy_smart_freq_hyst_cpu_ns[WALT_NR_CPUS];
 extern unsigned int sysctl_sched_legacy_smart_freq_hyst_enable_cpus;
+
+/* frequent yielder */
+#define MAX_YIELD_CNT_PER_TASK_THR		25
+#define	YIELD_INDUCED_SLEEP			BIT(7)
+#define YIELD_CNT_MASK				0x7F
 #endif /* _WALT_H */

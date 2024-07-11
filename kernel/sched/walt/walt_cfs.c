@@ -239,6 +239,7 @@ enum fastpaths {
 	PREV_CPU_FASTPATH,
 	CLUSTER_PACKING_FASTPATH,
 	PIPELINE_FASTPATH,
+	YIELD_FASTPATH,
 };
 
 static inline bool is_complex_sibling_idle(int cpu)
@@ -869,6 +870,7 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 
 	wts = (struct walt_task_struct *) p->android_vendor_data1;
 	pipeline_cpu = wts->pipeline_cpu;
+
 	if (walt_pipeline_low_latency_task(p) &&
 		(sched_boost_type != CONSERVATIVE_BOOST) &&
 		(pipeline_cpu != -1) &&
@@ -878,6 +880,18 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 		!walt_pipeline_low_latency_task(cpu_rq(pipeline_cpu)->curr)) {
 		best_energy_cpu = pipeline_cpu;
 		fbt_env.fastpath = PIPELINE_FASTPATH;
+		goto out;
+	}
+
+	/*
+	 * If yield count is high then this must be an induced sleep wakeup
+	 * use prev_cpu(yielding cpu) as the target cpu.
+	 */
+	if ((wts->yield_state >= MAX_YIELD_CNT_PER_TASK_THR) &&
+	    (prev_cpu != -1) && cpumask_test_cpu(prev_cpu, p->cpus_ptr) &&
+		cpu_active(prev_cpu) && !cpu_halted(prev_cpu)) {
+		best_energy_cpu = prev_cpu;
+		fbt_env.fastpath = YIELD_FASTPATH;
 		goto out;
 	}
 

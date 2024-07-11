@@ -15,6 +15,7 @@
 #include <linux/cpu.h>
 #include <linux/sysctl.h>
 #include <linux/of_platform.h>
+#include <linux/delay.h>
 
 #include <trace/hooks/sched.h>
 #include <trace/hooks/cpufreq.h>
@@ -2112,6 +2113,11 @@ static void update_history(struct rq *rq, struct task_struct *p,
 	u16 trailblazer_demand = 0;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
+	/* clear yield status of task if there is a change in window */
+
+	if ((wts->yield_state & YIELD_CNT_MASK) < MAX_YIELD_CNT_PER_TASK_THR)
+		wts->yield_state = 0;
+
 	/* Ignore windows where task had no activity */
 	if (!runtime || walt_is_idle_task(p) || !samples)
 		goto done;
@@ -2502,6 +2508,7 @@ static void init_new_task_load(struct task_struct *p)
 	wts->prev_on_rq = 0;
 	wts->prev_on_rq_cpu = -1;
 	wts->pipeline_cpu = -1;
+	wts->yield_state = 0;
 
 	for (i = 0; i < NUM_BUSY_BUCKETS; ++i)
 		wts->busy_buckets[i] = 0;
@@ -4586,6 +4593,7 @@ static void android_rvh_update_misfit_status(void *unused, struct task_struct *p
 static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 {
 	struct rq *rq = cpu_rq(task_cpu(p));
+	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	struct rq_flags rf;
 	u64 wallclock;
 	unsigned int old_load;
@@ -4596,6 +4604,17 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 	rq_lock_irqsave(rq, &rf);
 	old_load = task_load(p);
 	wallclock = walt_sched_clock();
+
+	/*
+	 * Once task does a sleep(not the yield induce sleep)
+	 * reset the flag, to ensure task is no longer qualified
+	 * as frequent yielder.
+	 * i.e. task needs to qualify again as frequent yielder.
+	 */
+	if (!(wts->yield_state & YIELD_INDUCED_SLEEP))
+		wts->yield_state = 0;
+	else
+		wts->yield_state &= YIELD_CNT_MASK;
 
 	if (walt_is_idle_task(rq->curr) && p->in_iowait)
 		walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
@@ -4909,6 +4928,23 @@ static void rebuild_sd_workfn(struct work_struct *work)
 	complete(&rebuild_domains_completion);
 }
 
+static void walt_do_sched_yield_before(void *unused, long *skip)
+{
+	struct walt_task_struct *wts = (struct walt_task_struct *) current->android_vendor_data1;
+	u8 cnt = wts->yield_state & YIELD_CNT_MASK;
+
+	if (!walt_fair_task(current))
+		return;
+
+	if (cnt >= MAX_YIELD_CNT_PER_TASK_THR) {
+		wts->yield_state |= YIELD_INDUCED_SLEEP;
+		*skip = true;
+		usleep_range_state(250, 250, TASK_INTERRUPTIBLE);
+	} else {
+		wts->yield_state++;
+	}
+}
+
 static void walt_do_sched_yield(void *unused, struct rq *rq)
 {
 	struct task_struct *curr = rq->curr;
@@ -5011,6 +5047,7 @@ static void register_walt_hooks(void)
 	register_trace_android_rvh_build_perf_domains(android_rvh_build_perf_domains, NULL);
 	register_trace_cpu_frequency_limits(walt_cpu_frequency_limits, NULL);
 	register_trace_android_rvh_do_sched_yield(walt_do_sched_yield, NULL);
+	register_trace_android_rvh_before_do_sched_yield(walt_do_sched_yield_before, NULL);
 	register_trace_android_rvh_update_thermal_stats(android_rvh_update_thermal_stats, NULL);
 }
 
