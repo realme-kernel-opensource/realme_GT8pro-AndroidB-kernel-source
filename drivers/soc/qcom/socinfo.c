@@ -278,6 +278,7 @@ struct socinfo_params {
 	u32 boot_cluster;
 	u32 boot_core;
 	u32 raw_package_type;
+	u32 nsubpart_feat_array_offset;
 };
 
 struct smem_image_version {
@@ -769,6 +770,15 @@ static uint32_t socinfo_get_pcode_id(void)
 	return pcode;
 }
 
+/* Version 21 */
+static uint32_t socinfo_get_nsubpart_feat_array_offset(void)
+{
+	return socinfo ?
+		(socinfo_format >= SOCINFO_VERSION(0, 21) ?
+		 le32_to_cpu(socinfo->nsubpart_feat_array_offset) : 0)
+		: 0;
+}
+
 /* Exported APIs */
 
 uint32_t socinfo_get_id(void)
@@ -960,6 +970,9 @@ socinfo_get_subpart_info(enum subset_part_type part,
 
 	num_subset_parts = socinfo_get_num_subset_parts();
 	offset = socinfo_get_nsubset_parts_array_offset();
+	if (socinfo_format >= SOCINFO_VERSION(0, 21))
+		offset = socinfo_get_nsubpart_feat_array_offset();
+
 	if (!num_subset_parts || !offset)
 		return -EINVAL;
 
