@@ -4761,7 +4761,7 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 
 	walt_lb_tick(rq);
 
-	if (soc_feat(SOC_ENABLE_OSCILLATE_ON_THERMALS))
+	if (soc_feat(SOC_ENABLE_EXPERIMENT3))
 		should_oscillate_tick();
 
 	/* IPC based smart FMAX */
@@ -4821,7 +4821,7 @@ static void android_rvh_schedule(void *unused, struct task_struct *prev,
 			wts->last_sleep_ts = wallclock;
 		walt_update_task_ravg(prev, rq, PUT_PREV_TASK, wallclock, 0);
 		walt_update_task_ravg(next, rq, PICK_NEXT_TASK, wallclock, 0);
-		if (soc_feat(SOC_ENABLE_OSCILLATE_ON_THERMALS) &&
+		if (soc_feat(SOC_ENABLE_EXPERIMENT3) &&
 				oscillate_cpu == raw_smp_processor_id()) {
 			if (should_oscillate()) {
 				if (!hrtimer_active(&walt_oscillate_timer)) {
@@ -5149,7 +5149,7 @@ static void walt_init(struct work_struct *work)
 		sysctl_sched_features &= ~(1UL << i);
 	}
 
-	if (soc_feat(SOC_ENABLE_OSCILLATE_ON_THERMALS)) {
+	if (soc_feat(SOC_ENABLE_EXPERIMENT3)) {
 		hrtimer_init(&walt_oscillate_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_HARD);
 		walt_oscillate_timer.function = walt_oscillate_timer_cb;
 	}
