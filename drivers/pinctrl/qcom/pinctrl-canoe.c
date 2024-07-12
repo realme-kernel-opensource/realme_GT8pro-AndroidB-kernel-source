@@ -91,7 +91,7 @@
 			pg_name##_pins,         \
 			ARRAY_SIZE(pg_name##_pins)),    \
 		.ctl_reg = offset,			\
-		.io_reg = offset + 0x4,			\
+		.io_reg = offset + 0xffc,			\
 		.intr_cfg_reg = 0,			\
 		.intr_status_reg = 0,			\
 		.intr_target_reg = 0,			\
