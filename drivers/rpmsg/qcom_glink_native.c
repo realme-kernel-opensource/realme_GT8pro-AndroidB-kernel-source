@@ -918,7 +918,7 @@ static int qcom_glink_queue_rx_intent_alloc(struct qcom_glink *glink,
 	list_add_tail(&intent->node, &channel->rx_queue);
 	spin_unlock_irqrestore(&channel->recv_lock, flags);
 
-	wake_up(&channel->rx_wq);
+	wake_up_interruptible(&channel->rx_wq);
 
 	return 0;
 }
@@ -1090,10 +1090,14 @@ static int qcom_glink_rx_thread(void *data)
 	int ret;
 
 	for (;;) {
-		wait_event(channel->rx_wq, !list_empty(&channel->rx_queue) ||
+		ret = wait_event_interruptible(channel->rx_wq, !list_empty(&channel->rx_queue) ||
 			   kthread_should_stop());
+
 		if (kthread_should_stop())
 			break;
+
+		if (ret)
+			continue;
 
 		spin_lock_irqsave(&channel->recv_lock, flags);
 		if (list_empty(&channel->rx_queue)) {
@@ -1254,7 +1258,7 @@ static int qcom_glink_rx_data(struct qcom_glink *glink, size_t avail)
 		list_add_tail(&intent->node, &channel->rx_queue);
 		spin_unlock(&channel->recv_lock);
 
-		wake_up(&channel->rx_wq);
+		wake_up_interruptible(&channel->rx_wq);
 
 		channel->buf = NULL;
 	}
@@ -1332,7 +1336,7 @@ static int qcom_glink_rx_data_zero_copy(struct qcom_glink *glink, size_t avail)
 	list_add_tail(&intent->node, &channel->rx_queue);
 	spin_unlock(&channel->recv_lock);
 
-	wake_up(&channel->rx_wq);
+	wake_up_interruptible(&channel->rx_wq);
 
 advance_rx:
 	qcom_glink_rx_advance(glink, ALIGN(sizeof(hdr), 8));
