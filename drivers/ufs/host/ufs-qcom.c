@@ -2339,9 +2339,6 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 	if (host->hw_ver.major == 0x2)
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_UFS_HCI_VERSION;
 
-	if (host->hw_ver.major > 0x3)
-		hba->quirks |= UFSHCD_QUIRK_REINIT_AFTER_MAX_GEAR_SWITCH;
-
 	if (host->disable_lpm || host->broken_ahit_wa)
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8;
 
