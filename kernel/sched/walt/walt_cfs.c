@@ -888,6 +888,7 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 	 * use prev_cpu(yielding cpu) as the target cpu.
 	 */
 	if ((wts->yield_state >= MAX_YIELD_CNT_PER_TASK_THR) &&
+	    (yield_should_induce_sleep >= YIELD_INDUCE_SLEEP_THR) &&
 	    (prev_cpu != -1) && cpumask_test_cpu(prev_cpu, p->cpus_ptr) &&
 		cpu_active(prev_cpu) && !cpu_halted(prev_cpu)) {
 		best_energy_cpu = prev_cpu;
@@ -1043,7 +1044,7 @@ out:
 
 	trace_sched_task_util(p, cpumask_bits(candidates)[0], best_energy_cpu,
 			sync, fbt_env.need_idle, fbt_env.fastpath,
-			start_t, uclamp_boost, start_cpu);
+			start_t, uclamp_boost, start_cpu, wts->yield_state & YIELD_CNT_MASK);
 
 	return best_energy_cpu;
 

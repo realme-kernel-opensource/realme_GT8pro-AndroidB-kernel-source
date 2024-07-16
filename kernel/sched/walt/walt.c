@@ -4928,18 +4928,40 @@ static void rebuild_sd_workfn(struct work_struct *work)
 	complete(&rebuild_domains_completion);
 }
 
+u8 yield_should_induce_sleep;
 static void walt_do_sched_yield_before(void *unused, long *skip)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) current->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)current->android_vendor_data1;
+	struct rq *rq = task_rq(current);
 	u8 cnt = wts->yield_state & YIELD_CNT_MASK;
+	static unsigned int total_yield_cnt;
+	static unsigned int total_sleep_cnt;
+	static u64 start_window_ts;
 
 	if (!walt_fair_task(current))
 		return;
 
+	if (rq->clock > (start_window_ts + WINDOW_SIZE_US * 1000ULL)) {
+		if ((total_yield_cnt >= MAX_YIELD_CNT_GLOBAL_THR) ||
+			(total_sleep_cnt >= MAX_YIELD_SLEEP_CNT_GLOBAL_THR))
+			yield_should_induce_sleep++;
+		else
+			yield_should_induce_sleep = 0;
+
+		/* not taking lock here */
+		start_window_ts = rq->clock;
+		total_yield_cnt = 0;
+		total_sleep_cnt = 0;
+	}
+
 	if (cnt >= MAX_YIELD_CNT_PER_TASK_THR) {
-		wts->yield_state |= YIELD_INDUCED_SLEEP;
-		*skip = true;
-		usleep_range_state(250, 250, TASK_INTERRUPTIBLE);
+		total_yield_cnt++;
+		if (yield_should_induce_sleep >= YIELD_INDUCE_SLEEP_THR) {
+			wts->yield_state |= YIELD_INDUCED_SLEEP;
+			*skip = true;
+			total_sleep_cnt++;
+			usleep_range_state(YIELD_SLEEP_TIME, YIELD_SLEEP_TIME, TASK_INTERRUPTIBLE);
+		}
 	} else {
 		wts->yield_state++;
 	}
@@ -4954,6 +4976,7 @@ static void walt_do_sched_yield(void *unused, struct rq *rq)
 		return;
 
 	walt_lockdep_assert_rq(rq, NULL);
+
 	if (!list_empty(&wts->mvp_list) && wts->mvp_list.next)
 		walt_cfs_deactivate_mvp_task(rq, curr);
 

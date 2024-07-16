@@ -1181,10 +1181,10 @@ TRACE_EVENT(sched_task_util,
 
 	TP_PROTO(struct task_struct *p, unsigned long candidates,
 		int best_energy_cpu, bool sync, int need_idle, int fastpath,
-		u64 start_t, bool uclamp_boosted, int start_cpu),
+		u64 start_t, bool uclamp_boosted, int start_cpu, int yield_cnt),
 
 	TP_ARGS(p, candidates, best_energy_cpu, sync, need_idle, fastpath,
-		start_t, uclamp_boosted, start_cpu),
+		start_t, uclamp_boosted, start_cpu, yield_cnt),
 
 	TP_STRUCT__entry(
 		__field(int,		pid)
@@ -1211,6 +1211,7 @@ TRACE_EVENT(sched_task_util,
 		__field(int,		load_boost)
 		__field(bool,		sync_state)
 		__field(int,		pipeline_cpu)
+		__field(int,		yield_cnt)
 	),
 
 	TP_fast_assign(
@@ -1241,9 +1242,10 @@ TRACE_EVENT(sched_task_util,
 		__entry->sync_state		= !is_state1();
 		__entry->pipeline_cpu		=
 			((struct walt_task_struct *) p->android_vendor_data1)->pipeline_cpu;
+		__entry->yield_cnt		= yield_cnt;
 	),
 
-	TP_printk("pid=%d comm=%s util=%lu prev_cpu=%d candidates=%#lx best_energy_cpu=%d sync=%d need_idle=%d fastpath=%d placement_boost=%d latency=%llu stune_boosted=%d is_rtg=%d rtg_skip_min=%d start_cpu=%d unfilter=%u affinity=%lx task_boost=%d low_latency=%d iowaited=%d load_boost=%d sync_state=%d pipeline_cpu=%d",
+	TP_printk("pid=%d comm=%s util=%lu prev_cpu=%d candidates=%#lx best_energy_cpu=%d sync=%d need_idle=%d fastpath=%d placement_boost=%d latency=%llu stune_boosted=%d is_rtg=%d rtg_skip_min=%d start_cpu=%d unfilter=%u affinity=%lx task_boost=%d low_latency=%d iowaited=%d load_boost=%d sync_state=%d pipeline_cpu=%d yield_cnt=%d",
 		__entry->pid, __entry->comm, __entry->util, __entry->prev_cpu,
 		__entry->candidates, __entry->best_energy_cpu, __entry->sync,
 		__entry->need_idle, __entry->fastpath, __entry->placement_boost,
@@ -1251,7 +1253,7 @@ TRACE_EVENT(sched_task_util,
 		__entry->is_rtg, __entry->rtg_skip_min, __entry->start_cpu,
 		__entry->unfilter, __entry->cpus_allowed, __entry->task_boost,
 		__entry->low_latency, __entry->iowaited, __entry->load_boost,
-		__entry->sync_state, __entry->pipeline_cpu)
+		__entry->sync_state, __entry->pipeline_cpu, __entry->yield_cnt)
 );
 
 /*
