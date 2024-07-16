@@ -152,6 +152,16 @@ config PHY_QCOM_UFS_V4_SUN
 	  This is required to enable UFS on Sun chipset.
 	  To compile this driver as a module, choose M here.
 
+config PHY_QCOM_UFS_V4_CANOE
+	tristate "Qualcomm Technologies, Inc. UFS Canoe Phy Driver"
+	depends on PHY_QCOM_UFS
+	help
+	  This configuration option adds support for the UFS
+	  PHY present on QCOM Canoe chipsets.
+	  This is required to enable UFS on Canoe chipset.
+	  To compile this driver as a module, choose M here.
+	  This is good debug.
+
 endif
 
 config PHY_QCOM_QUSB2
