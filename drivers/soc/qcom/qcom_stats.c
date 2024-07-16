@@ -53,6 +53,7 @@
 #define MAX_ISLAND_STATS		6
 #define ISLAND_STATS_PID		2 /* ADSP PID */
 #define ISLAND_STATS_SMEM_ID		653
+#define LLC_ISLAND_STATS_SMEM_ID		661
 
 #define STATS_BASEMINOR				0
 #define STATS_MAX_MINOR				1
@@ -129,6 +130,7 @@ struct stats_config {
 	bool read_cx_final_vote;
 	bool ddr_freq_update;
 	bool island_stats_avail;
+	bool llc_island_stats_avail;
 };
 
 struct stats_data {
@@ -752,6 +754,33 @@ int ddr_stats_get_change_his(struct ddr_stats_change_his_info *ddr_his_info)
 }
 EXPORT_SYMBOL_GPL(ddr_stats_get_change_his);
 
+int llc_stats_get_active_scids(struct llc_island_stats_active_scids *llc_active_scids)
+{
+	static struct llc_island_stats_active_scids *local_scids;
+
+	if (!drv || !drv->config->llc_island_stats_avail)
+		return -ENODEV;
+
+	mutex_lock(&drv->lock);
+	if (IS_ERR_OR_NULL(local_scids)) {
+		local_scids = qcom_smem_get(
+						ISLAND_STATS_PID,
+						LLC_ISLAND_STATS_SMEM_ID,
+						NULL);
+		if (IS_ERR_OR_NULL(local_scids)) {
+			mutex_unlock(&drv->lock);
+			return -ENOMEM;
+		}
+	} else {
+		memcpy_fromio(llc_active_scids, local_scids, sizeof(*local_scids));
+	}
+
+	mutex_unlock(&drv->lock);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(llc_stats_get_active_scids);
+
 static void qcom_print_stats(struct seq_file *s, const struct sleep_stats *stat)
 {
 	u64 accumulated = stat->accumulated;
@@ -1267,6 +1296,7 @@ static const struct stats_config rpmh_v4_data = {
 	.ddr_freq_update = true,
 	.read_cx_final_vote = true,
 	.island_stats_avail = true,
+	.llc_island_stats_avail = true,
 };
 
 static const struct of_device_id qcom_stats_table[] = {
