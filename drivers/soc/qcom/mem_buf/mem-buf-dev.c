@@ -16,6 +16,7 @@
 #include <linux/memory.h>
 #include <linux/genalloc.h>
 #include <linux/mem-buf-altmap.h>
+#include <linux/delay.h>
 
 #include <linux/mem-buf.h>
 #include "mem-buf-dev.h"
@@ -31,6 +32,8 @@ struct gen_pool *dmabuf_mem_pool;
 EXPORT_SYMBOL_GPL(dmabuf_mem_pool);
 
 #define POOL_MIN_ALLOC_ORDER SUBSECTION_SHIFT
+
+#define RECLAIM_RETRY_DELAY_MS	100
 
 int mem_buf_hyp_assign_table(struct sg_table *sgt, u32 *src_vmid, int source_nelems,
 			     int *dest_vmids, int *dest_perms, int dest_nelems)
@@ -90,14 +93,36 @@ int mem_buf_unassign_mem(struct sg_table *sgt, int *src_vmids,
 	int dst_vmid[] = {current_vmid};
 	int dst_perm[] = {PERM_READ | PERM_WRITE | PERM_EXEC};
 	int ret;
+	int i, num_retries = 5;
 
 	if (!sgt || !src_vmids || !nr_acl_entries)
 		return -EINVAL;
 
 	if (memparcel_hdl != MEM_BUF_MEMPARCEL_INVALID) {
-		ret = mem_buf_unassign_mem_gunyah(memparcel_hdl);
-		if (ret)
+		/*
+		 * Until support for listening for gunyah notifications is present
+		 */
+		for (i = 0; i < num_retries; i++) {
+			ret = mem_buf_unassign_mem_gunyah(memparcel_hdl);
+			/*
+			 * Although gunyah returns 11 for the case we want to retry for, this error
+			 * code is overridden with -EINVAL by the time it is passed back to us.
+			 * Retry on all failures instead.
+			 */
+			if (!ret)
+				break;
+
+			msleep(RECLAIM_RETRY_DELAY_MS);
+		}
+		if (ret) {
+			pr_err_ratelimited("mem_buf_unassign_mem_gunyah: handle %d failed after %d retries\n",
+					    memparcel_hdl, i);
 			return ret;
+		}
+
+		if (i)
+			pr_info_ratelimited("mem_buf_unassign_mem_gunyah: handle %d succeeeded after %d retries\n",
+					    memparcel_hdl, i);
 	}
 
 	ret = mem_buf_hyp_assign_table(sgt, src_vmids, nr_acl_entries,
