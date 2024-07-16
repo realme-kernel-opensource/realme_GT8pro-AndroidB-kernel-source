@@ -146,6 +146,7 @@ def define_gen3auto():
         "drivers/usb/gadget/function/usb_f_cdev.ko",
         "drivers/usb/gadget/function/usb_f_qdss.ko",
         "drivers/usb/phy/phy-generic.ko",
+        "drivers/usb/phy/phy-msm-snps-hs.ko",
         "drivers/usb/phy/phy-msm-ssusb-qmp.ko",
         "kernel/trace/qcom_ipc_logging.ko",
         "net/mac80211/mac80211.ko",
