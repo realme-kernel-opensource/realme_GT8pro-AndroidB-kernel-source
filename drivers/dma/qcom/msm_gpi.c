@@ -3604,15 +3604,88 @@ static int gpi_find_dynamic_gpii(struct gpi_dev *gpi_dev, u32 seid)
 	return -EIO;
 }
 
+/*
+ * gpi_read_ch_state() - read the gpii channel state
+ * @gpii_chan: base address to gpii channel
+ *
+ * Return: channel state
+ */
+static u32 gpi_read_ch_state(struct gpii_chan *gpii_chan)
+{
+	u32 state;
+
+	state = gpi_read_reg(gpii_chan->gpii, gpii_chan->ch_cntxt_base_reg +
+			     CNTXT_0_CONFIG);
+	state = (state & GPI_GPII_n_CH_k_CNTXT_0_CHSTATE_BMSK) >>
+		GPI_GPII_n_CH_k_CNTXT_0_CHSTATE_SHFT;
+
+	return state;
+}
+
+/**
+ * gpi_cleanup_hw_channel() - stop,reset and deallocate the
+ *                            gsi h/w channel
+ * @chan: Base address of dma channel
+ *
+ * Return: Returns success or failure
+ */
+static int gpi_cleanup_hw_channel(struct dma_chan *chan)
+{
+	struct gpii_chan *gpii_chan = to_gpii_chan(chan);
+	struct gpii *gpii = gpii_chan->gpii;
+	int ret = 0;
+
+	/*update the pm_state to active */
+	gpii->pm_state = ACTIVE_STATE;
+
+	/* send channel stop */
+	ret = gpi_send_cmd(gpii, gpii_chan, GPI_CH_CMD_STOP);
+	if (ret) {
+		GPII_ERR(gpii, gpii_chan->chid, "GPI_CH_CMD_STOP failed\n");
+		return ret;
+	}
+
+	/* send channel reset */
+	ret = gpi_send_cmd(gpii, gpii_chan, GPI_CH_CMD_RESET);
+	if (ret) {
+		GPII_ERR(gpii, gpii_chan->chid, "GPI_CH_CMD_RESET failed\n");
+		return ret;
+	}
+
+	/* send channel dealloc */
+	ret = gpi_send_cmd(gpii, gpii_chan, GPI_CH_CMD_DE_ALLOC);
+	if (ret) {
+		GPII_ERR(gpii, gpii_chan->chid, "GPI_CH_CMD_DE_ALLOC failed\n");
+		return ret;
+	}
+
+	/* dealloc the event channel for once i.e doing here along with tx chanel */
+	if (gpii_chan->chid == 0) {
+		/* send event command dealloc */
+		ret = gpi_send_cmd(gpii, NULL, GPI_EV_CMD_DEALLOC);
+		if (ret) {
+			GPII_ERR(gpii, gpii_chan->chid,
+				 "GPI_EV_CMD_DEALLOC failed\n");
+			return ret;
+		}
+	}
+
+	/* update the pm state to disable */
+	gpii->pm_state = DISABLE_STATE;
+
+	return ret;
+}
+
 /* gpi_of_dma_xlate: open client requested channel */
 static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
 					 struct of_dma *of_dma)
 {
 	struct gpi_dev *gpi_dev = (struct gpi_dev *)of_dma->of_dma_data;
-	u32 seid, chid;
+	u32 seid, chid, ch_state;
 	int gpii, static_gpii_no;
 	struct gpii_chan *gpii_chan;
 	struct dma_chan *dma_chan;
+	int ret = 0;
 
 	if (args->args_count < REQ_OF_DMA_ARGS) {
 		GPI_ERR(gpi_dev,
@@ -3663,6 +3736,26 @@ static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
 		gpii, chid, gpii_chan->req_tres, gpii_chan->priority,
 		gpii_chan->protocol, gpii_chan->seid, gpii_chan->init_config);
 	dma_chan = dma_get_slave_channel(&gpii_chan->vc.chan);
+
+	if (gpi_dev->is_le_vm) {
+		/* Power on case expecting channel state should be NOT allocated.
+		 * For levm reboot case resetting the HW if channel already allocated.
+		 */
+		ch_state = gpi_read_ch_state(gpii_chan);
+		if (ch_state != CH_STATE_NOT_ALLOCATED) {
+			/* Config interrupts only once doing here during tx channel deallocation */
+			if (gpii_chan->chid == 0)
+				gpi_config_interrupts(gpii_chan->gpii, DEFAULT_IRQ_SETTINGS, 0);
+			ret = gpi_cleanup_hw_channel(dma_chan);
+			if (ret) {
+				GPII_ERR(gpii_chan->gpii, gpii_chan->chid,
+					 "gpi_cleanup_hw_channel failed\n");
+				mutex_unlock(&gpi_dev->qup_se_lock);
+				return NULL;
+			}
+		}
+	}
+
 	mutex_unlock(&gpi_dev->qup_se_lock);
 	return dma_chan;
 }
