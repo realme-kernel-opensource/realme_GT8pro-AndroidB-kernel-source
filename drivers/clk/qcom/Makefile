@@ -142,6 +142,7 @@ obj-$(CONFIG_SM_DISPCC_CANOE) += dispcc-canoe.o
 obj-$(CONFIG_SM_GPUCC_CANOE) += gpucc-canoe.o
 obj-$(CONFIG_SM_CAMCC_CANOE) += camcc-canoe.o
 obj-$(CONFIG_SM_CAMBISTMCLKCC_CANOE) += cambistmclkcc-canoe.o
+obj-$(CONFIG_SM_TCSRCC_CANOE) += tcsrcc-canoe.o
 obj-$(CONFIG_SM_GCC_PINEAPPLE) += gcc-pineapple.o
 obj-$(CONFIG_SM_GCC_PINEAPPLE) += gcc-pineapple.o
 obj-$(CONFIG_SM_VIDEOCC_PINEAPPLE) += videocc-pineapple.o

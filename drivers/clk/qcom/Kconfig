@@ -1195,6 +1195,15 @@ config SM_CAMBISTMCLKCC_CANOE
 	  Say Y if you want to support camera devices for a better low-latency
 	  clock.
 
+config SM_TCSRCC_CANOE
+	tristate "CANOE Top-Level CSR Clock Controller"
+	depends on SM_GCC_CANOE
+	help
+	  Support for the TCSR clock controller on Qualcomm Technologies, Inc
+	  CANOE devices.
+	  Say Y if you want to support miscellaneous top-level clocks
+	  such as for the PHY references.
+
 config SM_GPUCC_6115
 	tristate "SM6115 Graphics Clock Controller"
 	select SM_GCC_6115
