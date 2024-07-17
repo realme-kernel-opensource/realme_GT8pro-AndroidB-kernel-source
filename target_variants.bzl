@@ -2,6 +2,7 @@ targets = [
     # keep sorted
     "canoe",
     "sun",
+    "vienna",
 ]
 
 la_variants = [
