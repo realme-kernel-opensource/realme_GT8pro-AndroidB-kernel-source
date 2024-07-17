@@ -215,10 +215,10 @@ static irqreturn_t gh_vcpu_irq_handler(int irq, void *data)
 
 	spin_lock(&gh_vm_lock);
 	vcpu = data;
-	vm = vcpu->vm;
 	if (!vcpu || !vcpu->vm || !vcpu->vm->is_vcpu_info_populated)
 		goto unlock;
 
+	vm = vcpu->vm;
 	trace_gh_vcpu_irq_handler(vcpu->vm->id, vcpu->idx);
 	if (vcpu->workqueue_mode)
 		queue_work(vm->vcpu_wq, &vcpu->work);
