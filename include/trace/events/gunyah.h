@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM gunyah
@@ -86,7 +86,7 @@ DECLARE_EVENT_CLASS(gh_rm_mem_accept_donate_lend_share,
 			((acl_desc != NULL)	? acl_desc->n_acl_entries : 0))
 
 		/* gh_sgl_desc */
-		__field(u16, n_sgl_entries)
+		__field(u32, n_sgl_entries)
 		__dynamic_array(u64, sgl_ipa_base_arr,
 			((sgl_desc != NULL)	? (sgl_desc->n_sgl_entries > MAX_ENTRIES_TO_PRINT
 							? MAX_ENTRIES_TO_PRINT
@@ -285,7 +285,7 @@ TRACE_EVENT(gh_rm_mem_accept_reply,
 
 	TP_STRUCT__entry(
 
-		__field(u16, n_sgl_entries)
+		__field(u32, n_sgl_entries)
 
 		__dynamic_array(u64, sgl_ipa_base_arr,
 				((sgl_desc != NULL)

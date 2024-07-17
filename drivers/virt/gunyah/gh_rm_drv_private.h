@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __GH_RM_DRV_PRIVATE_H
@@ -425,12 +425,24 @@ struct gh_mem_accept_resp_payload {
  */
 struct gh_sgl_frag_entry {
 	struct list_head list;
-	struct gh_sgl_desc *sgl_desc;
+	struct gh_sgl_desc_intf *sgl_desc;
 };
 struct gh_sgl_fragment {
 	struct list_head list;
-	u16 n_sgl_entries;
+	u32 n_sgl_entries;
 };
+
+/*
+ * Call: MEM_ACCEPT/MEM_LEND/MEM_SHARE
+ *
+ * Gunyah interface expects u16 sgl_entries
+ */
+struct gh_sgl_desc_intf {
+	u16 n_sgl_entries;
+	u16 reserved;
+	struct gh_sgl_entry sgl_entries[];
+} __packed;
+
 /*
  * Call: MEM_LEND/MEM_SHARE
  *
