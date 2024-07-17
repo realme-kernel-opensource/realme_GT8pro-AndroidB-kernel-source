@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2022, Linux Foundation. All rights reserved.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -272,6 +272,15 @@ static int ufs_qcom_ber_duration_set(const char *val, const struct kernel_param 
 		override_ber_duration = false;
 
 	return param_set_int(val, kp);
+}
+
+/**
+ * Checks if the populated CPUs are the same as the SoC's max CPUs.
+ * Return: 1 if some CPUs are not populated (partial); 0 otherwise.
+ */
+static inline bool ufs_qcom_partial_cpu_found(struct ufs_qcom_host *host)
+{
+	return cpumask_weight(cpu_possible_mask) != host->max_cpus;
 }
 
 /**
@@ -895,56 +904,6 @@ static void ufs_qcom_select_unipro_mode(struct ufs_qcom_host *host)
 	mb();
 }
 
-/*
- * ufs_qcom_host_reset - reset host controller and PHY
- */
-static int ufs_qcom_host_reset(struct ufs_hba *hba)
-{
-	int ret = 0;
-	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	bool reenable_intr;
-
-	host->reset_in_progress = true;
-
-	if (!host->core_reset) {
-		goto out;
-	}
-
-	reenable_intr = hba->is_irq_enabled;
-	ufshcd_disable_irq(hba);
-
-	ret = reset_control_assert(host->core_reset);
-	if (ret) {
-		dev_err(hba->dev, "%s: core_reset assert failed, err = %d\n",
-				 __func__, ret);
-		goto out;
-	}
-
-	/*
-	 * The hardware requirement for delay between assert/deassert
-	 * is at least 3-4 sleep clock (32.7KHz) cycles, which comes to
-	 * ~125us (4/32768). To be on the safe side add 200us delay.
-	 */
-	usleep_range(200, 210);
-
-	ret = reset_control_deassert(host->core_reset);
-	if (ret) {
-		dev_err(hba->dev, "%s: core_reset deassert failed, err = %d\n",
-				 __func__, ret);
-		goto out;
-	}
-
-	usleep_range(1000, 1100);
-
-	if (reenable_intr)
-		ufshcd_enable_irq(hba);
-
-out:
-	host->vdd_hba_pc = false;
-	host->reset_in_progress = false;
-	return ret;
-}
-
 static int ufs_qcom_phy_power_on(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
@@ -963,6 +922,94 @@ static int ufs_qcom_phy_power_on(struct ufs_hba *hba)
 
 	mutex_unlock(&host->phy_mutex);
 
+	return ret;
+}
+
+/*
+ * ufs_qcom_host_reset - reset host controller and PHY
+ */
+static int ufs_qcom_host_reset(struct ufs_hba *hba)
+{
+	int ret = 0;
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	bool reenable_intr;
+
+	host->reset_in_progress = true;
+
+	if (!host->core_reset) {
+		goto out;
+	}
+
+	if (host->hw_ver.major >= 0x6) {
+		reenable_intr = hba->is_irq_enabled;
+		ufshcd_disable_irq(hba);
+
+		/*
+		 * Refer to the PHY programming guide.
+		 * 1. Assert the BCR reset.
+		 * 2. Power on the PHY regulators and GDSC.
+		 * 3. Release the BCR reset.
+		 */
+		ret = reset_control_assert(host->core_reset);
+		if (ret) {
+			dev_err(hba->dev, "%s: core_reset assert failed, err = %d\n",
+					 __func__, ret);
+			goto out;
+		}
+
+		/*
+		 * If the PHY has already been powered, the ufs_qcom_phy_power_on()
+		 * would be a nop because the flag is_phy_pwr_on would be true.
+		 */
+		ret = ufs_qcom_phy_power_on(hba);
+		if (ret) {
+			dev_err(hba->dev, "%s: phy power on failed, ret = %d\n",
+				__func__, ret);
+			goto out;
+		}
+	} else {
+		/*
+		 * Power on the PHY before resetting the UFS host controller
+		 * and the UFS PHY. Without power, the PHY reset may not work properly.
+		 * If the PHY has already been powered, the ufs_qcom_phy_power_on()
+		 * would be a nop because the flag is_phy_pwr_on would be true.
+		 */
+		ret = ufs_qcom_phy_power_on(hba);
+		if (ret) {
+			dev_err(hba->dev, "%s: phy power on failed, ret = %d\n",
+				__func__, ret);
+			goto out;
+		}
+		reenable_intr = hba->is_irq_enabled;
+		ufshcd_disable_irq(hba);
+		ret = reset_control_assert(host->core_reset);
+		if (ret) {
+			dev_err(hba->dev, "%s: core_reset assert failed, err = %d\n",
+					 __func__, ret);
+			goto out;
+		}
+	}
+
+	/*
+	 * The hardware requirement for delay between assert/deassert
+	 * is at least 3-4 sleep clock (32.7KHz) cycles, which comes to
+	 * ~125us (4/32768). To be on the safe side add 200us delay.
+	 */
+	usleep_range(200, 210);
+
+	ret = reset_control_deassert(host->core_reset);
+	if (ret)
+		dev_err(hba->dev, "%s: core_reset deassert failed, err = %d\n",
+				 __func__, ret);
+
+	usleep_range(1000, 1100);
+
+	if (reenable_intr)
+		ufshcd_enable_irq(hba);
+
+out:
+	host->vdd_hba_pc = false;
+	host->reset_in_progress = false;
 	return ret;
 }
 
@@ -1048,10 +1095,6 @@ static int ufs_qcom_enable_hw_clk_gating(struct ufs_hba *hba)
 
 	/* Ensure that HW clock gating is enabled before next operations */
 	mb();
-
-	/* Enable Qunipro internal clock gating if supported */
-	if (!ufs_qcom_cap_qunipro_clk_gating(host))
-		goto out;
 
 	/* Enable all the mask bits */
 	err = ufshcd_dme_rmw(hba, DL_VS_CLK_CFG_MASK,
@@ -1164,15 +1207,7 @@ static int ufs_qcom_hce_enable_notify(struct ufs_hba *hba,
 	return err;
 }
 
-/**
- * ufs_qcom_cfg_timers - Configure ufs qcom cfg timers
- *
- * @hba: host controller instance
- * @gear: Current operating gear
- * @hs: current power mode
- * @rate: current operating rate (A or B)
- * @update_link_startup_timer: indicate if link_start ongoing
- * @is_pre_scale_up: flag to check if pre scale up condition.
+/*
  * Return: zero for success and non-zero in case of a failure.
  */
 static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
@@ -1181,29 +1216,8 @@ static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufs_clk_info *clki;
-	u32 core_clk_period_in_ns;
-	u32 tx_clk_cycles_per_us = 0;
 	unsigned long core_clk_rate = 0;
 	u32 core_clk_cycles_per_us = 0;
-
-	static u32 pwm_fr_table[][2] = {
-		{UFS_PWM_G1, 0x1},
-		{UFS_PWM_G2, 0x1},
-		{UFS_PWM_G3, 0x1},
-		{UFS_PWM_G4, 0x1},
-	};
-
-	static u32 hs_fr_table_rA[][2] = {
-		{UFS_HS_G1, 0x1F},
-		{UFS_HS_G2, 0x3e},
-		{UFS_HS_G3, 0x7D},
-	};
-
-	static u32 hs_fr_table_rB[][2] = {
-		{UFS_HS_G1, 0x24},
-		{UFS_HS_G2, 0x49},
-		{UFS_HS_G3, 0x92},
-	};
 
 	/*
 	 * The Qunipro controller does not use following registers:
@@ -1215,7 +1229,6 @@ static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 	 * controller V4.0.0 onwards.
 	*/
 	if (host->hw_ver.major < 4 &&
-		ufs_qcom_cap_qunipro(host) &&
 	    !ufshcd_is_intr_aggr_allowed(hba) &&
 		!ufshcd_is_auto_hibern8_supported(hba))
 		return 0;
@@ -1245,79 +1258,6 @@ static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 		/*
 		 * make sure above write gets applied before we return from
 		 * this function.
-		 */
-		mb();
-	}
-
-	if (ufs_qcom_cap_qunipro(host))
-		return 0;
-
-	core_clk_period_in_ns = NSEC_PER_SEC / core_clk_rate;
-	core_clk_period_in_ns <<= OFFSET_CLK_NS_REG;
-	core_clk_period_in_ns &= MASK_CLK_NS_REG;
-
-	switch (hs) {
-	case FASTAUTO_MODE:
-	case FAST_MODE:
-		if (rate == PA_HS_MODE_A) {
-			if (gear > ARRAY_SIZE(hs_fr_table_rA)) {
-				dev_err(hba->dev,
-					"%s: index %d exceeds table size %zu\n",
-					__func__, gear,
-					ARRAY_SIZE(hs_fr_table_rA));
-				return -EINVAL;
-			}
-			tx_clk_cycles_per_us = hs_fr_table_rA[gear-1][1];
-		} else if (rate == PA_HS_MODE_B) {
-			if (gear > ARRAY_SIZE(hs_fr_table_rB)) {
-				dev_err(hba->dev,
-					"%s: index %d exceeds table size %zu\n",
-					__func__, gear,
-					ARRAY_SIZE(hs_fr_table_rB));
-				return -EINVAL;
-			}
-			tx_clk_cycles_per_us = hs_fr_table_rB[gear-1][1];
-		} else {
-			dev_err(hba->dev, "%s: invalid rate = %d\n",
-				__func__, rate);
-			return -EINVAL;
-		}
-		break;
-	case SLOWAUTO_MODE:
-	case SLOW_MODE:
-		if (gear > ARRAY_SIZE(pwm_fr_table)) {
-			dev_err(hba->dev,
-					"%s: index %d exceeds table size %zu\n",
-					__func__, gear,
-					ARRAY_SIZE(pwm_fr_table));
-			return -EINVAL;
-		}
-		tx_clk_cycles_per_us = pwm_fr_table[gear-1][1];
-		break;
-	case UNCHANGED:
-	default:
-		dev_err(hba->dev, "%s: invalid mode = %d\n", __func__, hs);
-		return -EINVAL;
-	}
-
-	if (ufshcd_readl(hba, REG_UFS_TX_SYMBOL_CLK_NS_US) !=
-	    (core_clk_period_in_ns | tx_clk_cycles_per_us)) {
-		/* this register 2 fields shall be written at once */
-		ufshcd_writel(hba, core_clk_period_in_ns | tx_clk_cycles_per_us,
-			      REG_UFS_TX_SYMBOL_CLK_NS_US);
-		/*
-		 * make sure above write gets applied before we return from
-		 * this function.
-		 */
-		mb();
-	}
-
-	if (update_link_startup_timer && host->hw_ver.major < 0x5) {
-		ufshcd_writel(hba, ((core_clk_rate / MSEC_PER_SEC) * 100),
-			      REG_UFS_CFG0);
-		/*
-		 * make sure that this configuration is applied before
-		 * we return
 		 */
 		mb();
 	}
@@ -1503,8 +1443,8 @@ static int ufs_qcom_link_startup_notify(struct ufs_hba *hba,
 				strcmp(android_boot_dev, dev_name(dev)))
 			return -ENODEV;
 
-		if (__ufs_qcom_cfg_timers(hba, UFS_PWM_G1, SLOWAUTO_MODE,
-					0, true, false)) {
+		if (ufs_qcom_cfg_timers(hba, UFS_PWM_G1, SLOWAUTO_MODE,
+					0, true)) {
 			dev_err(hba->dev, "%s: ufs_qcom_cfg_timers() failed\n",
 				__func__);
 			err = -EINVAL;
@@ -1513,12 +1453,10 @@ static int ufs_qcom_link_startup_notify(struct ufs_hba *hba,
 
 		ufs_qcom_phy_ctrl_rx_linecfg(phy, true);
 
-		if (ufs_qcom_cap_qunipro(host)) {
-			err = ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(
-				hba);
-			if (err)
-				goto out;
-		}
+		err = ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(
+			hba);
+		if (err)
+			goto out;
 
 		err = ufs_qcom_enable_hw_clk_gating(hba);
 		if (err)
@@ -2130,9 +2068,9 @@ static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 
 		break;
 	case POST_CHANGE:
-		if (__ufs_qcom_cfg_timers(hba, dev_req_params->gear_rx,
+		if (ufs_qcom_cfg_timers(hba, dev_req_params->gear_rx,
 					dev_req_params->pwr_rx,
-					dev_req_params->hs_rate, false, false)) {
+					dev_req_params->hs_rate, false)) {
 			dev_err(hba->dev, "%s: ufs_qcom_cfg_timers() failed\n",
 				__func__);
 			/*
@@ -2398,15 +2336,8 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
-	if (host->hw_ver.major == 0x2) {
+	if (host->hw_ver.major == 0x2)
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_UFS_HCI_VERSION;
-
-		if (!ufs_qcom_cap_qunipro(host))
-			/* Legacy UniPro mode still need following quirks */
-			hba->quirks |= (UFSHCD_QUIRK_DELAY_BEFORE_DME_CMDS
-				| UFSHCD_QUIRK_DME_PEER_ACCESS_AUTO_MODE
-				| UFSHCD_QUIRK_BROKEN_PA_RXHSUNTERMCAP);
-	}
 
 	if (host->disable_lpm || host->broken_ahit_wa)
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8;
@@ -2930,6 +2861,19 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	host->cpufreq_dis = true;
+	/*
+	 * In a system where CPUs are partially populated, the cpu mapping
+	 * would be rearranged. Disable the QoS and CPU frequency scaling
+	 * in that case. The UFS performance may be impacted.
+	 * Check sys/devices/system/cpu/possible for possible cause of
+	 * performance degradation.
+	 */
+	if (ufs_qcom_partial_cpu_found(host)) {
+		dev_err(hba->dev, "%s: QoS disabled. Check partial CPUs\n",
+			__func__);
+		return;
+	}
+
 	qr = kzalloc(sizeof(*qr), GFP_KERNEL);
 	if (!qr)
 		return;
@@ -3006,6 +2950,16 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 	struct device_node *np = dev->of_node;
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int mask = 0;
+
+	/*
+	 * In a system where CPUs are partially populated, the cpu mapping
+	 * would be rearranged. Disable irq affinity in that case.
+	 * The UFS performance may be impacted.
+	 * Check sys/devices/system/cpu/possible for possible cause of
+	 * performance degradation.
+	 */
+	if (ufs_qcom_partial_cpu_found(host))
+		return;
 
 	if (np) {
 		of_property_read_u32(np, "qcom,prime-mask", &mask);
@@ -3301,16 +3255,7 @@ static void ufs_qcom_setup_max_hs_gear(struct ufs_qcom_host *host)
 	struct ufs_qcom_dev_params *host_pwr_cap = &host->host_pwr_cap;
 	u32 param0;
 
-	if (host->hw_ver.major == 0x1) {
-		/*
-		 * HS-G3 operations may not reliably work on legacy QCOM UFS
-		 * host controller hardware even though capability exchange
-		 * during link startup phase may end up negotiating maximum
-		 * supported gear as G3. Hence, downgrade the maximum supported
-		 * gear to HS-G2.
-		 */
-		host_pwr_cap->hs_tx_gear = UFS_HS_G2;
-	} else if (host->hw_ver.major < 0x4) {
+	if (host->hw_ver.major < 0x4) {
 		host_pwr_cap->hs_tx_gear = UFS_HS_G3;
 	} else {
 		param0 = ufshcd_readl(host->hba, REG_UFS_PARAM0);
@@ -3403,6 +3348,23 @@ static void ufs_qcom_parse_pbl_rst_workaround_flag(struct ufs_qcom_host *host)
 		return;
 
 	host->bypass_pbl_rst_wa = of_property_read_bool(np, str);
+}
+
+/*
+ * ufs_qcom_parse_max_cpus - read "qcom,max-cpus" entry from DT
+ */
+static void ufs_qcom_parse_max_cpus(struct ufs_qcom_host *host)
+{
+	struct device_node *np = host->hba->dev->of_node;
+
+	if (!np)
+		return;
+
+	of_property_read_u32(np, "qcom,max-cpus", &host->max_cpus);
+	if (!host->max_cpus) {
+		dev_err(host->hba->dev, "%s: missing max-cpus DT.\n", __func__);
+		host->max_cpus = 8;
+	}
 }
 
 /*
@@ -3587,6 +3549,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 
 	ufs_qcom_parse_wb(host);
 	ufs_qcom_parse_pbl_rst_workaround_flag(host);
+	ufs_qcom_parse_max_cpus(host);
 	ufs_qcom_parse_broken_ahit_workaround_flag(host);
 	ufs_qcom_set_caps(hba);
 	ufs_qcom_advertise_quirks(hba);
@@ -3754,9 +3717,6 @@ static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba)
 	struct ufs_pa_layer_attr *attr = &host->dev_req_params;
 	int err = 0;
 
-	if (!ufs_qcom_cap_qunipro(host))
-		goto out;
-
 	err = __ufs_qcom_cfg_timers(hba, attr->gear_rx, attr->pwr_rx,
 				  attr->hs_rate, false, true);
 	if (err) {
@@ -3765,7 +3725,7 @@ static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba)
 	}
 
 	err = ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(hba);
-out:
+
 	return err;
 }
 
@@ -3814,9 +3774,6 @@ static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
 	hba->clk_gating.delay_ms = UFS_QCOM_CLK_GATING_DELAY_MS_PWR_SAVE;
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
-	if (!ufs_qcom_cap_qunipro(host))
-		return 0;
-
 	if (attr)
 		ufs_qcom_cfg_timers(hba, attr->gear_rx, attr->pwr_rx,
 				    attr->hs_rate, false);
@@ -3853,7 +3810,7 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufs_pa_layer_attr *dev_req_params = &host->dev_req_params;
-	int err = 0;
+	int err;
 
 	/* check the host controller state before sending hibern8 cmd */
 	if (!ufshcd_is_hba_active(hba))
@@ -4676,12 +4633,6 @@ static int ufs_qcom_device_reset(struct ufs_hba *hba)
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int ret = 0;
 
-	/* Reset UFS Host Controller and PHY */
-	ret = ufs_qcom_host_reset(hba);
-	if (ret)
-		dev_warn(hba->dev, "%s: host reset returned %d\n",
-				 __func__, ret);
-
 	/* reset gpio is optional */
 	if (!host->device_reset)
 		return -EOPNOTSUPP;
@@ -4692,6 +4643,12 @@ static int ufs_qcom_device_reset(struct ufs_hba *hba)
 	 */
 	ufs_qcom_device_reset_ctrl(hba, true);
 	usleep_range(10, 15);
+
+	/* Reset UFS Host Controller and PHY */
+	ret = ufs_qcom_host_reset(hba);
+	if (ret)
+		dev_warn(hba->dev, "%s: host reset returned %d\n",
+				 __func__, ret);
 
 	ufs_qcom_device_reset_ctrl(hba, false);
 	usleep_range(10, 15);
@@ -4952,7 +4909,7 @@ static int ufs_qcom_config_esi(struct ufs_hba *hba)
 		if (host->hw_ver.major == 6)
 			ufshcd_rmwl(hba, ESI_VEC_MASK,
 				    FIELD_PREP(ESI_VEC_MASK, MAX_ESI_VEC - 1),
-				    REG_UFS_CFG3);
+				      REG_UFS_CFG3);
 		ufshcd_mcq_enable_esi(hba);
 	}
 
@@ -5242,6 +5199,9 @@ static ssize_t irq_affinity_support_store(struct device *dev,
 
 	/* if perf-mask is not set, don't proceed */
 	if (!host->perf_mask.bits[0])
+		goto out;
+
+	if (ufs_qcom_partial_cpu_found(host))
 		goto out;
 
 	host->irq_affinity_support = !!value;
@@ -5634,13 +5594,15 @@ static void ufs_qcom_remove(struct platform_device *pdev)
 
 	hba =  platform_get_drvdata(pdev);
 	host = ufshcd_get_variant(hba);
-	r = host->ufs_qos;
-	qcg = r->qcg;
 
-	pm_runtime_get_sync(&(pdev)->dev);
-	for (i = 0; i < r->num_groups; i++, qcg++)
-		remove_group_qos(qcg);
+	if (host->ufs_qos) {
+		r = host->ufs_qos;
+		qcg = r->qcg;
 
+		pm_runtime_get_sync(&(pdev)->dev);
+		for (i = 0; i < r->num_groups; i++, qcg++)
+			remove_group_qos(qcg);
+	}
 	if (msm_minidump_enabled())
 		atomic_notifier_chain_unregister(&panic_notifier_list,
 				&host->ufs_qcom_panic_nb);
