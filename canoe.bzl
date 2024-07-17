@@ -15,6 +15,7 @@ def define_canoe():
         "drivers/bus/mhi/host/mhi.ko",
         "drivers/clk/qcom/clk-dummy.ko",
         "drivers/clk/qcom/clk-qcom.ko",
+        "drivers/clk/qcom/evacc-canoe.ko",
         "drivers/clk/qcom/gcc-canoe.ko",
         "drivers/clk/qcom/gdsc-regulator.ko",
         "drivers/cpuidle/governors/qcom_lpm.ko",
