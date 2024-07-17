@@ -1177,6 +1177,15 @@ config SM_GPUCC_CANOE
 	  Say Y if you want to support graphics controller devices and
 	  functionality such as 3D graphics.
 
+config SM_CAMCC_CANOE
+	tristate "CANOE Camera Clock Controller"
+	depends on SM_GCC_CANOE
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc
+	  Canoe devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
 config SM_GPUCC_6115
 	tristate "SM6115 Graphics Clock Controller"
 	select SM_GCC_6115
