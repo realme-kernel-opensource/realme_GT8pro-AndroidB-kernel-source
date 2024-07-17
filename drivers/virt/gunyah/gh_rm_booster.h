@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __GH_RM_BOOSTER_H
 #define __GH_RM_BOOSTER_H
@@ -19,6 +19,15 @@ static inline int gh_hcall_change_rm_affinity(gh_capid_t cap_id, int cpu)
 	return _gh_hcall(0x603d, (struct gh_hcall_args){ cap_id, cpu, -1 },
 			 &_resp);
 }
+
+static inline int gh_hcall_change_rm_affinity_mpidr(gh_capid_t cap_id, u64 mpidr)
+{
+	struct gh_hcall_resp _resp = {0};
+
+	return _gh_hcall(0x603d, (struct gh_hcall_args){ cap_id, mpidr, 0 },
+			 &_resp);
+}
+
 
 #endif
 
