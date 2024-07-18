@@ -3911,8 +3911,9 @@ void update_cpu_capacity_helper(int cpu)
 	cluster = cpu_cluster(cpu);
 	/* reduce the fmax_capacity under cpufreq constraints */
 	if (cluster->walt_internal_freq_limit != cluster->max_possible_freq)
-		fmax_capacity = mult_frac(fmax_capacity, cluster->walt_internal_freq_limit,
-					 cluster->max_possible_freq);
+		fmax_capacity = mult_frac(fmax_capacity,
+					min(cluster->walt_internal_freq_limit, cluster->max_freq),
+					cluster->max_possible_freq);
 
 	old = rq->cpu_capacity_orig;
 	rq->cpu_capacity_orig = min(fmax_capacity, thermal_cap);
