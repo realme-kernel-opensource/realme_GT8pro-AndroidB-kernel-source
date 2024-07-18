@@ -992,7 +992,7 @@ static inline bool task_fits_max(struct task_struct *p, int dst_cpu)
 	 */
 	cpumask_andnot(&other_cluster, cpu_possible_mask, &cpu_cluster(dst_cpu)->cpus);
 	if (!cpumask_intersects(&other_cluster, p->cpus_ptr))
-		return false;
+		return true;
 
 	if (is_max_possible_cluster_cpu(dst_cpu))
 		return true;
