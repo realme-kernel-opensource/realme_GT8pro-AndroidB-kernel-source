@@ -1087,7 +1087,7 @@ static int qcom_glink_rx_thread(void *data)
 	struct glink_channel *channel = data;
 	struct qcom_glink *glink = channel->glink;
 	unsigned long flags;
-	int ret;
+	int ret = 0;
 
 	for (;;) {
 		ret = wait_event_interruptible(channel->rx_wq, !list_empty(&channel->rx_queue) ||
