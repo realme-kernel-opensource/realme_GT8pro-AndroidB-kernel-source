@@ -4345,6 +4345,8 @@ static void walt_sched_init_rq(struct rq *rq)
 	wrq->mvp_arrival_time = 0;
 	wrq->mvp_throttle_time = 0;
 	wrq->skip_mvp = false;
+	wrq->uclamp_limit[UCLAMP_MIN] = 0;
+	wrq->uclamp_limit[UCLAMP_MAX] = SCHED_CAPACITY_SCALE;
 }
 
 void sched_window_nr_ticks_change(void)
@@ -4532,11 +4534,23 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 	if (!double_enqueue)
 		walt_inc_cumulative_runnable_avg(rq, p);
 
-	if ((flags & ENQUEUE_WAKEUP)) {
-		if (walt_flag_test(p, WALT_TRAILBLAZER_BIT))
-			waltgov_run_callback(rq, WALT_CPUFREQ_TRAILBLAZER_BIT);
-		else if (do_pl_notif(rq))
-			waltgov_run_callback(rq, WALT_CPUFREQ_PL_BIT);
+
+
+	if ((flags & ENQUEUE_WAKEUP) && walt_flag_test(p, WALT_TRAILBLAZER_BIT)) {
+		waltgov_run_callback(rq, WALT_CPUFREQ_TRAILBLAZER_BIT);
+	} else if ((flags & ENQUEUE_WAKEUP) && do_pl_notif(rq)) {
+		waltgov_run_callback(rq, WALT_CPUFREQ_PL_BIT);
+	} else if (walt_feat(WALT_FEAT_UCLAMP_FREQ_BIT)) {
+		unsigned long min, max;
+
+		min = uclamp_rq_get(rq, UCLAMP_MIN);
+		max = uclamp_rq_get(rq, UCLAMP_MAX);
+		if ((wrq->uclamp_limit[UCLAMP_MIN] != min) ||
+		    (wrq->uclamp_limit[UCLAMP_MAX] != max)) {
+			wrq->uclamp_limit[UCLAMP_MIN] = min;
+			wrq->uclamp_limit[UCLAMP_MAX] = max;
+			waltgov_run_callback(rq, WALT_CPUFREQ_UCLAMP_BIT);
+		}
 	}
 
 	if (num_sched_clusters >= 2) {
@@ -4601,6 +4615,18 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 	if (!double_dequeue)
 		walt_dec_cumulative_runnable_avg(rq, p);
 
+	if (walt_feat(WALT_FEAT_UCLAMP_FREQ_BIT)) {
+		unsigned long min, max;
+
+		min = uclamp_rq_get(rq, UCLAMP_MIN);
+		max = uclamp_rq_get(rq, UCLAMP_MAX);
+		if ((wrq->uclamp_limit[UCLAMP_MIN] != min) ||
+		    (wrq->uclamp_limit[UCLAMP_MAX] != max)) {
+			wrq->uclamp_limit[UCLAMP_MIN] = min;
+			wrq->uclamp_limit[UCLAMP_MAX] = max;
+			waltgov_run_callback(rq, WALT_CPUFREQ_UCLAMP_BIT);
+		}
+	}
 	trace_sched_enq_deq_task(p, 0, cpumask_bits(p->cpus_ptr)[0], is_mvp(wts));
 }
 

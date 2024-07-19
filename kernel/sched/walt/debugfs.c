@@ -9,7 +9,7 @@
 #include "walt.h"
 #include "trace.h"
 
-unsigned int debugfs_walt_features = UINT_MAX;
+unsigned int debugfs_walt_features;
 static struct dentry *debugfs_walt;
 void walt_register_debugfs(void)
 {

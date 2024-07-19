@@ -277,6 +277,7 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	struct cpufreq_policy *policy = wg_policy->policy;
 	unsigned int freq, raw_freq, final_freq, smart_freq;
 	struct waltgov_cpu *wg_driv_cpu = &per_cpu(waltgov_cpu, wg_policy->driving_cpu);
+	struct walt_rq *wrq = &per_cpu(walt_rq, wg_policy->driving_cpu);
 	struct walt_sched_cluster *cluster = NULL;
 	bool skip = false;
 	bool thermal_isolated_now = cpus_halted_by_client(
@@ -357,6 +358,11 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 		freq = freq_cap[PARTIAL_HALT_CAP][cluster->id];
 		wg_driv_cpu->reasons |= CPUFREQ_REASON_PARTIAL_HALT_CAP_BIT;
 	}
+
+	if ((wg_driv_cpu->flags & WALT_CPUFREQ_UCLAMP_BIT) &&
+		((wrq->uclamp_limit[UCLAMP_MIN] != 0) ||
+			(wrq->uclamp_limit[UCLAMP_MAX] != SCHED_CAPACITY_SCALE)))
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_UCLAMP_BIT;
 
 	if (wg_policy->cached_raw_freq && freq == wg_policy->cached_raw_freq &&
 		!wg_policy->need_freq_update) {

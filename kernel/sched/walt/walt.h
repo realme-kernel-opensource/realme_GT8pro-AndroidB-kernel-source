@@ -89,7 +89,10 @@ enum freq_caps {
 
 extern int soc_sched_lib_name_capacity;
 
+/* WALT feature */
 #define WALT_FEAT_TRAILBLAZER_BIT	BIT_ULL(0)
+#define WALT_FEAT_UCLAMP_FREQ_BIT	BIT_ULL(1)
+
 extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 
 /*wts->flags bits*/
@@ -264,6 +267,8 @@ struct walt_rq {
 	u64			latest_clock;
 	u32			enqueue_counter;
 	unsigned long	cpu_capacity_orig;
+	/* UCLAMP tracking */
+	unsigned long		uclamp_limit[UCLAMP_CNT];
 };
 
 DECLARE_PER_CPU(struct walt_rq, walt_rq);
@@ -485,6 +490,7 @@ extern cpumask_t cpus_for_pipeline;
 #define WALT_CPUFREQ_SHARED_RAIL_BIT		BIT(7)
 #define WALT_CPUFREQ_TRAILBLAZER_BIT		BIT(8)
 #define WALT_CPUFREQ_SMART_FREQ_BIT		BIT(9)
+#define WALT_CPUFREQ_UCLAMP_BIT			BIT(10)
 
 /* CPUFREQ_REASON_LOAD is unused. If reasons value is 0, this indicates
  * that no extra features were enforcd, and the frequency alligns with
@@ -511,6 +517,7 @@ extern cpumask_t cpus_for_pipeline;
 #define CPUFREQ_REASON_TRAILBLAZER_CPU_BIT	BIT(16)
 #define CPUFREQ_REASON_ADAPTIVE_LVL_1_BIT	BIT(17)
 #define CPUFREQ_REASON_IPC_SMART_FREQ_BIT	BIT(18)
+#define CPUFREQ_REASON_UCLAMP_BIT		BIT(19)
 
 enum sched_boost_policy {
 	SCHED_BOOST_NONE,
