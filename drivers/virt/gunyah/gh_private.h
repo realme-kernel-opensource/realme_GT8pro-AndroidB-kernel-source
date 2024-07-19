@@ -16,6 +16,15 @@
 #define GH_EVENT_DESTROY_VM 1
 #define GH_MAX_VCPUS 8
 
+struct gh_vm_user_mem {
+	struct sg_table *sgt;
+	struct page **pages;
+	unsigned long npages;
+	u32 n_sgl_entries;
+	struct gh_sgl_entry *sgl_entries;
+	gh_memparcel_handle_t mem_handle;
+};
+
 struct gh_vcpu {
 	u32 vcpu_id;
 	struct gh_vm *vm;
@@ -38,6 +47,8 @@ struct gh_vm {
 	refcount_t users_count;
 	gh_memparcel_handle_t mem_handle;
 	struct mutex vm_lock;
+	struct gh_vm_user_mem *memory_mapping;
+	struct mm_struct *mm; /* userspace tied to this vm */
 };
 
 /*
@@ -45,11 +56,14 @@ struct gh_vm {
  */
 int gh_provide_mem(struct gh_vm *vm, phys_addr_t phys,
 					ssize_t size, bool is_system_vm);
+int gh_provide_user_mem(gh_vmid_t vmid, struct gh_vm_user_mem *memory_mapping);
 int gh_reclaim_mem(struct gh_vm *vm, phys_addr_t phys,
 					ssize_t size, bool is_system_vm);
+int gh_reclaim_user_mem(struct gh_vm *vm);
 long gh_vm_configure(u16 auth_mech, u64 image_offset,
 			u64 image_size, u64 dtb_offset, u64 dtb_size,
-			u32 pas_id, const char *fw_name, struct gh_vm *vm);
+			u32 pas_id, struct gh_vm *vm);
+long gh_vm_init(const char *fw_name, struct gh_vm *vm);
 void gh_uevent_notify_change(unsigned int type, struct gh_vm *vm);
 
 #endif /* _GH_PRIVATE_H */
