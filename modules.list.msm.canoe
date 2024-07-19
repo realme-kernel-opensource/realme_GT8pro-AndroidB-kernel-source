@@ -8,6 +8,7 @@ cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko
 debug-regulator.ko
+dispcc-canoe.ko
 evacc-canoe.ko
 gcc-canoe.ko
 gdsc-regulator.ko
