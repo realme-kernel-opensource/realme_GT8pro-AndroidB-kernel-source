@@ -20,7 +20,7 @@ struct gh_vm_user_mem {
 	struct sg_table *sgt;
 	struct page **pages;
 	unsigned long npages;
-	u32 n_sgl_entries;
+	unsigned long n_sgl_entries;
 	struct gh_sgl_entry *sgl_entries;
 	gh_memparcel_handle_t mem_handle;
 };

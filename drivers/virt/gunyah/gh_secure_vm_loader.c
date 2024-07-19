@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -398,6 +398,12 @@ long gh_vm_ioctl_set_user_mem_region(struct gh_vm *vm, unsigned long arg)
 	for (i = 1; i < mapping->npages; i++) {
 		if (!pages_are_mergeable(mapping->pages[i - 1], mapping->pages[i]))
 			mapping->n_sgl_entries++;
+	}
+
+	if (mapping->n_sgl_entries > U16_MAX) {
+		pr_err_ratelimited("Too many sgl_entries\n");
+		ret = -EOVERFLOW;
+		goto unpin_pages;
 	}
 
 	mapping->sgl_entries = kcalloc(mapping->n_sgl_entries,
