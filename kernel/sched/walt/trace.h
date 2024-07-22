@@ -544,24 +544,27 @@ TRACE_EVENT(core_ctl_set_boost,
 TRACE_EVENT(core_ctl_update_nr_need,
 
 	TP_PROTO(int cpu, int nr_need, int nr_misfit_need, int nrrun,
-		 int max_nr, int strict_nrrun, int nr_assist_need, int nr_misfit_assist_need,
-		 int nr_assist, int nr_busy),
+		 unsigned int nrrun_cpu_min_misfit, int max_nr, int strict_nrrun,
+		 int nr_assist_need, int nr_misfit_assist_need, int nr_assist,
+		 int nr_busy, unsigned int assist_cpu_min_misfit),
 
-	TP_ARGS(cpu, nr_need, nr_misfit_need, nrrun,
+	TP_ARGS(cpu, nr_need, nr_misfit_need, nrrun, nrrun_cpu_min_misfit,
 		max_nr, strict_nrrun, nr_assist_need, nr_misfit_assist_need,
-		nr_assist, nr_busy),
+		nr_assist, nr_busy, assist_cpu_min_misfit),
 
 	TP_STRUCT__entry(
 		__field(int, cpu)
 		__field(int, nr_need)
 		__field(int, nr_misfit_need)
 		__field(int, nrrun)
+		__field(unsigned int, nrrun_cpu_min_misfit)
 		__field(int, max_nr)
 		__field(int, strict_nrrun)
 		__field(int, nr_assist_need)
 		__field(int, nr_misfit_assist_need)
 		__field(int, nr_assist)
 		__field(int, nr_busy)
+		__field(unsigned int, assist_cpu_min_misfit)
 	),
 
 	TP_fast_assign(
@@ -569,18 +572,21 @@ TRACE_EVENT(core_ctl_update_nr_need,
 		__entry->nr_need		= nr_need;
 		__entry->nr_misfit_need		= nr_misfit_need;
 		__entry->nrrun			= nrrun;
+		__entry->nrrun_cpu_min_misfit	= nrrun_cpu_min_misfit;
 		__entry->max_nr			= max_nr;
 		__entry->strict_nrrun		= strict_nrrun;
 		__entry->nr_assist_need		= nr_assist_need;
 		__entry->nr_misfit_assist_need	= nr_misfit_assist_need;
 		__entry->nr_assist		= nr_assist;
 		__entry->nr_busy		= nr_busy;
+		__entry->assist_cpu_min_misfit	= assist_cpu_min_misfit;
 	),
 
-	TP_printk("cpu=%d nr_need=%d nr_misfit_need=%d nrrun=%d max_nr=%d strict_nrrun=%d nr_assist_need=%d nr_misfit_assist_need=%d nr_assist=%d nr_busy=%d",
+	TP_printk("cpu=%d nr_need=%d nr_misfit_need=%d nrrun=%d nr_misfit_threshold=%u max_nr=%d strict_nrrun=%d nr_assist_need=%d nr_misfit_assist_need=%d nr_assist=%d nr_busy=%d min_nr_assist_misfit_threshold=%u",
 		__entry->cpu, __entry->nr_need, __entry->nr_misfit_need, __entry->nrrun,
-		__entry->max_nr, __entry->strict_nrrun, __entry->nr_assist_need,
-		__entry->nr_misfit_assist_need, __entry->nr_assist, __entry->nr_busy)
+		__entry->nrrun_cpu_min_misfit, __entry->max_nr, __entry->strict_nrrun,
+		__entry->nr_assist_need, __entry->nr_misfit_assist_need,
+		__entry->nr_assist, __entry->nr_busy, __entry->assist_cpu_min_misfit)
 );
 
 TRACE_EVENT(core_ctl_notif_data,
