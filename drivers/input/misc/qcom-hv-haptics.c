@@ -4376,15 +4376,34 @@ static int haptics_parse_lra_dt(struct haptics_chip *chip)
 
 static int haptics_get_revision(struct haptics_chip *chip)
 {
+	struct device_node *node = chip->dev->of_node;
+	const __be32 *addr;
 	int rc;
 	u8 val[2];
 
+	/* Get HAP_CFG module revision */
+	addr = of_get_address(node, 0, NULL, NULL);
+	if (!addr) {
+		dev_err(chip->dev, "Read HAPTICS_CFG address failed\n");
+		return -EINVAL;
+	}
+
+	chip->cfg_addr_base = be32_to_cpu(*addr);
 	rc = haptics_read(chip, chip->cfg_addr_base,
 			HAP_CFG_REVISION1_REG, val, 2);
 	if (rc < 0)
 		return rc;
 
 	chip->cfg_revision = (val[1] << 8) | val[0];
+
+	/* Get HAP_PTN module revision */
+	addr = of_get_address(node, 1, NULL, NULL);
+	if (!addr) {
+		dev_err(chip->dev, "Read HAPTICS_PATTERN address failed\n");
+		return -EINVAL;
+	}
+
+	chip->ptn_addr_base = be32_to_cpu(*addr);
 	rc = haptics_read(chip, chip->ptn_addr_base,
 			HAP_PTN_REVISION1_REG, val, 2);
 	if (rc < 0)
@@ -4392,21 +4411,7 @@ static int haptics_get_revision(struct haptics_chip *chip)
 
 	chip->ptn_revision = (val[1] << 8) | val[0];
 
-	if (is_haptics_external_powered(chip)) {
-		dev_info(chip->dev, "haptics revision: HAP_CFG %#x, HAP_PTN %#x\n",
-			chip->cfg_revision, chip->ptn_revision);
-	} else {
-		rc = haptics_read(chip, chip->hbst_addr_base,
-				HAP_BOOST_REVISION1, val, 2);
-		if (rc < 0)
-			return rc;
-
-		chip->hbst_revision = (val[1] << 8) | val[0];
-		dev_info(chip->dev, "haptics revision: HAP_CFG %#x, HAP_PTN %#x, HAP_HBST %#x\n",
-			chip->cfg_revision, chip->ptn_revision, chip->hbst_revision);
-
-	}
-
+	/* Get hw_type based on HAP_CFG and HAP_PTN revision combination */
 	if ((MAJOR_REV(chip->cfg_revision) == HAP_CFG_V2) &&
 			(MAJOR_REV(chip->ptn_revision) == HAP_PTN_V2)) {
 		chip->hw_type = HAP520;
@@ -4427,6 +4432,29 @@ static int haptics_get_revision(struct haptics_chip *chip)
 		dev_err(chip->dev, "haptics revision is not supported\n");
 		return -EOPNOTSUPP;
 	}
+
+	if (is_haptics_external_powered(chip)) {
+		dev_info(chip->dev, "haptics revision: HAP_CFG %#x, HAP_PTN %#x, hw_type %d\n",
+			chip->cfg_revision, chip->ptn_revision, chip->hw_type);
+		return 0;
+	}
+
+	/* Get HAP_HBST revision */
+	addr = of_get_address(node, 2, NULL, NULL);
+	if (!addr) {
+		dev_err(chip->dev, "Read HAPTICS_HBOOST address failed\n");
+		return -EINVAL;
+	}
+
+	chip->hbst_addr_base = be32_to_cpu(*addr);
+	rc = haptics_read(chip, chip->hbst_addr_base,
+			HAP_BOOST_REVISION1, val, 2);
+	if (rc < 0)
+		return rc;
+
+	chip->hbst_revision = (val[1] << 8) | val[0];
+	dev_info(chip->dev, "haptics revision: HAP_CFG %#x, HAP_PTN %#x, HAP_HBST %#x, hw_type %d\n",
+		chip->cfg_revision, chip->ptn_revision, chip->hbst_revision, chip->hw_type);
 
 	return 0;
 }
@@ -4468,7 +4496,6 @@ static int haptics_parse_dt(struct haptics_chip *chip)
 	struct haptics_hw_config *config = &chip->config;
 	struct device_node *node = chip->dev->of_node;
 	struct platform_device *pdev = to_platform_device(chip->dev);
-	const __be32 *addr;
 	int rc = 0, tmp;
 
 	rc = haptics_parse_hpwr_vreg_dt(chip);
@@ -4506,31 +4533,6 @@ static int haptics_parse_dt(struct haptics_chip *chip)
 			dev_err(chip->dev, "Failed to get PBS client\n");
 			return -ENODEV;
 		}
-	}
-
-	addr = of_get_address(node, 0, NULL, NULL);
-	if (!addr) {
-		dev_err(chip->dev, "Read HAPTICS_CFG address failed\n");
-		rc = -EINVAL;
-		goto free_pbs;
-	}
-
-	chip->cfg_addr_base = be32_to_cpu(*addr);
-	addr = of_get_address(node, 1, NULL, NULL);
-	if (!addr) {
-		dev_err(chip->dev, "Read HAPTICS_PATTERN address failed\n");
-		rc = -EINVAL;
-		goto free_pbs;
-	}
-
-	chip->ptn_addr_base = be32_to_cpu(*addr);
-	addr = of_get_address(node, 2, NULL, NULL);
-	if (!addr && !is_haptics_external_powered(chip)) {
-		dev_err(chip->dev, "Read HAPTICS_HBOOST address failed\n");
-		rc = -EINVAL;
-		goto free_pbs;
-	} else if (addr != NULL) {
-		chip->hbst_addr_base = be32_to_cpu(*addr);
 	}
 
 	rc = haptics_get_revision(chip);
