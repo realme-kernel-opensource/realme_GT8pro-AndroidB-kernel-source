@@ -824,6 +824,83 @@ static int report_iommu_fault_helper(struct arm_smmu_domain *smmu_domain,
 				 smmu->dev, iova, flags);
 }
 
+struct find_fault_device_by_sid_data {
+	struct device *dev;
+	u32 sid;
+};
+
+static int find_fault_device_by_sid(struct device *dev, void *_data)
+{
+	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
+	struct arm_smmu_master_cfg *cfg = dev_iommu_priv_get(dev);
+	struct find_fault_device_by_sid_data *data = _data;
+	int i, idx;
+
+	for_each_cfg_sme(cfg, fwspec, i, idx) {
+		u16 sid = FIELD_GET(ARM_SMMU_SMR_ID, fwspec->ids[i]);
+		u16 mask = FIELD_GET(ARM_SMMU_SMR_MASK, fwspec->ids[i]);
+
+		if (!((data->sid ^ sid) & ~mask)) {
+			data->dev = dev;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/*
+ * Inform clients an unrecoverable fault has occurred.
+ * Client return values are ignored, but returning 0 is recommended.
+ */
+static void iommu_report_device_fault_helper(struct arm_smmu_domain *smmu_domain,
+	struct arm_smmu_device *smmu, int cbidx)
+{
+	struct find_fault_device_by_sid_data data = {0};
+	struct iommu_fault_event fault_evt = {0};
+	u32 i, reason, perm;
+	u64 val;
+
+	data.sid = arm_smmu_gr1_read(smmu, ARM_SMMU_GR1_CBFRSYNRA(cbidx)) &
+			CBFRSYNRA_SID_MASK;
+	for (i = 0; i < smmu->num_mapping_groups; i++) {
+		if (cbidx == smmu->s2crs[i].cbndx) {
+			iommu_group_for_each_dev(smmu->s2crs[i].group, &data,
+						 find_fault_device_by_sid);
+			break;
+		}
+	}
+
+	if (!data.dev)
+		return;
+
+	/* Extract fault attributes */
+	val = arm_smmu_cb_read(smmu, cbidx, ARM_SMMU_CB_FSYNR0);
+	perm = val & ARM_SMMU_FSYNR0_WNR ? IOMMU_FAULT_PERM_WRITE :
+					     IOMMU_FAULT_PERM_READ;
+	if (val & ARM_SMMU_FSYNR0_IND)
+		perm |= IOMMU_FAULT_PERM_EXEC;
+	if (val & ARM_SMMU_FSYNR0_PNU)
+		perm |= IOMMU_FAULT_PERM_PRIV;
+
+	/* Extract fault type */
+	val = arm_smmu_cb_read(smmu, cbidx, ARM_SMMU_CB_FSR);
+	reason = IOMMU_FAULT_REASON_UNKNOWN;
+	if (val & ARM_SMMU_FSR_TF)
+		reason = IOMMU_FAULT_REASON_PTE_FETCH;
+	else if (val & ARM_SMMU_FSR_PF)
+		reason = IOMMU_FAULT_REASON_PERMISSION;
+
+	fault_evt.fault.type = IOMMU_FAULT_DMA_UNRECOV;
+	fault_evt.fault.event = (struct iommu_fault_unrecoverable) {
+		.reason = reason,
+		.flags = IOMMU_FAULT_UNRECOV_ADDR_VALID,
+		.perm = perm,
+		.addr = arm_smmu_cb_readq(smmu, cbidx, ARM_SMMU_CB_FAR),
+	};
+
+	iommu_report_device_fault(data.dev, &fault_evt);
+}
+
 static int arm_smmu_get_fault_ids(struct iommu_domain *domain,
 			struct qcom_iommu_fault_ids *f_ids)
 {
@@ -955,6 +1032,12 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 	 */
 	ret = report_iommu_fault_helper(smmu_domain, smmu, idx);
 	if (ret == -ENOSYS) {
+		/*
+		 * Call the per-device fault handler if it exists.
+		 * No special return values supported currently.
+		 */
+		iommu_report_device_fault_helper(smmu_domain, smmu, idx);
+
 		if (__ratelimit(&_rs)) {
 			print_fault_regs(smmu_domain, smmu, idx);
 			arm_smmu_verify_fault(smmu_domain, smmu, idx);
