@@ -486,12 +486,6 @@ struct arm_smmu_mapping_cfg {
 	char fast : 1;
 };
 
-struct qcom_iommu_fault_param {
-	struct device *dev;
-	fault_handler_irq_t handler;
-	void *token;
-};
-
 struct arm_smmu_domain {
 	struct arm_smmu_device		*smmu;
 	struct device			*dev;
@@ -510,7 +504,6 @@ struct arm_smmu_domain {
 	u32				secure_vmid;
 	fault_handler_irq_t		fault_handler_irq;
 	void				*handler_irq_token;
-	struct qcom_iommu_fault_param	fault_param;
 
 	/*
 	 * Track PMDs which require tlb invalidate prior to being
