@@ -1515,6 +1515,13 @@ extern bool move_storage_load(struct rq *rq);
 #define YIELD_SLEEP_TIME_USEC			250
 #define MAX_YIELD_SLEEP_CNT_GLOBAL_THR		(YIELD_WINDOW_SIZE_USEC /		\
 								YIELD_SLEEP_TIME_USEC / 2)
+/* yield boundary*/
+#define MIN_FRAME_YIELD_INTERVAL_NSEC		(1000ULL * NSEC_PER_USEC)
+#define YIELD_SLEEP_HEADROOM			300000ULL
+#define FRAME120_WINDOW_NSEC			8333333
+#define FRAME90_WINDOW_NSEC			11111111
+#define FRAME60_WINDOW_NSEC			16666667
+
 extern u8 contiguous_yielding_windows;
 #define NUM_PIPELINE_BUSY_THRES 3
 extern unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
