@@ -10289,8 +10289,7 @@ static int msm_pcie_pm_ctrl_sanity_check(struct msm_pcie_dev_t *pcie_dev,
 						enum msm_pcie_pm_opt pm_opt,
 						u32 busnr, u32 options)
 {
-	u32 drv_pm_opts = MSM_PCIE_DRV_SUSPEND | MSM_PCIE_DISABLE_PC |
-			MSM_PCIE_ENABLE_PC | MSM_PCIE_DRV_PC_CTRL;
+	u32 drv_pm_opts = MSM_PCIE_DRV_SUSPEND | MSM_PCIE_DRV_PC_CTRL;
 
 	if (!pcie_dev) {
 		pr_err("PCIe: did not find RC for pci endpoint device.\n");
