@@ -1794,6 +1794,19 @@ static int qcom_glink_announce_create(struct rpmsg_device *rpdev)
 	return rc;
 }
 
+static int qcom_glink_announce_destroy(struct rpmsg_device *rpdev)
+{
+	struct glink_channel *channel = to_glink_channel(rpdev->ept);
+
+	CH_INFO(channel, "Entered\n");
+
+	if (channel->rx_task)
+		kthread_stop(channel->rx_task);
+
+	CH_INFO(channel, "Exit\n");
+	return 0;
+}
+
 static void qcom_glink_destroy_ept(struct rpmsg_endpoint *ept)
 {
 	struct glink_channel *channel = to_glink_channel(ept);
@@ -1807,9 +1820,6 @@ static void qcom_glink_destroy_ept(struct rpmsg_endpoint *ept)
 	}
 	channel->ept.cb = NULL;
 	spin_unlock_irqrestore(&channel->recv_lock, flags);
-
-	if (channel->rx_task)
-		kthread_stop(channel->rx_task);
 
 	qcom_glink_send_close_req(glink, channel);
 }
@@ -2060,6 +2070,7 @@ static struct device_node *qcom_glink_match_channel(struct device_node *node,
 static const struct rpmsg_device_ops glink_device_ops = {
 	.create_ept = qcom_glink_create_ept,
 	.announce_create = qcom_glink_announce_create,
+	.announce_destroy = qcom_glink_announce_destroy,
 };
 
 static const struct rpmsg_endpoint_ops glink_endpoint_ops = {
