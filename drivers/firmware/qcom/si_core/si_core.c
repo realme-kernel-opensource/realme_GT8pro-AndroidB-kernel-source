@@ -883,7 +883,7 @@ int si_object_do_invoke(struct si_object_invoke_ctx *oic,
 	if (ret)
 		return ret;
 
-	pr_info("start an invocation for %s.\n", si_object_name(object));
+	pr_debug("start an invocation for %s.\n", si_object_name(object));
 
 	ret = prepare_msg(oic, object, op, u);
 	if (ret)
