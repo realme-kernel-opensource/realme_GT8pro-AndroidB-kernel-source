@@ -6414,10 +6414,10 @@ static void msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 int msm_pcie_enumerate(u32 rc_idx)
 {
 	int ret = 0;
+	int domain_nr;
 	struct msm_pcie_dev_t *dev = &msm_pcie_dev[rc_idx];
 	struct pci_dev *pcidev = NULL;
 	struct pci_host_bridge *bridge;
-	bool found = false;
 	u32 ids, vendor_id, device_id;
 	LIST_HEAD(res);
 
@@ -6485,20 +6485,25 @@ int msm_pcie_enumerate(u32 rc_idx)
 		msm_pcie_write_reg_field(dev->dm_core,
 			PCIE20_DEVICE_CONTROL2_STATUS2, 0xf, dev->cpl_timeout);
 
-	do {
-		pcidev = pci_get_device(vendor_id, device_id, pcidev);
-		if (pcidev && (dev == (struct msm_pcie_dev_t *)
-			PCIE_BUS_PRIV_DATA(pcidev->bus))) {
-			dev->dev = pcidev;
-			found = true;
-		}
-	} while (!found && pcidev);
+	domain_nr = of_get_pci_domain_nr(dev->pdev->dev.of_node);
+	if (domain_nr < 0) {
+		ret = -EINVAL;
+		goto out;
+	}
 
+	/*
+	 * Getting 'struct pci_dev' of root port in the Root Complex/
+	 * bridge that is being enumerated.
+	 */
+	pcidev = pci_get_domain_bus_and_slot(domain_nr, 0, 0);
 	if (!pcidev) {
 		PCIE_ERR(dev, "PCIe: RC%d: Did not find PCI device.\n",
 			dev->rc_idx);
 		ret = -ENODEV;
 		goto out;
+	} else {
+		pci_dev_put(pcidev);
+		dev->dev = pcidev;
 	}
 
 	pci_walk_bus(dev->dev->bus, msm_pcie_config_device_info, dev);
