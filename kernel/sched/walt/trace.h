@@ -1931,6 +1931,48 @@ TRACE_EVENT(sched_yielder,
 		  __entry->target_threshold_sleep, __entry->in_legacy_uncap)
 );
 
+TRACE_EVENT(sched_update_busy_bitmap,
+
+	TP_PROTO(struct task_struct *p, struct rq *rq,
+		struct walt_task_struct *wts, struct walt_rq *wrq, enum task_event evt,
+		u64 wallclock, u64 next_ms_boundary),
+
+	TP_ARGS(p, rq, wts, wrq, evt, wallclock, next_ms_boundary),
+
+	TP_STRUCT__entry(
+		__array(char,		comm, TASK_COMM_LEN)
+		__field(pid_t,		pid)
+		__field(u64,		wallclock)
+		__field(u64,		mark_start)
+		__field(int,		rq_cpu)
+		__field(int,		pipeline_cpu)
+		__field(enum task_event,	evt)
+		__field(int,		busy_bitmap)
+		__field(u32,		period_contrib_run)
+		__field(u64,		next_ms_boundary)
+		),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
+		__entry->pid		= p->pid;
+		__entry->wallclock	= wallclock;
+		__entry->mark_start	= wts->mark_start;
+		__entry->rq_cpu		= cpu_of(rq);
+		__entry->pipeline_cpu = wts->pipeline_cpu;
+		__entry->evt		= evt;
+		__entry->busy_bitmap = wts->busy_bitmap;
+		__entry->period_contrib_run = wts->period_contrib_run;
+		__entry->next_ms_boundary = next_ms_boundary;
+		),
+
+
+	TP_printk("pid=%d comm=%s wc=%llu ms=%llu rq_cpu=%d pipeline_cpu=%d event=%s busy_bits=0x%x period_contrib_run=%u next_ms_boundary=%llu",
+			__entry->pid, __entry->comm, __entry->wallclock,
+			__entry->mark_start, __entry->rq_cpu, __entry->pipeline_cpu,
+			task_event_names[__entry->evt],	__entry->busy_bitmap,
+			__entry->period_contrib_run, __entry->next_ms_boundary)
+);
+
 #endif /* _TRACE_WALT_H */
 
 #undef TRACE_INCLUDE_PATH

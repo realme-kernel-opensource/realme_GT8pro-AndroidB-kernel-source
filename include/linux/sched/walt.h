@@ -159,6 +159,8 @@ struct walt_task_struct {
 	u8				high_util_history;
 	u8				mpam_part_id;
 	u8				yield_state;
+	u16				busy_bitmap;
+	u32				period_contrib_run;
 };
 
 #define wts_to_ts(wts) ({ \

@@ -16,6 +16,7 @@
 #include <linux/sysctl.h>
 #include <linux/of_platform.h>
 #include <linux/delay.h>
+#include <linux/time64.h>
 
 #include <trace/hooks/sched.h>
 #include <trace/hooks/cpufreq.h>
@@ -2462,6 +2463,119 @@ static inline void run_walt_irq_work_rollover(u64 old_window_start, struct rq *r
 	}
 }
 
+static inline void set_bits(struct walt_task_struct *wts,
+		int nr_bits, bool set_bit)
+{
+	int mask = 0;
+
+	if (nr_bits > 16)
+		nr_bits = 16;
+	wts->busy_bitmap = wts->busy_bitmap << nr_bits;
+	if (set_bit)
+		mask = (1 << nr_bits) - 1;
+
+	wts->busy_bitmap |= mask;
+}
+
+/*
+ * Easy Case
+ *
+ *  |          ms          wc             |
+ *  |          |            |             |
+ *  +----------+------------+-------------+--------
+ *  | contrib->+----------->|             |
+ *  |          |            |             |
+ * boundary                          next_ms_boundary
+ *
+ *
+ * ms in old ms boundary while wc in new ms boundary, which case the code accounts for bit
+ * until then next_ms_boundary and from next_ms_boundary to wc gets accounted in period
+ *
+ *  |          ms                        |          wc
+ *  |          |                         |          |
+ *  +----------+-------------------------+----------+-
+ *  |          |                         | contrib->|
+ *  |          |                         |
+ * boundary                          next_ms_boundary
+ *
+ *
+ * multiple boundaries between ms and wc,  which case the code accounts for bit
+ * until the next_ms_boundary and fills in the interm periods and the leftover from
+ * the closest is accounted in period
+ *
+ *  |          ms                        |                       |         wc
+ *  |          |                         |                       |         |
+ *  +----------+-------------------------+------periods----------+---------+--------
+ *  |          |                         |                       |contrib->
+ *  |          |                         |                       |
+ * boundary                          next_ms_boundary
+ */
+static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
+		u64 wallclock)
+{
+	struct walt_task_struct *wts = (struct walt_task_struct *)p->android_vendor_data1;
+	struct walt_rq *wrq = &per_cpu(walt_rq, task_cpu(p));
+	u64 next_ms_boundary, delta;
+	int periods;
+	bool running;
+
+	/*
+	 * Figure out whether pipeline_cpu, cpu_of(rq) are both same or if it
+	 * even matters.
+	 */
+	if (wts->pipeline_cpu == -1)
+		return;
+
+	if (wallclock < wts->mark_start) {
+		printk_deferred("WALT-BUG CPU%d: %s task %s(%d) mark_start %llu is higher than wallclock %llu\n",
+				raw_smp_processor_id(), __func__, p->comm, p->pid,
+				wts->mark_start, wallclock);
+		WALT_PANIC(1);
+		wallclock = wts->mark_start;
+	}
+
+	running = account_busy_for_cpu_time(rq, p, 0, event);
+
+	next_ms_boundary = ((wts->mark_start + (NSEC_PER_MSEC - 1)) / NSEC_PER_MSEC) *
+				NSEC_PER_MSEC;
+	if (wallclock < next_ms_boundary) {
+		if (running)
+			wts->period_contrib_run += wallclock - wts->mark_start;
+		goto out;
+	}
+
+	/* Exceeding a ms boundary */
+
+	/* Close the bit corresponding to the mark_start */
+	if (running)
+		wts->period_contrib_run += next_ms_boundary - wts->mark_start;
+	/* Set the bit representing the ms if runtime within that ms is more than 500us*/
+	if (wts->period_contrib_run > 500000)
+		set_bits(wts, 1, true);
+	else
+		set_bits(wts, 1, false);
+	wts->period_contrib_run = 0;
+
+	/* Account the action starting from next_ms_boundary to the closest ms boundary */
+	delta = wallclock - next_ms_boundary;
+	periods = delta / NSEC_PER_MSEC;
+
+	if (periods) {
+		if (running)
+			set_bits(wts, periods, true);
+		else
+			set_bits(wts, periods, false);
+	}
+
+	/* Start contributions for latest ms */
+	if (running)
+		wts->period_contrib_run = wallclock % NSEC_PER_MSEC;
+
+out:
+	trace_sched_update_busy_bitmap(p, rq, wts, wrq, event,
+			wallclock, next_ms_boundary);
+}
+
 /* Reflect task activity on its demand and cpu's busy time statistics */
 static void walt_update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 						u64 wallclock, u64 irqtime)
@@ -2497,6 +2611,7 @@ static void walt_update_task_ravg(struct task_struct *p, struct rq *rq, int even
 	update_task_demand(p, rq, event, wallclock);
 	update_cpu_busy_time(p, rq, event, wallclock, irqtime);
 	update_task_pred_demand(rq, p, event);
+	update_busy_bitmap(p, rq, event, wallclock);
 	if (event == PUT_PREV_TASK && READ_ONCE(p->__state))
 		wts->iowaited = p->in_iowait;
 
@@ -2559,6 +2674,8 @@ static void init_new_task_load(struct task_struct *p)
 	wts->prev_on_rq_cpu = -1;
 	wts->pipeline_cpu = -1;
 	wts->yield_state = 0;
+	wts->busy_bitmap = 0;
+	wts->period_contrib_run = 0;
 
 	for (i = 0; i < NUM_BUSY_BUCKETS; ++i)
 		wts->busy_buckets[i] = 0;
