@@ -1443,10 +1443,10 @@ extern unsigned int sysctl_sched_legacy_smart_freq_hyst_enable_cpus;
 #define MAX_YIELD_CNT_PER_TASK_THR		25
 #define	YIELD_INDUCED_SLEEP			BIT(7)
 #define YIELD_CNT_MASK				0x7F
-#define MAX_YIELD_CNT_GLOBAL_THR		2000
-#define WINDOW_SIZE_US				10000ULL
-#define YIELD_INDUCE_SLEEP_THR			3
+#define MAX_YIELD_CNT_GLOBAL_THR		10000
+#define WINDOW_SIZE_US				20000ULL
+#define MIN_CONTIGUOUS_YIELDING_WINDOW		3
 #define YIELD_SLEEP_TIME			250
 #define MAX_YIELD_SLEEP_CNT_GLOBAL_THR		((WINDOW_SIZE_US / 250) / 2)
-extern u8 yield_should_induce_sleep;
+extern u8 contiguous_yielding_windows;
 #endif /* _WALT_H */

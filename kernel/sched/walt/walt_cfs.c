@@ -888,7 +888,7 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 	 * use prev_cpu(yielding cpu) as the target cpu.
 	 */
 	if ((wts->yield_state >= MAX_YIELD_CNT_PER_TASK_THR) &&
-	    (yield_should_induce_sleep >= YIELD_INDUCE_SLEEP_THR) &&
+	    (contiguous_yielding_windows >= MIN_CONTIGUOUS_YIELDING_WINDOW) &&
 	    (prev_cpu != -1) && cpumask_test_cpu(prev_cpu, p->cpus_ptr) &&
 		cpu_active(prev_cpu) && !cpu_halted(prev_cpu)) {
 		best_energy_cpu = prev_cpu;

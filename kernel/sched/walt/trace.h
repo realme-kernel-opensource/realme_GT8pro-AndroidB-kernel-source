@@ -1888,6 +1888,33 @@ TRACE_EVENT(sched_boost_bus_dcvs,
 		__entry->storage_boosted)
 );
 
+TRACE_EVENT(sched_yielder,
+	TP_PROTO(struct task_struct *p, u8 window_cnt, unsigned int total_yield_cnt,
+		 unsigned int total_sleep_cnt, u8 task_yield_cnt),
+
+	TP_ARGS(p, window_cnt, total_yield_cnt, total_sleep_cnt, task_yield_cnt),
+
+	TP_STRUCT__entry(
+		 __array(char,		comm, TASK_COMM_LEN)
+		 __field(u8,		window_cnt)
+		 __field(unsigned int,	total_yield_cnt)
+		 __field(unsigned int,	total_sleep_cnt)
+		 __field(u8,		task_yield_cnt)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
+		__entry->window_cnt		= window_cnt;
+		__entry->total_yield_cnt	= total_yield_cnt;
+		__entry->total_sleep_cnt	= total_sleep_cnt;
+		__entry->task_yield_cnt		= task_yield_cnt;
+	),
+
+	TP_printk("task=%s continous_windows=%u global_yield_cnt=%u global_sleep_cnt=%u task_yield_nt=%u",
+		  __entry->comm, __entry->window_cnt, __entry->total_yield_cnt,
+		  __entry->total_sleep_cnt, __entry->task_yield_cnt)
+);
+
 #endif /* _TRACE_WALT_H */
 
 #undef TRACE_INCLUDE_PATH

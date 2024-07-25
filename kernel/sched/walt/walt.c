@@ -4893,7 +4893,7 @@ static void rebuild_sd_workfn(struct work_struct *work)
 	complete(&rebuild_domains_completion);
 }
 
-u8 yield_should_induce_sleep;
+u8 contiguous_yielding_windows;
 static void walt_do_sched_yield_before(void *unused, long *skip)
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *)current->android_vendor_data1;
@@ -4908,10 +4908,14 @@ static void walt_do_sched_yield_before(void *unused, long *skip)
 
 	if (rq->clock > (start_window_ts + WINDOW_SIZE_US * 1000ULL)) {
 		if ((total_yield_cnt >= MAX_YIELD_CNT_GLOBAL_THR) ||
-			(total_sleep_cnt >= MAX_YIELD_SLEEP_CNT_GLOBAL_THR))
-			yield_should_induce_sleep++;
-		else
-			yield_should_induce_sleep = 0;
+			(total_sleep_cnt >= MAX_YIELD_SLEEP_CNT_GLOBAL_THR)) {
+			if (contiguous_yielding_windows < MIN_CONTIGUOUS_YIELDING_WINDOW)
+				contiguous_yielding_windows++;
+		} else {
+			contiguous_yielding_windows = 0;
+		}
+		trace_sched_yielder(current, contiguous_yielding_windows, total_yield_cnt,
+					    total_sleep_cnt, cnt);
 
 		/* not taking lock here */
 		start_window_ts = rq->clock;
@@ -4921,7 +4925,7 @@ static void walt_do_sched_yield_before(void *unused, long *skip)
 
 	if (cnt >= MAX_YIELD_CNT_PER_TASK_THR) {
 		total_yield_cnt++;
-		if (yield_should_induce_sleep >= YIELD_INDUCE_SLEEP_THR) {
+		if (contiguous_yielding_windows >= MIN_CONTIGUOUS_YIELDING_WINDOW) {
 			wts->yield_state |= YIELD_INDUCED_SLEEP;
 			*skip = true;
 			total_sleep_cnt++;
