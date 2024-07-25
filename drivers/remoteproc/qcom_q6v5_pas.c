@@ -1385,9 +1385,6 @@ static void rproc_recovery_set(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = (struct qcom_adsp *)rproc->priv;
 
-	if (strnstr(rproc->name, "spss", strlen(rproc->name)))
-		return;
-
 	adsp->subsys_recovery_disabled = rproc->recovery_disabled;
 }
 
