@@ -56,7 +56,7 @@ static int rm_boost_target_cpu_set(const char *val, const struct kernel_param *k
 
 	if (cpu < num_possible_cpus()) {
 		ret = param_set_int(val, kp);
-		if (!ret)
+		if (!ret && rm_status)
 			rm_status->target_cpu_mpidr = gh_rm_booster_get_mpidr(cpu);
 
 		return ret;
