@@ -17,6 +17,8 @@ def define_canoe():
         "drivers/cpuidle/governors/qcom_lpm.ko",
         "drivers/dma-buf/heaps/qcom_dma_heaps.ko",
         "drivers/firmware/qcom/qcom-scm.ko",
+        "drivers/firmware/qcom/si_core/mem_object.ko",
+        "drivers/firmware/qcom/si_core/si_core_module.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
         "drivers/interconnect/qcom/icc-bcm-voter.ko",
         "drivers/interconnect/qcom/icc-debug.ko",
