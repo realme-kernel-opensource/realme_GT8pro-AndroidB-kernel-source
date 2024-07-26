@@ -1501,7 +1501,13 @@ extern bool move_storage_load(struct rq *rq);
 #define MAX_YIELD_CNT_PER_TASK_THR		25
 #define	YIELD_INDUCED_SLEEP			BIT(7)
 #define YIELD_CNT_MASK				0x7F
-#define MAX_YIELD_CNT_GLOBAL_THR		8000
+/*
+ * Threshold count under pipeline is more aggressive than normal threshold count as
+ * under pipeline condition tasks/threads yield for very short interval within a
+ * frame and thus doesn't hit higher threshold count.
+ */
+#define MAX_YIELD_CNT_GLOBAL_THR_DEFAULT	8000
+#define MAX_YIELD_CNT_GLOBAL_THR_PIPELINE	1000
 #define YIELD_WINDOW_SIZE_USEC			(16ULL * USEC_PER_MSEC)
 #define YIELD_WINDOW_SIZE_NSEC			(YIELD_WINDOW_SIZE_USEC * NSEC_PER_USEC)
 #define	YIELD_GRACE_PERIOD_NSEC			(4ULL * NSEC_PER_MSEC)

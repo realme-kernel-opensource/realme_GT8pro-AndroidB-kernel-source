@@ -125,10 +125,16 @@ void account_yields(u64 wallclock)
 	struct smart_freq_cluster_info *smart_freq_info = cluster->smart_freq_info;
 	static u64 yield_counting_window_ts;
 	u64 delta = wallclock - yield_counting_window_ts;
+	unsigned int threshold_cnt = MAX_YIELD_CNT_GLOBAL_THR_DEFAULT;
+
+	if (smart_freq_info->cluster_active_reason & (BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+						      BIT(PIPELINE_90FPS_SMART_FREQ) |
+						      BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ)))
+		threshold_cnt = MAX_YIELD_CNT_GLOBAL_THR_PIPELINE;
 
 	/* window boundary crossed */
 	if (delta > YIELD_WINDOW_SIZE_NSEC) {
-		unsigned int target_threshold_wake = MAX_YIELD_CNT_GLOBAL_THR;
+		unsigned int target_threshold_wake = threshold_cnt;
 		unsigned int target_threshold_sleep = MAX_YIELD_SLEEP_CNT_GLOBAL_THR;
 
 		/*
@@ -139,7 +145,7 @@ void account_yields(u64 wallclock)
 
 		if (unlikely(delta > YIELD_WINDOW_SIZE_NSEC + YIELD_GRACE_PERIOD_NSEC)) {
 			target_threshold_wake =
-				div64_u64(delta * MAX_YIELD_CNT_GLOBAL_THR,
+				div64_u64(delta * threshold_cnt,
 					  YIELD_WINDOW_SIZE_NSEC);
 			target_threshold_sleep =
 				div64_u64(delta * MAX_YIELD_SLEEP_CNT_GLOBAL_THR,
