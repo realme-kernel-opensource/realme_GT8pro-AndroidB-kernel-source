@@ -102,7 +102,7 @@ struct qcom_iommu_ops {
 	struct iommu_ops iommu_ops;
 	struct iommu_domain_ops domain_ops;
 };
-#define to_qcom_iommu_ops(x) (container_of(x, struct qcom_iommu_ops, domain_ops))
+int register_qcom_iommu_ops(struct qcom_iommu_ops *ops);
 
 struct device_node *qcom_iommu_group_parse_phandle(struct device *dev);
 int qcom_iommu_generate_dma_regions(struct device *dev,

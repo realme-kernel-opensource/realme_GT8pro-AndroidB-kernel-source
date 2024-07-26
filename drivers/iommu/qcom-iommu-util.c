@@ -10,8 +10,11 @@
 #include <linux/qcom-iommu-util.h>
 #include <linux/qcom-io-pgtable.h>
 #include "iommu-priv.h"
+#include <linux/xarray.h>
 #include "qcom-dma-iommu-generic.h"
 #include "qcom-io-pgtable-alloc.h"
+
+static DEFINE_XARRAY(xa_qcom_iommu_ops);
 
 struct qcom_iommu_range_prop_cb_data {
 	int (*range_prop_entry_cb_fn)(const __be32 *p, int naddr, int nsize, void *arg);
@@ -290,12 +293,36 @@ int qcom_iommu_get_fast_iova_range(struct device *dev, dma_addr_t *ret_iova_base
 }
 EXPORT_SYMBOL(qcom_iommu_get_fast_iova_range);
 
+/*
+ * Caller should check for NULL. Will return NULL for identity domains on
+ * kernel 6.8+
+ */
+static struct qcom_iommu_ops *to_qcom_iommu_ops(const struct iommu_domain_ops *ops)
+{
+	return xa_load(&xa_qcom_iommu_ops, (unsigned long)ops);
+}
+
+int register_qcom_iommu_ops(struct qcom_iommu_ops *ops)
+{
+	void *ret;
+
+	pr_err("DEBUG: registering iommu ops\n");
+	ret = xa_store(&xa_qcom_iommu_ops, (unsigned long)&ops->domain_ops,
+			ops, GFP_KERNEL);
+	if (xa_is_err(ret)) {
+		pr_err("Failed to register qcom_iommu_ops\n");
+		return xa_err(ret);
+	}
+	return 0;
+}
+EXPORT_SYMBOL_GPL(register_qcom_iommu_ops);
+
 phys_addr_t qcom_iommu_iova_to_phys_hard(struct iommu_domain *domain,
 				    struct qcom_iommu_atos_txn *txn)
 {
 	struct qcom_iommu_ops *ops = to_qcom_iommu_ops(domain->ops);
 
-	if (unlikely(ops->iova_to_phys_hard == NULL))
+	if (!ops || unlikely(ops->iova_to_phys_hard == NULL))
 		return 0;
 
 	return ops->iova_to_phys_hard(domain, txn);
@@ -312,7 +339,7 @@ int qcom_iommu_sid_switch(struct device *dev, enum sid_switch_direction dir)
 		return -EINVAL;
 
 	ops = to_qcom_iommu_ops(domain->ops);
-	if (unlikely(ops->sid_switch == NULL))
+	if (!ops || unlikely(ops->sid_switch == NULL))
 		return -EINVAL;
 
 	return ops->sid_switch(dev, dir);
@@ -324,7 +351,7 @@ int qcom_iommu_get_fault_ids(struct iommu_domain *domain,
 {
 	struct qcom_iommu_ops *ops = to_qcom_iommu_ops(domain->ops);
 
-	if (unlikely(ops->get_fault_ids == NULL))
+	if (!ops || unlikely(ops->get_fault_ids == NULL))
 		return -EINVAL;
 
 	return ops->get_fault_ids(domain, f_ids);
@@ -341,7 +368,7 @@ int qcom_skip_tlb_management(struct device *dev, bool skip)
 		return -EINVAL;
 
 	ops = to_qcom_iommu_ops(domain->ops);
-	if (unlikely(ops->skip_tlb_management == NULL))
+	if (!ops || unlikely(ops->skip_tlb_management == NULL))
 		return -EINVAL;
 
 	ops->skip_tlb_management(domain, skip);
@@ -363,7 +390,7 @@ int qcom_iommu_get_context_bank_nr(struct iommu_domain *domain)
 {
 	struct qcom_iommu_ops *ops = to_qcom_iommu_ops(domain->ops);
 
-	if (unlikely(ops->get_context_bank_nr == NULL))
+	if (!ops || unlikely(ops->get_context_bank_nr == NULL))
 		return -EINVAL;
 
 	return ops->get_context_bank_nr(domain);
@@ -374,7 +401,7 @@ int qcom_iommu_get_asid_nr(struct iommu_domain *domain)
 {
 	struct qcom_iommu_ops *ops = to_qcom_iommu_ops(domain->ops);
 
-	if (unlikely(ops->get_asid_nr == NULL))
+	if (!ops || unlikely(ops->get_asid_nr == NULL))
 		return -EINVAL;
 
 	return ops->get_asid_nr(domain);
@@ -385,7 +412,7 @@ int qcom_iommu_set_secure_vmid(struct iommu_domain *domain, enum vmid vmid)
 {
 	struct qcom_iommu_ops *ops = to_qcom_iommu_ops(domain->ops);
 
-	if (unlikely(ops->set_secure_vmid == NULL))
+	if (!ops || unlikely(ops->set_secure_vmid == NULL))
 		return -EINVAL;
 
 	return ops->set_secure_vmid(domain, vmid);
@@ -396,7 +423,7 @@ int qcom_iommu_set_fault_model(struct iommu_domain *domain, int fault_model)
 {
 	struct qcom_iommu_ops *ops = to_qcom_iommu_ops(domain->ops);
 
-	if (unlikely(ops->set_fault_model == NULL))
+	if (!ops || unlikely(ops->set_fault_model == NULL))
 		return -EINVAL;
 	else if (fault_model & ~(QCOM_IOMMU_FAULT_MODEL_NON_FATAL |
 				 QCOM_IOMMU_FAULT_MODEL_NO_CFRE |
@@ -420,7 +447,7 @@ int qcom_iommu_set_fault_handler_irq(struct iommu_domain *domain,
 {
 	struct qcom_iommu_ops *ops = to_qcom_iommu_ops(domain->ops);
 
-	if (unlikely(ops->set_fault_handler_irq == NULL))
+	if (!ops || unlikely(ops->set_fault_handler_irq == NULL))
 		return -EINVAL;
 
 	WARN_ONCE("%s API is deprecated\n", __func__);
@@ -447,7 +474,7 @@ int qcom_iommu_register_device_fault_handler_irq(struct device *dev,
 		return -EINVAL;
 
 	ops = to_qcom_iommu_ops(domain->ops);
-	if (!ops->register_device_fault_handler_irq)
+	if (!ops || !ops->register_device_fault_handler_irq)
 		return -EINVAL;
 
 	ops->register_device_fault_handler_irq(dev, handler, token);
@@ -459,7 +486,7 @@ int qcom_iommu_enable_s1_translation(struct iommu_domain *domain)
 {
 	struct qcom_iommu_ops *ops = to_qcom_iommu_ops(domain->ops);
 
-	if (unlikely(ops->enable_s1_translation == NULL))
+	if (!ops || unlikely(ops->enable_s1_translation == NULL))
 		return -EINVAL;
 
 	return ops->enable_s1_translation(domain);
@@ -470,7 +497,7 @@ int qcom_iommu_get_mappings_configuration(struct iommu_domain *domain)
 {
 	struct qcom_iommu_ops *ops = to_qcom_iommu_ops(domain->ops);
 
-	if (unlikely(ops->get_mappings_configuration == NULL))
+	if (!ops || unlikely(ops->get_mappings_configuration == NULL))
 		return -EINVAL;
 
 	return ops->get_mappings_configuration(domain);

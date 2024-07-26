@@ -3729,6 +3729,10 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 		goto out_power_off;
 	}
 
+	err = register_qcom_iommu_ops(&arm_smmu_ops);
+	if (err)
+		goto remove_iommu_sysfs_node;
+
 	err = iommu_device_register(&smmu->iommu, &arm_smmu_ops.iommu_ops,
 				    using_legacy_binding ? NULL : dev);
 
