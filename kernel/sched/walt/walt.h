@@ -37,6 +37,12 @@
 /* Max window size (in ns) = 1s */
 #define MAX_SCHED_RAVG_WINDOW 1000000000
 
+#define SCHED_RAVG_8MS_WINDOW 8000000
+#define SCHED_RAVG_12MS_WINDOW 12000000
+#define SCHED_RAVG_16MS_WINDOW 16000000
+#define SCHED_RAVG_20MS_WINDOW 20000000
+#define SCHED_RAVG_32MS_WINDOW 32000000
+
 #define NR_WINDOWS_PER_SEC (NSEC_PER_SEC / DEFAULT_SCHED_RAVG_WINDOW)
 
 /* MAX_MARGIN_LEVELS should be one less than MAX_CLUSTERS */
@@ -99,6 +105,7 @@ extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 #define	WALT_INIT_BIT			BIT(0)
 #define WALT_TRAILBLAZER_BIT		BIT(1)
 #define WALT_IDLE_TASK_BIT		BIT(2)
+#define WALT_LRB_PIPELINE_BIT		BIT(3)
 
 #define WALT_LOW_LATENCY_PROCFS_BIT	BIT(0)
 #define WALT_LOW_LATENCY_BINDER_BIT	BIT(1)
@@ -269,6 +276,7 @@ struct walt_rq {
 	unsigned long	cpu_capacity_orig;
 	/* UCLAMP tracking */
 	unsigned long		uclamp_limit[UCLAMP_CNT];
+	u64			lrb_pipeline_start_time; /* lrb = long_running_boost */
 };
 
 DECLARE_PER_CPU(struct walt_rq, walt_rq);
@@ -491,6 +499,7 @@ extern cpumask_t cpus_for_pipeline;
 #define WALT_CPUFREQ_TRAILBLAZER_BIT		BIT(8)
 #define WALT_CPUFREQ_SMART_FREQ_BIT		BIT(9)
 #define WALT_CPUFREQ_UCLAMP_BIT			BIT(10)
+#define WALT_CPUFREQ_PIPELINE_BUSY_BIT		BIT(11)
 
 /* CPUFREQ_REASON_LOAD is unused. If reasons value is 0, this indicates
  * that no extra features were enforcd, and the frequency alligns with
@@ -518,6 +527,7 @@ extern cpumask_t cpus_for_pipeline;
 #define CPUFREQ_REASON_ADAPTIVE_LVL_1_BIT	BIT(17)
 #define CPUFREQ_REASON_IPC_SMART_FREQ_BIT	BIT(18)
 #define CPUFREQ_REASON_UCLAMP_BIT		BIT(19)
+#define CPUFREQ_REASON_PIPELINE_BUSY_BIT	BIT(20)
 
 enum sched_boost_policy {
 	SCHED_BOOST_NONE,
@@ -1329,6 +1339,7 @@ extern bool now_is_sbt;
 extern bool is_sbt_or_oscillate(void);
 
 extern unsigned int sysctl_sched_walt_core_util[WALT_NR_CPUS];
+extern unsigned int sysctl_pipeline_busy_boost_pct;
 
 enum WALT_DEBUG_FEAT {
 	WALT_BUG_UPSTREAM,

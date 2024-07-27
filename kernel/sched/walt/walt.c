@@ -703,6 +703,11 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason)
 		*reason = CPUFREQ_REASON_EARLY_DET_BIT;
 	}
 
+	if (wrq->lrb_pipeline_start_time) {
+		load = mult_frac(load, 100 + sysctl_pipeline_busy_boost_pct, 100);
+		*reason = CPUFREQ_REASON_PIPELINE_BUSY_BIT;
+	}
+
 	if (walt_rotation_enabled) {
 		load = sched_ravg_window;
 		*reason = CPUFREQ_REASON_BTR_BIT;
@@ -1129,7 +1134,7 @@ static inline bool is_new_task(struct task_struct *p)
 
 	return wts->active_time < NEW_TASK_ACTIVE_TIME;
 }
-static inline void run_walt_irq_work_rollover(u64 old_window_start, struct rq *rq);
+static inline int run_walt_irq_work_rollover(u64 old_window_start, struct rq *rq);
 
 static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 {
@@ -2447,22 +2452,33 @@ update_task_rq_cpu_cycles(struct task_struct *p, struct rq *rq, int event,
 	wts->cpu_cycles = cur_cycles;
 }
 
-static inline void run_walt_irq_work_rollover(u64 old_window_start, struct rq *rq)
+/*
+ * Returns
+ * 0: if window rollover not required or is not the winning CPU.
+ * 1: if this CPU is tasked with window rollover duties.
+ */
+static inline int run_walt_irq_work_rollover(u64 old_window_start, struct rq *rq)
 {
 	u64 result;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
 	if (old_window_start == wrq->window_start)
-		return;
+		return 0;
 
 	result = atomic64_cmpxchg(&walt_irq_work_lastq_ws, old_window_start,
 				   wrq->window_start);
 	if (result == old_window_start) {
 		walt_irq_work_queue(&walt_cpufreq_irq_work);
 		trace_walt_window_rollover(wrq->window_start);
+		return 1;
 	}
+
+	return 0;
 }
 
+#define PIPELINE_BUSY_THRESH_8MS_WINDOW 6
+#define PIPELINE_BUSY_THRESH_12MS_WINDOW 11
+#define PIPELINE_BUSY_THRESH_16MS_WINDOW 15
 static inline void set_bits(struct walt_task_struct *wts,
 		int nr_bits, bool set_bit)
 {
@@ -2518,6 +2534,15 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 	u64 next_ms_boundary, delta;
 	int periods;
 	bool running;
+	int no_boost_reason = 0;
+
+	/*
+	 * If it has been active for more than 4mS turn it off, the task that caused this activation
+	 * should have slept and if its still running it must have updated its load via
+	 * prs. No need to continue boosting.
+	 */
+	if (wallclock > wrq->lrb_pipeline_start_time + 4000000)
+		wrq->lrb_pipeline_start_time = 0;
 
 	/*
 	 * Figure out whether pipeline_cpu, cpu_of(rq) are both same or if it
@@ -2535,6 +2560,10 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 	}
 
 	running = account_busy_for_cpu_time(rq, p, 0, event);
+
+	/* task woke up or utra happened while its asleep, clear old boosts */
+	if (p->on_rq == 0)
+		walt_flag_set(p, WALT_LRB_PIPELINE_BIT, 0);
 
 	next_ms_boundary = ((wts->mark_start + (NSEC_PER_MSEC - 1)) / NSEC_PER_MSEC) *
 				NSEC_PER_MSEC;
@@ -2571,9 +2600,57 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 	if (running)
 		wts->period_contrib_run = wallclock % NSEC_PER_MSEC;
 
+	/* task had already set a boost since wakeup, boost just once since wakeup */
+	if (walt_flag_test(p, WALT_LRB_PIPELINE_BIT)) {
+		no_boost_reason = 1;
+		goto out;
+	}
+
+	/*
+	 * task is not on_rq - if it is in the process of waking up, boost will be applied on the
+	 * right cpu at PICK event
+	 */
+	if (p->on_rq == 0) {
+		no_boost_reason = 2;
+		goto out;
+	}
+
+	if (sched_ravg_window < SCHED_RAVG_8MS_WINDOW ||
+		sched_ravg_window > SCHED_RAVG_16MS_WINDOW) {
+		no_boost_reason = 3;
+		goto out;
+	}
+
+	if (sched_ravg_window == SCHED_RAVG_8MS_WINDOW &&
+			hweight16(wts->busy_bitmap & 0x00FF) < PIPELINE_BUSY_THRESH_8MS_WINDOW) {
+		no_boost_reason = 4;
+		goto out;
+	}
+
+	if (sched_ravg_window == SCHED_RAVG_12MS_WINDOW &&
+			hweight16(wts->busy_bitmap & 0x0FFF) < PIPELINE_BUSY_THRESH_12MS_WINDOW) {
+		no_boost_reason = 5;
+		goto out;
+	}
+
+	if (sched_ravg_window == SCHED_RAVG_16MS_WINDOW &&
+			hweight16(wts->busy_bitmap) < PIPELINE_BUSY_THRESH_16MS_WINDOW) {
+		no_boost_reason = 6;
+		goto out;
+	}
+
+	/* cpu already boosted, so dont extend */
+	if (wrq->lrb_pipeline_start_time != 0) {
+		no_boost_reason = 7;
+		goto out;
+	}
+
+	walt_flag_set(p, WALT_LRB_PIPELINE_BIT, 1);
+	wrq->lrb_pipeline_start_time = wallclock;
+
 out:
 	trace_sched_update_busy_bitmap(p, rq, wts, wrq, event,
-			wallclock, next_ms_boundary);
+			wallclock, next_ms_boundary, no_boost_reason);
 }
 
 /* Reflect task activity on its demand and cpu's busy time statistics */
@@ -2581,6 +2658,9 @@ static void walt_update_task_ravg(struct task_struct *p, struct rq *rq, int even
 						u64 wallclock, u64 irqtime)
 {
 	u64 old_window_start;
+	int this_cpu_runs_window_rollover;
+	bool old_lrb_pipeline_task_state;
+	bool old_lrb_pipeline_cpu_state;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 
@@ -2598,7 +2678,8 @@ static void walt_update_task_ravg(struct task_struct *p, struct rq *rq, int even
 	walt_lockdep_assert_rq(rq, p);
 
 	old_window_start = update_window_start(rq, wallclock, event);
-
+	old_lrb_pipeline_task_state = walt_flag_test(p, WALT_LRB_PIPELINE_BIT);
+	old_lrb_pipeline_cpu_state = wrq->lrb_pipeline_start_time;
 	if (!wts->window_start)
 		wts->window_start = wrq->window_start;
 
@@ -2628,7 +2709,15 @@ done:
 			raw_smp_processor_id(), __func__, p->comm, p->pid,
 			wts->mark_start, wts->window_start, rq->cpu, event);
 
-	run_walt_irq_work_rollover(old_window_start, rq);
+	this_cpu_runs_window_rollover = run_walt_irq_work_rollover(old_window_start, rq);
+	if (likely(!this_cpu_runs_window_rollover)) {
+		if ((unlikely(wts->pipeline_cpu != -1) &&
+				task_cpu(p) == cpu_of(rq) &&
+				!old_lrb_pipeline_task_state &&
+				walt_flag_test(p, WALT_LRB_PIPELINE_BIT)) ||
+				(old_lrb_pipeline_cpu_state && !wrq->lrb_pipeline_start_time))
+			waltgov_run_callback(rq, WALT_CPUFREQ_PIPELINE_BUSY_BIT);
+	}
 }
 
 static inline void __sched_fork_init(struct task_struct *p)
@@ -4432,6 +4521,7 @@ static void walt_sched_init_rq(struct rq *rq)
 	wrq->task_exec_scale = 1024;
 	wrq->push_task = NULL;
 	wrq->cpu_capacity_orig = arch_scale_cpu_capacity(cpu_of(rq));
+	wrq->lrb_pipeline_start_time = 0;
 
 	wrq->curr_runnable_sum = wrq->prev_runnable_sum = 0;
 	wrq->nt_curr_runnable_sum = wrq->nt_prev_runnable_sum = 0;
@@ -4874,7 +4964,6 @@ static void android_rvh_tick_entry(void *unused, struct rq *rq)
 
 	if (is_ed_task_present(rq, wallclock, NULL))
 		waltgov_run_callback(rq, WALT_CPUFREQ_EARLY_DET_BIT);
-
 }
 
 bool is_sbt_or_oscillate(void)

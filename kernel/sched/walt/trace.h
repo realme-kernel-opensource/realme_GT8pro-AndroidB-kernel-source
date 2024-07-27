@@ -1935,13 +1935,14 @@ TRACE_EVENT(sched_update_busy_bitmap,
 
 	TP_PROTO(struct task_struct *p, struct rq *rq,
 		struct walt_task_struct *wts, struct walt_rq *wrq, enum task_event evt,
-		u64 wallclock, u64 next_ms_boundary),
+		u64 wallclock, u64 next_ms_boundary, int no_boost_reason),
 
-	TP_ARGS(p, rq, wts, wrq, evt, wallclock, next_ms_boundary),
+	TP_ARGS(p, rq, wts, wrq, evt, wallclock, next_ms_boundary, no_boost_reason),
 
 	TP_STRUCT__entry(
 		__array(char,		comm, TASK_COMM_LEN)
 		__field(pid_t,		pid)
+		__field(int,		on_rq)
 		__field(u64,		wallclock)
 		__field(u64,		mark_start)
 		__field(int,		rq_cpu)
@@ -1950,11 +1951,14 @@ TRACE_EVENT(sched_update_busy_bitmap,
 		__field(int,		busy_bitmap)
 		__field(u32,		period_contrib_run)
 		__field(u64,		next_ms_boundary)
+		__field(int,		no_boost_reason)
+		__field(u64,		lrb_pipeline_start_time)
 		),
 
 	TP_fast_assign(
 		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
 		__entry->pid		= p->pid;
+		__entry->on_rq		= p->on_rq;
 		__entry->wallclock	= wallclock;
 		__entry->mark_start	= wts->mark_start;
 		__entry->rq_cpu		= cpu_of(rq);
@@ -1963,14 +1967,16 @@ TRACE_EVENT(sched_update_busy_bitmap,
 		__entry->busy_bitmap = wts->busy_bitmap;
 		__entry->period_contrib_run = wts->period_contrib_run;
 		__entry->next_ms_boundary = next_ms_boundary;
+		__entry->no_boost_reason = no_boost_reason;
+		__entry->lrb_pipeline_start_time = wrq->lrb_pipeline_start_time;
 		),
 
-
-	TP_printk("pid=%d comm=%s wc=%llu ms=%llu rq_cpu=%d pipeline_cpu=%d event=%s busy_bits=0x%x period_contrib_run=%u next_ms_boundary=%llu",
-			__entry->pid, __entry->comm, __entry->wallclock,
+	TP_printk("pid=%d comm=%s on_rq=%d wc=%llu ms=%llu rq_cpu=%d pipeline_cpu=%d event=%s busy_bits=0x%x period_contrib_run=%u next_ms_boundary=%llu no_boost_reason=%d lrb_pipeline_start_time=%llu",
+			__entry->pid, __entry->comm, __entry->on_rq, __entry->wallclock,
 			__entry->mark_start, __entry->rq_cpu, __entry->pipeline_cpu,
 			task_event_names[__entry->evt],	__entry->busy_bitmap,
-			__entry->period_contrib_run, __entry->next_ms_boundary)
+			__entry->period_contrib_run, __entry->next_ms_boundary,
+			__entry->no_boost_reason, __entry->lrb_pipeline_start_time)
 );
 
 #endif /* _TRACE_WALT_H */
