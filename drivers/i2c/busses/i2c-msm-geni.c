@@ -2913,8 +2913,14 @@ static int geni_i2c_runtime_suspend(struct device *dev)
 				return ret;
 			}
 		}
-	} else if (gi2c->is_shared) {
-		/* Do not unconfigure GPIOs if shared se */
+	} else if (gi2c->is_shared && !gi2c->pm_ctrl_client) {
+		/**
+		 * SE is shared between two EEs.
+		 * case 1: Client calls get_sync/put_sync of the parent
+		 * driver [pm_ctrl_client =true].
+		 * case 2: Client driver don't control runtime PM of the parent.
+		 * In that case, only is_shared = true.
+		 */
 		geni_se_common_clks_off(gi2c->i2c_rsc.clk, gi2c->m_ahb_clk, gi2c->s_ahb_clk);
 		ret = geni_icc_disable(&gi2c->i2c_rsc);
 		if (ret)
