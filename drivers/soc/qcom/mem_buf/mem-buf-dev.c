@@ -31,7 +31,7 @@ EXPORT_SYMBOL_GPL(mem_buf_capability);
 struct gen_pool *dmabuf_mem_pool;
 EXPORT_SYMBOL_GPL(dmabuf_mem_pool);
 
-#define POOL_MIN_ALLOC_ORDER SUBSECTION_SHIFT
+#define POOL_MIN_ALLOC_ORDER SECTION_SIZE_BITS
 
 #define RECLAIM_RETRY_DELAY_MS	100
 
