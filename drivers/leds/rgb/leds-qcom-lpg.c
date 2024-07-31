@@ -41,9 +41,9 @@
 #define PWM_SEC_ACCESS_REG	0xd0
 #define PWM_DTEST_REG(x)	(0xe2 + (x) - 1)
 
-#define SDAM_REG_PBS_SEQ_EN	0x42
-#define SDAM_PBS_TRIG_SET	0xe5
-#define SDAM_PBS_TRIG_CLR	0xe6
+#define SDAM_REG_PBS_SEQ_EN		0x42
+#define SDAM_PBS_TRIG_SET		0xe5
+#define SDAM_PBS_TRIG_CLR		0xe6
 
 #define TRI_LED_SRC_SEL		0x45
 #define TRI_LED_EN_CTL		0x46
@@ -64,7 +64,7 @@
 
 #define SDAM_MAX_DEVICES	2
 /* LPG common config settings for PPG */
-#define SDAM_START_BASE				0x40
+#define SDAM_START_BASE			0x40
 #define SDAM_REG_RAMP_STEP_DURATION		0x47
 
 #define SDAM_LUT_SDAM_LUT_PATTERN_OFFSET	0x45
@@ -74,10 +74,10 @@
 #define SDAM_LUT_EN_OFFSET			0x0
 #define SDAM_PATTERN_CONFIG_OFFSET		0x1
 #define SDAM_END_INDEX_OFFSET			0x3
-#define SDAM_START_INDEX_OFFSET			0x4
+#define SDAM_START_INDEX_OFFSET		0x4
 #define SDAM_PBS_SCRATCH_LUT_COUNTER_OFFSET	0x6
-#define SDAM_PAUSE_HI_MULTIPLIER_OFFSET		0x8
-#define SDAM_PAUSE_LO_MULTIPLIER_OFFSET		0x9
+#define SDAM_PAUSE_HI_MULTIPLIER_OFFSET	0x8
+#define SDAM_PAUSE_LO_MULTIPLIER_OFFSET	0x9
 
 struct lpg_channel;
 struct lpg_data;
@@ -109,7 +109,7 @@ struct lpg {
 
 	struct mutex lock;
 
-	struct pwm_chip pwm;
+	struct pwm_chip *pwm;
 
 	const struct lpg_data *data;
 
@@ -1199,7 +1199,7 @@ static int lpg_pattern_mc_clear(struct led_classdev *cdev)
 
 static inline struct lpg *lpg_pwm_from_chip(struct pwm_chip *chip)
 {
-	return container_of(chip, struct lpg, pwm);
+	return pwmchip_get_drvdata(chip);
 }
 
 static int lpg_pwm_request(struct pwm_chip *chip, struct pwm_device *pwm)
@@ -1314,13 +1314,17 @@ static const struct pwm_ops lpg_pwm_ops = {
 
 static int lpg_add_pwm(struct lpg *lpg)
 {
+	struct pwm_chip *chip;
 	int ret;
 
-	lpg->pwm.dev = lpg->dev;
-	lpg->pwm.npwm = lpg->num_channels;
-	lpg->pwm.ops = &lpg_pwm_ops;
+	lpg->pwm = chip = devm_pwmchip_alloc(lpg->dev, lpg->num_channels, 0);
+	if (IS_ERR(chip))
+		return PTR_ERR(chip);
 
-	ret = devm_pwmchip_add(lpg->dev, &lpg->pwm);
+	chip->ops = &lpg_pwm_ops;
+	pwmchip_set_drvdata(chip, lpg);
+
+	ret = devm_pwmchip_add(lpg->dev, chip);
 	if (ret)
 		dev_err_probe(lpg->dev, ret, "failed to add PWM chip\n");
 
@@ -1644,6 +1648,23 @@ static int lpg_probe(struct platform_device *pdev)
 	return lpg_add_pwm(lpg);
 }
 
+static const struct lpg_data pm660l_lpg_data = {
+	.lut_base = 0xb000,
+	.lut_size = 49,
+
+	.triled_base = 0xd000,
+	.triled_has_atc_ctl = true,
+	.triled_has_src_sel = true,
+
+	.num_channels = 4,
+	.channels = (const struct lpg_channel_data[]) {
+		{ .base = 0xb100, .triled_mask = BIT(5) },
+		{ .base = 0xb200, .triled_mask = BIT(6) },
+		{ .base = 0xb300, .triled_mask = BIT(7) },
+		{ .base = 0xb400 },
+	},
+};
+
 static const struct lpg_data pm8916_pwm_data = {
 	.num_channels = 1,
 	.channels = (const struct lpg_channel_data[]) {
@@ -1772,6 +1793,8 @@ static const struct lpg_data pm8350c_pwm_data = {
 
 	.triled_base = 0xef00,
 
+	.lut_size = 122,
+
 	.num_channels = 4,
 	.channels = (const struct lpg_channel_data[]) {
 		{ .base = 0xe800, .triled_mask = BIT(7), .sdam_offset = 0x48 },
@@ -1790,6 +1813,7 @@ static const struct lpg_data pmk8550_pwm_data = {
 };
 
 static const struct of_device_id lpg_of_table[] = {
+	{ .compatible = "qcom,pm660l-lpg", .data = &pm660l_lpg_data },
 	{ .compatible = "qcom,pm8150b-lpg", .data = &pm8150b_lpg_data },
 	{ .compatible = "qcom,pm8150l-lpg", .data = &pm8150l_lpg_data },
 	{ .compatible = "qcom,pm8350c-pwm", .data = &pm8350c_pwm_data },
