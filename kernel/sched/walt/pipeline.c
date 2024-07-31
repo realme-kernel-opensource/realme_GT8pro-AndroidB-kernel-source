@@ -301,7 +301,8 @@ bool find_heaviest_topapp(u64 window_start)
 	cpumask_and(&last_available_big_cpus, cpu_online_mask, &cpus_for_pipeline);
 	cpumask_andnot(&last_available_big_cpus, &last_available_big_cpus, cpu_halt_mask);
 
-	if (pipeline_special_task) {
+	/* Ensure the special task is only pinned if there are 3 auto pipeline tasks */
+	if (pipeline_special_task && heavy_wts[MAX_NR_PIPELINE - 1]) {
 		heavy_wts[0]->pipeline_cpu =
 			cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
 		heavy_wts[0]->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
@@ -314,7 +315,7 @@ bool find_heaviest_topapp(u64 window_start)
 		if (!wts)
 			continue;
 
-		if (i == 0 && pipeline_special_task)
+		if (i == 0 && pipeline_special_task && heavy_wts[MAX_NR_PIPELINE - 1])
 			continue;
 
 		if (wts->pipeline_cpu != -1) {
