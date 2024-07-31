@@ -632,5 +632,13 @@ bool enable_load_sync(int cpu)
 			!cpumask_intersects(&pipeline_sync_cpus, &cpus_for_pipeline))
 		return false;
 
-	return true;
+	/* Ensure to load sync only if there are 3 auto pipeline tasks */
+	if (have_heavy_list)
+		return have_heavy_list == MAX_NR_PIPELINE;
+
+	/*
+	 * If auto pipeline is disabled, manual must be on. Ensure to load sync under manual
+	 * pipeline only if there are 3 or more pipeline tasks
+	 */
+	return pipeline_nr >= MAX_NR_PIPELINE;
 }
