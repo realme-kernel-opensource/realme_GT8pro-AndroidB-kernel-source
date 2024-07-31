@@ -306,7 +306,6 @@ int register_qcom_iommu_ops(struct qcom_iommu_ops *ops)
 {
 	void *ret;
 
-	pr_err("DEBUG: registering iommu ops\n");
 	ret = xa_store(&xa_qcom_iommu_ops, (unsigned long)&ops->domain_ops,
 			ops, GFP_KERNEL);
 	if (xa_is_err(ret)) {
