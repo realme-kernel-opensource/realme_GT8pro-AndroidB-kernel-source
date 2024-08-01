@@ -9,6 +9,7 @@ def define_canoe():
         # keep sorted
         "arch/arm64/gunyah/gh_arm_drv.ko",
         "arch/arm64/gunyah/gunyah_hypercall.ko",
+        "drivers/base/regmap/qti-regmap-debugfs.ko",
         "drivers/bus/mhi/devices/mhi_dev_satellite.ko",
         "drivers/bus/mhi/devices/mhi_dev_uci.ko",
         "drivers/bus/mhi/host/mhi.ko",
