@@ -1530,6 +1530,7 @@ void qcom_glink_native_rx(struct qcom_glink *glink)
 	unsigned int param2;
 	unsigned int avail;
 	unsigned int cmd;
+	int retry = 0;
 	int ret = 0;
 
 	if (should_wake) {
@@ -1598,9 +1599,14 @@ void qcom_glink_native_rx(struct qcom_glink *glink)
 			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
 			break;
 		default:
-			dev_err(glink->dev, "unhandled rx cmd: %d\n", cmd);
-			ret = -EINVAL;
-			break;
+			dev_err(glink->dev, "unhandled rx cmd: 0x%x\n", cmd);
+			retry++;
+			if (retry < 5)
+				continue;
+			else {
+				ret = -EINVAL;
+				break;
+			}
 		}
 
 		if (ret)
