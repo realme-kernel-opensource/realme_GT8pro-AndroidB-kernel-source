@@ -483,7 +483,7 @@ void rearrange_heavy(u64 window_start, bool force)
 	if (delay_rearrange(window_start, AUTO_PIPELINE, force))
 		return;
 
-	if (!soc_feat(SOC_ENABLE_PIPELINE_SWAPPING_BIT))
+	if (!soc_feat(SOC_ENABLE_PIPELINE_SWAPPING_BIT) && !force)
 		return;
 
 	raw_spin_lock_irqsave(&heavy_lock, flags);
