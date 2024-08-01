@@ -71,6 +71,7 @@ def define_canoe():
         "drivers/soc/qcom/smp2p_sleepstate.ko",
         "drivers/soc/qcom/socinfo.ko",
         "drivers/spmi/spmi-pmic-arb.ko",
+        "drivers/spmi/spmi-pmic-arb-debug.ko",
         "drivers/tty/hvc/hvc_gunyah.ko",
         "drivers/ufs/host/ufs-qcom.ko",
         "drivers/usb/dwc3/dwc3-msm.ko",
