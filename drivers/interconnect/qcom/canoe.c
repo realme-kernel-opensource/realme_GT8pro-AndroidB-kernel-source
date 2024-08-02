@@ -2618,6 +2618,13 @@ static struct qcom_icc_bcm bcm_mm1 = {
 		   &qns_mem_noc_sf },
 };
 
+static struct qcom_icc_bcm bcm_qpc0 = {
+	.name = "QPC0",
+	.voter_idx = VOTER_IDX_HLOS,
+	.num_nodes = 1,
+	.nodes = { &qnm_qpace },
+};
+
 static struct qcom_icc_bcm bcm_qup0 = {
 	.name = "QUP0",
 	.voter_idx = VOTER_IDX_HLOS,
@@ -3385,6 +3392,7 @@ static struct qcom_icc_desc canoe_cnoc_main = {
 };
 
 static struct qcom_icc_bcm *gem_noc_bcms[] = {
+	&bcm_qpc0,
 	&bcm_sh0,
 	&bcm_sh1,
 	&bcm_sh0_cam_ife_0,
