@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -20,6 +20,7 @@
 #define GH_TLMM_MEM_LABEL 0x8
 
 struct gh_tlmm_vm_info {
+	struct device *dev;
 	struct notifier_block guest_memshare_nb;
 	enum gh_vm_names vm_name;
 	gh_memparcel_handle_t vm_mem_handle;
@@ -28,9 +29,6 @@ struct gh_tlmm_vm_info {
 	u32 iomem_list_size;
 	void *mem_cookie;
 };
-
-static struct gh_tlmm_vm_info gh_tlmm_vm_info_data;
-static struct device *gh_tlmm_dev;
 
 static struct gh_acl_desc *gh_tlmm_vm_get_acl(enum gh_vm_names vm_name)
 {
@@ -86,13 +84,15 @@ static int gh_tlmm_vm_mem_share(struct gh_tlmm_vm_info *gh_tlmm_vm_info_data)
 
 	acl_desc = gh_tlmm_vm_get_acl(GH_TRUSTED_VM);
 	if (IS_ERR(acl_desc)) {
-		dev_err(gh_tlmm_dev, "Failed to get acl of IO memories for TLMM\n");
+		dev_err(gh_tlmm_vm_info_data->dev,
+			"Failed to get acl of IO memories for TLMM\n");
 		return PTR_ERR(acl_desc);
 	}
 
 	sgl_desc = gh_tlmm_vm_get_sgl(gh_tlmm_vm_info_data);
 	if (IS_ERR(sgl_desc)) {
-		dev_err(gh_tlmm_dev, "Failed to get sgl of IO memories for TLMM\n");
+		dev_err(gh_tlmm_vm_info_data->dev,
+			"Failed to get sgl of IO memories for TLMM\n");
 		rc = PTR_ERR(sgl_desc);
 		goto sgl_error;
 	}
@@ -100,7 +100,8 @@ static int gh_tlmm_vm_mem_share(struct gh_tlmm_vm_info *gh_tlmm_vm_info_data)
 	rc = ghd_rm_mem_share(GH_RM_MEM_TYPE_IO, 0, GH_TLMM_MEM_LABEL,
 			acl_desc, sgl_desc, NULL, &mem_handle);
 	if (rc) {
-		dev_err(gh_tlmm_dev, "Failed to share IO memories for TLMM rc:%d\n", rc);
+		dev_err(gh_tlmm_vm_info_data->dev,
+			"Failed to share IO memories for TLMM rc:%d\n", rc);
 		goto error;
 	}
 
@@ -136,7 +137,7 @@ static int __maybe_unused gh_guest_memshare_nb_handler(struct notifier_block *th
 	 * These notifications come from RM after PIL loading the VM images.
 	 */
 	if (vm_status_payload->vm_status == GH_RM_VM_STATUS_READY)
-		gh_tlmm_vm_mem_share(&gh_tlmm_vm_info_data);
+		gh_tlmm_vm_mem_share(vm_info);
 
 	return NOTIFY_DONE;
 }
@@ -146,20 +147,21 @@ static int gh_tlmm_vm_mem_release(struct gh_tlmm_vm_info *gh_tlmm_vm_info_data)
 	int rc = 0;
 
 	if (!gh_tlmm_vm_info_data->vm_mem_handle) {
-		dev_err(gh_tlmm_dev, "Invalid memory handle\n");
+		dev_err(gh_tlmm_vm_info_data->dev, "Invalid memory handle\n");
 		return -EINVAL;
 	}
 
 	rc = gh_rm_mem_release(gh_tlmm_vm_info_data->vm_mem_handle, 0);
 	if (rc)
-		dev_err(gh_tlmm_dev, "VM mem release failed rc:%d\n", rc);
+		dev_err(gh_tlmm_vm_info_data->dev,
+			"VM mem release failed rc:%d\n", rc);
 
 	rc = gh_rm_mem_notify(gh_tlmm_vm_info_data->vm_mem_handle,
 		GH_RM_MEM_NOTIFY_OWNER_RELEASED,
 		GH_MEM_NOTIFIER_TAG_TLMM, 0);
 	if (rc)
-		dev_err(gh_tlmm_dev, "Failed to notify mem release to PVM rc:%d\n",
-							rc);
+		dev_err(gh_tlmm_vm_info_data->dev,
+			"Failed to notify mem release to PVM rc:%d\n", rc);
 
 	gh_tlmm_vm_info_data->vm_mem_handle = 0;
 	return rc;
@@ -170,13 +172,14 @@ static int gh_tlmm_vm_mem_reclaim(struct gh_tlmm_vm_info *gh_tlmm_vm_info_data)
 	int rc = 0;
 
 	if (!gh_tlmm_vm_info_data->vm_mem_handle) {
-		dev_err(gh_tlmm_dev, "Invalid memory handle\n");
+		dev_err(gh_tlmm_vm_info_data->dev, "Invalid memory handle\n");
 		return -EINVAL;
 	}
 
 	rc = ghd_rm_mem_reclaim(gh_tlmm_vm_info_data->vm_mem_handle, 0);
 	if (rc)
-		dev_err(gh_tlmm_dev, "VM mem reclaim failed rc:%d\n", rc);
+		dev_err(gh_tlmm_vm_info_data->dev,
+			"VM mem reclaim failed rc:%d\n", rc);
 
 	gh_tlmm_vm_info_data->vm_mem_handle = 0;
 
@@ -199,7 +202,8 @@ static int gh_tlmm_vm_populate_vm_info(struct platform_device *dev, struct gh_tl
 		rc = of_property_read_u32_index(np, "qcom,rm-mem-handle",
 				1, &vm_mem_handle);
 		if (rc) {
-			dev_err(gh_tlmm_dev, "Failed to receive mem handle rc:%d\n", rc);
+			dev_err(&dev->dev,
+				"Failed to receive mem handle rc:%d\n", rc);
 			goto vm_error;
 		}
 
@@ -210,7 +214,7 @@ static int gh_tlmm_vm_populate_vm_info(struct platform_device *dev, struct gh_tl
 	num_regs = of_count_phandle_with_args(np,
 			"tlmm-vm-gpio-list", "#gpio-cells");
 	if (num_regs < 0) {
-		dev_err(gh_tlmm_dev, "Invalid number of gpios specified\n");
+		dev_err(&dev->dev, "Invalid number of gpios specified\n");
 		rc = -EINVAL;
 		goto vm_error;
 	}
@@ -223,7 +227,7 @@ static int gh_tlmm_vm_populate_vm_info(struct platform_device *dev, struct gh_tl
 		gpio = of_get_named_gpio(np, "tlmm-vm-gpio-list", i);
 		if (gpio < 0) {
 			rc = gpio;
-			dev_err(gh_tlmm_dev, "Failed to receive shared gpios %d\n", rc);
+			dev_err(&dev->dev, "Failed to receive shared gpios %d\n", rc);
 			goto gpios_error;
 		}
 		gpios[i] = gpio;
@@ -254,7 +258,7 @@ static int gh_tlmm_vm_populate_vm_info(struct platform_device *dev, struct gh_tl
 	for (i = 0; i < num_regs; i++)  {
 		ret = msm_gpio_get_pin_address(gpios[i], res);
 		if (!ret) {
-			dev_err(gh_tlmm_dev, "Invalid gpio\n");
+			dev_err(&dev->dev, "Invalid gpio\n");
 			rc = -EINVAL;
 			goto res_error;
 		}
@@ -284,29 +288,29 @@ static void __maybe_unused gh_tlmm_vm_mem_on_release_handler(enum gh_mem_notifie
 	struct gh_tlmm_vm_info *vm_info;
 
 	if (notif_type != GH_RM_NOTIF_MEM_RELEASED) {
-		dev_err(gh_tlmm_dev, "Invalid notification type\n");
+		pr_err("Invalid notification type\n");
 		return;
 	}
 
 	if (tag != GH_MEM_NOTIFIER_TAG_TLMM) {
-		dev_err(gh_tlmm_dev, "Invalid tag\n");
+		pr_err("Invalid tag\n");
 		return;
 	}
 
 	if (!entry_data || !notif_msg) {
-		dev_err(gh_tlmm_dev, "Invalid data or notification message\n");
+		pr_err("Invalid data or notification message\n");
 		return;
 	}
 
 	vm_info = (struct gh_tlmm_vm_info *)entry_data;
 	if (!vm_info) {
-		dev_err(gh_tlmm_dev, "Invalid vm_info\n");
+		pr_err("Invalid vm_info\n");
 		return;
 	}
 
 	release_payload = (struct gh_rm_notif_mem_released_payload  *)notif_msg;
 	if (release_payload->mem_handle != vm_info->vm_mem_handle) {
-		dev_err(gh_tlmm_dev, "Invalid mem handle detected\n");
+		dev_err(vm_info->dev, "Invalid mem handle detected\n");
 		return;
 	}
 
@@ -319,11 +323,17 @@ static int gh_tlmm_vm_mem_access_probe(struct platform_device *pdev)
 	int owner_vmid, ret;
 	struct device_node *node;
 	gh_vmid_t vmid;
+	struct gh_tlmm_vm_info *vm_info_data;
+	struct device *dev = &pdev->dev;
 
-	gh_tlmm_dev = &pdev->dev;
+	vm_info_data = devm_kzalloc(dev, sizeof(*vm_info_data), GFP_KERNEL);
+	if (!vm_info_data)
+		return -ENOMEM;
+	platform_set_drvdata(pdev, vm_info_data);
+	vm_info_data->dev = dev;
 
-	if (gh_tlmm_vm_populate_vm_info(pdev, &gh_tlmm_vm_info_data)) {
-		dev_err(gh_tlmm_dev, "Failed to populate TLMM VM info\n");
+	if (gh_tlmm_vm_populate_vm_info(pdev, vm_info_data)) {
+		dev_err(dev, "Failed to populate TLMM VM info\n");
 		return -EINVAL;
 	}
 
@@ -331,7 +341,7 @@ static int gh_tlmm_vm_mem_access_probe(struct platform_device *pdev)
 	if (IS_ERR_OR_NULL(node)) {
 		node = of_find_compatible_node(NULL, NULL, "qcom,haven-vm-id-1.0");
 		if (IS_ERR_OR_NULL(node)) {
-			dev_err(gh_tlmm_dev, "Could not find vm-id node\n");
+			dev_err(dev, "Could not find vm-id node\n");
 			return -ENODEV;
 		}
 	}
@@ -339,19 +349,21 @@ static int gh_tlmm_vm_mem_access_probe(struct platform_device *pdev)
 	ret = of_property_read_u32(node, "qcom,owner-vmid", &owner_vmid);
 	if (ret) {
 		/* GH_PRIMARY_VM */
-		mem_cookie = gh_mem_notifier_register(GH_MEM_NOTIFIER_TAG_TLMM,
-					gh_tlmm_vm_mem_on_release_handler, &gh_tlmm_vm_info_data);
+		mem_cookie = gh_mem_notifier_register(
+			GH_MEM_NOTIFIER_TAG_TLMM,
+			gh_tlmm_vm_mem_on_release_handler, &vm_info_data);
 		if (IS_ERR(mem_cookie)) {
-			dev_err(gh_tlmm_dev, "Failed to register on release notifier%ld\n",
-						PTR_ERR(mem_cookie));
+			dev_err(dev,
+				"Failed to register on release notifier%ld\n",
+				PTR_ERR(mem_cookie));
 			return -EINVAL;
 		}
 
-		gh_tlmm_vm_info_data.mem_cookie = mem_cookie;
-		gh_tlmm_vm_info_data.guest_memshare_nb.notifier_call = gh_guest_memshare_nb_handler;
+		vm_info_data->mem_cookie = mem_cookie;
+		vm_info_data->guest_memshare_nb.notifier_call = gh_guest_memshare_nb_handler;
 
-		gh_tlmm_vm_info_data.guest_memshare_nb.priority = INT_MAX;
-		ret = gh_rm_register_notifier(&gh_tlmm_vm_info_data.guest_memshare_nb);
+		vm_info_data->guest_memshare_nb.priority = INT_MAX;
+		ret = gh_rm_register_notifier(&vm_info_data->guest_memshare_nb);
 		if (ret)
 			return ret;
 	} else {
@@ -360,7 +372,7 @@ static int gh_tlmm_vm_mem_access_probe(struct platform_device *pdev)
 			return ret;
 
 
-		gh_tlmm_vm_mem_release(&gh_tlmm_vm_info_data);
+		gh_tlmm_vm_mem_release(vm_info_data);
 	}
 
 	return 0;
@@ -371,11 +383,14 @@ static int gh_tlmm_vm_mem_access_remove(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
 	bool master;
+	struct gh_tlmm_vm_info *vm_info_data;
+
+	vm_info_data = platform_get_drvdata(pdev);
 
 	master = of_property_read_bool(np, "qcom,master");
 	if (master)
-		gh_mem_notifier_unregister(gh_tlmm_vm_info_data.mem_cookie);
-	gh_rm_unregister_notifier(&gh_tlmm_vm_info_data.guest_memshare_nb);
+		gh_mem_notifier_unregister(vm_info_data->mem_cookie);
+	gh_rm_unregister_notifier(&vm_info_data->guest_memshare_nb);
 
 	return 0;
 }
