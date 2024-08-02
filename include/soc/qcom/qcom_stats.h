@@ -8,6 +8,8 @@
 #define __QCOM_STATS_H__
 
 #define DDR_HISTORY_MAX_ELEMENTS	0x2
+#define NUM_MAX_SCID	64
+#define LLC_ISLAND_STATS_RESVD	3
 
 struct ddr_freq_residency {
 	u32 freq;
@@ -32,6 +34,15 @@ struct ddr_stats_change_his_info {
 	u32 last_2_shub_changes_lo[DDR_HISTORY_MAX_ELEMENTS];
 };
 
+struct llc_island_stats_active_scids {
+	u32 versionID;
+	/* counters per SCID which blocks the entry or forces exit of LLC island */
+	u64 scid_count[NUM_MAX_SCID];
+	/* current SCID status */
+	u64 cur_scid_status;
+	u64 reserved[LLC_ISLAND_STATS_RESVD];
+} __packed;
+
 struct qcom_stats_cx_vote_info {
 	u8 level; /* CX LEVEL */
 };
@@ -46,6 +57,7 @@ int qcom_stats_ddr_freqsync_msg(void);
 int ddr_stats_get_freq_count(void);
 int ddr_stats_get_residency(int freq_count, struct ddr_freq_residency *data);
 int ddr_stats_get_change_his(struct ddr_stats_change_his_info *ddr_his_info);
+int llc_stats_get_active_scids(struct llc_island_stats_active_scids *llc_active_scids);
 
 bool has_system_slept(bool *aoss_debug);
 bool has_subsystem_slept(void);
@@ -68,6 +80,8 @@ static inline int ddr_stats_get_freq_count(void)
 int ddr_stats_get_residency(int freq_count, struct ddr_freq_residency *data)
 { return -ENODEV; }
 int ddr_stats_get_change_his(struct ddr_stats_change_his_info *ddr_his_info)
+{ return -ENODEV; }
+int llc_stats_get_active_scids(struct llc_island_stats_active_scids *llc_active_scids)
 { return -ENODEV; }
 
 bool has_system_slept(void)
