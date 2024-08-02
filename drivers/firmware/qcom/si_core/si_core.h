@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __SI_CORE_H__
@@ -186,7 +186,8 @@ static inline void err_to_qtee_err(struct qtee_callback *cb_msg, int err)
 
 		break;
 	default:
-		cb_msg->result = OBJECT_ERROR;
+		/* Positive err. are sent back as-is, negatives are transport related. */
+		cb_msg->result = (err >= OBJECT_OK) ? err : OBJECT_ERROR;
 	}
 }
 
