@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.*/
+/* Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.*/
 
 #include <linux/dma-direct.h>
 #include <linux/dma-mapping.h>
@@ -18,6 +18,7 @@
 #include <linux/gunyah/gh_dbl.h>
 #include <linux/gunyah/gh_panic_notifier.h>
 #include <linux/gunyah/gh_rm_drv.h>
+#include <linux/gunyah/gh_vm.h>
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <soc/qcom/secure_buffer.h>
 
@@ -26,8 +27,6 @@
 #define DDUMP_DBL_MASK				0x1
 #define DDUMP_PROFS_NAME			"vmkmsg"
 #define DDUMP_WAIT_WAKEIRQ_TIMEOUT	msecs_to_jiffies(1000)
-
-static bool vm_status_ready;
 
 static void qcom_ddump_to_shm(struct kmsg_dumper *dumper,
 			  enum kmsg_dump_reason reason)
@@ -213,33 +212,32 @@ static int qcom_ddump_unshare_mem(struct qcom_dmesg_dumper *qdd, gh_vmid_t self,
 	return ret;
 }
 
-static int qcom_ddump_rm_cb(struct notifier_block *nb, unsigned long cmd,
+static int qcom_ddump_vm_cb(struct notifier_block *nb, unsigned long cmd,
 			     void *data)
 {
-	struct gh_rm_notif_vm_status_payload *vm_status_payload;
-	struct qcom_dmesg_dumper *qdd;
+	struct qcom_dmesg_dumper *qdd = container_of(nb, struct qcom_dmesg_dumper, vm_nb);
 	dma_addr_t dma_handle;
 	gh_vmid_t peer_vmid;
 	gh_vmid_t self_vmid;
+	gh_vmid_t vmid;
 	int ret;
 
-	qdd = container_of(nb, struct qcom_dmesg_dumper, rm_nb);
-
-	if (cmd != GH_RM_NOTIF_VM_STATUS)
+	if (!data)
 		return NOTIFY_DONE;
+	vmid = *((gh_vmid_t *)data);
 
-	vm_status_payload = data;
-	if (vm_status_payload->vm_status != GH_RM_VM_STATUS_READY &&
-	    vm_status_payload->vm_status != GH_RM_VM_STATUS_RESET)
-		return NOTIFY_DONE;
 	if (ghd_rm_get_vmid(qdd->peer_name, &peer_vmid))
 		return NOTIFY_DONE;
 	if (ghd_rm_get_vmid(GH_PRIMARY_VM, &self_vmid))
 		return NOTIFY_DONE;
-	if (peer_vmid != vm_status_payload->vmid)
+	if (peer_vmid != vmid)
 		return NOTIFY_DONE;
 
-	if (vm_status_payload->vm_status == GH_RM_VM_STATUS_READY) {
+	switch (cmd) {
+	case GH_VM_BEFORE_POWERUP:
+		if (qdd->is_ready)
+			break;
+
 		if (!qdd->is_static) {
 			qdd->base = dma_alloc_coherent(qdd->dev, qdd->size,
 							&dma_handle, GFP_KERNEL);
@@ -260,24 +258,30 @@ static int qcom_ddump_rm_cb(struct notifier_block *nb, unsigned long cmd,
 
 		if (qcom_ddump_share_mem(qdd, self_vmid, peer_vmid)) {
 			dev_err(qdd->dev, "Failed to share memory\n");
-			goto free_mem;
+			if (!qdd->is_static)
+				dma_free_coherent(qdd->dev, qdd->size, qdd->base,
+					phys_to_dma(qdd->dev, qdd->res.start));
+
+			return NOTIFY_DONE;
 		}
 
-		vm_status_ready = true;
+		qdd->is_ready = true;
+		break;
+	case GH_VM_POWERUP_FAIL:
+		fallthrough;
+	case GH_VM_EARLY_POWEROFF:
+		if (qdd->is_ready) {
+			qdd->is_ready = false;
+			msm_minidump_remove_region(&qdd->md_entry);
+			if (!qcom_ddump_unshare_mem(qdd, self_vmid, peer_vmid)) {
+				if (!qdd->is_static)
+					dma_free_coherent(qdd->dev, qdd->size, qdd->base,
+						phys_to_dma(qdd->dev, qdd->res.start));
+			}
+		}
+
+		break;
 	}
-
-	if (vm_status_payload->vm_status == GH_RM_VM_STATUS_RESET) {
-		vm_status_ready = false;
-		if (!qcom_ddump_unshare_mem(qdd, self_vmid, peer_vmid))
-			goto free_mem;
-	}
-
-	return NOTIFY_DONE;
-
-free_mem:
-	if (!qdd->is_static)
-		dma_free_coherent(qdd->dev, qdd->size, qdd->base,
-				phys_to_dma(qdd->dev, qdd->res.start));
 
 	return NOTIFY_DONE;
 }
@@ -324,10 +328,10 @@ static ssize_t qcom_ddump_vmkmsg_read(struct file *file, char __user *buf,
 			 size_t count, loff_t *ppos)
 {
 	struct qcom_dmesg_dumper *qdd = pde_data(file_inode(file));
-	struct ddump_shm_hdr *hdr = qdd->base;
+	struct ddump_shm_hdr *hdr;
 	int ret;
 
-	if (!vm_status_ready)
+	if (!qdd->is_ready)
 		return -ENODEV;
 
 	if (count < LOG_LINE_MAX) {
@@ -335,6 +339,7 @@ static ssize_t qcom_ddump_vmkmsg_read(struct file *file, char __user *buf,
 		return -EINVAL;
 	}
 
+	hdr = qdd->base;
 	/**
 	 * If SVM is in suspend mode and the log size more than 1k byte,
 	 * we think SVM has log need to be read. Otherwise, we think the
@@ -344,7 +349,10 @@ static ssize_t qcom_ddump_vmkmsg_read(struct file *file, char __user *buf,
 		return 0;
 
 	hdr->user_buf_len = count;
-	qcom_ddump_gh_kick(qdd);
+	ret = qcom_ddump_gh_kick(qdd);
+	if (ret)
+		return ret;
+
 	ret = wait_for_completion_timeout(&qdd->ddump_completion, DDUMP_WAIT_WAKEIRQ_TIMEOUT);
 	if (!ret) {
 		dev_err(qdd->dev, "wait for completion timeout\n");
@@ -493,9 +501,9 @@ static int qcom_ddump_probe(struct platform_device *pdev)
 		if (ret)
 			qdd->peer_name = GH_SELF_VM;
 
-		qdd->rm_nb.notifier_call = qcom_ddump_rm_cb;
-		qdd->rm_nb.priority = INT_MAX;
-		gh_rm_register_notifier(&qdd->rm_nb);
+		qdd->vm_nb.notifier_call = qcom_ddump_vm_cb;
+		qdd->vm_nb.priority = INT_MAX;
+		gh_register_vm_notifier(&qdd->vm_nb);
 	} else {
 		res = devm_request_mem_region(dev, qdd->res.start, qdd->size, dev_name(dev));
 		if (!res) {
@@ -520,7 +528,7 @@ static int qcom_ddump_probe(struct platform_device *pdev)
 		ret = qcom_ddump_alive_log_probe(qdd);
 		if (ret) {
 			if (qdd->primary_vm)
-				gh_rm_unregister_notifier(&qdd->rm_nb);
+				gh_unregister_vm_notifier(&qdd->vm_nb);
 			else
 				kmsg_dump_unregister(&qdd->dump);
 			return ret;
@@ -550,7 +558,7 @@ static int qcom_ddump_remove(struct platform_device *pdev)
 	}
 
 	if (qdd->primary_vm) {
-		gh_rm_unregister_notifier(&qdd->rm_nb);
+		gh_unregister_vm_notifier(&qdd->vm_nb);
 		ret = ghd_rm_get_vmid(qdd->peer_name, &peer_vmid);
 		if (ret)
 			return ret;
