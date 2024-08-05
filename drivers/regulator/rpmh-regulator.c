@@ -135,7 +135,7 @@ enum rpmh_regulator_reg_index {
 /* Min and max limits of VRM resource request parameters */
 #define RPMH_VRM_MIN_UV			0
 #define RPMH_VRM_MAX_UV			8191000
-
+#define RPMH_VRM_STEP_UV		1000
 #define RPMH_VRM_HEADROOM_MIN_UV	0
 #define RPMH_VRM_HEADROOM_MAX_UV	511000
 
@@ -1454,6 +1454,7 @@ static const struct regulator_ops rpmh_regulator_vrm_ops = {
 	.set_mode		= rpmh_regulator_vrm_set_mode,
 	.get_mode		= rpmh_regulator_vrm_get_mode,
 	.set_load		= rpmh_regulator_vrm_set_load,
+	.list_voltage		= regulator_list_voltage_linear,
 };
 
 static const struct regulator_ops rpmh_regulator_arc_ops = {
@@ -1976,6 +1977,7 @@ static int rpmh_regulator_init_vreg(struct rpmh_vreg *vreg)
 	struct regulator_config reg_config = {};
 	struct regulator_init_data *init_data;
 	struct regulator_ops *ops;
+	int min_uV, max_uV;
 	int rc, i;
 	u32 set;
 
@@ -2041,7 +2043,16 @@ static int rpmh_regulator_init_vreg(struct rpmh_vreg *vreg)
 
 	switch (type) {
 	case RPMH_REGULATOR_TYPE_VRM:
-		vreg->rdesc.n_voltages = 2;
+		min_uV = DIV_ROUND_UP(init_data->constraints.min_uV, RPMH_VRM_STEP_UV)
+			* RPMH_VRM_STEP_UV;
+		max_uV = (init_data->constraints.max_uV / RPMH_VRM_STEP_UV) * RPMH_VRM_STEP_UV;
+		if (!min_uV && !max_uV) {
+			vreg->rdesc.n_voltages = 2;
+			break;
+		}
+		vreg->rdesc.min_uV = min_uV;
+		vreg->rdesc.n_voltages = (max_uV - min_uV) / RPMH_VRM_STEP_UV + 1;
+		vreg->rdesc.uV_step = RPMH_VRM_STEP_UV;
 		break;
 	case RPMH_REGULATOR_TYPE_ARC:
 		vreg->rdesc.n_voltages = vreg->aggr_vreg->level_count;
