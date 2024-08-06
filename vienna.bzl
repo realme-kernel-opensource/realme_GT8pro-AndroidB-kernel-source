@@ -7,8 +7,11 @@ def define_vienna():
     _vienna_in_tree_modules = [
         # keep sorted
         "drivers/firmware/qcom/qcom-scm.ko",
+        "drivers/irqchip/qcom-pdc.ko",
         "drivers/pinctrl/qcom/pinctrl-msm.ko",
         "drivers/pinctrl/qcom/pinctrl-vienna.ko",
+        "drivers/soc/qcom/cmd-db.ko",
+        "drivers/soc/qcom/qcom_rpmh.ko",
     ]
 
     _vienna_consolidate_in_tree_modules = _vienna_in_tree_modules + [
