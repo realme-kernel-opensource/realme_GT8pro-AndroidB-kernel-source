@@ -241,5 +241,6 @@
 #define GCC_VIDEO_AXI0_CLK_ARES					33
 #define GCC_VIDEO_AXI1_CLK_ARES					34
 #define GCC_VIDEO_BCR						35
+#define GCC_VIDEO_XO_CLK_ARES					36
 
 #endif
