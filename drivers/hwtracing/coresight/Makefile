@@ -52,4 +52,5 @@ coresight-cti-y := coresight-cti-core.o	coresight-cti-platform.o \
 obj-$(CONFIG_ULTRASOC_SMB) += ultrasoc-smb.o
 obj-$(CONFIG_CORESIGHT_TRACE_NOC) += coresight-trace-noc.o
 obj-$(CONFIG_CORESIGHT_TGU) += coresight-tgu.o
+obj-$(CONFIG_CORESIGHT_CSR) += coresight-csr.o
 obj-$(CONFIG_CORESIGHT_DUMMY) += coresight-dummy.o
