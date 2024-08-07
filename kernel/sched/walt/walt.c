@@ -4386,6 +4386,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 	int cpu;
 	bool is_migration = false, is_asym_migration = false, is_pipeline_sync_migration = false;
 	u32 wakeup_ctr_sum = 0;
+	struct walt_sched_cluster *cluster;
 
 	if (irq_work == &walt_migration_irq_work)
 		is_migration = true;
@@ -4444,6 +4445,9 @@ static void walt_irq_work(struct irq_work *irq_work)
 		wrq = &per_cpu(walt_rq, cpu_of(this_rq()));
 		pipeline_check(wrq);
 		core_ctl_check(wrq->window_start, wakeup_ctr_sum);
+		for_each_sched_cluster(cluster) {
+			update_smart_freq_legacy_reason_hyst_time(cluster);
+		}
 		check_obet_set_boost();
 	}
 }

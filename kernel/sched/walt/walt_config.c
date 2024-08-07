@@ -19,7 +19,7 @@ int soc_sched_lib_name_capacity;
 
 void walt_config(void)
 {
-	int i, j;
+	int i, j, cpu;
 	const char *name = socinfo_get_id_string();
 
 	sysctl_sched_group_upmigrate_pct = 100;
@@ -49,6 +49,14 @@ void walt_config(void)
 	sysctl_max_freq_partial_halt = FREQ_QOS_MAX_DEFAULT_VALUE;
 	asym_cap_sibling_cpus = CPU_MASK_NONE;
 	pipeline_sync_cpus = CPU_MASK_NONE;
+	for_each_possible_cpu(cpu) {
+		for (i = 0; i < LEGACY_SMART_FREQ; i++) {
+			if (i)
+				smart_freq_legacy_reason_hyst_ms[i][cpu] = 4;
+			else
+				smart_freq_legacy_reason_hyst_ms[i][cpu] = 0;
+		}
+	}
 
 	for (i = 0; i < MAX_MARGIN_LEVELS; i++) {
 		sysctl_sched_capacity_margin_up_pct[i] = 95; /* ~5% margin */
@@ -139,6 +147,13 @@ void walt_config(void)
 		load_sync_low_pct_60fps[0][1]		= sysctl_cluster10_load_sync_60fps[1];
 		load_sync_high_pct_60fps[0][1]		= sysctl_cluster10_load_sync_60fps[2];
 
+		/* CPU0 needs an 9mS bias for all legacy smart freq reasons */
+		for (i = 1; i < LEGACY_SMART_FREQ; i++)
+			smart_freq_legacy_reason_hyst_ms[i][0] = 9;
+		for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
+			for (i = 1; i < LEGACY_SMART_FREQ; i++)
+				smart_freq_legacy_reason_hyst_ms[i][cpu] = 2;
+		}
 	} else if (!strcmp(name, "PINEAPPLE")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
