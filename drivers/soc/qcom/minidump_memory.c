@@ -1149,7 +1149,7 @@ static void md_dma_buf_info(char *m, size_t dump_size)
 	struct dma_buf_priv dma_buf_priv;
 	struct priv_buf buf;
 
-	if (!in_task())
+	if (!in_task() || in_atomic())
 		return;
 
 	buf.buf = m;
