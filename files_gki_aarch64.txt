@@ -239,7 +239,6 @@ arch/arm64/kernel/head.S
 arch/arm64/kernel/hw_breakpoint.c
 arch/arm64/kernel/hyp-stub.S
 arch/arm64/kernel/idle.c
-arch/arm64/kernel/idreg-override.c
 arch/arm64/kernel/image-vars.h
 arch/arm64/kernel/image.h
 arch/arm64/kernel/io.c
@@ -251,12 +250,18 @@ arch/arm64/kernel/module-plts.c
 arch/arm64/kernel/module.c
 arch/arm64/kernel/mte.c
 arch/arm64/kernel/paravirt.c
-arch/arm64/kernel/patch-scs.c
 arch/arm64/kernel/patching.c
 arch/arm64/kernel/pci.c
 arch/arm64/kernel/perf_callchain.c
 arch/arm64/kernel/perf_regs.c
+arch/arm64/kernel/pi/idreg-override.c
 arch/arm64/kernel/pi/kaslr_early.c
+arch/arm64/kernel/pi/map_kernel.c
+arch/arm64/kernel/pi/map_range.c
+arch/arm64/kernel/pi/patch-scs.c
+arch/arm64/kernel/pi/pi.h
+arch/arm64/kernel/pi/relacheck.c
+arch/arm64/kernel/pi/relocate.c
 arch/arm64/kernel/pointer_auth.c
 arch/arm64/kernel/probes/decode-insn.c
 arch/arm64/kernel/probes/decode-insn.h
@@ -418,6 +423,7 @@ arch/arm64/lib/strrchr.S
 arch/arm64/lib/tishift.S
 arch/arm64/mm/cache.S
 arch/arm64/mm/context.c
+arch/arm64/mm/contpte.c
 arch/arm64/mm/copypage.c
 arch/arm64/mm/dma-mapping.c
 arch/arm64/mm/extable.c
@@ -822,6 +828,7 @@ drivers/firmware/arm_scmi/mailbox.c
 drivers/firmware/arm_scmi/notify.c
 drivers/firmware/arm_scmi/notify.h
 drivers/firmware/arm_scmi/perf.c
+drivers/firmware/arm_scmi/pinctrl.c
 drivers/firmware/arm_scmi/power.c
 drivers/firmware/arm_scmi/powercap.c
 drivers/firmware/arm_scmi/protocols.h
@@ -1092,7 +1099,6 @@ drivers/iommu/io-pgtable-arm.c
 drivers/iommu/io-pgtable-arm.h
 drivers/iommu/io-pgtable.c
 drivers/iommu/iommu-priv.h
-drivers/iommu/iommu-sva.h
 drivers/iommu/iommu-sysfs.c
 drivers/iommu/iommu-traces.c
 drivers/iommu/iommu.c
@@ -1403,6 +1409,7 @@ drivers/of/address.c
 drivers/of/base.c
 drivers/of/cpu.c
 drivers/of/device.c
+drivers/of/empty_root.dts
 drivers/of/fdt.c
 drivers/of/fdt_address.c
 drivers/of/irq.c
@@ -1429,11 +1436,13 @@ drivers/pci/controller/dwc/pcie-kirin.c
 drivers/pci/controller/dwc/pcie-qcom.c
 drivers/pci/controller/pci-host-common.c
 drivers/pci/controller/pci-host-generic.c
+drivers/pci/devres.c
 drivers/pci/ecam.c
 drivers/pci/endpoint/pci-epc-core.c
 drivers/pci/endpoint/pci-epc-mem.c
 drivers/pci/endpoint/pci-epf-core.c
 drivers/pci/host-bridge.c
+drivers/pci/iomap.c
 drivers/pci/iov.c
 drivers/pci/irq.c
 drivers/pci/mmap.c
@@ -1461,7 +1470,6 @@ drivers/pci/remove.c
 drivers/pci/rom.c
 drivers/pci/search.c
 drivers/pci/setup-bus.c
-drivers/pci/setup-irq.c
 drivers/pci/setup-res.c
 drivers/pci/slot.c
 drivers/pci/syscall.c
@@ -1790,6 +1798,7 @@ drivers/usb/host/ehci-timer.c
 drivers/usb/host/ehci.h
 drivers/usb/host/pci-quirks.c
 drivers/usb/host/pci-quirks.h
+drivers/usb/host/xhci-caps.h
 drivers/usb/host/xhci-dbg.c
 drivers/usb/host/xhci-dbgcap.h
 drivers/usb/host/xhci-debugfs.c
@@ -1803,6 +1812,7 @@ drivers/usb/host/xhci-pci.c
 drivers/usb/host/xhci-pci.h
 drivers/usb/host/xhci-plat.c
 drivers/usb/host/xhci-plat.h
+drivers/usb/host/xhci-port.h
 drivers/usb/host/xhci-ring.c
 drivers/usb/host/xhci-trace.c
 drivers/usb/host/xhci-trace.h
@@ -2065,6 +2075,7 @@ fs/fuse/file.c
 fs/fuse/fuse_i.h
 fs/fuse/inode.c
 fs/fuse/ioctl.c
+fs/fuse/iomode.c
 fs/fuse/passthrough.c
 fs/fuse/readdir.c
 fs/fuse/virtio_fs.c
@@ -2761,8 +2772,8 @@ include/linux/cpuidle.h
 include/linux/cpumask.h
 include/linux/cpumask_api.h
 include/linux/cpuset.h
-include/linux/crash_core.h
 include/linux/crash_dump.h
+include/linux/crash_reserve.h
 include/linux/crc-ccitt.h
 include/linux/crc16.h
 include/linux/crc32.h
@@ -2852,7 +2863,6 @@ include/linux/ethtool.h
 include/linux/ethtool_netlink.h
 include/linux/eventfd.h
 include/linux/eventpoll.h
-include/linux/evm.h
 include/linux/export.h
 include/linux/exportfs.h
 include/linux/ext2_fs.h
@@ -3435,6 +3445,7 @@ include/linux/psi.h
 include/linux/psi_types.h
 include/linux/pstore.h
 include/linux/pstore_ram.h
+include/linux/ptdump.h
 include/linux/pti.h
 include/linux/ptp_classify.h
 include/linux/ptp_clock_kernel.h
@@ -3819,6 +3830,7 @@ include/linux/virtio_ring.h
 include/linux/virtio_vsock.h
 include/linux/vm_event_item.h
 include/linux/vmalloc.h
+include/linux/vmcore_info.h
 include/linux/vmpressure.h
 include/linux/vmstat.h
 include/linux/vt.h
@@ -3833,6 +3845,7 @@ include/linux/watch_queue.h
 include/linux/watchdog.h
 include/linux/win_minmax.h
 include/linux/wireless.h
+include/linux/wordpart.h
 include/linux/workqueue.h
 include/linux/workqueue_api.h
 include/linux/workqueue_types.h
@@ -3885,6 +3898,9 @@ include/media/videobuf2-memops.h
 include/media/videobuf2-v4l2.h
 include/media/videobuf2-vmalloc.h
 include/net/6lowpan.h
+include/net/9p/9p.h
+include/net/9p/client.h
+include/net/9p/transport.h
 include/net/act_api.h
 include/net/addrconf.h
 include/net/af_ieee802154.h
@@ -3928,6 +3944,7 @@ include/net/dst.h
 include/net/dst_cache.h
 include/net/dst_metadata.h
 include/net/dst_ops.h
+include/net/eee.h
 include/net/erspan.h
 include/net/esp.h
 include/net/espintcp.h
@@ -3944,6 +3961,7 @@ include/net/gre.h
 include/net/gro.h
 include/net/gro_cells.h
 include/net/gso.h
+include/net/hotdata.h
 include/net/icmp.h
 include/net/ieee802154_netdev.h
 include/net/if_inet6.h
@@ -3989,6 +4007,7 @@ include/net/net_debug.h
 include/net/net_namespace.h
 include/net/net_ratelimit.h
 include/net/net_trackers.h
+include/net/netdev_queues.h
 include/net/netdev_rx_queue.h
 include/net/netevent.h
 include/net/netfilter/ipv4/nf_conntrack_ipv4.h
@@ -4031,6 +4050,7 @@ include/net/netfilter/nf_tproxy.h
 include/net/netkit.h
 include/net/netlabel.h
 include/net/netlink.h
+include/net/netmem.h
 include/net/netns/bpf.h
 include/net/netns/can.h
 include/net/netns/conntrack.h
@@ -4076,6 +4096,7 @@ include/net/request_sock.h
 include/net/rose.h
 include/net/route.h
 include/net/rpl.h
+include/net/rps.h
 include/net/rtnetlink.h
 include/net/rtnh.h
 include/net/sch_generic.h
@@ -4194,6 +4215,7 @@ include/sound/tlv.h
 include/sound/ump.h
 include/trace/bpf_probe.h
 include/trace/define_trace.h
+include/trace/events/9p.h
 include/trace/events/alarmtimer.h
 include/trace/events/asoc.h
 include/trace/events/avc.h
@@ -4375,6 +4397,7 @@ include/uapi/linux/auxvec.h
 include/uapi/linux/ax25.h
 include/uapi/linux/batadv_packet.h
 include/uapi/linux/binfmts.h
+include/uapi/linux/bits.h
 include/uapi/linux/blkpg.h
 include/uapi/linux/blktrace_api.h
 include/uapi/linux/blkzoned.h
@@ -4487,7 +4510,6 @@ include/uapi/linux/io_uring.h
 include/uapi/linux/ioam6.h
 include/uapi/linux/ioam6_genl.h
 include/uapi/linux/ioctl.h
-include/uapi/linux/iommu.h
 include/uapi/linux/ioprio.h
 include/uapi/linux/ip.h
 include/uapi/linux/ip6_tunnel.h
@@ -4767,6 +4789,7 @@ include/uapi/linux/v4l2-controls.h
 include/uapi/linux/v4l2-dv-timings.h
 include/uapi/linux/v4l2-mediabus.h
 include/uapi/linux/v4l2-subdev.h
+include/uapi/linux/vesa.h
 include/uapi/linux/veth.h
 include/uapi/linux/vfio.h
 include/uapi/linux/vhost.h
@@ -4932,6 +4955,7 @@ kernel/audit_watch.c
 kernel/auditfilter.c
 kernel/auditsc.c
 kernel/bounds.c
+kernel/bpf/arena.c
 kernel/bpf/arraymap.c
 kernel/bpf/bloom_filter.c
 kernel/bpf/bpf_cgrp_storage.c
@@ -4940,7 +4964,6 @@ kernel/bpf/bpf_local_storage.c
 kernel/bpf/bpf_lru_list.c
 kernel/bpf/bpf_lru_list.h
 kernel/bpf/bpf_struct_ops.c
-kernel/bpf/bpf_struct_ops_types.h
 kernel/bpf/bpf_task_storage.c
 kernel/bpf/btf.c
 kernel/bpf/cgroup.c
@@ -4980,6 +5003,7 @@ kernel/bpf/sysfs_btf.c
 kernel/bpf/task_iter.c
 kernel/bpf/tcx.c
 kernel/bpf/tnum.c
+kernel/bpf/token.c
 kernel/bpf/trampoline.c
 kernel/bpf/verifier.c
 kernel/capability.c
@@ -5079,7 +5103,6 @@ kernel/locking/rwsem.c
 kernel/locking/semaphore.c
 kernel/locking/spinlock.c
 kernel/locking/ww_mutex.h
-kernel/module/gki_module.c
 kernel/module/internal.h
 kernel/module/kallsyms.c
 kernel/module/kmod.c
@@ -5444,7 +5467,6 @@ lib/objpool.c
 lib/oid_registry.c
 lib/once.c
 lib/parser.c
-lib/pci_iomap.c
 lib/percpu-refcount.c
 lib/percpu_counter.c
 lib/plist.c
@@ -5682,9 +5704,15 @@ net/8021q/vlan_dev.c
 net/8021q/vlan_netlink.c
 net/8021q/vlanproc.c
 net/8021q/vlanproc.h
-net/bluetooth/a2mp.h
+net/9p/client.c
+net/9p/error.c
+net/9p/mod.c
+net/9p/protocol.c
+net/9p/protocol.h
+net/9p/trans_common.c
+net/9p/trans_common.h
+net/9p/trans_fd.c
 net/bluetooth/af_bluetooth.c
-net/bluetooth/amp.h
 net/bluetooth/aosp.h
 net/bluetooth/coredump.c
 net/bluetooth/ecdh_helper.c
@@ -5775,6 +5803,7 @@ net/core/gen_stats.c
 net/core/gro.c
 net/core/gro_cells.c
 net/core/gso.c
+net/core/hotdata.c
 net/core/link_watch.c
 net/core/neighbour.c
 net/core/net-procfs.c
@@ -6270,8 +6299,6 @@ net/tipc/udp_media.c
 net/tipc/udp_media.h
 net/unix/af_unix.c
 net/unix/garbage.c
-net/unix/scm.c
-net/unix/scm.h
 net/unix/sysctl_net_unix.c
 net/unix/unix_bpf.c
 net/vmw_vsock/af_vsock.c
@@ -6342,16 +6369,20 @@ scripts/dtc/version_gen.h
 scripts/genksyms/genksyms.c
 scripts/genksyms/genksyms.h
 scripts/kallsyms.c
+scripts/kconfig/array_size.h
 scripts/kconfig/conf.c
 scripts/kconfig/confdata.c
 scripts/kconfig/expr.c
 scripts/kconfig/expr.h
+scripts/kconfig/hashtable.h
 scripts/kconfig/internal.h
 scripts/kconfig/list.h
+scripts/kconfig/list_types.h
 scripts/kconfig/lkc.h
 scripts/kconfig/lkc_proto.h
 scripts/kconfig/menu.c
 scripts/kconfig/preprocess.c
+scripts/kconfig/preprocess.h
 scripts/kconfig/symbol.c
 scripts/kconfig/util.c
 scripts/link-vmlinux.sh
