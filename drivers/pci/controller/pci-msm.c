@@ -763,7 +763,7 @@ struct msm_aer_err_info {
 
 	unsigned int status;		/* COR/UNCOR Error Status */
 	unsigned int mask;		/* COR/UNCOR Error Mask */
-	struct aer_header_log_regs tlp;	/* TLP Header */
+	struct pcie_tlp_log tlp;	/* TLP Header */
 
 	u32 l1ss_ctl1;			/* PCI_L1SS_CTL1 reg value */
 	u16 lnksta;			/* PCI_EXP_LNKSTA reg value */
@@ -6748,7 +6748,7 @@ static void msm_print_tlp_header(struct pci_dev *dev,
 				 struct msm_aer_err_info *info)
 {
 	PCIE_DBG(info->rdev, "PCIe: RC%d: TLP Header: %08x %08x %08x %08x\n",
-		info->rdev->rc_idx, info->tlp.dw0, info->tlp.dw1, info->tlp.dw2, info->tlp.dw3);
+		info->rdev->rc_idx, info->tlp.dw[0], info->tlp.dw[1], info->tlp.dw[2], info->tlp.dw[3]);
 }
 
 static void msm_aer_print_error_stats(struct pci_dev *dev,
@@ -7104,13 +7104,13 @@ static int msm_aer_get_device_error_info(struct pci_dev *dev,
 		if (info->status & AER_LOG_TLP_MASKS) {
 			info->tlp_header_valid = 1;
 			pci_read_config_dword(dev,
-				aer + PCI_ERR_HEADER_LOG, &info->tlp.dw0);
+				aer + PCI_ERR_HEADER_LOG, &info->tlp.dw[0]);
 			pci_read_config_dword(dev,
-				aer + PCI_ERR_HEADER_LOG + 4, &info->tlp.dw1);
+				aer + PCI_ERR_HEADER_LOG + 4, &info->tlp.dw[1]);
 			pci_read_config_dword(dev,
-				aer + PCI_ERR_HEADER_LOG + 8, &info->tlp.dw2);
+				aer + PCI_ERR_HEADER_LOG + 8, &info->tlp.dw[2]);
 			pci_read_config_dword(dev,
-				aer + PCI_ERR_HEADER_LOG + 12, &info->tlp.dw3);
+				aer + PCI_ERR_HEADER_LOG + 12, &info->tlp.dw[3]);
 		}
 	}
 
