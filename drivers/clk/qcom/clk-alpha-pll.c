@@ -2721,6 +2721,9 @@ void clk_lucid_evo_pll_configure(struct clk_alpha_pll *pll, struct regmap *regma
 	if (trion_pll_is_enabled(pll, regmap))
 		return;
 
+	if (pll->flags & DISABLE_TO_OFF)
+		regmap_update_bits(regmap, PLL_MODE(pll), PLL_RESET_N, 0);
+
 	regmap_read(regmap, PLL_L_VAL(pll), &regval);
 	regval &= LUCID_EVO_PLL_L_VAL_MASK;
 	if (regval)
