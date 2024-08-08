@@ -46,3 +46,14 @@ phy-qcom-ufs-qrbtc-sdm845.ko
 phy-qcom-ufs.ko
 phy-qcom-ufs-qmp-v4-canoe.ko
 sg.ko
+gh_arm_drv.ko
+gh_dbl.ko
+gh_msgq.ko
+gh_rm_drv.ko
+gunyah.ko
+gunyah-msgq.ko
+gunyah_hypercall.ko
+gunyah_loader.ko
+gunyah_platform_hooks.ko
+gunyah_qcom.ko
+mdt_loader.ko
