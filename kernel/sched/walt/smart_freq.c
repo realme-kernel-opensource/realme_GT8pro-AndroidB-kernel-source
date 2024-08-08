@@ -399,12 +399,39 @@ void smart_freq_update_reason_common(u64 wallclock, int nr_big, u32 wakeup_ctr_s
 		}
 
 		/*
-		 * PIPELINE
+		 * PIPELINE_60FPS_OR_LESSER
 		 */
-		if (cluster_participation_mask & BIT(PIPELINE_SMART_FREQ)) {
-			current_state = pipeline_in_progress();
+		if (cluster_participation_mask &
+				BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ)) {
+			current_state = pipeline_in_progress() &&
+						sched_ravg_window >= SCHED_RAVG_16MS_WINDOW;
 			if (current_state)
-				cluster_reasons |= BIT(PIPELINE_SMART_FREQ);
+				cluster_reasons |=
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ);
+		}
+
+		/*
+		 * PIPELINE_90FPS
+		 */
+		if (cluster_participation_mask &
+				BIT(PIPELINE_90FPS_SMART_FREQ)) {
+			current_state = pipeline_in_progress() &&
+						sched_ravg_window == SCHED_RAVG_12MS_WINDOW;
+			if (current_state)
+				cluster_reasons |=
+					BIT(PIPELINE_90FPS_SMART_FREQ);
+		}
+
+		/*
+		 * PIPELINE_120FPS_OR_GREATER
+		 */
+		if (cluster_participation_mask &
+				BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ)) {
+			current_state = pipeline_in_progress() &&
+						sched_ravg_window == SCHED_RAVG_8MS_WINDOW;
+			if (current_state)
+				cluster_reasons |=
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
 		}
 
 		/*
@@ -484,7 +511,9 @@ void smart_freq_init(const char *name)
 					BIT(BIG_TASKCNT_SMART_FREQ) |
 					BIT(TRAILBLAZER_SMART_FREQ) |
 					BIT(SBT_SMART_FREQ) |
-					BIT(PIPELINE_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ) |
 					BIT(THERMAL_ROTATION_SMART_FREQ);
 
 				/* IPC */
@@ -513,7 +542,9 @@ void smart_freq_init(const char *name)
 					BIT(BIG_TASKCNT_SMART_FREQ) |
 					BIT(TRAILBLAZER_SMART_FREQ) |
 					BIT(SBT_SMART_FREQ) |
-					BIT(PIPELINE_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ) |
 					BIT(THERMAL_ROTATION_SMART_FREQ);
 
 				/* IPC */

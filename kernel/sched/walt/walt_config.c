@@ -154,6 +154,10 @@ void walt_config(void)
 			for (i = 1; i < LEGACY_SMART_FREQ; i++)
 				smart_freq_legacy_reason_hyst_ms[i][cpu] = 2;
 		}
+		for_each_possible_cpu(cpu) {
+			smart_freq_legacy_reason_hyst_ms[PIPELINE_60FPS_OR_LESSER_SMART_FREQ][cpu] =
+				1;
+		}
 	} else if (!strcmp(name, "PINEAPPLE")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
