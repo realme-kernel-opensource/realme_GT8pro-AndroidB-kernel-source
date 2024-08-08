@@ -38,8 +38,16 @@
 #define FIFO_1_HEAD		0x28
 #define FIFO_1_NOTIFY		0x2c
 
+#define LOCAL_STATE		0x30
+
 #define IRQ_SETUP_IDX		0
 #define IRQ_XFER_IDX		1
+
+enum {
+	LOCAL_STATE_DEFAULT,
+	LOCAL_STATE_INIT,
+	LOCAL_STATE_START,
+};
 
 struct qrtr_genpool_hdr {
 	__le16 len;
@@ -83,6 +91,8 @@ struct qrtr_genpool_pipe {
  * @setup_work: worker to maintain shared memory between edges
  * @irq_xfer: IRQ for incoming transfers
  * @irq_xfer_label: IRQ name for irq_xfer
+ * @state: current state of the local side
+ * @lock: lock for updating local state
  */
 struct qrtr_genpool_dev {
 	struct qrtr_endpoint ep;
@@ -109,7 +119,16 @@ struct qrtr_genpool_dev {
 
 	int irq_xfer;
 	char irq_xfer_label[LABEL_SIZE];
+
+	u32 state;
+	spinlock_t lock; /* lock for local state updates */
 };
+
+static void qrtr_genpool_set_state(struct qrtr_genpool_dev *qdev, u32 state)
+{
+	qdev->state = state;
+	*(u32 *)(qdev->base + LOCAL_STATE) = cpu_to_le32(qdev->state);
+}
 
 static void qrtr_genpool_signal(struct qrtr_genpool_dev *qdev,
 				struct mbox_chan *mbox_chan)
@@ -419,9 +438,14 @@ static irqreturn_t qrtr_genpool_setup_intr(int irq, void *data)
 static irqreturn_t qrtr_genpool_xfer_intr(int irq, void *data)
 {
 	struct qrtr_genpool_dev *qdev = data;
+	unsigned long flags;
 
-	if (!qdev->base)
+	spin_lock_irqsave(&qdev->lock, flags);
+	if (qdev->state != LOCAL_STATE_START) {
+		spin_unlock_irqrestore(&qdev->lock, flags);
 		return IRQ_HANDLED;
+	}
+	spin_unlock_irqrestore(&qdev->lock, flags);
 
 	qrtr_genpool_read(qdev);
 
@@ -555,6 +579,7 @@ static int qrtr_genpool_memory_init(struct qrtr_genpool_dev *qdev)
 static void qrtr_genpool_setup_work(struct work_struct *work)
 {
 	struct qrtr_genpool_dev *qdev = container_of(work, struct qrtr_genpool_dev, setup_work);
+	unsigned long flags;
 	int rc;
 
 	disable_irq(qdev->irq_xfer);
@@ -582,7 +607,10 @@ static void qrtr_genpool_setup_work(struct work_struct *work)
 
 	enable_irq(qdev->irq_xfer);
 
+	spin_lock_irqsave(&qdev->lock, flags);
+	qrtr_genpool_set_state(qdev, LOCAL_STATE_START);
 	qrtr_genpool_signal_setup(qdev);
+	spin_unlock_irqrestore(&qdev->lock, flags);
 }
 
 /**
@@ -599,6 +627,7 @@ static int qrtr_genpool_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct qrtr_genpool_dev *qdev;
+	unsigned long flags;
 	int rc;
 
 	qdev = devm_kzalloc(dev, sizeof(*qdev), GFP_KERNEL);
@@ -622,6 +651,11 @@ static int qrtr_genpool_probe(struct platform_device *pdev)
 
 	init_waitqueue_head(&qdev->tx_avail_notify);
 	INIT_WORK(&qdev->setup_work, qrtr_genpool_setup_work);
+	spin_lock_init(&qdev->lock);
+
+	rc = qrtr_genpool_memory_alloc(qdev);
+	if (rc)
+		goto err;
 
 	rc = qrtr_genpool_mbox_init(qdev);
 	if (rc)
@@ -630,6 +664,12 @@ static int qrtr_genpool_probe(struct platform_device *pdev)
 	rc = qrtr_genpool_irq_init(qdev);
 	if (rc)
 		goto err;
+
+	/* move to LOCAL_STATE_INIT from LOCAL_STATE_DEFAULT */
+	spin_lock_irqsave(&qdev->lock, flags);
+	qrtr_genpool_set_state(qdev, LOCAL_STATE_INIT);
+	qrtr_genpool_signal_setup(qdev);
+	spin_unlock_irqrestore(&qdev->lock, flags);
 
 	return 0;
 
