@@ -200,7 +200,7 @@ static void gh_rm_notif_work(struct work_struct *notify_work)
 	struct gh_rm_notif_work *notify = container_of(notify_work, struct gh_rm_notif_work, work);
 
 	srcu_notifier_call_chain(&gh_rm_notifier, notify->action, notify->msg);
-	kfree(notify->msg);
+	vfree(notify->msg);
 	kfree(notify);
 }
 
@@ -219,11 +219,12 @@ static int gh_rm_core_notifier_call(struct notifier_block *nb, unsigned long act
 		return notifier_from_errno(-ENOMEM);
 
 	notif->action = action;
-	notif->msg = kmemdup(msg, msg_size, GFP_KERNEL);
+	notif->msg = vmalloc(msg_size);
 	if (!notif->msg) {
 		kfree(notif);
 		return notifier_from_errno(-ENOMEM);
 	}
+	memcpy(notif->msg, msg, msg_size);
 	INIT_WORK(&notif->work, gh_rm_notif_work);
 
 	schedule_work(&notif->work);
