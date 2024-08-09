@@ -337,6 +337,15 @@ config QCOM_MEMORY_DUMP_V2
 	  of deadlocks or cpu hangs these dump regions are captured to
 	  give a snapshot of the system at the time of the crash.
 
+config QCOM_DYNAMIC_MEMORY_DUMP
+	bool "QCOM Dynamic Memory Dump Support"
+	depends on QCOM_MEMORY_DUMP_V2
+	help
+	  This enables dynamic memory dump feature. It allows enabling
+	  dump entry via sysfs node, the memory reserved for the entry
+	  can be reclaimed if this dump entry is not enabled at running
+          time.
+
 config QCOM_SMEM_STATE
 	bool
 
