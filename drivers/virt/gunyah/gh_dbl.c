@@ -10,7 +10,7 @@
 #include <linux/interrupt.h>
 
 #include <linux/gunyah/gh_dbl.h>
-#include <linux/gunyah_rsc_mgr.h>
+#include <linux/gunyah.h>
 #include "hcall_dbl.h"
 
 struct gh_dbl_desc {

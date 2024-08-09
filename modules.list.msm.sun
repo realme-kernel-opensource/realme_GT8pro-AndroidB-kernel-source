@@ -86,11 +86,11 @@ gh_dbl.ko
 gh_msgq.ko
 gh_rm_drv.ko
 gunyah.ko
-gunyah-msgq.ko
 gunyah_hypercall.ko
 gunyah_loader.ko
 gunyah_platform_hooks.ko
 gunyah_qcom.ko
+gunyah_rsc_mgr.ko
 mdt_loader.ko
 cambistmclkcc-sun.ko
 videocc-sun.ko

@@ -11,7 +11,7 @@
 #include <linux/types.h>
 #include <linux/notifier.h>
 #include <linux/fwnode.h>
-#include <linux/gunyah_rsc_mgr.h>
+#include <linux/gunyah.h>
 #include <linux/range.h>
 
 #include "gh_common.h"

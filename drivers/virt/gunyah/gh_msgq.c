@@ -14,7 +14,7 @@
 #include <linux/ratelimit.h>
 
 #include <linux/gunyah/gh_msgq.h>
-#include <linux/gunyah_rsc_mgr.h>
+#include <linux/gunyah.h>
 #include "hcall_msgq.h"
 
 /* HVC call specific mask: 0 to 31 */
