@@ -699,6 +699,9 @@ static int msm_m31_eusb2_phy_set_power(struct usb_phy *uphy, unsigned int mA)
 {
 	struct m31_eusb2_phy *phy = container_of(uphy, struct m31_eusb2_phy, phy);
 
+	if (phy->cable_connected && (mA == 0))
+		return 0;
+
 	phy->vbus_draw = mA;
 	schedule_work(&phy->vbus_draw_work);
 
