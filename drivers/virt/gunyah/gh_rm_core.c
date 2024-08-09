@@ -180,8 +180,23 @@ static size_t gh_rm_notif_size(unsigned long action, void *msg)
 		return sizeof(struct gh_rm_notif_vm_irq_released_payload);
 	case GH_RM_NOTIF_VM_IRQ_ACCEPTED:
 		return sizeof(struct gh_rm_notif_vm_irq_accepted_payload);
-	case GH_RM_NOTIF_MEM_SHARED:
-		return sizeof(struct gh_rm_notif_mem_shared_payload);
+	case GH_RM_NOTIF_MEM_SHARED: {
+		size_t size = sizeof(struct gh_rm_notif_mem_shared_payload);
+		struct gh_acl_desc *acl;
+		struct gh_sgl_desc *sgl;
+		struct gh_mem_attr_desc *attr;
+
+		acl = msg + size;
+		size += struct_size(acl, acl_entries, acl->n_acl_entries);
+
+		sgl = msg + size;
+		size += struct_size(sgl, sgl_entries, sgl->n_sgl_entries);
+
+		attr = msg + size;
+		size += struct_size(attr, attr_entries, attr->n_mem_attr_entries);
+
+		return size;
+	}
 	case GH_RM_NOTIF_MEM_RELEASED:
 		return sizeof(struct gh_rm_notif_mem_released_payload);
 	case GH_RM_NOTIF_MEM_ACCEPTED:
