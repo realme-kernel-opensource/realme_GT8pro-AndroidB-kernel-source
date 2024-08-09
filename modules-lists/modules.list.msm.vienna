@@ -7,6 +7,11 @@ pinctrl-vienna.ko
 qcom-scm.ko
 cmd-db.ko
 qcom_rpmh.ko
+icc-bcm-voter.ko
+icc-debug.ko
+icc-rpmh.ko
+qnoc-qos.ko
+qnoc-vienna.ko
 arm_smmu.ko
 mem_buf.ko
 mem_buf_dev.ko
