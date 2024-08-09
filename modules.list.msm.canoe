@@ -16,6 +16,10 @@ icc-debug.ko
 icc-rpmh.ko
 proxy-consumer.ko
 stub-regulator.ko
+spmi-pmic-arb.ko
+regmap-spmi.ko
+qti-regmap-debugfs.ko
+qcom-spmi-pmic.ko
 qcom-pdc.ko
 qcom-dload-mode.ko
 pinctrl-msm.ko

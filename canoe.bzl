@@ -9,6 +9,7 @@ def define_canoe():
         # keep sorted
         "arch/arm64/gunyah/gh_arm_drv.ko",
         "arch/arm64/gunyah/gunyah_hypercall.ko",
+        "drivers/base/regmap/qti-regmap-debugfs.ko",
         "drivers/bus/mhi/devices/mhi_dev_satellite.ko",
         "drivers/bus/mhi/devices/mhi_dev_uci.ko",
         "drivers/bus/mhi/host/mhi.ko",
@@ -36,6 +37,7 @@ def define_canoe():
         "drivers/mailbox/gunyah-msgq.ko",
         "drivers/mailbox/msm_qmp.ko",
         "drivers/mailbox/qcom-ipcc.ko",
+        "drivers/mfd/qcom-spmi-pmic.ko",
         "drivers/nvmem/nvmem_qfprom.ko",
         "drivers/pci/controller/pci-msm-drv.ko",
         "drivers/phy/qualcomm/phy-qcom-ufs.ko",
@@ -68,6 +70,7 @@ def define_canoe():
         "drivers/soc/qcom/smp2p.ko",
         "drivers/soc/qcom/smp2p_sleepstate.ko",
         "drivers/soc/qcom/socinfo.ko",
+        "drivers/spmi/spmi-pmic-arb.ko",
         "drivers/tty/hvc/hvc_gunyah.ko",
         "drivers/ufs/host/ufs-qcom.ko",
         "drivers/usb/dwc3/dwc3-msm.ko",
