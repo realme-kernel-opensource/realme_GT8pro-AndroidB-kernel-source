@@ -405,6 +405,9 @@
 #define HAP_PTN_ISENSE_ADC_CTL_REG		0x69
 #define HAP_PTN_VISENSE_ADC_CTL_MASK		GENMASK(7, 0)
 
+#define HAP_PTN_VGAIN_ERR_COMP_LSB		0xF1
+#define HAP_PTN_IGAIN_ERR_COMP_LSB		0xF3
+
 /* register in HBOOST module */
 #define HAP_BOOST_REVISION1			0x00
 #define HAP_BOOST_REVISION2			0x01
@@ -6071,6 +6074,40 @@ static ssize_t visense_enabled_show(const struct class *c,
 }
 static CLASS_ATTR_RO(visense_enabled);
 
+static ssize_t v_gain_error_show(const struct class *c,
+		const struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	u8 v_gain_error[2] = { 0 };
+	int rc;
+
+	rc = haptics_read(chip, chip->ptn_addr_base,
+			HAP_PTN_VGAIN_ERR_COMP_LSB, v_gain_error, 2);
+	if (rc < 0)
+		return rc;
+
+	return scnprintf(buf, PAGE_SIZE, "%#x\n", (v_gain_error[1] << 8 | v_gain_error[0]));
+}
+static const CLASS_ATTR_RO(v_gain_error);
+
+static ssize_t i_gain_error_show(const struct class *c,
+		const struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	u8 i_gain_error[2] = { 0 };
+	int rc;
+
+	rc = haptics_read(chip, chip->ptn_addr_base,
+			HAP_PTN_IGAIN_ERR_COMP_LSB, i_gain_error, 2);
+	if (rc < 0)
+		return rc;
+
+	return scnprintf(buf, PAGE_SIZE, "%#x\n", (i_gain_error[1] << 8 | i_gain_error[0]));
+}
+static const CLASS_ATTR_RO(i_gain_error);
+
 static struct attribute *hap_class_attrs[] = {
 	&class_attr_lra_calibration.attr,
 	&class_attr_lra_frequency_hz.attr,
@@ -6295,6 +6332,20 @@ static int haptics_probe(struct platform_device *pdev)
 		goto destroy_ff;
 	}
 
+	if (chip->hw_type >= HAP530_HV && chip->visense_enabled) {
+		rc = class_create_file(&chip->hap_class, &class_attr_i_gain_error);
+		if (rc) {
+			dev_err(chip->dev, "failed to add i_gain_error, rc=%d\n", rc);
+			goto destroy_ff;
+		}
+
+		rc = class_create_file(&chip->hap_class, &class_attr_v_gain_error);
+		if (rc) {
+			dev_err(chip->dev, "failed to add v_gain_error, rc=%d\n", rc);
+			goto remove_i_gain_error;
+		}
+	}
+
 	chip->hboost_nb.notifier_call = haptics_boost_notifier;
 	register_hboost_event_notifier(&chip->hboost_nb);
 
@@ -6305,7 +6356,10 @@ static int haptics_probe(struct platform_device *pdev)
 		if (IS_ERR(chip->lpass_ssr_handle)) {
 			rc = PTR_ERR(chip->lpass_ssr_handle);
 			dev_err(chip->dev, "register SSR notifier failed, rc=%d\n", rc);
-			goto destroy_ff;
+			if (chip->visense_enabled)
+				goto remove_v_gain_error;
+			else
+				goto destroy_ff;
 		}
 	}
 
@@ -6316,6 +6370,10 @@ static int haptics_probe(struct platform_device *pdev)
 	haptics_runtime_autosuspend(chip);
 	phapchip = chip;
 	return 0;
+remove_v_gain_error:
+	class_remove_file(&chip->hap_class, &class_attr_v_gain_error);
+remove_i_gain_error:
+	class_remove_file(&chip->hap_class, &class_attr_i_gain_error);
 destroy_ff:
 	input_ff_destroy(chip->input_dev);
 	return rc;
