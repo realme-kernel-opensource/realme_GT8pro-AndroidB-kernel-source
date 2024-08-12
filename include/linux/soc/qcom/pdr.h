@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __QCOM_PDR_HELPER__
 #define __QCOM_PDR_HELPER__
@@ -31,20 +31,20 @@ int pdr_restart_pd(struct pdr_handle *pdr, struct pdr_service *pds);
 void pdr_handle_release(struct pdr_handle *pdr);
 
 #else
-struct pdr_handle *pdr_handle_alloc(void (*status)(int state,
+static inline struct pdr_handle *pdr_handle_alloc(void (*status)(int state,
 						   char *service_path,
 						   void *priv), void *priv)
 { return NULL; }
 
-struct pdr_service *pdr_add_lookup(struct pdr_handle *pdr,
+static inline struct pdr_service *pdr_add_lookup(struct pdr_handle *pdr,
 				   const char *service_name,
 				   const char *service_path)
 { return NULL; }
 
-int pdr_restart_pd(struct pdr_handle *pdr, struct pdr_service *pds)
+static inline int pdr_restart_pd(struct pdr_handle *pdr, struct pdr_service *pds)
 { return 0; }
 
-void pdr_handle_release(struct pdr_handle *pdr)
+static inline void pdr_handle_release(struct pdr_handle *pdr)
 { return;  }
 
 #endif
