@@ -716,10 +716,6 @@ static void print_symbol(FILE *out, const struct menu *menu)
 			print_quoted_string(out, prop->text);
 			fputc('\n', out);
 			break;
-		case P_SYMBOL:
-			fputs( "  symbol ", out);
-			fprintf(out, "%s\n", prop->menu->sym->name);
-			break;
 		default:
 			fprintf(out, "  unknown prop %d!\n", prop->type);
 			break;
