@@ -7,4 +7,12 @@ pinctrl-vienna.ko
 qcom-scm.ko
 cmd-db.ko
 qcom_rpmh.ko
+arm_smmu.ko
+mem_buf.ko
+mem_buf_dev.ko
+qcom_dma_heaps.ko
+iommu-logger.ko
+msm_dma_iommu_mapping.ko
+secure_buffer.ko
+qcom_iommu_util.ko
 stub-regulator.ko
