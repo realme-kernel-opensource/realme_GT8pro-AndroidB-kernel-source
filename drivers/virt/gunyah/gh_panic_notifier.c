@@ -542,6 +542,7 @@ static int init_recovery_vms(struct kobject *kobj)
 
 	for (i = 0; i < GH_RECOVERY_VM_MAX; i++) {
 		vm = &recovery_vms[i];
+		sysfs_attr_init(&vm->recovery_attr.attr);
 		vm->recovery = false;
 		vm->recovery_attr.show = recovery_show;
 		vm->recovery_attr.store = recovery_store;
