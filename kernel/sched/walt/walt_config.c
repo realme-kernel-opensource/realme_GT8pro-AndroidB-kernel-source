@@ -13,6 +13,9 @@ cpumask_t asym_cap_sibling_cpus;
 cpumask_t pipeline_sync_cpus;
 int oscillate_period_ns;
 int soc_sched_lib_name_capacity;
+#define PIPELINE_BUSY_THRESH_8MS_WINDOW 6
+#define PIPELINE_BUSY_THRESH_12MS_WINDOW 11
+#define PIPELINE_BUSY_THRESH_16MS_WINDOW 15
 
 void walt_config(void)
 {
@@ -75,6 +78,9 @@ void walt_config(void)
 			freq_cap[i][j] = FREQ_QOS_MAX_DEFAULT_VALUE;
 	}
 
+	sysctl_sched_lrpb_active_ms[0] = PIPELINE_BUSY_THRESH_8MS_WINDOW;
+	sysctl_sched_lrpb_active_ms[1] = PIPELINE_BUSY_THRESH_12MS_WINDOW;
+	sysctl_sched_lrpb_active_ms[2] = PIPELINE_BUSY_THRESH_16MS_WINDOW;
 	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
 	soc_feat_set(SOC_ENABLE_UCLAMP_BOOSTED_BIT);

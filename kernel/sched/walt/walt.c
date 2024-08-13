@@ -2478,9 +2478,6 @@ static inline int run_walt_irq_work_rollover(u64 old_window_start, struct rq *rq
 	return 0;
 }
 
-#define PIPELINE_BUSY_THRESH_8MS_WINDOW 6
-#define PIPELINE_BUSY_THRESH_12MS_WINDOW 11
-#define PIPELINE_BUSY_THRESH_16MS_WINDOW 15
 static inline void set_bits(struct walt_task_struct *wts,
 		int nr_bits, bool set_bit)
 {
@@ -2617,33 +2614,30 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 		goto out;
 	}
 
-	if (sched_ravg_window < SCHED_RAVG_8MS_WINDOW ||
-		sched_ravg_window > SCHED_RAVG_16MS_WINDOW) {
+	if (sched_ravg_window <= SCHED_RAVG_8MS_WINDOW &&
+			((hweight16(wts->busy_bitmap & 0x00FF) < sysctl_sched_lrpb_active_ms[0]) ||
+			!sysctl_sched_lrpb_active_ms[0])) {
 		no_boost_reason = 3;
 		goto out;
 	}
 
-	if (sched_ravg_window == SCHED_RAVG_8MS_WINDOW &&
-			hweight16(wts->busy_bitmap & 0x00FF) < PIPELINE_BUSY_THRESH_8MS_WINDOW) {
+	if (sched_ravg_window == SCHED_RAVG_12MS_WINDOW &&
+			((hweight16(wts->busy_bitmap & 0x0FFF) < sysctl_sched_lrpb_active_ms[1]) ||
+			 !sysctl_sched_lrpb_active_ms[1])) {
 		no_boost_reason = 4;
 		goto out;
 	}
 
-	if (sched_ravg_window == SCHED_RAVG_12MS_WINDOW &&
-			hweight16(wts->busy_bitmap & 0x0FFF) < PIPELINE_BUSY_THRESH_12MS_WINDOW) {
+	if (sched_ravg_window >= SCHED_RAVG_16MS_WINDOW &&
+			((hweight16(wts->busy_bitmap) < sysctl_sched_lrpb_active_ms[2]) ||
+			 !sysctl_sched_lrpb_active_ms[2])) {
 		no_boost_reason = 5;
-		goto out;
-	}
-
-	if (sched_ravg_window == SCHED_RAVG_16MS_WINDOW &&
-			hweight16(wts->busy_bitmap) < PIPELINE_BUSY_THRESH_16MS_WINDOW) {
-		no_boost_reason = 6;
 		goto out;
 	}
 
 	/* cpu already boosted, so dont extend */
 	if (wrq->lrb_pipeline_start_time != 0) {
-		no_boost_reason = 7;
+		no_boost_reason = 6;
 		goto out;
 	}
 

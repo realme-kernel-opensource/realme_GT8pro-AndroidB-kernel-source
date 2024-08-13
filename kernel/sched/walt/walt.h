@@ -1470,4 +1470,6 @@ extern unsigned int sysctl_sched_legacy_smart_freq_hyst_enable_cpus;
 #define MAX_YIELD_SLEEP_CNT_GLOBAL_THR		(YIELD_WINDOW_SIZE_USEC /		\
 								YIELD_SLEEP_TIME_USEC / 2)
 extern u8 contiguous_yielding_windows;
+#define NUM_PIPELINE_BUSY_THRES 3
+extern unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
 #endif /* _WALT_H */

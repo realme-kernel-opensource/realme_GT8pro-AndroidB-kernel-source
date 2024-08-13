@@ -102,6 +102,7 @@ unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster3[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_sched_walt_core_util[WALT_NR_CPUS];
 unsigned int sysctl_pipeline_busy_boost_pct;
+unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
 
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
@@ -1641,6 +1642,15 @@ static struct ctl_table walt_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "sched_lrpb_active_ms",
+		.data		= &sysctl_sched_lrpb_active_ms,
+		.maxlen		= sizeof(unsigned int) * NUM_PIPELINE_BUSY_THRES,
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
 	},
 };
 
