@@ -57,6 +57,7 @@ static enum hrtimer_restart clusttimer_fn(struct hrtimer *h)
 	cluster_gov->restrict_idx = -1;
 	cluster_gov->pred_residency = 0;
 	cluster_gov->is_timer_expired = true;
+	cluster_gov->is_timer_queued = false;
 
 	return HRTIMER_NORESTART;
 }
@@ -298,12 +299,17 @@ static int cluster_power_down(struct lpm_cluster *cluster_gov)
 
 	if (cluster_gov->use_bias_timer &&
 	    num_possible_cpus() != cpumask_weight(cluster_gov->genpd->cpus)) {
-		if (!cluster_gov->is_timer_expired) {
+		if (!cluster_gov->is_timer_expired && !cluster_gov->is_timer_queued) {
 			clusttimer_cancel(cluster_gov);
 			clusttimer_start(cluster_gov, NSEC_PER_MSEC *
 					 CLUST_BIAS_TIME_MSEC);
+			cluster_gov->is_timer_queued = true;
 			return -1;
 		}
+		if (cluster_gov->is_timer_queued)
+			return -1;
+
+		cluster_gov->htmr_wkup = false;
 		cluster_gov->is_timer_expired = false;
 		return 0;
 	}
