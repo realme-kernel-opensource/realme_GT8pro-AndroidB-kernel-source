@@ -203,6 +203,7 @@ enum {
  * @intent_received: flag indicating that an intent has been received
  * @intent_req_wq: wait queue for intent_req signalling
  * @intent_timeout_count: number of times intents have timed out consecutively
+ * @cb_irq: execute data callback in irq context
  * @local_signals: local side signals
  * @remote_signals: remote side signals
  * @signals_cb: client callback for notifying signal change
@@ -243,6 +244,7 @@ struct glink_channel {
 	wait_queue_head_t intent_req_wq;
 	bool channel_ready;
 	int intent_timeout_count;
+	bool cb_irq;
 
 	unsigned int local_signals;
 	unsigned int remote_signals;
@@ -1118,6 +1120,11 @@ static int qcom_glink_rx_thread(void *data)
 				spin_unlock_irqrestore(&channel->intent_lock, flags);
 			}
 
+			if (channel->cb_irq) {
+				__qcom_glink_rx_done(glink, channel, intent);
+				continue;
+			}
+
 			if (channel->ept.cb) {
 				ret = channel->ept.cb(channel->ept.rpdev,
 						intent->data,
@@ -1161,6 +1168,63 @@ static int qcom_glink_rx_thread(void *data)
 	}
 
 	return 0;
+}
+
+static void qcom_glink_rx_data_handler(struct glink_channel *channel,
+				       struct glink_core_rx_intent *intent)
+{
+	if (channel->cb_irq) {
+		int ret = 0;
+
+		if (!channel->glink->intentless) {
+			spin_lock(&channel->intent_lock);
+			list_add_tail(&intent->node, &channel->defer_intents);
+			spin_unlock(&channel->intent_lock);
+		}
+
+		spin_lock(&channel->recv_lock);
+		if (channel->ept.cb) {
+			ret = channel->ept.cb(channel->ept.rpdev,
+					intent->data,
+					intent->offset,
+					channel->ept.priv,
+					RPMSG_ADDR_ANY);
+
+			if (ret < 0) {
+				if (ret != -ENODEV) {
+					CH_ERR(channel,
+						"callback error ret = %d\n", ret);
+				}
+			}
+		} else {
+			CH_ERR(channel, "callback not present\n");
+		}
+		spin_unlock(&channel->recv_lock);
+
+		if (qcom_glink_is_wakeup(true))
+			pr_info("%s[%d:%d] %s: wakeup packet size:%d\n",
+				channel->name, channel->lcid, channel->rcid,
+				__func__, intent->offset);
+
+		intent->offset = 0;
+
+		if (!(qcom_glink_rx_done_supported(&channel->ept) && ret == RPMSG_DEFER)) {
+			if (!channel->glink->intentless) {
+				spin_lock(&channel->intent_lock);
+				list_del(&intent->node);
+				spin_unlock(&channel->intent_lock);
+			}
+		} else
+			goto out;
+	}
+
+	spin_lock(&channel->recv_lock);
+	list_add_tail(&intent->node, &channel->rx_queue);
+	spin_unlock(&channel->recv_lock);
+
+	wake_up_interruptible(&channel->rx_wq);
+out:
+	channel->buf = NULL;
 }
 
 static int qcom_glink_rx_data(struct qcom_glink *glink, size_t avail)
@@ -1256,15 +1320,8 @@ static int qcom_glink_rx_data(struct qcom_glink *glink, size_t avail)
 	intent->offset += chunk_size;
 
 	/* Handle message when no fragments remain to be received */
-	if (!left_size) {
-		spin_lock(&channel->recv_lock);
-		list_add_tail(&intent->node, &channel->rx_queue);
-		spin_unlock(&channel->recv_lock);
-
-		wake_up_interruptible(&channel->rx_wq);
-
-		channel->buf = NULL;
-	}
+	if (!left_size)
+		qcom_glink_rx_data_handler(channel, intent);
 
 advance_rx:
 	qcom_glink_rx_advance(glink, ALIGN(sizeof(hdr) + chunk_size, 8));
@@ -2162,6 +2219,9 @@ static int qcom_glink_rx_open(struct qcom_glink *glink, unsigned int rcid,
 		rpdev->dev.of_node = node;
 		rpdev->dev.parent = glink->dev;
 		rpdev->dev.release = qcom_glink_rpdev_release;
+
+		if (of_property_read_bool(rpdev->dev.of_node, "qcom,cb-irq"))
+			channel->cb_irq = true;
 
 		ret = rpmsg_register_device(rpdev);
 		if (ret)
