@@ -155,7 +155,7 @@ static inline bool walt_task_skip_min_cpu(struct task_struct *p)
 
 	return (sched_boost_type != CONSERVATIVE_BOOST) &&
 		walt_get_rtg_status(p) && (wts->unfilter ||
-		walt_pipeline_low_latency_task(p));
+		(pipeline_in_progress() && walt_pipeline_low_latency_task(p)));
 }
 
 static inline bool walt_is_many_wakeup(int sibling_count_hint)
@@ -871,8 +871,8 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 	wts = (struct walt_task_struct *) p->android_vendor_data1;
 	pipeline_cpu = wts->pipeline_cpu;
 
-	if (walt_pipeline_low_latency_task(p) &&
-		(sched_boost_type != CONSERVATIVE_BOOST) &&
+	if (pipeline_in_progress() &&
+		walt_pipeline_low_latency_task(p) &&
 		(pipeline_cpu != -1) &&
 		cpumask_test_cpu(pipeline_cpu, p->cpus_ptr) &&
 		cpu_active(pipeline_cpu) &&
@@ -1131,7 +1131,8 @@ static void binder_restore_priority_hook(void *data,
 int walt_get_mvp_task_prio(struct task_struct *p)
 {
 	if (walt_procfs_low_latency_task(p) ||
-			walt_pipeline_low_latency_task(p))
+			(pipeline_in_progress() &&
+			 walt_pipeline_low_latency_task(p)))
 		return WALT_LL_PIPE_MVP;
 
 	if (per_task_boost(p) == TASK_BOOST_STRICT_MAX)

@@ -2574,6 +2574,9 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 	if (wallclock > wrq->lrb_pipeline_start_time + 4000000)
 		wrq->lrb_pipeline_start_time = 0;
 
+	if (!pipeline_in_progress())
+		return;
+
 	/*
 	 * Figure out whether pipeline_cpu, cpu_of(rq) are both same or if it
 	 * even matters.

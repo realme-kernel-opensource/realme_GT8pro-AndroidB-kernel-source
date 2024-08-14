@@ -248,7 +248,7 @@ static inline bool _walt_can_migrate_task(struct task_struct *p, int dst_cpu,
 		if (per_task_boost(p) == TASK_BOOST_STRICT_MAX &&
 				task_in_related_thread_group(p))
 			return false;
-		if (walt_pipeline_low_latency_task(p))
+		if (pipeline_in_progress() && walt_pipeline_low_latency_task(p))
 			return false;
 		if (!force && walt_get_rtg_status(p))
 			return false;

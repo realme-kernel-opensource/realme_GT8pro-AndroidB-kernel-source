@@ -739,6 +739,28 @@ static inline bool task_placement_boost_enabled(struct task_struct *p)
 	return task_sched_boost(p);
 }
 
+extern int have_heavy_list;
+extern int pipeline_nr;
+extern unsigned int sysctl_sched_pipeline_util_thres;
+static inline bool pipeline_desired(void)
+{
+	return sysctl_sched_heavy_nr || sysctl_sched_pipeline_util_thres || pipeline_nr;
+}
+
+static inline bool pipeline_in_progress(void)
+{
+	if (sched_boost_type)
+		return false;
+
+	if (pipeline_nr)
+		return true;
+
+	if ((sysctl_sched_heavy_nr || sysctl_sched_pipeline_util_thres) && have_heavy_list)
+		return true;
+
+	return false;
+}
+
 static inline enum sched_boost_policy task_boost_policy(struct task_struct *p)
 {
 	enum sched_boost_policy policy;
@@ -754,7 +776,7 @@ static inline enum sched_boost_policy task_boost_policy(struct task_struct *p)
 		 */
 		if (sched_boost_type == CONSERVATIVE_BOOST &&
 			task_util(p) <= sysctl_sched_min_task_util_for_boost &&
-			!walt_pipeline_low_latency_task(p))
+			!(pipeline_in_progress() && walt_pipeline_low_latency_task(p)))
 			policy = SCHED_BOOST_NONE;
 		if (sched_boost_type == BALANCE_BOOST &&
 			task_util(p) <= sysctl_sched_min_task_util_for_boost)
@@ -1434,9 +1456,7 @@ extern unsigned int sysctl_sched_pipeline_special;
 extern struct task_struct *pipeline_special_task;
 extern void remove_special_task(void);
 extern void set_special_task(struct task_struct *pipeline_special_local);
-extern unsigned int sysctl_sched_pipeline_util_thres;
 #define MAX_NR_PIPELINE 3
-extern int pipeline_nr;
 /* smart freq */
 #define SMART_FREQ_LEGACY_TUPLE_SIZE		3
 #define SMART_FREQ_IPC_TUPLE_SIZE		3

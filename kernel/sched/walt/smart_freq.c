@@ -402,8 +402,7 @@ void smart_freq_update_reason_common(u64 wallclock, int nr_big, u32 wakeup_ctr_s
 		 * PIPELINE
 		 */
 		if (cluster_participation_mask & BIT(PIPELINE_SMART_FREQ)) {
-			current_state = pipeline_nr || sysctl_sched_heavy_nr ||
-						sysctl_sched_pipeline_util_thres;
+			current_state = pipeline_in_progress();
 			if (current_state)
 				cluster_reasons |= BIT(PIPELINE_SMART_FREQ);
 		}
