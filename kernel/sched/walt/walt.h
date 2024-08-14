@@ -1449,7 +1449,6 @@ static inline void walt_lockdep_assert(int cond, int cpu, struct task_struct *p)
 
 extern void pipeline_check(struct walt_rq *wrq);
 extern bool enable_load_sync(int cpu);
-extern unsigned int enable_pipeline_boost;
 extern struct walt_related_thread_group *lookup_related_thread_group(unsigned int group_id);
 extern bool prev_is_sbt;
 extern unsigned int sysctl_sched_pipeline_special;

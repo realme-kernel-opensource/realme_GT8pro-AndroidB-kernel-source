@@ -6,7 +6,6 @@
 #include "walt.h"
 #include "trace.h"
 
-unsigned int enable_pipeline_boost;
 
 static DEFINE_RAW_SPINLOCK(pipeline_lock);
 static struct walt_task_struct *pipeline_wts[WALT_NR_CPUS];
@@ -123,27 +122,28 @@ void set_special_task(struct task_struct *pipeline_special_local)
 
 cpumask_t cpus_for_pipeline = { CPU_BITS_NONE };
 
-/* always set boost for max cluster, for pipeline tasks */
-static inline void pipeline_set_boost(bool boost, int flag)
+/* always set unisolation for max cluster, for pipeline tasks */
+static inline void pipeline_set_unisolation(bool set, int flag)
 {
-	static bool isolation_boost;
+	static bool unisolation_state;
 	struct walt_sched_cluster *cluster;
+	static unsigned int enable_pipeline_unisolation;
 
-	if (!boost)
-		enable_pipeline_boost &= ~(1 << flag);
+	if (!set)
+		enable_pipeline_unisolation &= ~(1 << flag);
 	else
-		enable_pipeline_boost |= (1 << flag);
+		enable_pipeline_unisolation |= (1 << flag);
 
-	if (isolation_boost && !enable_pipeline_boost) {
-		isolation_boost = false;
+	if (unisolation_state && !enable_pipeline_unisolation) {
+		unisolation_state = false;
 
 		for_each_sched_cluster(cluster) {
 			if (cpumask_intersects(&cpus_for_pipeline, &cluster->cpus) ||
 			    is_max_possible_cluster_cpu(cpumask_first(&cluster->cpus)))
 				core_ctl_set_cluster_boost(cluster->id, false);
 		}
-	} else if (!isolation_boost && enable_pipeline_boost) {
-		isolation_boost = true;
+	} else if (!unisolation_state && enable_pipeline_unisolation) {
+		unisolation_state = true;
 
 		for_each_sched_cluster(cluster) {
 			if (cpumask_intersects(&cpus_for_pipeline, &cluster->cpus) ||
@@ -155,19 +155,20 @@ static inline void pipeline_set_boost(bool boost, int flag)
 
 /*
  * sysctl_sched_heavy_nr or sysctl_sched_pipeline_util_thres can change at any moment in time.
- * as a result, the ability to set/clear boost state for a particular type of pipeline, is
- * hindered. Detect a transition and reset the boost state of the pipeline method no longer in use.
+ * as a result, the ability to set/clear unisolation state for a particular type of pipeline, is
+ * hindered. Detect a transition and reset the unisolation state of the pipeline method no longer
+ * in use.
  */
-static inline void pipeline_reset_boost(void)
+static inline void pipeline_reset_unisolation_state(void)
 {
 	static bool last_auto_pipeline;
 
 	if ((sysctl_sched_heavy_nr || sysctl_sched_pipeline_util_thres) && !last_auto_pipeline) {
-		pipeline_set_boost(false, MANUAL_PIPELINE);
+		pipeline_set_unisolation(false, MANUAL_PIPELINE);
 		last_auto_pipeline = true;
 	} else if (!sysctl_sched_heavy_nr &&
 			!sysctl_sched_pipeline_util_thres && last_auto_pipeline) {
-		pipeline_set_boost(false, AUTO_PIPELINE);
+		pipeline_set_unisolation(false, AUTO_PIPELINE);
 		last_auto_pipeline = false;
 	}
 }
@@ -203,7 +204,7 @@ bool find_heaviest_topapp(u64 window_start)
 			raw_spin_unlock_irqrestore(&heavy_lock, flags);
 			have_heavy_list = 0;
 
-			pipeline_set_boost(false, AUTO_PIPELINE);
+			pipeline_set_unisolation(false, AUTO_PIPELINE);
 		}
 		return false;
 	}
@@ -296,7 +297,7 @@ bool find_heaviest_topapp(u64 window_start)
 		}
 	}
 
-	pipeline_set_boost(true, AUTO_PIPELINE);
+	pipeline_set_unisolation(true, AUTO_PIPELINE);
 
 	/* start with non-prime cpus chosen for this chipset (e.g. golds) */
 	cpumask_and(&last_available_big_cpus, cpu_online_mask, &cpus_for_pipeline);
@@ -603,7 +604,7 @@ release_lock:
 
 out:
 	if (found_pipeline ^ last_found_pipeline) {
-		pipeline_set_boost(found_pipeline, MANUAL_PIPELINE);
+		pipeline_set_unisolation(found_pipeline, MANUAL_PIPELINE);
 		last_found_pipeline = found_pipeline;
 	}
 }
@@ -615,7 +616,7 @@ void pipeline_check(struct walt_rq *wrq)
 
 	rearrange_heavy(wrq->window_start, found_topapp);
 	rearrange_pipeline_preferred_cpus(wrq->window_start);
-	pipeline_reset_boost();
+	pipeline_reset_unisolation_state();
 }
 
 bool enable_load_sync(int cpu)
@@ -624,9 +625,6 @@ bool enable_load_sync(int cpu)
 		return false;
 
 	if (!pipeline_in_progress())
-		return false;
-
-	if (!enable_pipeline_boost)
 		return false;
 
 	/*
