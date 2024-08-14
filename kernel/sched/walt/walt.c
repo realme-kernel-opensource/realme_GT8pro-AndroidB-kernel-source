@@ -1687,7 +1687,7 @@ static inline u64 scale_exec_time(u64 delta, struct rq *rq, struct walt_task_str
 
 	delta = (delta * wrq->task_exec_scale) >> SCHED_CAPACITY_SHIFT;
 
-	if (wts->load_boost && wts->grp && wts->grp->skip_min)
+	if (wts->load_boost && wts->grp)
 		delta = (delta * (1024 + wts->boosted_task_load) >> 10);
 
 	return delta;
