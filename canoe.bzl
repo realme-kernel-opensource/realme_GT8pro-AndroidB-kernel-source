@@ -18,6 +18,8 @@ def define_canoe():
         "drivers/clk/qcom/gcc-canoe.ko",
         "drivers/clk/qcom/gdsc-regulator.ko",
         "drivers/cpuidle/governors/qcom_lpm.ko",
+        "drivers/devfreq/governor_gpubw_mon.ko",
+        "drivers/devfreq/governor_msm_adreno_tz.ko",
         "drivers/dma-buf/heaps/qcom_dma_heaps.ko",
         "drivers/dma/qcom/msm_gpi.ko",
         "drivers/firmware/qcom/qcom-scm.ko",
