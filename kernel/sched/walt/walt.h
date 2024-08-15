@@ -1493,9 +1493,11 @@ extern u8 contiguous_yielding_windows;
 extern unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
 #define NUM_LOAD_SYNC_SETTINGS 3
 extern unsigned int sysctl_cluster01_load_sync[NUM_LOAD_SYNC_SETTINGS];
+extern unsigned int sysctl_cluster01_load_sync_60fps[NUM_LOAD_SYNC_SETTINGS];
 extern unsigned int sysctl_cluster02_load_sync[NUM_LOAD_SYNC_SETTINGS];
 extern unsigned int sysctl_cluster03_load_sync[NUM_LOAD_SYNC_SETTINGS];
 extern unsigned int sysctl_cluster10_load_sync[NUM_LOAD_SYNC_SETTINGS];
+extern unsigned int sysctl_cluster10_load_sync_60fps[NUM_LOAD_SYNC_SETTINGS];
 extern unsigned int sysctl_cluster12_load_sync[NUM_LOAD_SYNC_SETTINGS];
 extern unsigned int sysctl_cluster13_load_sync[NUM_LOAD_SYNC_SETTINGS];
 extern unsigned int sysctl_cluster20_load_sync[NUM_LOAD_SYNC_SETTINGS];
@@ -1505,6 +1507,9 @@ extern unsigned int sysctl_cluster30_load_sync[NUM_LOAD_SYNC_SETTINGS];
 extern unsigned int sysctl_cluster31_load_sync[NUM_LOAD_SYNC_SETTINGS];
 extern unsigned int sysctl_cluster32_load_sync[NUM_LOAD_SYNC_SETTINGS];
 extern unsigned int load_sync_util_thres[MAX_CLUSTERS][MAX_CLUSTERS];
+extern unsigned int load_sync_util_thres_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_low_pct[MAX_CLUSTERS][MAX_CLUSTERS];
+extern unsigned int load_sync_low_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_high_pct[MAX_CLUSTERS][MAX_CLUSTERS];
+extern unsigned int load_sync_high_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 #endif /* _WALT_H */

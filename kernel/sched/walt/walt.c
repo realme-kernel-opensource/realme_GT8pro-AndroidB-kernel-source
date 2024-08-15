@@ -773,6 +773,18 @@ int other_sync_pct(unsigned long util_other)
 {
 	int pct;
 
+	if (sched_ravg_window >= SCHED_RAVG_16MS_WINDOW) {
+		if (util_other <=
+			load_sync_util_thres_60fps[num_sched_clusters - 2][num_sched_clusters - 1])
+			pct =
+			load_sync_low_pct_60fps[num_sched_clusters - 2][num_sched_clusters - 1];
+		else
+			pct =
+			load_sync_high_pct_60fps[num_sched_clusters - 2][num_sched_clusters - 1];
+
+		return pct;
+	}
+
 	if (util_other <= load_sync_util_thres[num_sched_clusters - 2][num_sched_clusters - 1])
 		pct = load_sync_low_pct[num_sched_clusters - 2][num_sched_clusters - 1];
 	else
@@ -784,6 +796,18 @@ int other_sync_pct(unsigned long util_other)
 int prime_sync_pct(unsigned long util_prime)
 {
 	int pct;
+
+	if (sched_ravg_window >= SCHED_RAVG_16MS_WINDOW) {
+		if (util_prime <=
+			load_sync_util_thres_60fps[num_sched_clusters - 1][num_sched_clusters - 2])
+			pct =
+			load_sync_low_pct_60fps[num_sched_clusters - 1][num_sched_clusters - 2];
+		else
+			pct =
+			load_sync_high_pct_60fps[num_sched_clusters - 1][num_sched_clusters - 2];
+
+		return pct;
+	}
 
 	if (util_prime <= load_sync_util_thres[num_sched_clusters - 1][num_sched_clusters - 2])
 		pct = load_sync_low_pct[num_sched_clusters - 1][num_sched_clusters - 2];

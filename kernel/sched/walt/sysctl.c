@@ -104,9 +104,11 @@ unsigned int sysctl_sched_walt_core_util[WALT_NR_CPUS];
 unsigned int sysctl_pipeline_busy_boost_pct;
 unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
 unsigned int sysctl_cluster01_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster01_load_sync_60fps[NUM_LOAD_SYNC_SETTINGS];
 unsigned int sysctl_cluster02_load_sync[NUM_LOAD_SYNC_SETTINGS];
 unsigned int sysctl_cluster03_load_sync[NUM_LOAD_SYNC_SETTINGS];
 unsigned int sysctl_cluster10_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster10_load_sync_60fps[NUM_LOAD_SYNC_SETTINGS];
 unsigned int sysctl_cluster12_load_sync[NUM_LOAD_SYNC_SETTINGS];
 unsigned int sysctl_cluster13_load_sync[NUM_LOAD_SYNC_SETTINGS];
 unsigned int sysctl_cluster20_load_sync[NUM_LOAD_SYNC_SETTINGS];
@@ -116,8 +118,11 @@ unsigned int sysctl_cluster30_load_sync[NUM_LOAD_SYNC_SETTINGS];
 unsigned int sysctl_cluster31_load_sync[NUM_LOAD_SYNC_SETTINGS];
 unsigned int sysctl_cluster32_load_sync[NUM_LOAD_SYNC_SETTINGS];
 unsigned int load_sync_util_thres[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int load_sync_util_thres_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_low_pct[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int load_sync_low_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_high_pct[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int load_sync_high_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
@@ -947,6 +952,10 @@ int sched_load_sync_handler(const struct ctl_table *table, int write,
 		load_sync_util_thres[0][1] = data[0];
 		load_sync_low_pct[0][1] = data[1];
 		load_sync_high_pct[0][1] = data[2];
+	} else if (data == &sysctl_cluster01_load_sync_60fps[0]) {
+		load_sync_util_thres_60fps[0][1] = data[0];
+		load_sync_low_pct_60fps[0][1] = data[1];
+		load_sync_high_pct_60fps[0][1] = data[2];
 	} else if (data == &sysctl_cluster02_load_sync[0]) {
 		load_sync_util_thres[0][2] = data[0];
 		load_sync_low_pct[0][2] = data[1];
@@ -959,6 +968,10 @@ int sched_load_sync_handler(const struct ctl_table *table, int write,
 		load_sync_util_thres[1][0] = data[0];
 		load_sync_low_pct[1][0] = data[1];
 		load_sync_high_pct[1][0] = data[2];
+	} else if (data == &sysctl_cluster10_load_sync_60fps[0]) {
+		load_sync_util_thres_60fps[1][0] = data[0];
+		load_sync_low_pct_60fps[1][0] = data[1];
+		load_sync_high_pct_60fps[1][0] = data[2];
 	} else if (data == &sysctl_cluster12_load_sync[0]) {
 		load_sync_util_thres[1][2] = data[0];
 		load_sync_low_pct[1][2] = data[1];
@@ -1008,6 +1021,13 @@ static struct ctl_table cluster_01[] = {
 		.mode		= 0644,
 		.proc_handler	= sched_load_sync_handler,
 	},
+	{
+		.procname	= "load_sync_settings_60fps",
+		.data		= &sysctl_cluster01_load_sync_60fps,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
 };
 
 static struct ctl_table cluster_02[] = {
@@ -1034,6 +1054,13 @@ static struct ctl_table cluster_10[] = {
 	{
 		.procname	= "load_sync_settings",
 		.data		= &sysctl_cluster10_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+	{
+		.procname	= "load_sync_settings_60fps",
+		.data		= &sysctl_cluster10_load_sync_60fps,
 		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= sched_load_sync_handler,

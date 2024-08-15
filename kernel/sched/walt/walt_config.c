@@ -125,6 +125,20 @@ void walt_config(void)
 		load_sync_util_thres[1][0]	= sysctl_cluster10_load_sync[0];
 		load_sync_low_pct[0][1]		= sysctl_cluster10_load_sync[1];
 		load_sync_high_pct[0][1]	= sysctl_cluster10_load_sync[2];
+
+		sysctl_cluster01_load_sync_60fps[0]	= 400;
+		sysctl_cluster01_load_sync_60fps[1]	= 60;
+		sysctl_cluster01_load_sync_60fps[2]	= 100;
+		sysctl_cluster10_load_sync_60fps[0]	= 500;
+		sysctl_cluster10_load_sync_60fps[1]	= 70;
+		sysctl_cluster10_load_sync_60fps[2]	= 90;
+		load_sync_util_thres_60fps[0][1]	= sysctl_cluster01_load_sync_60fps[0];
+		load_sync_low_pct_60fps[0][1]		= sysctl_cluster01_load_sync_60fps[1];
+		load_sync_high_pct_60fps[0][1]		= sysctl_cluster01_load_sync_60fps[2];
+		load_sync_util_thres_60fps[1][0]	= sysctl_cluster10_load_sync_60fps[0];
+		load_sync_low_pct_60fps[0][1]		= sysctl_cluster10_load_sync_60fps[1];
+		load_sync_high_pct_60fps[0][1]		= sysctl_cluster10_load_sync_60fps[2];
+
 	} else if (!strcmp(name, "PINEAPPLE")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
