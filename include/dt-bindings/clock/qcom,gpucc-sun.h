@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_CLK_QCOM_GPU_CC_SUN_H
@@ -38,6 +38,8 @@
 
 /* GPU_CC power domains */
 #define GPU_CC_CX_GDSC						0
+#define GPU_CC_CX_SMMU_GDSC					1
+#define GPU_CC_CX_GMU_GDSC					2
 
 /* GPU_CC resets */
 #define GPUCC_GPU_CC_CB_BCR					0
