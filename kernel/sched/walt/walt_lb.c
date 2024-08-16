@@ -1219,6 +1219,35 @@ out:
 }
 EXPORT_SYMBOL_GPL(sched_walt_oscillate);
 
+static void walt_find_new_ilb(void *unused, struct cpumask *nohz_idle_cpus_mask,
+		int *ilb)
+{
+	int cpu, i;
+
+	*ilb = nr_cpu_ids;
+	for (i = 0; i < num_sched_clusters - 1; i++) {
+		for_each_cpu_and(cpu, nohz_idle_cpus_mask, &cpu_array[0][i]) {
+			if (cpu == smp_processor_id())
+				continue;
+			if (available_idle_cpu(cpu) && cpu_online(cpu)) {
+				*ilb = cpu;
+				return;
+			}
+		}
+	}
+
+	for (i = 0; i < num_sched_clusters - 1; i++) {
+		for_each_cpu(cpu, &cpu_array[0][i]) {
+			if (cpu == smp_processor_id())
+				continue;
+			if (available_idle_cpu(cpu) && cpu_online(cpu)) {
+				*ilb = cpu;
+				return;
+			}
+		}
+	}
+}
+
 void walt_lb_init(void)
 {
 	int cpu;
@@ -1229,6 +1258,7 @@ void walt_lb_init(void)
 	register_trace_android_rvh_can_migrate_task(walt_can_migrate_task, NULL);
 	register_trace_android_rvh_find_busiest_queue(walt_find_busiest_queue, NULL);
 	register_trace_android_rvh_sched_newidle_balance(walt_sched_newidle_balance, NULL);
+	register_trace_android_rvh_find_new_ilb(walt_find_new_ilb, NULL);
 
 	for_each_cpu(cpu, cpu_possible_mask) {
 		call_single_data_t *csd;
