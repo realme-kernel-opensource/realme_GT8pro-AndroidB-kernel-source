@@ -49,6 +49,7 @@
   argv_free
   argv_split
   arm64_use_ng_mappings
+  arm_smccc_1_1_get_conduit
   arm_smccc_1_2_hvc
   __arm_smccc_smc
   __arm_smccc_sve_check
@@ -1244,6 +1245,7 @@
   __flush_workqueue
   __folio_lock
   __folio_put
+  folio_unlock
   folio_wait_bit
   __fortify_panic
   fortify_panic
@@ -2201,6 +2203,11 @@
   msi_unlock_descs
   msleep
   msleep_interruptible
+  mt_find
+  mt_find_after
+  mtree_destroy
+  mtree_erase
+  mtree_insert_range
   mtree_load
   mutex_destroy
   __mutex_init
@@ -3918,6 +3925,7 @@
   __uio_register_device
   uio_unregister_device
   unlock_page
+  unpin_user_page
   unpin_user_pages
   unregister_blkdev
   unregister_candev
