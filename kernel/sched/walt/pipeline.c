@@ -187,9 +187,6 @@ bool find_heaviest_topapp(u64 window_start)
 	if (num_sched_clusters < 2)
 		return false;
 
-	if (last_rearrange_ns && (window_start < (last_rearrange_ns + 100 * MSEC_TO_NSEC)))
-		return false;
-
 	/* lazy enabling disabling until 100mS for colocation or heavy_nr change */
 	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
 	if (!grp || (!sysctl_sched_heavy_nr && !sysctl_sched_pipeline_util_thres) ||
@@ -210,6 +207,9 @@ bool find_heaviest_topapp(u64 window_start)
 		}
 		return false;
 	}
+
+	if (last_rearrange_ns && (window_start < (last_rearrange_ns + 100 * MSEC_TO_NSEC)))
+		return false;
 
 	raw_spin_lock_irqsave(&grp->lock, flags);
 	raw_spin_lock(&heavy_lock);
@@ -514,12 +514,13 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 	if (num_sched_clusters < 2)
 		return;
 
+	if (!pipeline_nr || sched_boost_type)
+		goto out;
+
 	if (delay_rearrange(window_start, MANUAL_PIPELINE, false))
 		goto out;
 
 	raw_spin_lock_irqsave(&pipeline_lock, flags);
-	if (!pipeline_nr || sched_boost_type)
-		goto release_lock;
 
 	found_pipeline = true;
 
