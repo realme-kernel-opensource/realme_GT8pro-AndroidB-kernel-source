@@ -13,7 +13,7 @@ cpumask_t asym_cap_sibling_cpus;
 cpumask_t pipeline_sync_cpus;
 int oscillate_period_ns;
 int soc_sched_lib_name_capacity;
-#define PIPELINE_BUSY_THRESH_8MS_WINDOW 6
+#define PIPELINE_BUSY_THRESH_8MS_WINDOW 7
 #define PIPELINE_BUSY_THRESH_12MS_WINDOW 11
 #define PIPELINE_BUSY_THRESH_16MS_WINDOW 15
 
