@@ -1294,25 +1294,6 @@ static irqreturn_t arm_smmu_context_fault_irq(int irq, void *dev)
 {
 	struct iommu_domain *domain = dev;
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
-	struct arm_smmu_device *smmu = smmu_domain->smmu;
-	struct qcom_iommu_fault_param *fparam = &smmu_domain->fault_param;
-	int cbidx = smmu_domain->cfg.cbndx;
-	u32 fault_sid = arm_smmu_gr1_read(smmu, ARM_SMMU_GR1_CBFRSYNRA(cbidx)) &
-					CBFRSYNRA_SID_MASK;
-
-	if (fparam->handler) {
-		struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(fparam->dev);
-		struct arm_smmu_master_cfg *cfg = dev_iommu_priv_get(fparam->dev);
-		int i, idx;
-
-		for_each_cfg_sme(cfg, fwspec, i, idx) {
-			u16 sid = FIELD_GET(ARM_SMMU_SMR_ID, fwspec->ids[i]);
-			u16 mask = FIELD_GET(ARM_SMMU_SMR_MASK, fwspec->ids[i]);
-
-			if (!((fault_sid ^ sid) & ~mask))
-				fparam->handler(domain, fparam->token);
-		}
-	}
 
 	/* call the handler that is requested in non-thread irq context */
 	if (smmu_domain->fault_handler_irq)
@@ -2602,7 +2583,8 @@ static int arm_smmu_set_pgtable_quirks(struct iommu_domain *domain,
 	return ret;
 }
 
-static int arm_smmu_of_xlate(struct device *dev, struct of_phandle_args *args)
+static int arm_smmu_of_xlate(struct device *dev,
+			     const struct of_phandle_args *args)
 {
 	u32 mask, fwid = 0;
 
@@ -2802,26 +2784,6 @@ static void arm_smmu_set_fault_handler_irq(struct iommu_domain *domain,
 	smmu_domain->handler_irq_token = token;
 }
 
-static void arm_smmu_register_device_fault_handler_irq(struct device *dev,
-		fault_handler_irq_t handler, void *token)
-{
-	struct arm_smmu_domain *smmu_domain;
-	struct iommu_domain *domain;
-	struct qcom_iommu_fault_param *fparam;
-
-	domain = iommu_get_domain_for_dev(dev);
-	if (!domain)
-		return;
-
-	smmu_domain = to_smmu_domain(domain);
-	fparam = &smmu_domain->fault_param;
-	WARN_ON(fparam->handler);
-
-	fparam->dev = dev;
-	fparam->handler = handler;
-	fparam->token = token;
-}
-
 static int arm_smmu_enable_s1_translation(struct iommu_domain *domain)
 {
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
@@ -2894,7 +2856,6 @@ static struct qcom_iommu_ops arm_smmu_ops = {
 	.set_secure_vmid		= arm_smmu_set_secure_vmid,
 	.set_fault_model		= arm_smmu_set_fault_model,
 	.set_fault_handler_irq		= arm_smmu_set_fault_handler_irq,
-	.register_device_fault_handler_irq = arm_smmu_register_device_fault_handler_irq,
 	.enable_s1_translation		= arm_smmu_enable_s1_translation,
 	.get_mappings_configuration	= arm_smmu_get_mappings_configuration,
 	.skip_tlb_management		= arm_smmu_skip_tlb_management,

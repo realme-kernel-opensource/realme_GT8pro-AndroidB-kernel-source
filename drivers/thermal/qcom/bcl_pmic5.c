@@ -781,7 +781,7 @@ static void bcl_vbat_init(struct platform_device *pdev,
 			return;
 	}
 	vbat->tz_dev = thermal_zone_device_register_with_trips("vbat",
-			bcl_get_vbat_trip(vbat), 3, 0, vbat,
+			bcl_get_vbat_trip(vbat), 3, vbat,
 			&vbat_tzd_ops, &vbat_tzp, 0, 0);
 	if (IS_ERR(vbat->tz_dev)) {
 		pr_debug("vbat[%s] register failed. err:%ld\n",

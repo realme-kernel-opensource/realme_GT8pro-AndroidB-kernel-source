@@ -1018,13 +1018,6 @@ static int adc_tm5_gen3_configure(struct adc5_channel_prop *prop)
 	return adc5_write(adc, prop->sdam_index, ADC5_GEN3_CONV_REQ, &conv_req, 1);
 }
 
-/* WA to add writable trip_temp_*_hyst sysfs node till core has proper fix */
-static int adc_tm5_gen3_set_trip_hyst(struct thermal_zone_device *tz,
-					int trip, int hysteresis)
-{
-	return 0;
-}
-
 static int adc_tm5_gen3_set_trip_temp(struct thermal_zone_device *tz,
 					int low_temp, int high_temp)
 {
@@ -1430,12 +1423,10 @@ EXPORT_SYMBOL_GPL(adc_tm_disable_chan_meas_gen3);
 static struct thermal_zone_device_ops adc_tm_ops = {
 	.get_temp = adc_tm_gen3_get_temp,
 	.set_trips = adc_tm5_gen3_set_trip_temp,
-	.set_trip_hyst = adc_tm5_gen3_set_trip_hyst,
 };
 
 static struct thermal_zone_device_ops adc_tm_ops_iio = {
 	.get_temp = adc_tm_gen3_get_temp,
-	.set_trip_hyst = adc_tm5_gen3_set_trip_hyst,
 };
 
 static int adc_tm_register_tzd(struct adc5_chip *adc)

@@ -434,53 +434,6 @@ int qcom_iommu_set_fault_model(struct iommu_domain *domain, int fault_model)
 }
 EXPORT_SYMBOL(qcom_iommu_set_fault_model);
 
-/*
- * Sets the client function which gets called during non-threaded irq
- * fault handler when registered.
- *
- * This api is deprecated; qcom_iommu_register_device_fault_handler_irq
- * should be used instead.
- */
-int qcom_iommu_set_fault_handler_irq(struct iommu_domain *domain,
-	fault_handler_irq_t handler_irq, void *token)
-{
-	struct qcom_iommu_ops *ops = to_qcom_iommu_ops(domain->ops);
-
-	if (!ops || unlikely(ops->set_fault_handler_irq == NULL))
-		return -EINVAL;
-
-	WARN_ONCE("%s API is deprecated\n", __func__);
-	ops->set_fault_handler_irq(domain, handler_irq, token);
-
-	return 0;
-}
-EXPORT_SYMBOL(qcom_iommu_set_fault_handler_irq);
-
-/*
- * Sets the client function which gets called during non-threaded irq
- * fault handler when registered.
- * The only expected user is cnss, which uses this to disable logging
- * quickly after a fault.
- */
-int qcom_iommu_register_device_fault_handler_irq(struct device *dev,
-	fault_handler_irq_t handler, void *token)
-{
-	struct iommu_domain *domain;
-	struct qcom_iommu_ops *ops;
-
-	domain = iommu_get_domain_for_dev(dev);
-	if (!domain)
-		return -EINVAL;
-
-	ops = to_qcom_iommu_ops(domain->ops);
-	if (!ops || !ops->register_device_fault_handler_irq)
-		return -EINVAL;
-
-	ops->register_device_fault_handler_irq(dev, handler, token);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(qcom_iommu_register_device_fault_handler_irq);
-
 int qcom_iommu_enable_s1_translation(struct iommu_domain *domain)
 {
 	struct qcom_iommu_ops *ops = to_qcom_iommu_ops(domain->ops);

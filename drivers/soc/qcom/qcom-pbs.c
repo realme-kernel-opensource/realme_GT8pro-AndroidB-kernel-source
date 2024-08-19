@@ -19,6 +19,9 @@
 #define PBS_CLIENT_SCRATCH2		0x51
 #define PBS_CLIENT_SCRATCH2_ERROR	0xFF
 
+#define RETRIES				2000
+#define DELAY				1100
+
 struct pbs_dev {
 	struct device		*dev;
 	struct regmap		*regmap;
@@ -30,11 +33,11 @@ struct pbs_dev {
 
 static int qcom_pbs_wait_for_ack(struct pbs_dev *pbs, u8 bit_pos)
 {
-	int ret, retries = 2000, delay = 1100;
 	unsigned int val;
+	int ret;
 
 	ret = regmap_read_poll_timeout(pbs->regmap,  pbs->base + PBS_CLIENT_SCRATCH2,
-					val, val & BIT(bit_pos), delay, delay * retries);
+				       val, val & BIT(bit_pos), DELAY, DELAY * RETRIES);
 
 	if (ret < 0) {
 		dev_err(pbs->dev, "Timeout for PBS ACK/NACK for bit %u\n", bit_pos);
@@ -66,7 +69,7 @@ static int qcom_pbs_wait_for_ack(struct pbs_dev *pbs, u8 bit_pos)
  *    completion of the sequence.
  * 4. If PBS_CLIENT_SCRATCH2 == 0xFF, the PBS sequence failed to execute
  *
- * Returns: 0 on success, < 0 on failure
+ * Return: 0 on success, < 0 on failure
  */
 int qcom_pbs_trigger_event(struct pbs_dev *pbs, u8 bitmap)
 {
@@ -74,10 +77,8 @@ int qcom_pbs_trigger_event(struct pbs_dev *pbs, u8 bitmap)
 	u16 bit_pos;
 	int ret;
 
-	if (!bitmap) {
-		dev_err(pbs->dev, "Invalid bitmap passed by client\n");
+	if (WARN_ON(!bitmap))
 		return -EINVAL;
-	}
 
 	if (IS_ERR_OR_NULL(pbs))
 		return -EINVAL;
@@ -100,40 +101,32 @@ int qcom_pbs_trigger_event(struct pbs_dev *pbs, u8 bitmap)
 
 		/* Clear the PBS sequence bit position */
 		ret = regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH2,
-					BIT(bit_pos), 0);
+					 BIT(bit_pos), 0);
 		if (ret < 0)
-			goto error;
+			goto out_clear_scratch1;
 
 		/* Set the PBS sequence bit position */
 		ret = regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH1,
-					BIT(bit_pos), BIT(bit_pos));
+					 BIT(bit_pos), BIT(bit_pos));
 		if (ret < 0)
-			goto error;
+			goto out_clear_scratch1;
 
 		/* Initiate the SW trigger */
 		ret = regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_TRIG_CTL,
-					PBS_CLIENT_SW_TRIG_BIT, PBS_CLIENT_SW_TRIG_BIT);
+					 PBS_CLIENT_SW_TRIG_BIT, PBS_CLIENT_SW_TRIG_BIT);
 		if (ret < 0)
-			goto error;
+			goto out_clear_scratch1;
 
 		ret = qcom_pbs_wait_for_ack(pbs, bit_pos);
 		if (ret < 0)
-			goto error;
+			goto out_clear_scratch1;
 
 		/* Clear the PBS sequence bit position */
-		ret = regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH1,
-					BIT(bit_pos), 0);
-		if (ret < 0)
-			goto error;
-
-		/* Clear the PBS sequence bit position */
-		ret = regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH2,
-					BIT(bit_pos), 0);
-		if (ret < 0)
-			goto error;
+		regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH1, BIT(bit_pos), 0);
+		regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH2, BIT(bit_pos), 0);
 	}
 
-error:
+out_clear_scratch1:
 	/* Clear all the requested bitmap */
 	ret = regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH1, bitmap, 0);
 
@@ -151,7 +144,7 @@ EXPORT_SYMBOL_GPL(qcom_pbs_trigger_event);
  * This function is used to get the PBS device that is being
  * used by the client.
  *
- * Returns: pbs_dev on success, ERR_PTR on failure
+ * Return: pbs_dev on success, ERR_PTR on failure
  */
 struct pbs_dev *get_pbs_client_device(struct device *dev)
 {

@@ -34,13 +34,6 @@ struct bcl_device {
 
 static struct bcl_device *bcl_perph;
 
-/* WA to add writable trip_temp_*_hyst sysfs node till core has proper fix */
-static int bcl_soc_set_trip_hyst(
-		struct thermal_zone_device *tz, int trip, int hysteresis)
-{
-	return 0;
-};
-
 static int bcl_soc_get_trend(struct thermal_zone_device *tz,
 			const struct thermal_trip *trip,
 			enum thermal_trend *trend)
@@ -168,7 +161,6 @@ static int bcl_soc_probe(struct platform_device *pdev)
 	bcl_perph->dev = &pdev->dev;
 	bcl_perph->ops.get_temp = bcl_read_soc;
 	bcl_perph->ops.set_trips = bcl_set_soc;
-	bcl_perph->ops.set_trip_hyst = bcl_soc_set_trip_hyst;
 	bcl_perph->ops.get_trend = bcl_soc_get_trend;
 	bcl_perph->ops.change_mode = qti_tz_change_mode;
 	INIT_WORK(&bcl_perph->soc_eval_work, bcl_evaluate_soc);

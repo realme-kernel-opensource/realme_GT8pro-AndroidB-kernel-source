@@ -68,9 +68,6 @@ static int fetch_and_populate_trips(char *config_buf, struct thermal_zone_device
 
 		buf1_offset = ret;
 
-		if (!tz->trips)
-			continue;
-
 		ret = fetch_and_populate_trip_data(buf_hyst, tz, i, buf2_offset,
 				buf_size, true);
 		if (ret < 0)
@@ -238,7 +235,7 @@ ssize_t thermal_dbgfs_config_read(struct file *file, char __user *buf,
 	offset += scnprintf(config_buf + offset, PAGE_SIZE - offset, "%*s%d\n",
 				-15, "passive_delay",
 				jiffies_to_msecs(tz->passive_delay_jiffies));
-	if (!tz->num_trips || !tz->trips) {
+	if (!tz->num_trips) {
 		if (offset >= PAGE_SIZE) {
 			pr_err("%s sensor config rule length is more than buffer size\n",
 					tz->type);

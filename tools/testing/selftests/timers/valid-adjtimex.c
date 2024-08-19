@@ -21,9 +21,6 @@
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *   GNU General Public License for more details.
  */
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -63,6 +60,7 @@ int clear_time_state(void)
 #define NUM_FREQ_INVALID 2
 
 #define SHIFTED_PPM (1 << 16)
+
 long valid_freq[NUM_FREQ_VALID] = {
 	 -499 * SHIFTED_PPM,
 	 -450 * SHIFTED_PPM,
@@ -104,8 +102,12 @@ long outofrange_freq[NUM_FREQ_OUTOFRANGE] = {
 	 1000 * SHIFTED_PPM,
 };
 
+#ifndef LONG_MAX
 #define LONG_MAX (~0UL>>1)
+#endif
+#ifndef LONG_MIN
 #define LONG_MIN (-LONG_MAX - 1)
+#endif
 
 long invalid_freq[NUM_FREQ_INVALID] = {
 	LONG_MAX,

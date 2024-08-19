@@ -94,8 +94,6 @@ struct qcom_iommu_ops {
 	int (*set_fault_model)(struct iommu_domain *domain, int fault_model);
 	void (*set_fault_handler_irq)(struct iommu_domain *domain,
 			fault_handler_irq_t handler_irq, void *token);
-	void (*register_device_fault_handler_irq)(struct device *dev,
-			fault_handler_irq_t handler, void *token);
 	int (*enable_s1_translation)(struct iommu_domain *domain);
 	int (*get_mappings_configuration)(struct iommu_domain *domain);
 	void (*skip_tlb_management)(struct iommu_domain *domain, bool skip);
@@ -134,11 +132,6 @@ int qcom_iommu_get_asid_nr(struct iommu_domain *domain);
 int qcom_iommu_set_secure_vmid(struct iommu_domain *domain, enum vmid vmid);
 
 int qcom_iommu_set_fault_model(struct iommu_domain *domain, int fault_model);
-
-int qcom_iommu_set_fault_handler_irq(struct iommu_domain *domain,
-		fault_handler_irq_t handler_irq, void *token);
-int qcom_iommu_register_device_fault_handler_irq(struct device *dev,
-		fault_handler_irq_t handler, void *token);
 
 int qcom_iommu_enable_s1_translation(struct iommu_domain *domain);
 

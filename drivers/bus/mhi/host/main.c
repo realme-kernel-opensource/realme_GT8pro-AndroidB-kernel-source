@@ -15,6 +15,7 @@
 #include <linux/skbuff.h>
 #include <linux/slab.h>
 #include "internal.h"
+#include "trace.h"
 
 int __must_check mhi_read_reg(struct mhi_controller *mhi_cntrl,
 			      void __iomem *base, u32 offset, u32 *out)
@@ -547,6 +548,7 @@ irqreturn_t mhi_intvec_threaded_handler(int irq_number, void *priv)
 		mhi_state_str(mhi_cntrl->dev_state),
 		TO_MHI_EXEC_STR(ee), mhi_state_str(state));
 
+	trace_mhi_intvec_states(mhi_cntrl, ee, state);
 	if (state == MHI_STATE_SYS_ERR) {
 		MHI_VERB(dev, "System error detected\n");
 		pm_state = mhi_tryset_pm_state(mhi_cntrl,
@@ -903,6 +905,8 @@ int mhi_process_ctrl_ev_ring(struct mhi_controller *mhi_cntrl,
 			(u64)mhi_to_physical(ev_ring, local_rp),
 			local_rp->ptr, local_rp->dword[0], local_rp->dword[1]);
 
+		trace_mhi_ctrl_event(mhi_cntrl, local_rp);
+
 		switch (type) {
 		case MHI_PKT_TYPE_BW_REQ_EVENT:
 		{
@@ -1071,6 +1075,8 @@ int mhi_process_data_event_ring(struct mhi_controller *mhi_cntrl,
 
 		MHI_VERB(dev, "Processing Event:0x%llx 0x%08x 0x%08x\n",
 			local_rp->ptr, local_rp->dword[0], local_rp->dword[1]);
+
+		trace_mhi_data_event(mhi_cntrl, local_rp);
 
 		chan = MHI_TRE_GET_EV_CHID(local_rp);
 
@@ -1335,6 +1341,7 @@ int mhi_gen_tre(struct mhi_controller *mhi_cntrl, struct mhi_chan *mhi_chan,
 		mhi_chan->chan, (u64)mhi_to_physical(tre_ring, mhi_tre),
 		mhi_tre->ptr, mhi_tre->dword[0], mhi_tre->dword[1]);
 
+	trace_mhi_gen_tre(mhi_cntrl, mhi_chan, mhi_tre);
 	/* increment WP */
 	mhi_add_ring_element(mhi_cntrl, tre_ring);
 	mhi_add_ring_element(mhi_cntrl, buf_ring);
@@ -1437,6 +1444,7 @@ static int mhi_update_channel_state(struct mhi_controller *mhi_cntrl,
 	MHI_VERB(dev, "%d: Updating channel state to: %s\n", mhi_chan->chan,
 		TO_CH_STATE_TYPE_STR(to_state));
 
+	trace_mhi_channel_command_start(mhi_cntrl, mhi_chan, to_state, TPS("Updating"));
 	switch (to_state) {
 	case MHI_CH_STATE_TYPE_RESET:
 		write_lock_irq(&mhi_chan->lock);
@@ -1506,6 +1514,7 @@ static int mhi_update_channel_state(struct mhi_controller *mhi_cntrl,
 	MHI_VERB(dev, "%d: Channel state change to %s successful\n",
 		mhi_chan->chan, TO_CH_STATE_TYPE_STR(to_state));
 
+	trace_mhi_channel_command_end(mhi_cntrl, mhi_chan, to_state, TPS("Updated"));
 exit_channel_update:
 	mhi_cntrl->runtime_put(mhi_cntrl);
 	mhi_device_put(mhi_cntrl->mhi_dev);

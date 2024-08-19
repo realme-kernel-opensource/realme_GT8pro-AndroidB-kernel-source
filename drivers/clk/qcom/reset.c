@@ -61,9 +61,8 @@ static int qcom_reset(struct reset_controller_dev *rcdev, unsigned long id)
 	return 0;
 }
 
-static int
-qcom_reset_set(struct reset_controller_dev *rcdev,
-	       unsigned long id, bool assert)
+static int qcom_reset_set_assert(struct reset_controller_dev *rcdev,
+				 unsigned long id, bool assert)
 {
 	struct qcom_reset_controller *rst;
 	const struct qcom_reset_map *map;
@@ -98,16 +97,14 @@ err:
 	return ret;
 }
 
-static int
-qcom_reset_assert(struct reset_controller_dev *rcdev, unsigned long id)
+static int qcom_reset_assert(struct reset_controller_dev *rcdev, unsigned long id)
 {
-	return qcom_reset_set(rcdev, id, true);
+	return qcom_reset_set_assert(rcdev, id, true);
 }
 
-static int
-qcom_reset_deassert(struct reset_controller_dev *rcdev, unsigned long id)
+static int qcom_reset_deassert(struct reset_controller_dev *rcdev, unsigned long id)
 {
-	return qcom_reset_set(rcdev, id, false);
+	return qcom_reset_set_assert(rcdev, id, false);
 }
 
 static int

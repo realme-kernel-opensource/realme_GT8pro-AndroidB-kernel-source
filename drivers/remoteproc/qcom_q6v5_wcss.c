@@ -1012,8 +1012,8 @@ static int q6v5_wcss_probe(struct platform_device *pdev)
 	if (!desc)
 		return -EINVAL;
 
-	rproc = rproc_alloc(&pdev->dev, pdev->name, desc->ops,
-			    desc->firmware_name, sizeof(*wcss));
+	rproc = devm_rproc_alloc(&pdev->dev, pdev->name, desc->ops,
+				 desc->firmware_name, sizeof(*wcss));
 	if (!rproc) {
 		dev_err(&pdev->dev, "failed to allocate rproc\n");
 		return -ENOMEM;
@@ -1028,29 +1028,29 @@ static int q6v5_wcss_probe(struct platform_device *pdev)
 
 	ret = q6v5_wcss_init_mmio(wcss, pdev);
 	if (ret)
-		goto free_rproc;
+		return ret;
 
 	ret = q6v5_alloc_memory_region(wcss);
 	if (ret)
-		goto free_rproc;
+		return ret;
 
 	if (wcss->version == WCSS_QCS404) {
 		ret = q6v5_wcss_init_clock(wcss);
 		if (ret)
-			goto free_rproc;
+			return ret;
 
 		ret = q6v5_wcss_init_regulator(wcss);
 		if (ret)
-			goto free_rproc;
+			return ret;
 	}
 
 	ret = q6v5_wcss_init_reset(wcss, desc);
 	if (ret)
-		goto free_rproc;
+		return ret;
 
 	ret = qcom_q6v5_init(&wcss->q6v5, pdev, rproc, desc->crash_reason_smem, 0, 0, NULL, NULL);
 	if (ret)
-		goto free_rproc;
+		return ret;
 
 	qcom_add_glink_subdev(rproc, &wcss->glink_subdev, "q6wcss");
 	qcom_add_ssr_subdev(rproc, &wcss->ssr_subdev, "q6wcss");
@@ -1062,16 +1062,11 @@ static int q6v5_wcss_probe(struct platform_device *pdev)
 
 	ret = rproc_add(rproc);
 	if (ret)
-		goto free_rproc;
+		return ret;
 
 	platform_set_drvdata(pdev, rproc);
 
 	return 0;
-
-free_rproc:
-	rproc_free(rproc);
-
-	return ret;
 }
 
 static void q6v5_wcss_remove(struct platform_device *pdev)
@@ -1081,7 +1076,6 @@ static void q6v5_wcss_remove(struct platform_device *pdev)
 
 	qcom_q6v5_deinit(&wcss->q6v5);
 	rproc_del(rproc);
-	rproc_free(rproc);
 }
 
 static const struct wcss_data wcss_ipq8074_res_init = {
