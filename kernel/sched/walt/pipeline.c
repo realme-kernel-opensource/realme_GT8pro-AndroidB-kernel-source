@@ -455,9 +455,6 @@ void rearrange_heavy(u64 window_start, bool force)
 	if (num_sched_clusters < 2)
 		return;
 
-	if (pipeline_special_task)
-		return;
-
 	if (have_heavy_list <= 2) {
 		find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
 
@@ -481,6 +478,9 @@ void rearrange_heavy(u64 window_start, bool force)
 
 		return;
 	}
+
+	if (pipeline_special_task)
+		return;
 
 	if (delay_rearrange(window_start, AUTO_PIPELINE, force))
 		return;
@@ -645,4 +645,37 @@ bool enable_load_sync(int cpu)
 	 * pipeline only if there are 3 or more pipeline tasks
 	 */
 	return pipeline_nr >= MAX_NR_PIPELINE;
+}
+
+/*
+ * pipeline_fits_smaller_cpus evaluates if a pipeline task should be treated as a misfit.
+ * There are three possible outcomes:
+ *	- ret -1: Continue evaluation with task_fits_max().
+ *      - ret  0: Task should be treated as a misfit (does not fit on smaller CPUs).
+ *      - ret  1: Task cannot be treated as a misfit (fits on smaller CPUs).
+ *
+ * If the task is assigned a pipeline CPU which is a prime CPU, ret should be 0, indicating
+ * the task is a misfit.
+ * If the number of pipeline tasks is 2 or fewer, continue evaluation of task_fits_max().
+ * If the number of pipeline tasks is 3 or more, ret should be 1, indicating the task fits on the
+ * smaller CPUs and is not a misfit.
+ */
+int pipeline_fits_smaller_cpus(struct task_struct *p)
+{
+	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+
+	if (cpumask_test_cpu(wts->pipeline_cpu, &cpu_array[0][num_sched_clusters-1]))
+		return 0;
+
+	if (have_heavy_list) {
+		if (have_heavy_list == MAX_NR_PIPELINE)
+			return 1;
+		else
+			return -1;
+	}
+
+	if (pipeline_nr >= MAX_NR_PIPELINE)
+		return 1;
+	else
+		return -1;
 }

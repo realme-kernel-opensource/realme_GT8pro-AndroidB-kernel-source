@@ -1028,14 +1028,13 @@ static inline bool task_fits_capacity(struct task_struct *p,
 	return capacity * 1024 > uclamp_task_util(p) * margin;
 }
 
+extern int pipeline_fits_smaller_cpus(struct task_struct *p);
 static inline bool task_fits_max(struct task_struct *p, int dst_cpu)
 {
 	unsigned long task_boost = per_task_boost(p);
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	cpumask_t other_cluster;
-
-	if (wts->pipeline_cpu != -1)
-		return true;
+	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	int ret = -1;
 
 	/*
 	 * If a task is affined only to cpus of cluster then it cannot be a
@@ -1047,6 +1046,14 @@ static inline bool task_fits_max(struct task_struct *p, int dst_cpu)
 
 	if (is_max_possible_cluster_cpu(dst_cpu))
 		return true;
+
+	if (wts->pipeline_cpu != -1) {
+		ret = pipeline_fits_smaller_cpus(p);
+		if (ret == 0)
+			return false;
+		else if (ret == 1)
+			return true;
+	}
 
 	if (is_min_possible_cluster_cpu(dst_cpu)) {
 		if (task_boost_policy(p) == SCHED_BOOST_ON_BIG ||
