@@ -352,42 +352,20 @@ static int adsp_unprepare(struct rproc *rproc)
 
 	return 0;
 }
+
 static void adsp_add_coredump_segments(struct qcom_adsp *adsp, const struct firmware *fw)
 {
 	struct rproc *rproc = adsp->rproc;
 	struct rproc_dump_segment *entry;
-	struct elf32_hdr *ehdr = (struct elf32_hdr *)fw->data;
-	struct elf32_phdr *phdr, *phdrs = (struct elf32_phdr *)(fw->data + ehdr->e_phoff);
-	uint32_t elf_min_addr = U32_MAX;
-	bool relocatable = false;
-	int ret;
-	int i;
 
-	for (i = 0; i < ehdr->e_phnum; i++) {
-		phdr = &phdrs[i];
-		if (phdr->p_type != PT_LOAD ||
-		   (phdr->p_flags & QCOM_MDT_TYPE_MASK) == QCOM_MDT_TYPE_HASH ||
-		   !phdr->p_memsz)
-			continue;
-
-		if (phdr->p_flags & QCOM_MDT_RELOCATABLE)
-			relocatable = true;
-
-		elf_min_addr = min(phdr->p_paddr, elf_min_addr);
-
-		ret = rproc_coredump_add_segment(rproc, phdr->p_paddr, phdr->p_memsz);
-		if (ret) {
-			dev_err(adsp->dev, "failed to add rproc segment: %d\n", ret);
-			rproc_coredump_cleanup(adsp->rproc);
-			return;
-		}
+	rproc_coredump_cleanup(rproc);
+	if (qcom_register_dump_segments(rproc, fw) < 0) {
+		rproc_coredump_cleanup(adsp->rproc);
+		return;
 	}
 
 	list_for_each_entry(entry, &rproc->dump_segments, node)
-		entry->da = adsp->mem_phys + entry->da - elf_min_addr;
-
-	if (relocatable)
-		adsp->mem_reloc = adsp->mem_phys + adsp->mem_reloc - elf_min_addr;
+		entry->da = adsp->mem_phys + entry->da - adsp->mem_reloc;
 }
 
 static int adsp_load(struct rproc *rproc, const struct firmware *fw)
@@ -400,8 +378,6 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 
 	if (adsp->dma_phys_below_32b)
 		dev = adsp->dev;
-
-	rproc_coredump_cleanup(adsp->rproc);
 
 	/* Store firmware handle to be used in adsp_start() */
 	adsp->firmware = fw;
@@ -430,8 +406,6 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 		if (ret)
 			goto release_dtb_metadata;
 	}
-
-	adsp_add_coredump_segments(adsp, fw);
 
 	goto exit_load;
 
@@ -649,7 +623,7 @@ static int adsp_start(struct rproc *rproc)
 		goto release_pas_metadata;
 
 	qcom_pil_info_store(adsp->info_name, adsp->mem_phys, adsp->mem_size);
-
+	adsp_add_coredump_segments(adsp, adsp->firmware);
 	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_auth_reset", "enter");
 
 	ret = qcom_scm_pas_auth_and_reset(adsp->pas_id);
@@ -980,7 +954,7 @@ static void *adsp_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iom
 	struct qcom_adsp *adsp = rproc->priv;
 	int offset;
 
-	offset = da - adsp->mem_reloc;
+	offset = da - adsp->mem_phys;
 	if (offset < 0 || offset + len > adsp->mem_size)
 		return NULL;
 
