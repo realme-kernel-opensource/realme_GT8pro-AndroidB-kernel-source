@@ -254,6 +254,145 @@ static int get_addr_range(const __be32 *p, int naddr, int nsize, void *arg)
 	return 0;
 }
 
+/*
+ * similar to list_for_each_entry_safe_reverse from include/linux/list.h,
+ * except starting position is prior to pos, instead of the list tail.
+ */
+#define list_for_each_entry_safe_continue_reverse(pos, n, head, member)		\
+	for (pos = list_prev_entry(pos, member),			\
+		n = list_prev_entry(pos, member);			\
+	     !list_entry_is_head(pos, head, member);			\
+	     pos = n, n = list_prev_entry(n, member))
+
+/*
+ * "new" has been added to list in sorted order, but may overlap with preceding
+ * or following entries. Merge as required, deleting old nodes.
+ *
+ * A valid region has following properties:
+ * A.length > 0
+ * A.end == A.length + A.start - 1 does not overflow or underflow.
+ * A.end is in range [0, U64_MAX]
+ * A.start is in range [0, U64_MAX]
+ *
+ * This causes an issue when checking if A.start is adjacent to B.end:
+ * B.end + 1 can overflow, and A.start - 1 can underflow.
+ *
+ * This is resolved by short ciruiting the comparison if A.start == 0.
+ */
+static void merge_resv_region(struct list_head *list, struct iommu_resv_region *new)
+{
+	struct iommu_resv_region *cur, *tmp;
+	u64 new_end, cur_end, end, start;
+
+	/* Merge against entries with smaller start address */
+	cur = new;
+	list_for_each_entry_safe_continue_reverse(cur, tmp, list, list) {
+		new_end = new->start + new->length - 1;
+		cur_end = cur->start + cur->length - 1;
+		if (new->start && new->start - 1 > cur_end)
+			break;
+
+		start = min(new->start, cur->start);
+		end = max(new_end, cur_end);
+		pr_debug("%s: Merging %llx-%llx into %llx-%llx\n",
+			__func__, new->start, new_end, cur->start, cur_end);
+
+		list_del(&cur->list);
+		kfree(cur);
+		new->start = start;
+		new->length = end + 1 - new->start;
+	}
+
+	/* Merge against entries with greater start address */
+	cur = new;
+	list_for_each_entry_safe_continue(cur, tmp, list, list) {
+		new_end = new->start + new->length - 1;
+		cur_end = cur->start + cur->length - 1;
+		if (cur->start && new_end < cur->start - 1)
+			break;
+
+		start = min(new->start, cur->start);
+		end = max(new_end, cur_end);
+		pr_debug("%s: Merging %llx-%llx into %llx-%llx\n",
+			__func__, new->start, new_end, cur->start, cur_end);
+
+		list_del(&cur->list);
+		kfree(cur);
+		new->start = start;
+		new->length = end + 1 - new->start;
+	}
+}
+
+/*
+ * On success, dma_range contains a single range which spans all usable addresses.
+ * Returns -ENODEV if property not present, or another negative value on error
+ */
+static int get_iova_range_from_iommu_addresses(struct device *dev, struct iova_range *dma_range,
+						u64 fastmap_max_iova)
+{
+	LIST_HEAD(list);
+	LIST_HEAD(mergelist);
+	struct iommu_resv_region *new, *region, *x;
+	int ret = -EINVAL;
+	bool found = false;
+	struct of_phandle_iterator it;
+
+	of_for_each_phandle(&it, ret, dev->of_node, "memory-region", NULL, 0) {
+		if (of_find_property(it.node, "iommu-addresses", NULL)) {
+			found = true;
+			break;
+		}
+	}
+	if (!found)
+		return -ENODEV;
+
+	qcom_iommu_get_resv_regions(dev, &list);
+	if (list_empty(&list)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	list_for_each_entry(region, &list, list) {
+		new = kmemdup(region, sizeof(*region), GFP_KERNEL);
+		if (!new) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		list_for_each_entry(x, &mergelist, list)
+			if (x->start > new->start)
+				break;
+		list_add_tail(&new->list, &x->list);
+		merge_resv_region(&mergelist, new);
+	}
+
+	pr_debug("%s: Sorted & Merged iommu-address regions\n", __func__);
+	list_for_each_entry(x, &mergelist, list)
+		pr_debug("%s: %llx-%llx\n", __func__, x->start, x->start + x->length - 1);
+
+	region = list_first_entry(&mergelist, struct iommu_resv_region, list);
+	dma_range->base = 0;
+	if (region->start == 0)
+		dma_range->base = region->start + region->length;
+
+	region = list_last_entry(&mergelist, struct iommu_resv_region, list);
+	dma_range->end = fastmap_max_iova;
+	if (region->start <= fastmap_max_iova &&
+	    region->start + region->length - 1 >= fastmap_max_iova)
+		dma_range->end = region->start - 1;
+
+	pr_debug("%s: Result: %llx-%llx\n", __func__, dma_range->base, dma_range->end);
+	ret = 0;
+
+out:
+	list_for_each_entry_safe(region, x, &mergelist, list) {
+		list_del(&region->list);
+		kfree(region);
+	}
+	iommu_put_resv_regions(dev, &list);
+	return ret;
+}
+
 int qcom_iommu_get_fast_iova_range(struct device *dev, dma_addr_t *ret_iova_base,
 				   dma_addr_t *ret_iova_end)
 {
@@ -263,18 +402,32 @@ int qcom_iommu_get_fast_iova_range(struct device *dev, dma_addr_t *ret_iova_base
 		.range_prop_entry_cb_fn = get_addr_range,
 	};
 	int ret;
+	u64 fastmap_max_iova = SZ_4G - 1;
 
 	if (!dev || !ret_iova_base || !ret_iova_end)
 		return -EINVAL;
 
 	get_addr_range_cb_data.arg = &dma_range;
+
+	/*
+	 * Legacy property - should be removed post kernel version 6.6.
+	 */
 	ret = of_property_walk_each_entry(dev, "qcom,iommu-dma-addr-pool",
 					  &get_addr_range_cb_data);
-	if (ret == -ENODEV) {
-		dma_range.base = 0;
-		dma_range.end = SZ_4G - 1;
-	} else if (ret) {
+	if (ret && ret != -ENODEV) {
+		dev_err(dev, "Parsing qcom,iommu-dma-addr-pool failed\n");
 		return ret;
+	}
+	if (ret) {
+		ret = get_iova_range_from_iommu_addresses(dev, &dma_range,
+							  fastmap_max_iova);
+		if (ret && ret != -ENODEV) {
+			dev_err(dev, "Parsing iommu-addresses into set failed with %d\n", ret);
+			return ret;
+		} else if (ret) {
+			dma_range.base = 0;
+			dma_range.end = fastmap_max_iova;
+		}
 	}
 
 	get_addr_range_cb_data.arg = &geometry_range;
@@ -282,7 +435,7 @@ int qcom_iommu_get_fast_iova_range(struct device *dev, dma_addr_t *ret_iova_base
 					  &get_addr_range_cb_data);
 	if (ret == -ENODEV) {
 		geometry_range.base = 0;
-		geometry_range.end = SZ_4G - 1;
+		geometry_range.end = fastmap_max_iova;
 	} else if (ret) {
 		return ret;
 	}
