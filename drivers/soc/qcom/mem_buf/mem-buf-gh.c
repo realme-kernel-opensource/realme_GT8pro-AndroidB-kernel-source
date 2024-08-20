@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/anon_inodes.h>
@@ -1122,16 +1122,37 @@ struct gh_sgl_desc *mem_buf_get_sgl(void *__membuf)
 }
 EXPORT_SYMBOL_GPL(mem_buf_get_sgl);
 
-static void mem_buf_retrieve_release(struct qcom_sg_buffer *buffer)
+static void mem_buf_retrieve_dma_buf_release(struct dma_buf *dmabuf)
 {
+	struct qcom_sg_buffer *buffer = dmabuf->priv;
 	struct mem_buf_dmabuf_obj *obj;
 
 	obj = container_of(buffer, struct mem_buf_dmabuf_obj, buffer);
 
 	memunmap_pages(&obj->pgmap);
+	qcom_sg_release(dmabuf);
 	sg_free_table(&buffer->sg_table);
 	kfree(obj);
 }
+
+static struct mem_buf_dma_buf_ops mem_buf_retrieve_dma_buf_ops = {
+	.attach = qcom_sg_attach,
+	.lookup = qcom_sg_lookup_vmperm,
+	.dma_ops = {
+		.attach = NULL, /* Will be set by mem_buf_dma_buf_export */
+		.detach = qcom_sg_detach,
+		.map_dma_buf = qcom_sg_map_dma_buf,
+		.unmap_dma_buf = qcom_sg_unmap_dma_buf,
+		.begin_cpu_access = qcom_sg_dma_buf_begin_cpu_access,
+		.end_cpu_access = qcom_sg_dma_buf_end_cpu_access,
+		.begin_cpu_access_partial = qcom_sg_dma_buf_begin_cpu_access_partial,
+		.end_cpu_access_partial = qcom_sg_dma_buf_end_cpu_access_partial,
+		.mmap = qcom_sg_mmap,
+		.vmap = qcom_sg_vmap,
+		.vunmap = qcom_sg_vunmap,
+		.release = mem_buf_retrieve_dma_buf_release,
+	}
+};
 
 struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
 {
@@ -1200,7 +1221,7 @@ struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
 	buffer->heap = NULL;
 	buffer->len = mem_buf_get_sgl_buf_size(sgl_desc);
 	buffer->uncached = false;
-	buffer->free = mem_buf_retrieve_release;
+	buffer->free = NULL;
 	buffer->vmperm = mem_buf_vmperm_alloc_accept(&buffer->sg_table,
 						     arg->memparcel_hdl,
 						     arg->vmids, arg->perms,
@@ -1210,7 +1231,7 @@ struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
 	exp_info.flags = arg->fd_flags;
 	exp_info.priv = buffer;
 
-	dmabuf = qcom_dma_buf_export(&exp_info, &qcom_sg_buf_ops);
+	dmabuf = qcom_dma_buf_export(&exp_info, &mem_buf_retrieve_dma_buf_ops);
 	if (IS_ERR(dmabuf)) {
 		ret = PTR_ERR(dmabuf);
 		goto err_export_dma_buf;
