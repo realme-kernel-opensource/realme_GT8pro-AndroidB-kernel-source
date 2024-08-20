@@ -467,7 +467,6 @@ block/blk-lib.c
 block/blk-map.c
 block/blk-merge.c
 block/blk-mq-cpumap.c
-block/blk-mq-debugfs-zoned.c
 block/blk-mq-debugfs.c
 block/blk-mq-debugfs.h
 block/blk-mq-pci.c
@@ -1516,7 +1515,6 @@ drivers/ptp/ptp_private.h
 drivers/ptp/ptp_sysfs.c
 drivers/ptp/ptp_vclock.c
 drivers/pwm/core.c
-drivers/pwm/sysfs.c
 drivers/ras/debugfs.c
 drivers/ras/debugfs.h
 drivers/ras/ras.c
@@ -1531,6 +1529,7 @@ drivers/regulator/internal.h
 drivers/regulator/irq_helpers.c
 drivers/regulator/of_regulator.c
 drivers/regulator/regnl.h
+drivers/regulator/sun20i-regulator.c
 drivers/remoteproc/remoteproc_cdev.c
 drivers/remoteproc/remoteproc_core.c
 drivers/remoteproc/remoteproc_coredump.c
@@ -1732,6 +1731,8 @@ drivers/usb/dwc3/host.c
 drivers/usb/dwc3/io.h
 drivers/usb/dwc3/trace.c
 drivers/usb/dwc3/trace.h
+drivers/usb/gadget/android_configfs_uevent.c
+drivers/usb/gadget/android_configfs_uevent.h
 drivers/usb/gadget/composite.c
 drivers/usb/gadget/config.c
 drivers/usb/gadget/configfs.c
@@ -1818,6 +1819,11 @@ drivers/usb/host/xhci-trace.c
 drivers/usb/host/xhci-trace.h
 drivers/usb/host/xhci.c
 drivers/usb/host/xhci.h
+drivers/usb/mon/mon_bin.c
+drivers/usb/mon/mon_main.c
+drivers/usb/mon/mon_stat.c
+drivers/usb/mon/mon_text.c
+drivers/usb/mon/usb_mon.h
 drivers/usb/phy/of.c
 drivers/usb/phy/phy.c
 drivers/usb/roles/class.c
@@ -1946,14 +1952,13 @@ fs/erofs/erofs_fs.h
 fs/erofs/inode.c
 fs/erofs/internal.h
 fs/erofs/namei.c
-fs/erofs/pcpubuf.c
 fs/erofs/super.c
 fs/erofs/sysfs.c
-fs/erofs/utils.c
 fs/erofs/xattr.c
 fs/erofs/xattr.h
 fs/erofs/zdata.c
 fs/erofs/zmap.c
+fs/erofs/zutil.c
 fs/eventfd.c
 fs/eventpoll.c
 fs/exec.c
@@ -2129,6 +2134,19 @@ fs/mount.h
 fs/mpage.c
 fs/namei.c
 fs/namespace.c
+fs/netfs/buffered_read.c
+fs/netfs/buffered_write.c
+fs/netfs/direct_read.c
+fs/netfs/direct_write.c
+fs/netfs/internal.h
+fs/netfs/io.c
+fs/netfs/iterator.c
+fs/netfs/locking.c
+fs/netfs/main.c
+fs/netfs/misc.c
+fs/netfs/objects.c
+fs/netfs/write_collect.c
+fs/netfs/write_issue.c
 fs/nls/mac-celtic.c
 fs/nls/mac-centeuro.c
 fs/nls/mac-croatian.c
@@ -2902,6 +2920,8 @@ include/linux/fs_pin.h
 include/linux/fs_stack.h
 include/linux/fs_struct.h
 include/linux/fs_types.h
+include/linux/fscache-cache.h
+include/linux/fscache.h
 include/linux/fscrypt.h
 include/linux/fsl/mc.h
 include/linux/fsnotify.h
@@ -3029,6 +3049,7 @@ include/linux/io-pgtable.h
 include/linux/io.h
 include/linux/io_uring.h
 include/linux/io_uring/cmd.h
+include/linux/io_uring/net.h
 include/linux/io_uring_types.h
 include/linux/ioam6.h
 include/linux/ioam6_genl.h
@@ -3276,6 +3297,7 @@ include/linux/netfilter_ipv4/ip_tables.h
 include/linux/netfilter_ipv6.h
 include/linux/netfilter_ipv6/ip6_tables.h
 include/linux/netfilter_netdev.h
+include/linux/netfs.h
 include/linux/netlink.h
 include/linux/netpoll.h
 include/linux/nfs.h
@@ -3760,6 +3782,7 @@ include/linux/unicode.h
 include/linux/units.h
 include/linux/uprobes.h
 include/linux/usb.h
+include/linux/usb/android_configfs_uevent.h
 include/linux/usb/audio-v2.h
 include/linux/usb/audio-v3.h
 include/linux/usb/audio.h
@@ -4239,9 +4262,11 @@ include/trace/events/fib.h
 include/trace/events/fib6.h
 include/trace/events/filelock.h
 include/trace/events/filemap.h
+include/trace/events/fscache.h
 include/trace/events/gpio.h
 include/trace/events/gpu_mem.h
 include/trace/events/huge_memory.h
+include/trace/events/hw_pressure.h
 include/trace/events/i2c.h
 include/trace/events/initcall.h
 include/trace/events/io_uring.h
@@ -4265,6 +4290,7 @@ include/trace/events/napi.h
 include/trace/events/neigh.h
 include/trace/events/net.h
 include/trace/events/net_probe_common.h
+include/trace/events/netfs.h
 include/trace/events/netlink.h
 include/trace/events/notifier.h
 include/trace/events/oom.h
@@ -4294,7 +4320,6 @@ include/trace/events/swiotlb.h
 include/trace/events/syscalls.h
 include/trace/events/task.h
 include/trace/events/tcp.h
-include/trace/events/thermal_pressure.h
 include/trace/events/thp.h
 include/trace/events/timer.h
 include/trace/events/timer_migration.h
@@ -4902,6 +4927,8 @@ io_uring/io_uring.c
 io_uring/io_uring.h
 io_uring/kbuf.c
 io_uring/kbuf.h
+io_uring/memmap.c
+io_uring/memmap.h
 io_uring/msg_ring.c
 io_uring/msg_ring.h
 io_uring/napi.c
