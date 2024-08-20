@@ -2676,6 +2676,7 @@
   __pm_runtime_use_autosuspend
   __pm_stay_awake
   pm_stay_awake
+  pm_suspend_target_state
   pm_system_wakeup
   pm_wakeup_dev_event
   pm_wakeup_ws_event
@@ -3546,6 +3547,7 @@
   tipc_sk_fill_sock_diag
   topology_clear_scale_freq_source
   topology_update_done
+  topology_update_hw_pressure
   topology_update_thermal_pressure
   _totalram_pages
   trace_array_put

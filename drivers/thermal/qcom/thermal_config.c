@@ -34,9 +34,9 @@ static int fetch_and_populate_trip_data(char *buf, struct thermal_zone_device *t
 	int trip_temp;
 
 	if (!is_hyst)
-		trip_temp = tz->trips[idx].temperature;
+		trip_temp = tz->trips[idx].trip.temperature;
 	else
-		trip_temp = tz->trips[idx].hysteresis;
+		trip_temp = tz->trips[idx].trip.hysteresis;
 
 	offset += scnprintf(buf + offset, size - offset, "%d ", trip_temp);
 
@@ -129,7 +129,7 @@ static int fetch_and_populate_cdevs(char *config_buf, struct thermal_zone_device
 		bool no_cdevs = true;
 
 		list_for_each_entry(instance, &tz->thermal_instances, tz_node) {
-			if (!instance->cdev || instance->trip != &tz->trips[i])
+			if (!instance->cdev || instance->trip != &tz->trips[i].trip)
 				continue;
 
 			no_cdevs = false;
