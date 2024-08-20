@@ -3609,6 +3609,7 @@ static bool handle_rx_dma_xfer(u32 s_irq_status, struct uart_port *uport)
 				     "%s dma_rx_status:0x%x Rx Framing error:%d\n",
 				     __func__, dma_rx_status,
 				     uport->icount.frame);
+			geni_se_dump_dbg_regs(uport);
 		}
 
 		if (dma_rx_status & UART_DMA_RX_BREAK) {
@@ -3618,6 +3619,7 @@ static bool handle_rx_dma_xfer(u32 s_irq_status, struct uart_port *uport)
 				     __func__, dma_rx_status, uport->icount.brk);
 			msm_geni_update_uart_error_code(msm_port,
 							UART_ERROR_RX_BREAK_ERROR);
+			geni_se_dump_dbg_regs(uport);
 		}
 
 		if (dma_rx_status & RX_EOT || dma_rx_status & RX_DMA_DONE) {
