@@ -472,14 +472,13 @@ static int tpdm_enable(struct coresight_device *csdev, struct perf_event *event,
 {
 	struct tpdm_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
-	spin_lock(&drvdata->spinlock);
-	if (drvdata->enable) {
-		spin_unlock(&drvdata->spinlock);
+	if (!coresight_take_mode(csdev, mode)) {
+		/* Someone is already using the tracer */
 		return -EBUSY;
 	}
 
+	spin_lock(&drvdata->spinlock);
 	__tpdm_enable(drvdata);
-	drvdata->enable = true;
 	spin_unlock(&drvdata->spinlock);
 
 	dev_dbg(drvdata->dev, "TPDM tracing enabled\n");
@@ -529,17 +528,14 @@ static void tpdm_disable(struct coresight_device *csdev,
 {
 	struct tpdm_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
-	spin_lock(&drvdata->spinlock);
-	if (!drvdata->enable) {
+	if (coresight_get_mode(csdev) == CS_MODE_SYSFS) {
+		spin_lock(&drvdata->spinlock);
+		__tpdm_disable(drvdata);
 		spin_unlock(&drvdata->spinlock);
-		return;
+
+		coresight_set_mode(csdev, CS_MODE_DISABLED);
+		dev_dbg(drvdata->dev, "TPDM tracing disabled\n");
 	}
-
-	__tpdm_disable(drvdata);
-	drvdata->enable = false;
-	spin_unlock(&drvdata->spinlock);
-
-	dev_dbg(drvdata->dev, "TPDM tracing disabled\n");
 }
 
 static const struct coresight_ops_source tpdm_source_ops = {
@@ -630,7 +626,7 @@ static ssize_t integration_test_store(struct device *dev,
 	if (val != 1 && val != 2)
 		return -EINVAL;
 
-	if (!drvdata->enable)
+	if (coresight_get_mode(drvdata->csdev) != CS_MODE_SYSFS)
 		return -EINVAL;
 
 	if (val == 1)
