@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -382,7 +382,7 @@ static struct amba_id trace_noc_ids[] = {
 		.id     = 0x000f0c00,
 		.mask   = 0x000fff00,
 	},
-	{ 0, 0},
+	{},
 };
 MODULE_DEVICE_TABLE(amba, trace_noc_ids);
 
