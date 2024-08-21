@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/gunyah_rsc_mgr.h>
@@ -13,6 +13,7 @@
 #define GH_RM_RPC_MEM_APPEND			0x51000018
 
 /* Message IDs: VM Management */
+/* clang-format off */
 #define GH_RM_RPC_VM_ALLOC_VMID			0x56000001
 #define GH_RM_RPC_VM_DEALLOC_VMID		0x56000002
 #define GH_RM_RPC_VM_START			0x56000004
@@ -23,6 +24,8 @@
 #define GH_RM_RPC_VM_GET_HYP_RESOURCES		0x56000020
 #define GH_RM_RPC_VM_GET_VMID			0x56000024
 #define GH_RM_RPC_VM_SET_FIRMWARE_MEM		0x56000032
+#define GUNYAH_RM_RPC_GET_LOG			0x00000005U
+/* clang-format on */
 
 struct gh_rm_vm_common_vmid_req {
 	__le16 vmid;
@@ -108,6 +111,16 @@ struct gh_vm_set_firmware_mem_req {
 } __packed;
 
 #define GH_RM_MAX_MEM_ENTRIES	512
+
+struct gunyah_rm_get_log_req {
+	__le16 log_id;
+	__le16 padding;
+};
+
+struct gunyah_rm_get_log_resp {
+	__le64 addr;
+	__le64 size;
+};
 
 /*
  * Several RM calls take only a VMID as a parameter and give only standard
@@ -530,3 +543,24 @@ int gh_rm_get_vmid(struct gh_rm *rm, u16 *vmid)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(gh_rm_get_vmid);
+
+int gh_rm_get_log(struct gh_rm *rm, u16 log_id, u64 *addr, u64 *size)
+{
+	struct gunyah_rm_get_log_req req = {
+		.log_id = cpu_to_le16(log_id),
+	};
+	struct gunyah_rm_get_log_resp *resp;
+	size_t resp_size;
+	int ret;
+
+	ret = gh_rm_call(rm, GUNYAH_RM_RPC_GET_LOG, &req,
+		sizeof(req), (void **)&resp, &resp_size);
+
+	if (ret)
+		return ret;
+
+	*addr = le64_to_cpu(resp->addr);
+	*size = le64_to_cpu(resp->size);
+
+	return ret;
+}

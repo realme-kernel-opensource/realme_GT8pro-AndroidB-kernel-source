@@ -8,6 +8,8 @@ config GUNYAH
 	tristate "Gunyah Virtualization drivers"
 	depends on ARM64
 	depends on MAILBOX
+	depends on SYSFS
+	select SYS_HYPERVISOR
 	select GUNYAH_PLATFORM_HOOKS
 	select AUXILIARY_BUS
 	imply GUNYAH_QCOM_PLATFORM if ARCH_QCOM

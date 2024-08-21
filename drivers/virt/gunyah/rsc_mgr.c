@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of.h>
@@ -8,6 +8,7 @@
 #include <linux/mutex.h>
 #include <linux/sched.h>
 #include <linux/gunyah.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/of_irq.h>
 #include <linux/notifier.h>
@@ -19,6 +20,7 @@
 #include <linux/miscdevice.h>
 
 #include <asm/gunyah.h>
+#include <linux/io.h>
 
 #include "rsc_mgr.h"
 #include "vm_mgr.h"
@@ -38,6 +40,13 @@
 
 #define GH_RM_MAX_NUM_FRAGMENTS		62
 #define RM_RPC_FRAGMENTS_MASK		GENMASK(7, 2)
+
+struct gunyah_rm_log {
+	uint32_t write_idx;
+	uint32_t size;
+
+	char buffer[];
+};
 
 struct gh_rm_rpc_hdr {
 	u8 api;
@@ -825,6 +834,42 @@ static int gh_identify(void)
 	return 0;
 }
 
+static struct gunyah_rm_log *rm_log_ptr;
+
+static ssize_t rm_log_show(struct kobject *kobj, struct kobj_attribute *attr, char *buffer)
+{
+	int len = 0;
+
+	len += sysfs_emit_at(buffer, len, "%.*s", rm_log_ptr->size - ((rm_log_ptr->write_idx) + 1),
+			&rm_log_ptr->buffer[rm_log_ptr->write_idx + 1]);
+	len += sysfs_emit_at(buffer, len, "%.*s", rm_log_ptr->write_idx, &rm_log_ptr->buffer[0]);
+
+	return len;
+}
+
+static struct kobj_attribute rm_log_attr = __ATTR_RO(rm_log);
+
+static int gunyah_rm_sysfs_register(struct platform_device *pdev, struct gh_rm *rm)
+{
+	u64 addr;
+	u64 size;
+
+	int ret = gh_rm_get_log(rm, 0, &addr, &size);
+
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Error in returning log: %d\n", ret);
+		return 0;
+	}
+
+	rm_log_ptr = (struct gunyah_rm_log *) devm_ioremap(&pdev->dev, addr, size);
+	return sysfs_create_file(hypervisor_kobj, &rm_log_attr.attr);
+}
+
+static void gunyah_rm_sysfs_unregister(void)
+{
+	sysfs_remove_file(hypervisor_kobj, &rm_log_attr.attr);
+}
+
 static int gh_rm_drv_probe(struct platform_device *pdev)
 {
 	struct irq_domain *parent_irq_domain;
@@ -907,8 +952,15 @@ static int gh_rm_drv_probe(struct platform_device *pdev)
 		goto err_misc_device;
 	}
 
+	ret = gunyah_rm_sysfs_register(pdev, rm);
+	if (ret)
+		goto err_adev;
+
 	return 0;
 
+err_adev:
+	auxiliary_device_delete(&rm->adev);
+	auxiliary_device_uninit(&rm->adev);
 err_misc_device:
 	misc_deregister(&rm->miscdev);
 err_irq_domain:
@@ -924,6 +976,7 @@ static int gh_rm_drv_remove(struct platform_device *pdev)
 {
 	struct gh_rm *rm = platform_get_drvdata(pdev);
 
+	gunyah_rm_sysfs_unregister();
 	auxiliary_device_delete(&rm->adev);
 	auxiliary_device_uninit(&rm->adev);
 	misc_deregister(&rm->miscdev);
