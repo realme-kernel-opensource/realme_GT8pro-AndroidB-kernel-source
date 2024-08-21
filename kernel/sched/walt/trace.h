@@ -1778,9 +1778,9 @@ TRACE_EVENT(sched_update_updown_early_migrate_values,
 
 TRACE_EVENT(sched_pipeline_tasks,
 
-	TP_PROTO(int type, int index, struct walt_task_struct *heavy_wts, int nr),
+	TP_PROTO(int type, int index, struct walt_task_struct *heavy_wts, int nr, u32 total_util),
 
-	TP_ARGS(type, index, heavy_wts, nr),
+	TP_ARGS(type, index, heavy_wts, nr, total_util),
 
 	TP_STRUCT__entry(
 		__field(int, index)
@@ -1793,6 +1793,8 @@ TRACE_EVENT(sched_pipeline_tasks,
 		__field(int, low_latency)
 		__field(int, nr)
 		__field(int, special_pid)
+		__field(unsigned int, util_thres)
+		__field(u32, total_util)
 	),
 
 	TP_fast_assign(
@@ -1806,13 +1808,15 @@ TRACE_EVENT(sched_pipeline_tasks,
 		__entry->low_latency	= heavy_wts->low_latency;
 		__entry->nr		= nr;
 		__entry->special_pid	= pipeline_special_task ? pipeline_special_task->pid : -1;
+		__entry->util_thres	= sysctl_sched_pipeline_util_thres;
+		__entry->total_util	= total_util;
 	),
 
-	TP_printk("type=%d index=%d pid=%d comm=(%s) demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d special_pid=%d",
+	TP_printk("type=%d index=%d pid=%d comm=%s demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d special_pid=%d util_thres=%u total_util=%u",
 			__entry->type, __entry->index, __entry->pid,
 			__entry->comm, __entry->demand_scaled, __entry->coloc_demand,
 			__entry->pipeline_cpu, __entry->low_latency, __entry->nr,
-			__entry->special_pid)
+			__entry->special_pid, __entry->util_thres, __entry->total_util)
 );
 
 TRACE_EVENT(sched_pipeline_swapped,

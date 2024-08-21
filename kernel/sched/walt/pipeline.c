@@ -358,7 +358,7 @@ bool find_heaviest_topapp(u64 window_start)
 		for (i = 0; i < MAX_NR_PIPELINE; i++) {
 			if (heavy_wts[i] != NULL)
 				trace_sched_pipeline_tasks(AUTO_PIPELINE, i, heavy_wts[i],
-						have_heavy_list);
+						have_heavy_list, total_util);
 		}
 	}
 
@@ -595,7 +595,7 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 		for (i = 0; i < WALT_NR_CPUS; i++) {
 			if (pipeline_wts[i] != NULL)
 				trace_sched_pipeline_tasks(MANUAL_PIPELINE, i, pipeline_wts[i],
-						pipeline_nr);
+						pipeline_nr, 0);
 		}
 	}
 
