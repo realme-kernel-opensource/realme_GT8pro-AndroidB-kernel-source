@@ -6,7 +6,7 @@
  *
  * Author: Will Deacon <will.deacon@arm.com>
  *
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"arm-lpae io-pgtable: " fmt
@@ -375,7 +375,8 @@ static int arm_lpae_init_pte(struct arm_lpae_io_pgtable *data,
 	for (i = 0; i < num_entries; i++)
 		if (ptep[i] & ARM_LPAE_PTE_VALID) {
 			/* We require an unmap first */
-			WARN_ON(!selftest_running);
+			WARN(!selftest_running, "Bad pte: 0x%llx at IOVA: 0x%llx Lvl: %d\n",
+					ptep[i], iova + i * ARM_LPAE_BLOCK_SIZE(lvl, data), lvl);
 			return -EEXIST;
 		}
 
