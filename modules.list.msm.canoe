@@ -61,3 +61,5 @@ gunyah_loader.ko
 gunyah_platform_hooks.ko
 gunyah_qcom.ko
 mdt_loader.ko
+qcom_wdt_core.ko
+gh_virt_wdt.ko
