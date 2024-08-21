@@ -629,16 +629,21 @@ static ssize_t integration_test_store(struct device *dev,
 	if (coresight_get_mode(drvdata->csdev) != CS_MODE_SYSFS)
 		return -EINVAL;
 
-	if (val == 1)
-		val = ATBCNTRL_VAL_64;
-	else
-		val = ATBCNTRL_VAL_32;
 	CS_UNLOCK(drvdata->base);
 	writel_relaxed(0x1, drvdata->base + TPDM_ITCNTRL);
-
-	for (i = 0; i < INTEGRATION_TEST_CYCLE; i++)
-		writel_relaxed(val, drvdata->base + TPDM_ITATBCNTRL);
-
+	for (i = 0; i < INTEGRATION_TEST_CYCLE; i++) {
+		if (val == 1) {
+			writel_relaxed(ATBCNTRL_VAL_64_CMB,
+				       drvdata->base + TPDM_ITATBCNTRL);
+			writel_relaxed(ATBCNTRL_VAL_64,
+				       drvdata->base + TPDM_ITATBCNTRL);
+		} else {
+			writel_relaxed(ATBCNTRL_VAL_32_CMB,
+				       drvdata->base + TPDM_ITATBCNTRL);
+			writel_relaxed(ATBCNTRL_VAL_32,
+				       drvdata->base + TPDM_ITATBCNTRL);
+		}
+	}
 	writel_relaxed(0, drvdata->base + TPDM_ITCNTRL);
 	CS_LOCK(drvdata->base);
 	return size;
