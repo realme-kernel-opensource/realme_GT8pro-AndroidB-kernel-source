@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
@@ -571,7 +571,7 @@ int msm_msi_init(struct device *dev)
 	int ret;
 	struct msm_msi *msi;
 	struct device_node *of_node;
-	const __be32 *prop_val;
+	struct resource msi_res;
 	struct of_phandle_args irq;
 	u32 size_exp = 0;
 	struct resource *res;
@@ -611,14 +611,13 @@ int msm_msi_init(struct device *dev)
 	spin_lock_init(&msi->cfg_lock);
 	INIT_LIST_HEAD(&msi->clients);
 
-	prop_val = of_get_address(msi->of_node, 0, NULL, NULL);
-	if (!prop_val) {
+	if (of_address_to_resource(msi->of_node, 0, &msi_res)) {
 		dev_err(msi->dev, "MSI: missing 'reg' devicetree\n");
 		ret = -EINVAL;
 		goto err;
 	}
 
-	msi->msi_addr = be32_to_cpup(prop_val);
+	msi->msi_addr = msi_res.start;
 	if (!msi->msi_addr) {
 		dev_err(msi->dev, "MSI: failed to get MSI address\n");
 		ret = -EINVAL;
