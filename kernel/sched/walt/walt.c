@@ -5044,25 +5044,38 @@ EXPORT_SYMBOL_GPL(should_boost_bus_dcvs);
  */
 int oscillate_cpu = -1;
 
-bool should_oscillate(unsigned int busy_cpu)
+bool should_oscillate(unsigned int busy_cpu, int *no_oscillate_reason)
 {
 	int cpu;
-	int is_only_one_cpu_active = 0;
+	int busy_cpu_count = 0;
 
-	if (!is_obet)
+	if (busy_cpu >= nr_cpu_ids) {
+		*no_oscillate_reason = 1;
 		return false;
+	}
 
-	if (!is_max_possible_cluster_cpu(busy_cpu))
+	if (!is_obet) {
+		*no_oscillate_reason = 2;
 		return false;
+	}
 
-	if (cpumask_weight(&cpu_array[0][num_sched_clusters - 1]) == 1)
+	if (!is_max_possible_cluster_cpu(busy_cpu)) {
+		*no_oscillate_reason = 3;
 		return false;
+	}
+
+	if (cpumask_weight(&cpu_array[0][num_sched_clusters - 1]) == 1) {
+		*no_oscillate_reason = 4;
+		return false;
+	}
 
 	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
-		is_only_one_cpu_active += !available_idle_cpu(cpu);
+		busy_cpu_count += !available_idle_cpu(cpu);
 	}
-	if (is_only_one_cpu_active != 1)
+	if (busy_cpu_count != 1) {
+		*no_oscillate_reason = 5;
 		return false;
+	}
 
 	return true;
 }

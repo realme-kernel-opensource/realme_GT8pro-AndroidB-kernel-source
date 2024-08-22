@@ -400,8 +400,7 @@ static int walt_lb_pull_tasks(int dst_cpu, int src_cpu, struct task_struct **pul
 				 * the push_task is really pulled onto this CPU.
 				 */
 				wts = (struct walt_task_struct *) p->android_vendor_data1;
-				trace_walt_active_load_balance(p, src_cpu, dst_cpu, wts,
-						-1);
+				trace_walt_active_load_balance(p, src_cpu, dst_cpu, wts);
 				success = stop_one_cpu_nowait(src_cpu,
 						stop_walt_lb_active_migration,
 						src_rq, &src_rq->active_balance_work);
@@ -737,7 +736,7 @@ void walt_lb_tick(struct rq *rq)
 	mark_reserved(new_cpu);
 	raw_spin_unlock_irqrestore(&walt_lb_migration_lock, flags);
 
-	trace_walt_active_load_balance(p, prev_cpu, new_cpu, wts, -1);
+	trace_walt_active_load_balance(p, prev_cpu, new_cpu, wts);
 	ret = stop_one_cpu_nowait(prev_cpu,
 			stop_walt_lb_active_migration, rq,
 			&rq->active_balance_work);
@@ -1109,21 +1108,14 @@ void sched_walt_oscillate(unsigned int busy_cpu)
 {
 	struct rq *src_rq;
 	struct walt_rq *src_wrq;
-	int dst_cpu, src_cpu;
-	struct task_struct *p;
+	int dst_cpu = -1, src_cpu = -1;
+	struct task_struct *p = NULL;
 	struct walt_task_struct *wts;
 	unsigned long flags;
+	int no_oscillate_reason = 0;
 
-
-	if (busy_cpu >= nr_cpu_ids) {
-		oscillate_cpu = -1;
-		return;
-	}
-
-	if (!should_oscillate(busy_cpu)) {
-		oscillate_cpu = -1;
-		return;
-	}
+	if (!should_oscillate(busy_cpu, &no_oscillate_reason))
+		goto out_fail;
 
 	src_cpu = busy_cpu;
 	dst_cpu = busy_cpu + 1;
@@ -1139,8 +1131,10 @@ void sched_walt_oscillate(unsigned int busy_cpu)
 	if (cpumask_test_cpu(dst_cpu, p->cpus_ptr)) {
 		bool success;
 
-		if (src_rq->active_balance)
+		if (src_rq->active_balance) {
+			no_oscillate_reason = 100;
 			goto unlock;
+		}
 
 		src_rq->active_balance = 1;
 		src_rq->push_cpu = dst_cpu;
@@ -1156,24 +1150,26 @@ void sched_walt_oscillate(unsigned int busy_cpu)
 		 * the push_task is really pulled onto this CPU.
 		 */
 		wts = (struct walt_task_struct *) p->android_vendor_data1;
-		trace_walt_active_load_balance(p, src_cpu, dst_cpu, wts,
-				oscillate_cpu);
 		oscillate_cpu = src_cpu;
 		success = stop_one_cpu_nowait(src_cpu,
 				stop_walt_lb_active_migration,
 				src_rq, &src_rq->active_balance_work);
 
 		if (!success) {
-			oscillate_cpu = -1;
+			no_oscillate_reason = 101;
 			clear_reserved(dst_cpu);
+			goto out_fail;
 		} else {
 			wake_up_if_idle(dst_cpu);
 		}
-		return;
+		goto out;
 	}
 unlock:
 	raw_spin_unlock_irqrestore(&src_rq->__lock, flags);
+out_fail:
 	oscillate_cpu = -1;
+out:
+	trace_walt_oscillate(p, src_cpu, dst_cpu, oscillate_cpu, no_oscillate_reason);
 	return;
 }
 EXPORT_SYMBOL_GPL(sched_walt_oscillate);

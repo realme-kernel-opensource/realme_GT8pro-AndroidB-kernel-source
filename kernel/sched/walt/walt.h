@@ -1358,7 +1358,7 @@ void dec_rq_walt_stats(struct rq *rq, struct task_struct *p);
 extern bool is_obet;
 extern int oscillate_cpu;
 extern int oscillate_period_ns;
-extern bool should_oscillate(unsigned int busy_cpu);
+extern bool should_oscillate(unsigned int busy_cpu, int *no_oscillate_reason);
 extern bool now_is_sbt;
 extern bool is_sbt_or_oscillate(void);
 
