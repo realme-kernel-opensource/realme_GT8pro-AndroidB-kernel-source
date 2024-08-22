@@ -285,24 +285,27 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	bool reset_need_freq_update = false;
 	unsigned int smart_reason;
 
-	if (thermal_isolated_now) {
-		if (!wg_policy->thermal_isolated) {
-			/* Entering thermal isolation */
-			wg_policy->thermal_isolated = true;
-			wg_policy->policy->cached_resolved_idx = 0;
-			final_freq = wg_policy->policy->freq_table[0].frequency;
-			__waltgov_update_next_freq(wg_policy, time, final_freq, final_freq);
+	if (soc_feat(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT)) {
+		if (thermal_isolated_now) {
+			if (!wg_policy->thermal_isolated) {
+				/* Entering thermal isolation */
+				wg_policy->thermal_isolated = true;
+				wg_policy->policy->cached_resolved_idx = 0;
+				final_freq = wg_policy->policy->freq_table[0].frequency;
+				__waltgov_update_next_freq(wg_policy, time, final_freq, final_freq);
+			} else {
+				/* no need to change freq, i.e. continue with min freq */
+				final_freq = 0;
+			}
+			raw_freq = final_freq;
+			freq = raw_freq;
+			goto out;
 		} else {
-			final_freq = 0;  /* no need to change freq, i.e. continue with min freq */
-		}
-		raw_freq = final_freq;
-		freq = raw_freq;
-		goto out;
-	} else {
-		if (wg_policy->thermal_isolated) {
-			/* Exiting thermal isolation*/
-			wg_policy->thermal_isolated = false;
-			wg_policy->need_freq_update = true;
+			if (wg_policy->thermal_isolated) {
+				/* Exiting thermal isolation*/
+				wg_policy->thermal_isolated = false;
+				wg_policy->need_freq_update = true;
+			}
 		}
 	}
 
