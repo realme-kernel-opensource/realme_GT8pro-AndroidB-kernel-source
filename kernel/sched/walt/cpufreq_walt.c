@@ -616,7 +616,8 @@ static void waltgov_update_freq(struct waltgov_callback *cb, u64 time,
 	trace_waltgov_util_update(wg_cpu->cpu, wg_cpu->util, wg_policy->avg_cap,
 				wg_cpu->max, wg_cpu->walt_load.nl,
 				wg_cpu->walt_load.pl,
-				wg_cpu->walt_load.rtgb_active, flags);
+				wg_cpu->walt_load.rtgb_active, flags,
+				wg_policy->tunables->boost);
 
 	if (waltgov_should_update_freq(wg_policy, time) &&
 	    !(flags & WALT_CPUFREQ_CONTINUE_BIT)) {
