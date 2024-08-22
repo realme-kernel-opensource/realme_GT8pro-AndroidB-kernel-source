@@ -394,16 +394,30 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 #define MAX_SHARED_MEM_RETRY_CNT	5000
 #define MAX_SHARED_MATCH_SEQ_CNT	10
 
-static int slc_mon_shared_memread(void __iomem *mem,  struct qcom_msc_slc_mon_val *mon_buf)
+static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 {
-	int part_id, retry_cnt = 0, match_seq_cnt = 0;
-	uint64_t timestamp;
-	uint32_t match_seq;
-	struct qcom_slc_mon_mem *mon_mem = (struct qcom_slc_mon_mem *)mem;
+	struct qcom_mpam_msc *qcom_msc;
+	struct msc_query *query;
+	struct qcom_slc_mon_mem *mon_mem;
+	union mon_values *mon_data;
 	struct qcom_slc_mon_data *data_mem;
-	struct qcom_slc_mon_data_val *data_buf;
+	int mon_idx;
+	uint32_t match_seq, retry_cnt, match_seq_cnt = 0;
 
+	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
+	if (qcom_msc == NULL)
+		return -EINVAL;
+
+	query = (struct msc_query *)msc_partid;
+	mon_data = (union mon_values *)data;
+	mon_idx = mon_idx_lookup(qcom_msc->mon_base, query->client_id, query->part_id);
+	if (mon_idx < 0)
+		return -EINVAL;
+
+	mon_mem = (struct qcom_slc_mon_mem *)qcom_msc->mon_base;
+	data_mem = &(mon_mem->data[mon_idx]);
 	do {
+		retry_cnt = 0;
 		while (unlikely((match_seq = mon_mem->match_seq) % 2) &&
 				(retry_cnt++ < MAX_SHARED_MEM_RETRY_CNT))
 			;
@@ -411,48 +425,25 @@ static int slc_mon_shared_memread(void __iomem *mem,  struct qcom_msc_slc_mon_va
 		if (retry_cnt == MAX_SHARED_MEM_RETRY_CNT)
 			return -EINVAL;
 
-		for (part_id = 0; part_id < SLC_NUM_PARTIDS; part_id++) {
-			data_buf = &(mon_buf->data[part_id]);
-			data_mem = &(mon_mem->data[part_id]);
-			data_buf->part_info.client_id = data_mem->part_info.client_id;
-			data_buf->part_info.part_id = data_mem->part_info.part_id;
+		/* Read as zero if monitor not enabled */
+		mon_data->ref.mon_data = 0;
+		if ((mon_data->ref.slc_mon_function == CACHE_CAPACITY_CONFIG) &&
+				(data_mem->cap_stats.cap_enabled))
+			mon_data->capacity.num_cache_lines = data_mem->cap_stats.num_cache_lines;
 
-			if (data_mem->cap_stats.cap_enabled)
-				data_buf->num_cache_lines = data_mem->cap_stats.num_cache_lines;
+		if ((mon_data->ref.slc_mon_function == CACHE_READ_MISS_CONFIG) &&
+				(data_mem->rd_miss_stats.miss_enabled))
+			mon_data->misses.num_rd_misses = data_mem->rd_miss_stats.rd_misses;
 
-			if (data_mem->rd_miss_stats.miss_enabled)
-				data_buf->rd_misses = data_mem->rd_miss_stats.rd_misses;
-		}
-
-		timestamp = mon_mem->last_capture_time;
+		mon_data->ref.last_capture_time = mon_mem->last_capture_time;
 	} while ((match_seq != mon_mem->match_seq) &&
 			(match_seq_cnt++ < MAX_SHARED_MATCH_SEQ_CNT));
 
 	if (match_seq_cnt == MAX_SHARED_MATCH_SEQ_CNT)
 		return -EINVAL;
 
-	mon_buf->last_capture_time = timestamp;
 	return 0;
 }
-
-static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *mon_val)
-{
-	struct qcom_mpam_msc *qcom_msc;
-	void __iomem *mon_base;
-	struct qcom_msc_slc_mon_val *mon_buf;
-
-	mon_buf = (struct qcom_msc_slc_mon_val *)mon_val;
-	if (mon_buf == NULL)
-		return -EINVAL;
-
-	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
-	if (qcom_msc == NULL)
-		return -EINVAL;
-
-	mon_base = (void __iomem *)qcom_msc->mon_base;
-	slc_mon_shared_memread(mon_base, mon_buf);
-	return 0;
-};
 
 static struct mpam_msc_ops slc_msc_ops = {
 	.set_cache_partition = slc_set_cache_partition,
