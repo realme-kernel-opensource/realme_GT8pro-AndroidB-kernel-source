@@ -509,7 +509,7 @@ static void ipi_entry(void *ignore, const char *unused)
  * get_cpus_qos() - Returns the aggrigated PM QoS request.
  * @mask: cpumask of the cpus
  */
-static inline s64 get_cpus_qos(const struct cpumask *mask)
+s64 get_cpus_qos(const struct cpumask *mask)
 {
 	int cpu;
 	s64 n, latency = PM_QOS_CPU_LATENCY_DEFAULT_VALUE * NSEC_PER_USEC;

@@ -278,6 +278,8 @@ static int cluster_power_down(struct lpm_cluster *cluster_gov)
 	struct genpd_governor_data *gd = genpd->gd;
 	int idx = genpd->state_idx;
 	uint32_t residency;
+	s64 cpus_qos;
+	int i;
 
 	if (idx < 0)
 		return 0;
@@ -286,6 +288,13 @@ static int cluster_power_down(struct lpm_cluster *cluster_gov)
 	cluster_gov->entry_idx = idx;
 	trace_cluster_pred_select(genpd->state_idx, gd->next_wakeup, cluster_gov->restrict_idx,
 				  cluster_gov->predicted, cluster_gov->pred_residency);
+
+	cpus_qos = get_cpus_qos(cluster_gov->genpd->cpus);
+	for (i = 0; i < genpd->state_count; i++) {
+		if (idx == i &&
+		    cpus_qos < genpd->states[i].power_on_latency_ns)
+			return -1;
+	}
 
 	if (cluster_gov->use_bias_timer &&
 	    num_possible_cpus() != cpumask_weight(cluster_gov->genpd->cpus)) {

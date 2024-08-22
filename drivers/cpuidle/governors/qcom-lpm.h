@@ -7,6 +7,8 @@
 #ifndef __QCOM_LPM_H__
 #define __QCOM_LPM_H__
 
+#include <linux/cpumask.h>
+
 #define MAX_LPM_CPUS		8
 #define MAXSAMPLES		5
 #define PRED_TIMER_ADD		100
@@ -121,5 +123,6 @@ int create_cluster_sysfs_nodes(struct lpm_cluster *cluster_gov);
 void register_cluster_governor_ops(struct cluster_governor *ops);
 void remove_global_sysfs_nodes(void);
 void remove_cluster_sysfs_nodes(struct lpm_cluster *cluster_gov);
+s64 get_cpus_qos(const struct cpumask *mask);
 
 #endif /* __QCOM_LPM_H__ */
