@@ -88,6 +88,7 @@
 #define LLCC_GPU_LITTLE  80
 #define LLCC_OOBM_NS     81
 #define LLCC_OOBM_S      82
+#define LLCC_CPUSSMPAM   89
 
 #define LLCC_VERSION_2_0_0_0          0x02000000
 #define LLCC_VERSION_2_1_0_0          0x02010000
