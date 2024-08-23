@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2018, 2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/spmi.h>
@@ -23,6 +24,7 @@
 #define PMIC_ARB_DEBUG_STATUS		0x14
 #define PMIC_ARB_DEBUG_WDATA(n)		(0x18 + 4 * (n))
 #define PMIC_ARB_DEBUG_RDATA(n)		(0x38 + 4 * (n))
+#define PMIC_ARB_DEBUG_CMD4		0x60  /* only for PMIC arbiter v8 and above */
 
 /* Transaction status flag bits */
 enum pmic_arb_chnl_status {
@@ -52,18 +54,32 @@ enum pmic_arb_cmd_op_code {
 
 #define PMIC_ARB_TIMEOUT_US		100
 #define PMIC_ARB_MAX_TRANS_BYTES	8
-#define PMIC_ARB_MAX_SID		0xF
+
+struct pmic_arb_debug_data {
+	u8	sid_bw;
+	u8	bus_count;
+	u8	bus_id_reg;
+	u8	bus_id_shift;
+};
 
 /**
  * spmi_pmic_arb_debug - SPMI PMIC Arbiter debug object
  *
  * @addr:		base address of SPMI PMIC arbiter debug module
  * @lock:		lock to synchronize accesses.
+ * @clock:		clock provider of SPMI PMIC arbiter debug module
+ * @data:		HW data of SPMI PMIC arbiter debug module
  */
 struct spmi_pmic_arb_debug {
-	void __iomem		*addr;
-	raw_spinlock_t		lock;
-	struct clk		*clock;
+	void __iomem			*addr;
+	raw_spinlock_t			lock;
+	struct clk			*clock;
+	struct pmic_arb_debug_data	*data;
+};
+
+struct spmi_pmic_arb_debug_bus {
+	struct spmi_pmic_arb_debug	*pmic_arb;
+	u8				id;
 };
 
 static inline void pmic_arb_debug_write(struct spmi_pmic_arb_debug *pa,
@@ -81,7 +97,8 @@ static inline u32 pmic_arb_debug_read(struct spmi_pmic_arb_debug *pa,
 /* pa->lock must be held by the caller. */
 static int pmic_arb_debug_wait_for_done(struct spmi_controller *ctrl)
 {
-	struct spmi_pmic_arb_debug *pa = spmi_controller_get_drvdata(ctrl);
+	struct spmi_pmic_arb_debug_bus *bus = spmi_controller_get_drvdata(ctrl);
+	struct spmi_pmic_arb_debug *pa = bus->pmic_arb;
 	u32 status = 0;
 	u32 timeout = PMIC_ARB_TIMEOUT_US;
 
@@ -120,10 +137,13 @@ static int pmic_arb_debug_wait_for_done(struct spmi_controller *ctrl)
 static int pmic_arb_debug_issue_command(struct spmi_controller *ctrl, u8 opc,
 				u8 sid, u16 addr, size_t len)
 {
-	struct spmi_pmic_arb_debug *pa = spmi_controller_get_drvdata(ctrl);
+	struct spmi_pmic_arb_debug_bus *bus = spmi_controller_get_drvdata(ctrl);
+	struct spmi_pmic_arb_debug *pa = bus->pmic_arb;
 	u16 pid       = (addr >> 8) & 0xFF;
 	u16 offset    = addr & 0xFF;
 	u8 byte_count = len - 1;
+	u8 max_sid = (1 << pa->data->sid_bw) - 1;
+	u8 val;
 
 	if (byte_count >= PMIC_ARB_MAX_TRANS_BYTES) {
 		dev_err(&ctrl->dev, "pmic-arb supports 1 to %d bytes per transaction, but %zu requested\n",
@@ -131,15 +151,23 @@ static int pmic_arb_debug_issue_command(struct spmi_controller *ctrl, u8 opc,
 		return  -EINVAL;
 	}
 
-	if (sid > PMIC_ARB_MAX_SID) {
+	if (sid > max_sid) {
 		dev_err(&ctrl->dev, "pmic-arb supports sid 0 to %u, but %u requested\n",
-			PMIC_ARB_MAX_SID, sid);
+			max_sid, sid);
 		return  -EINVAL;
 	}
 
 	pmic_arb_debug_write(pa, PMIC_ARB_DEBUG_CMD3, offset);
 	pmic_arb_debug_write(pa, PMIC_ARB_DEBUG_CMD2, pid);
-	pmic_arb_debug_write(pa, PMIC_ARB_DEBUG_CMD1, (byte_count << 4) | sid);
+
+	val = (byte_count << pa->data->sid_bw) | sid;
+	if (pa->data->bus_id_reg == PMIC_ARB_DEBUG_CMD1)
+		val |= bus->id << pa->data->bus_id_shift;
+
+	pmic_arb_debug_write(pa, PMIC_ARB_DEBUG_CMD1, val);
+
+	if (pa->data->bus_id_reg == PMIC_ARB_DEBUG_CMD4)
+		pmic_arb_debug_write(pa, PMIC_ARB_DEBUG_CMD4, bus->id << pa->data->bus_id_shift);
 
 	/* Start the transaction */
 	pmic_arb_debug_write(pa, PMIC_ARB_DEBUG_CMD0, opc << 1);
@@ -162,7 +190,8 @@ static int pmic_arb_debug_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid)
 static int pmic_arb_debug_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
 				u16 addr, u8 *buf, size_t len)
 {
-	struct spmi_pmic_arb_debug *pa = spmi_controller_get_drvdata(ctrl);
+	struct spmi_pmic_arb_debug_bus *bus = spmi_controller_get_drvdata(ctrl);
+	struct spmi_pmic_arb_debug *pa = bus->pmic_arb;
 	unsigned long flags;
 	int i, rc;
 
@@ -201,7 +230,8 @@ done:
 static int pmic_arb_debug_write_cmd(struct spmi_controller *ctrl, u8 opc,
 				u8 sid, u16 addr, const u8 *buf, size_t len)
 {
-	struct spmi_pmic_arb_debug *pa = spmi_controller_get_drvdata(ctrl);
+	struct spmi_pmic_arb_debug_bus *bus = spmi_controller_get_drvdata(ctrl);
+	struct spmi_pmic_arb_debug *pa = bus->pmic_arb;
 	unsigned long flags;
 	int i, rc;
 
@@ -243,10 +273,69 @@ static int pmic_arb_debug_write_cmd(struct spmi_controller *ctrl, u8 opc,
 	return rc;
 }
 
+static int spmi_pmic_arb_debug_bus_init(struct spmi_pmic_arb_debug *pa,
+					struct device *parent,
+					struct device_node *node,
+					u8 bus_id)
+{
+	struct spmi_pmic_arb_debug_bus *bus;
+	struct spmi_controller *ctrl;
+
+	ctrl = devm_spmi_controller_alloc(parent, sizeof(*bus));
+	if (!ctrl)
+		return -ENOMEM;
+
+	bus = spmi_controller_get_drvdata(ctrl);
+	bus->pmic_arb = pa;
+	bus->id = bus_id;
+
+	ctrl->dev.of_node = node;
+	ctrl->cmd = pmic_arb_debug_cmd;
+	ctrl->read_cmd = pmic_arb_debug_read_cmd;
+	ctrl->write_cmd = pmic_arb_debug_write_cmd;
+
+	return devm_spmi_controller_add(parent, ctrl);
+}
+
+static int spmi_pmic_arb_debug_bus_register(struct platform_device *pdev,
+					struct spmi_pmic_arb_debug *pa)
+{
+	struct device *dev = &pdev->dev;
+	struct device_node *node = dev->of_node;
+	struct device_node *child;
+	int ret, num = 0;
+	u64 id = 0;
+
+	if (of_device_is_compatible(node, "qcom,spmi-pmic-arb-debug"))
+		return spmi_pmic_arb_debug_bus_init(pa, dev, node, 0);
+
+	for_each_available_child_of_node(node, child) {
+		if (of_node_name_eq(child, "spmi")) {
+			ret = of_property_read_reg(child, 0, &id, NULL);
+			if (ret < 0) {
+				dev_err(&pdev->dev, "no reg property specified\n");
+				return -EINVAL;
+			}
+
+			if (id >= pa->data->bus_count) {
+				dev_err(&pdev->dev, "Unsupported bus index %llu\n", id);
+				return -EINVAL;
+			}
+
+			ret = spmi_pmic_arb_debug_bus_init(pa, dev, child, (u8)id);
+			if (ret)
+				return ret;
+
+			num++;
+		}
+	}
+
+	return 0;
+}
+
 static int spmi_pmic_arb_debug_probe(struct platform_device *pdev)
 {
 	struct spmi_pmic_arb_debug *pa;
-	struct spmi_controller *ctrl;
 	struct resource *res;
 	int rc;
 	u32 fuse_val, fuse_bit;
@@ -290,25 +379,19 @@ static int spmi_pmic_arb_debug_probe(struct platform_device *pdev)
 		}
 	}
 
-
-	ctrl = spmi_controller_alloc(&pdev->dev, sizeof(*pa));
-	if (!ctrl)
+	pa = devm_kzalloc(&pdev->dev, sizeof(*pa), GFP_KERNEL);
+	if (!pa)
 		return -ENOMEM;
-
-	pa = spmi_controller_get_drvdata(ctrl);
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "core");
 	if (!res) {
 		dev_err(&pdev->dev, "core address not specified\n");
-		rc = -EINVAL;
-		goto err_put_ctrl;
+		return -EINVAL;
 	}
 
-	pa->addr = devm_ioremap_resource(&ctrl->dev, res);
-	if (IS_ERR(pa->addr)) {
-		rc = PTR_ERR(pa->addr);
-		goto err_put_ctrl;
-	}
+	pa->addr = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(pa->addr))
+		return PTR_ERR(pa->addr);
 
 	if (of_find_property(pdev->dev.of_node, "clock-names", NULL)) {
 		pa->clock = devm_clk_get(&pdev->dev, "core_clk");
@@ -317,49 +400,47 @@ static int spmi_pmic_arb_debug_probe(struct platform_device *pdev)
 			if (rc != -EPROBE_DEFER)
 				dev_err(&pdev->dev, "unable to request core clock, rc=%d\n",
 					rc);
-			goto err_put_ctrl;
+			return rc;
 		}
 	}
 
-	platform_set_drvdata(pdev, ctrl);
 	raw_spin_lock_init(&pa->lock);
+	pa->data = (struct pmic_arb_debug_data *) device_get_match_data(&pdev->dev);
 
-	ctrl->cmd = pmic_arb_debug_cmd;
-	ctrl->read_cmd = pmic_arb_debug_read_cmd;
-	ctrl->write_cmd = pmic_arb_debug_write_cmd;
-
-	rc = spmi_controller_add(ctrl);
-	if (rc)
-		goto err_put_ctrl;
-
-	dev_info(&ctrl->dev, "SPMI PMIC arbiter debug bus controller added\n");
-
-	return 0;
-
-err_put_ctrl:
-	spmi_controller_put(ctrl);
-	return rc;
+	return spmi_pmic_arb_debug_bus_register(pdev, pa);
 }
 
-static int spmi_pmic_arb_debug_remove(struct platform_device *pdev)
-{
-	struct spmi_controller *ctrl = platform_get_drvdata(pdev);
+static const struct pmic_arb_debug_data pmic_arb_v5 = {
+	4,
+	1,
+	0,
+	0,
+};
 
-	spmi_controller_remove(ctrl);
-	spmi_controller_put(ctrl);
+static const struct pmic_arb_debug_data pmic_arb_v7 = {
+	4,
+	2,
+	PMIC_ARB_DEBUG_CMD1,
+	7,
+};
 
-	return 0;
-}
+static const struct pmic_arb_debug_data pmic_arb_v8 = {
+	5,
+	4,
+	PMIC_ARB_DEBUG_CMD4,
+	0,
+};
 
 static const struct of_device_id spmi_pmic_arb_debug_match_table[] = {
-	{ .compatible = "qcom,spmi-pmic-arb-debug", },
+	{ .compatible = "qcom,spmi-pmic-arb-debug", .data = &pmic_arb_v5 },
+	{ .compatible = "qcom,spmi-pmic-arb-debug-v7", .data = &pmic_arb_v7 },
+	{ .compatible = "qcom,spmi-pmic-arb-debug-v8", .data = &pmic_arb_v8 },
 	{},
 };
 MODULE_DEVICE_TABLE(of, spmi_pmic_arb_debug_match_table);
 
 static struct platform_driver spmi_pmic_arb_debug_driver = {
 	.probe		= spmi_pmic_arb_debug_probe,
-	.remove		= spmi_pmic_arb_debug_remove,
 	.driver		= {
 		.name	= "spmi_pmic_arb_debug",
 		.of_match_table = spmi_pmic_arb_debug_match_table,
