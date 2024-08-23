@@ -10,6 +10,7 @@ def define_vienna():
         "drivers/irqchip/qcom-pdc.ko",
         "drivers/pinctrl/qcom/pinctrl-msm.ko",
         "drivers/pinctrl/qcom/pinctrl-vienna.ko",
+        "drivers/regulator/stub-regulator.ko",
         "drivers/soc/qcom/cmd-db.ko",
         "drivers/soc/qcom/qcom_rpmh.ko",
     ]
