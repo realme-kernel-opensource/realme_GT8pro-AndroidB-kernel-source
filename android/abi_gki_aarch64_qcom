@@ -2430,6 +2430,7 @@
   of_platform_populate
   of_property_count_elems_of_size
   of_property_match_string
+  of_property_read_reg
   of_property_read_string
   of_property_read_string_helper
   of_property_read_u32_index
