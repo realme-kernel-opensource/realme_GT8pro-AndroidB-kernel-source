@@ -919,7 +919,7 @@ TRACE_EVENT(walt_newidle_balance,
 		__field(bool, help_min_cap)
 		__field(u64, avg_idle)
 		__field(bool, enough_idle)
-		__field(int, overload)
+		__field(int, overloaded)
 		__field(int, pid)
 	),
 
@@ -933,16 +933,16 @@ TRACE_EVENT(walt_newidle_balance,
 		__entry->help_min_cap	= help_min_cap;
 		__entry->avg_idle	= cpu_rq(this_cpu)->avg_idle;
 		__entry->enough_idle	= enough_idle;
-		__entry->overload	= cpu_rq(this_cpu)->rd->overload;
+		__entry->overloaded	= cpu_rq(this_cpu)->rd->overloaded;
 		__entry->pid		= p ? p->pid : -1;
 	),
 
-	TP_printk("cpu=%d busy_cpu=%d pulled=%d nr_running=%u rt_nr_running=%u nr_iowait=%d help_min_cap=%d avg_idle=%llu enough_idle=%d overload=%d pid=%d",
+	TP_printk("cpu=%d busy_cpu=%d pulled=%d nr_running=%u rt_nr_running=%u nr_iowait=%d help_min_cap=%d avg_idle=%llu enough_idle=%d overloaded=%d pid=%d",
 			__entry->cpu, __entry->busy_cpu, __entry->pulled,
 			__entry->nr_running, __entry->rt_nr_running,
 			__entry->nr_iowait, __entry->help_min_cap,
 			__entry->avg_idle, __entry->enough_idle,
-			__entry->overload, __entry->pid)
+			__entry->overloaded, __entry->pid)
 );
 
 TRACE_EVENT(walt_lb_cpu_util,
@@ -1027,7 +1027,7 @@ TRACE_EVENT(sched_cpu_util,
 			__entry->lowest_mask	= 0;
 		else
 			__entry->lowest_mask	= cpumask_bits(lowest_mask)[0];
-		__entry->thermal_pressure	= arch_scale_thermal_pressure(cpu);
+		__entry->thermal_pressure	= arch_scale_hw_pressure(cpu);
 	),
 
 	TP_printk("cpu=%d nr_running=%d cpu_util=%ld cpu_util_cum=%ld capacity_curr=%lu capacity=%lu capacity_orig=%lu idle_exit_latency=%u irqload=%llu online=%u, inactive=%u, halted=%u, reserved=%u, high_irq_load=%u nr_rtg_hp=%u prs_gprs=%llu lowest_mask=0x%x thermal_pressure=%lu",
@@ -1603,7 +1603,7 @@ TRACE_EVENT(update_cpu_capacity,
 		__entry->rq_cpu_capacity_orig = rq_cpu_capacity_orig;
 		__entry->arch_capacity = arch_scale_cpu_capacity(cpu);
 		__entry->thermal_cap = arch_scale_cpu_capacity(cpu) -
-					arch_scale_thermal_pressure(cpu);
+					arch_scale_hw_pressure(cpu);
 		__entry->max_freq = cluster->max_freq;
 		__entry->max_possible_freq = cluster->max_possible_freq;
 	),

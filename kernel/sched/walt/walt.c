@@ -3899,7 +3899,7 @@ static inline void irq_work_restrict_to_mig_clusters(cpumask_t *lock_cpus)
 void update_cpu_capacity_helper(int cpu)
 {
 	unsigned long fmax_capacity = arch_scale_cpu_capacity(cpu);
-	unsigned long thermal_pressure = arch_scale_thermal_pressure(cpu);
+	unsigned long thermal_pressure = arch_scale_hw_pressure(cpu);
 	unsigned long thermal_cap, old;
 	struct walt_sched_cluster *cluster;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
@@ -4711,7 +4711,7 @@ bool should_oscillate(void)
 	int cpu;
 	int is_only_one_cpu_active = 0;
 	int this_cpu = raw_smp_processor_id();
-	int thermal_pressure = arch_scale_thermal_pressure(this_cpu);
+	int thermal_pressure = arch_scale_hw_pressure(this_cpu);
 
 	if (!thermal_pressure)
 		return false;

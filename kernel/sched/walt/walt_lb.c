@@ -896,7 +896,7 @@ static void walt_newidle_balance(struct rq *this_rq,
 	if (walt_balance_rt(this_rq) || this_rq->nr_running)
 		goto rt_pulled;
 
-	if (!force_overload && !READ_ONCE(this_rq->rd->overload))
+	if (!force_overload && !READ_ONCE(this_rq->rd->overloaded))
 		goto repin;
 
 	if (atomic_read(&this_rq->nr_iowait) && !enough_idle)
