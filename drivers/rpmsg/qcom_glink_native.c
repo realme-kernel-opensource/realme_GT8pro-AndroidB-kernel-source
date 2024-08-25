@@ -350,6 +350,8 @@ static void qcom_glink_channel_release(struct kref *ref)
 	}
 
 	idr_for_each_entry(&channel->liids, tmp, iid) {
+		if (!tmp->size)
+			tmp->data = NULL;
 		kfree(tmp->data);
 		kfree(tmp);
 	}
