@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/scmi_c1dcvs.h>
@@ -154,6 +154,7 @@ static int scmi_c1dcvs_protocol_init(const struct scmi_protocol_handle *ph)
 
 static const struct scmi_protocol scmi_c1dcvs = {
 	.id = SCMI_C1DCVS_PROTOCOL,
+	.vendor_id = "qcom",
 	.owner = THIS_MODULE,
 	.instance_init = &scmi_c1dcvs_protocol_init,
 	.ops = &c1dcvs_config_ops,

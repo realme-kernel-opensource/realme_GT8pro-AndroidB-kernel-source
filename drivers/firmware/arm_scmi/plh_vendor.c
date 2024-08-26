@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/scmi_plh.h>
@@ -165,6 +165,7 @@ static int scmi_plh_vendor_protocol_init(const struct scmi_protocol_handle *ph)
 
 static const struct scmi_protocol scmi_plh_vendor = {
 	.id = SCMI_PROTOCOL_PLH,
+	.vendor_id = "qcom",
 	.owner = THIS_MODULE,
 	.instance_init = &scmi_plh_vendor_protocol_init,
 	.ops = &plh_proto_ops,

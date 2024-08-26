@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "common.h"
@@ -138,6 +138,7 @@ static int qcom_scmi_vendor_protocol_init(const struct scmi_protocol_handle *ph)
 
 static const struct scmi_protocol qcom_scmi_vendor = {
 	.id = QCOM_SCMI_VENDOR_PROTOCOL,
+	.vendor_id = "qcom",
 	.owner = THIS_MODULE,
 	.instance_init = &qcom_scmi_vendor_protocol_init,
 	.ops = &qcom_proto_ops,

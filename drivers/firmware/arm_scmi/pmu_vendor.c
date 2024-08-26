@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/scmi_pmu.h>
@@ -97,6 +97,7 @@ static int scmi_pmu_protocol_init(const struct scmi_protocol_handle *ph)
 
 static const struct scmi_protocol scmi_pmu = {
 	.id = SCMI_PMU_PROTOCOL,
+	.vendor_id = "qcom",
 	.owner = THIS_MODULE,
 	.instance_init = &scmi_pmu_protocol_init,
 	.ops = &pmu_config_ops,
