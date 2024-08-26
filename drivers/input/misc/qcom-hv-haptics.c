@@ -1526,6 +1526,7 @@ static int haptics_set_vmax_mv(struct haptics_chip *chip, u32 vmax_mv)
 {
 	int rc = 0;
 	u32 nominal_ohm, vmax_hdrm_mv;
+	u8 cl_vdrv_ctl;
 
 	mutex_lock(&chip->vmax_lock);
 	if (vmax_mv > chip->clamped_vmax_mv)
@@ -1565,11 +1566,18 @@ static int haptics_set_vmax_mv(struct haptics_chip *chip, u32 vmax_mv)
 			goto unlock;
 		}
 
+		rc = haptics_read(chip, chip->ptn_addr_base,
+				HAP_PTN_CL_VDRIVE_CTL_REG, &cl_vdrv_ctl, 1);
+		if (rc < 0) {
+			dev_err(chip->dev, "Read CL_VDRIVE_CTL failed, rc=%d\n", rc);
+			goto unlock;
+		}
+
 		rc = haptics_masked_write(chip, chip->ptn_addr_base,
 				HAP_PTN_CL_VDRIVE_CTL_REG,
 				EN_CL_VDRIVE_BIT, 0);
 		if (rc < 0) {
-			dev_err(chip->dev, "disable CL_VDRIVE failed, rc=%d\n", rc);
+			dev_err(chip->dev, "disable CL_VDRIVE_CTL failed, rc=%d\n", rc);
 			goto unlock;
 		}
 
@@ -1591,11 +1599,10 @@ static int haptics_set_vmax_mv(struct haptics_chip *chip, u32 vmax_mv)
 			goto unlock;
 		}
 
-		rc = haptics_masked_write(chip, chip->ptn_addr_base,
-				HAP_PTN_CL_VDRIVE_CTL_REG,
-				EN_CL_VDRIVE_BIT, EN_CL_VDRIVE_BIT);
+		rc = haptics_write(chip, chip->ptn_addr_base,
+				HAP_PTN_CL_VDRIVE_CTL_REG, &cl_vdrv_ctl, 1);
 		if (rc < 0)
-			dev_err(chip->dev, "enable CL_VDRIVE failed, rc=%d\n", rc);
+			dev_err(chip->dev, "restore CL_VDRIVE_CTL failed, rc=%d\n", rc);
 	}
 
 unlock:
