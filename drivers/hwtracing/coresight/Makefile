@@ -54,4 +54,5 @@ obj-$(CONFIG_CORESIGHT_TRACE_NOC) += coresight-trace-noc.o
 obj-$(CONFIG_CORESIGHT_TGU) += coresight-tgu.o
 obj-$(CONFIG_CORESIGHT_CSR) += coresight-csr.o
 obj-$(CONFIG_CORESIGHT_DUMMY) += coresight-dummy.o
+obj-$(CONFIG_CORESIGHT_REMOTE_ETM) += coresight-remote-etm.o coresight-tmc-sec.o
 obj-$(CONFIG_CORESIGHT_QMI) += coresight-qmi.o
