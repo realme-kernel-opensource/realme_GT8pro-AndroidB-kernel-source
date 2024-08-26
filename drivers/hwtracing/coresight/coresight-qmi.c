@@ -422,13 +422,13 @@ static struct platform_driver coresight_qmi_driver = {
 	},
 };
 
-int __init coresight_qmi_init(void)
+static int __init coresight_qmi_init(void)
 {
 	return platform_driver_register(&coresight_qmi_driver);
 }
 module_init(coresight_qmi_init);
 
-void __exit coresight_qmi_exit(void)
+static void __exit coresight_qmi_exit(void)
 {
 	platform_driver_unregister(&coresight_qmi_driver);
 }
