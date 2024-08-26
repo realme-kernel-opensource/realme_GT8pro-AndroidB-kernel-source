@@ -275,4 +275,14 @@ config CORESIGHT_DUMMY
 
 	  To compile this driver as a module, choose M here: the module will be
 	  called coresight-dummy.
+
+config CORESIGHT_QMI
+	tristate "CORESIGHT QMI support"
+	help
+	  Enables support for sending command to subsystem via QMI. this is
+	  primarily used for enabling remote ETM, assigning etr, assigning ATID
+	  for subsystem source.
+
+	  To compile this driver as a module, choose M here: the module will be
+	  called coresight-dummy.
 endif
