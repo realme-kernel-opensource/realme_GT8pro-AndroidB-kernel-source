@@ -171,7 +171,7 @@ static int slc_client_query(struct device *dev, void *msc_partid, void *msc_part
 	struct slc_client_info *client_info;
 
 	query = (struct msc_query *)msc_partid;
-	client_info = (struct slc_client_info *) msc_partconfig;
+	client_info = (struct slc_client_info *)msc_partconfig;
 
 	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
 	if (qcom_msc == NULL)
@@ -189,7 +189,7 @@ static int slc_get_cache_partition(struct device *dev, void *msc_partid, void *m
 	struct slc_client_capability *slc_client_cap;
 	struct qcom_slc_gear_val *gear_config;
 
-	query = (struct msc_query *) msc_partid;
+	query = (struct msc_query *)msc_partid;
 	qcom_msc = slc_capability_check(dev, query);
 	if (qcom_msc == NULL)
 		return -EINVAL;
@@ -213,7 +213,7 @@ static int slc_get_cache_partition_capability(struct device *dev, void *msc_part
 	struct slc_partid_capability *slc_partid_capability;
 	struct slc_client_capability *slc_client_cap;
 
-	query = (struct msc_query *) msc_partid;
+	query = (struct msc_query *)msc_partid;
 	qcom_msc = slc_capability_check(dev, query);
 	if (qcom_msc == NULL)
 		return -EINVAL;
@@ -236,12 +236,11 @@ static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id)
 
 	for (mon_idx = 0; mon_idx < SLC_NUM_PARTIDS; mon_idx++) {
 		part_info = &mon_mem->data[mon_idx].part_info;
-		if ((client_id ==  part_info->client_id) &&
-				(part_id ==  part_info->part_id))
+		if ((client_id == part_info->client_id) &&
+				(part_id == part_info->part_id))
 			break;
 	}
 
-	//avinashp
 	if (mon_idx == SLC_NUM_PARTIDS)
 		return -EINVAL;
 
@@ -253,23 +252,15 @@ static struct qcom_mpam_msc *slc_config_request_check(struct device *dev, struct
 {
 	struct qcom_mpam_msc *qcom_msc;
 	struct qcom_slc_capability *slc_capability;
-	int client_idx, partid_idx, mon_idx;
-	void __iomem *mon_base;
+	int mon_idx;
 
 	qcom_msc = slc_capability_check(dev, query);
 	if (qcom_msc == NULL)
 		return NULL;
 
-	mon_base = (void __iomem *)qcom_msc->mon_base;
-	if (mon_base == NULL)
-		return NULL;
-
-	client_idx = query->client_id;
-	partid_idx = query->part_id;
 	slc_capability =  (struct qcom_slc_capability *)qcom_msc->msc_capability;
-
-	mon_idx = mon_idx_lookup(mon_base, client_idx, partid_idx);
-	if ((mon_idx < 0) && mon_idx >= SLC_NUM_PARTIDS)
+	mon_idx = mon_idx_lookup(qcom_msc->mon_base, query->client_id, query->part_id);
+	if (mon_idx < 0)
 		return NULL;
 
 	switch (mon_cfg->slc_mon_function) {
@@ -322,23 +313,15 @@ static int update_mon_stats(struct device *dev, struct msc_query *query,
 {
 	struct qcom_mpam_msc *qcom_msc;
 	struct qcom_slc_capability *slc_capability;
-	int client_idx, partid_idx, mon_idx;
-	void __iomem *mon_base;
+	int mon_idx;
 
 	qcom_msc = slc_capability_check(dev, query);
 	if (qcom_msc == NULL)
 		return -EINVAL;
 
-	mon_base = (void __iomem *)qcom_msc->mon_base;
-	if (mon_base == NULL)
-		return -EINVAL;
-
-	client_idx = query->client_id;
-	partid_idx = query->part_id;
 	slc_capability =  (struct qcom_slc_capability *)qcom_msc->msc_capability;
-
-	mon_idx = mon_idx_lookup(mon_base, client_idx, partid_idx);
-	if ((mon_idx < 0) && mon_idx >= SLC_NUM_PARTIDS)
+	mon_idx = mon_idx_lookup(qcom_msc->mon_base, query->client_id, query->part_id);
+	if (mon_idx < 0)
 		return -EINVAL;
 
 	switch (mon_cfg->slc_mon_function) {
@@ -467,9 +450,7 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *mon_va
 		return -EINVAL;
 
 	mon_base = (void __iomem *)qcom_msc->mon_base;
-
 	slc_mon_shared_memread(mon_base, mon_buf);
-
 	return 0;
 };
 
@@ -599,7 +580,7 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "qcom,dev-index Node failed!\n");
 
-	if (val > 255)
+	if (val > U8_MAX)
 		return dev_err_probe(&pdev->dev, -EINVAL, "dev-index wrong value failed!\n");
 
 	qcom_msc->qcom_msc_id.idx = val;
