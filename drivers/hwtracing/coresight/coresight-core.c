@@ -899,6 +899,20 @@ static void coresight_clear_default_sink(struct coresight_device *csdev)
 	}
 }
 
+int coresight_validate_sink(struct coresight_device *source,
+					struct coresight_device *sink)
+{
+
+
+	if (of_coresight_secure_node(sink) && !of_coresight_secure_node(source)) {
+		dev_err(&sink->dev, "dont support this source: %s\n",
+				dev_name(&source->dev));
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static void coresight_device_release(struct device *dev)
 {
 	struct coresight_device *csdev = to_coresight_device(dev);

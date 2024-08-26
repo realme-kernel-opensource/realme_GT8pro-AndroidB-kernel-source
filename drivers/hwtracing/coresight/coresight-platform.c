@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -197,6 +198,17 @@ static const char *of_coresight_get_device_name(struct device *dev)
 	of_property_read_string(dev->of_node, "device-name", &name);
 
 	return name;
+}
+
+/*
+ * of_coresight_secure: Check whether the device is a secure node
+ *
+ * Return true, it means this is a secure node.
+ */
+bool of_coresight_secure_node(struct coresight_device *csdev)
+{
+	return of_property_read_bool(csdev->dev.parent->of_node,
+					"qcom,secure-component");
 }
 
 /*
