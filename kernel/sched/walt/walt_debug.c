@@ -9,6 +9,7 @@
 #include <trace/hooks/sched.h>
 
 #include "walt.h"
+#include "walt_debug.h"
 
 static void android_rvh_schedule_bug(void *unused, void *unused2)
 {
@@ -17,6 +18,12 @@ static void android_rvh_schedule_bug(void *unused, void *unused2)
 
 static int __init walt_debug_init(void)
 {
+	int ret;
+
+	ret = preemptirq_long_init();
+	if (ret)
+		return ret;
+
 	register_trace_android_rvh_schedule_bug(android_rvh_schedule_bug, NULL);
 
 	return 0;
