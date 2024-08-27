@@ -62,6 +62,17 @@ struct ufs_qcom_phy_vreg {
 	bool enabled;
 };
 
+struct phy_tuning_entry {
+	u32 device_id;
+	u32 reg_offset;
+	u32 tuning_val;
+};
+
+struct ufs_qcom_phy_tuning {
+	u32 count;
+	struct phy_tuning_entry *entries;
+};
+
 struct ufs_qcom_phy {
 	struct list_head list;
 	struct device *dev;
@@ -115,6 +126,9 @@ struct ufs_qcom_phy {
 
 	enum phy_mode mode;
 	int submode;
+
+	u32 device_id;
+	struct ufs_qcom_phy_tuning tuning;
 
 	/* Pre-Sil UFS PHY Card type detection */
 	u32 soc_emulation_type;

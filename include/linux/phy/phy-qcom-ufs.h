@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2013-2021, Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef PHY_QCOM_UFS_H_
@@ -18,6 +18,7 @@ void ufs_qcom_phy_set_src_clk_h8_enter(struct phy *generic_phy);
 void ufs_qcom_phy_set_src_clk_h8_exit(struct phy *generic_phy);
 void ufs_qcom_phy_save_controller_version(struct phy *generic_phy,
 					u8 major, u16 minor, u16 step);
+void ufs_qcom_phy_set_device_id(struct phy *generic_phy, u32 vendor_id);
 
 #endif /* PHY_QCOM_UFS_H_ */
 
