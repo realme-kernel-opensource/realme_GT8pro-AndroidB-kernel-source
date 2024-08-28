@@ -748,7 +748,7 @@ void qcom_scm_pas_metadata_release(struct qcom_scm_pas_metadata *ctx,
 {
 	struct device *dma_dev = __scm->dev;
 
-	if (!ctx->ptr)
+	if (!ctx || !ctx->ptr)
 		return;
 
 	if (dev_32bit)
