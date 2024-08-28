@@ -329,9 +329,11 @@ struct crm_mgr {
  * @base:               Base address of the CRM device.
  * @hw_drvs:            Controller for each HW DRV
  * @num_hw_drvs:        Number of HW DRV controllers in the CRM device
+ * @max_hw_drv:         Max id of HW DRV controller in use
  * @num_channels:       Number of Channels, Applicable only for HW DRV
  * @sw_drvs:            Controller for each SW DRV
  * @num_sw_drvs:        Number of SW DRV controllers in the CRM device
+ * @max_sw_drv:         Max id of SW DRV controller in use
  * @crmb_mgr:           Controller for CRMB device.
  * @crmb_pt_mgr:        Controller for CRMB_PT device.
  * @crmc_mgr:           Controller for CRMC device.
@@ -347,9 +349,11 @@ struct crm_drv_top {
 	void __iomem *base;
 	struct crm_drv *hw_drvs;
 	int num_hw_drvs;
+	int max_hw_drv;
 	u32 num_channels;
 	struct crm_drv *sw_drvs;
 	int num_sw_drvs;
+	int max_sw_drv;
 	struct crm_mgr crmb_mgr;
 	struct crm_mgr crmb_pt_mgr;
 	struct crm_mgr crmc_mgr;
@@ -483,15 +487,26 @@ static struct crm_drv *get_crm_drv(const struct device *dev, enum crm_drv_type d
 				   u32 drv_id)
 {
 	struct crm_drv_top *crm;
+	int i, num_drvs;
+	struct crm_drv *drvs;
 
 	if (!dev)
 		return NULL;
 
 	crm = dev_get_drvdata(dev);
-	if (drv_type == CRM_HW_DRV && drv_id < crm->num_hw_drvs)
-		return &crm->hw_drvs[drv_id];
-	else if (drv_type == CRM_SW_DRV && drv_id < crm->num_sw_drvs)
-		return &crm->sw_drvs[drv_id];
+
+	if (drv_type == CRM_HW_DRV) {
+		num_drvs = crm->num_hw_drvs;
+		drvs = crm->hw_drvs;
+	} else {
+		num_drvs = crm->num_sw_drvs;
+		drvs = crm->sw_drvs;
+	}
+
+	for (i = 0; i < num_drvs; i++) {
+		if (drv_id == drvs[i].drv_id)
+			return &drvs[i];
+	}
 
 	return NULL;
 }
@@ -1613,15 +1628,14 @@ static int crm_probe_drvs(struct crm_drv_top *crm, struct device_node *dn)
 {
 	u32 crm_ver, major_ver, minor_ver;
 	u32 crm_cfg, crm_cfg_2;
-	int num_hw_drvs, num_sw_drvs;
 
 	crm_ver = readl_relaxed(crm->common + crm->desc->cfg_regs[CRM_VERSION]);
 	major_ver = field_get(crm->desc->cfg_regs[MAJOR_VERSION], crm_ver);
 	minor_ver = field_get(crm->desc->cfg_regs[MINOR_VERSION], crm_ver);
 
 	crm_cfg = readl_relaxed(crm->common + crm->desc->cfg_regs[CRM_CFG_PARAM_1]);
-	num_hw_drvs = field_get(crm->desc->cfg_regs[NUM_HW_DRVS], crm_cfg);
-	num_sw_drvs = field_get(crm->desc->cfg_regs[NUM_SW_DRVS], crm_cfg);
+	crm->max_hw_drv = field_get(crm->desc->cfg_regs[NUM_HW_DRVS], crm_cfg);
+	crm->max_sw_drv = field_get(crm->desc->cfg_regs[NUM_SW_DRVS], crm_cfg);
 	crm->num_channels = field_get(crm->desc->cfg_regs[NUM_CHANNELS], crm_cfg);
 
 	crm->num_hw_drvs = of_property_count_u32_elems(dn, "qcom,hw-drv-ids");
@@ -1646,8 +1660,8 @@ skip_hw_drvs:
 		return PTR_ERR(crm->sw_drvs);
 
 skip_sw_drvs:
-	if (crm->num_sw_drvs > num_sw_drvs ||
-	    crm->num_hw_drvs > num_hw_drvs ||
+	if (crm->num_sw_drvs > crm->max_sw_drv ||
+	    crm->num_hw_drvs > crm->max_hw_drv ||
 	    (!crm->num_sw_drvs && !crm->num_hw_drvs))
 		return -EINVAL;
 
