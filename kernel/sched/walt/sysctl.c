@@ -121,6 +121,10 @@ unsigned int load_sync_low_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_low_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_high_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_high_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int sysctl_pipeline_special_task_util_thres;
+unsigned int sysctl_pipeline_non_special_task_util_thres;
+unsigned int sysctl_pipeline_pin_thres_low_pct;
+unsigned int sysctl_pipeline_pin_thres_high_pct;
 
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
@@ -1862,6 +1866,42 @@ static struct ctl_table walt_table[] = {
 		.procname	= "sched_lrpb_active_ms",
 		.data		= &sysctl_sched_lrpb_active_ms,
 		.maxlen		= sizeof(unsigned int) * NUM_PIPELINE_BUSY_THRES,
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_pipeline_special_task_util_thres",
+		.data		= &sysctl_pipeline_special_task_util_thres,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_pipeline_non_special_task_util_thres",
+		.data		= &sysctl_pipeline_non_special_task_util_thres,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_pipeline_pin_thres_low_pct",
+		.data		= &sysctl_pipeline_pin_thres_low_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_pipeline_pin_thres_high_pct",
+		.data		= &sysctl_pipeline_pin_thres_high_pct,
+		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,

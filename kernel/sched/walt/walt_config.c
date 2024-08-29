@@ -101,6 +101,12 @@ void walt_config(void)
 	soc_feat_set(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 	soc_feat_set(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
 	soc_feat_set(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
+
+	sysctl_pipeline_special_task_util_thres = 100;
+	sysctl_pipeline_non_special_task_util_thres = 200;
+	sysctl_pipeline_pin_thres_low_pct = 50;
+	sysctl_pipeline_pin_thres_high_pct = 60;
+
 	/* return if socinfo is not available */
 	if (!name)
 		return;

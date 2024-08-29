@@ -13,10 +13,11 @@ int pipeline_nr;
 
 static DEFINE_RAW_SPINLOCK(heavy_lock);
 static struct walt_task_struct *heavy_wts[MAX_NR_PIPELINE];
+bool pipeline_pinning;
 
 static inline int pipeline_demand(struct walt_task_struct *wts)
 {
-	return wts->coloc_demand;
+	return scale_time_to_util(wts->coloc_demand);
 }
 
 int add_pipeline(struct walt_task_struct *wts)
@@ -173,6 +174,26 @@ static inline void pipeline_reset_unisolation_state(void)
 	}
 }
 
+static inline bool should_pipeline_pin_special(void)
+{
+	if (!pipeline_special_task)
+		return false;
+	if (!heavy_wts[MAX_NR_PIPELINE - 1])
+		return false;
+	if (pipeline_demand(heavy_wts[0]) <= sysctl_pipeline_special_task_util_thres)
+		return true;
+	if (pipeline_demand(heavy_wts[1]) <= sysctl_pipeline_non_special_task_util_thres)
+		return true;
+	if (pipeline_pinning && (pipeline_demand(heavy_wts[0]) <=
+		mult_frac(pipeline_demand(heavy_wts[1]), sysctl_pipeline_pin_thres_low_pct, 100)))
+		return false;
+	if (!pipeline_pinning && (pipeline_demand(heavy_wts[0]) <=
+		mult_frac(pipeline_demand(heavy_wts[1]), sysctl_pipeline_pin_thres_high_pct, 100)))
+		return false;
+
+	return true;
+}
+
 cpumask_t last_available_big_cpus = CPU_MASK_NONE;
 int have_heavy_list;
 bool find_heaviest_topapp(u64 window_start)
@@ -273,7 +294,7 @@ bool find_heaviest_topapp(u64 window_start)
 				total_util += pipeline_demand(heavy_wts[i]);
 		}
 
-		if (scale_time_to_util((u64)total_util) < sysctl_sched_pipeline_util_thres)
+		if (total_util < sysctl_sched_pipeline_util_thres)
 			heavy_wts[MAX_NR_PIPELINE - 1] = NULL;
 	}
 
@@ -303,13 +324,20 @@ bool find_heaviest_topapp(u64 window_start)
 	cpumask_and(&last_available_big_cpus, cpu_online_mask, &cpus_for_pipeline);
 	cpumask_andnot(&last_available_big_cpus, &last_available_big_cpus, cpu_halt_mask);
 
-	/* Ensure the special task is only pinned if there are 3 auto pipeline tasks */
-	if (pipeline_special_task && heavy_wts[MAX_NR_PIPELINE - 1]) {
+	/*
+	 * Ensure the special task is only pinned if there are 3 auto pipeline tasks and
+	 * check certain demand conditions between special pipeline task and the largest
+	 * non-special pipeline task.
+	 */
+	if (should_pipeline_pin_special()) {
+		pipeline_pinning = true;
 		heavy_wts[0]->pipeline_cpu =
 			cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
 		heavy_wts[0]->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
 		if (cpumask_test_cpu(heavy_wts[0]->pipeline_cpu, &last_available_big_cpus))
 			cpumask_clear_cpu(heavy_wts[0]->pipeline_cpu, &last_available_big_cpus);
+	} else {
+		pipeline_pinning = false;
 	}
 
 	for (i = 0; i < MAX_NR_PIPELINE; i++) {
@@ -317,7 +345,7 @@ bool find_heaviest_topapp(u64 window_start)
 		if (!wts)
 			continue;
 
-		if (i == 0 && pipeline_special_task && heavy_wts[MAX_NR_PIPELINE - 1])
+		if (i == 0 && pipeline_pinning)
 			continue;
 
 		if (wts->pipeline_cpu != -1) {
@@ -358,7 +386,7 @@ bool find_heaviest_topapp(u64 window_start)
 		for (i = 0; i < MAX_NR_PIPELINE; i++) {
 			if (heavy_wts[i] != NULL)
 				trace_sched_pipeline_tasks(AUTO_PIPELINE, i, heavy_wts[i],
-						have_heavy_list, total_util);
+						have_heavy_list, total_util, pipeline_pinning);
 		}
 	}
 
@@ -479,7 +507,7 @@ void rearrange_heavy(u64 window_start, bool force)
 		return;
 	}
 
-	if (pipeline_special_task)
+	if (pipeline_pinning)
 		return;
 
 	if (delay_rearrange(window_start, AUTO_PIPELINE, force))
@@ -595,7 +623,7 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 		for (i = 0; i < WALT_NR_CPUS; i++) {
 			if (pipeline_wts[i] != NULL)
 				trace_sched_pipeline_tasks(MANUAL_PIPELINE, i, pipeline_wts[i],
-						pipeline_nr, 0);
+						pipeline_nr, 0, 0);
 		}
 	}
 

@@ -1523,4 +1523,8 @@ extern unsigned int load_sync_low_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_low_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_high_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_high_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
+extern unsigned int sysctl_pipeline_special_task_util_thres;
+extern unsigned int sysctl_pipeline_non_special_task_util_thres;
+extern unsigned int sysctl_pipeline_pin_thres_low_pct;
+extern unsigned int sysctl_pipeline_pin_thres_high_pct;
 #endif /* _WALT_H */
