@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/seq_file.h>
@@ -143,7 +143,7 @@ static unsigned long cpu_util_without(int cpu, struct task_struct *p)
 	 * clamp to the maximum CPU capacity to ensure consistency with
 	 * the cpu_util call.
 	 */
-	return min_t(unsigned long, util, capacity_orig_of(cpu));
+	return min_t(unsigned long, util, arch_scale_cpu_capacity(cpu));
 }
 
 static inline bool walt_task_skip_min_cpu(struct task_struct *p)
@@ -378,7 +378,7 @@ static void walt_find_best_target(struct sched_domain *sd,
 		cpumask_and(&visit_cpus, p->cpus_ptr,
 				&cpu_array[order_index][cluster]);
 		for_each_cpu(i, &visit_cpus) {
-			unsigned long capacity_orig = capacity_orig_of(i);
+			unsigned long capacity_orig = arch_scale_cpu_capacity(i);
 			unsigned long wake_cpu_util, new_cpu_util, new_util_cuml;
 			long spare_cap;
 			unsigned int idle_exit_latency = UINT_MAX;
@@ -586,7 +586,7 @@ cpu_util_next_walt(int cpu, struct task_struct *p, int dst_cpu)
 		util += task_util(p);
 	}
 
-	return min_t(unsigned long, util, capacity_orig_of(cpu));
+	return min_t(unsigned long, util, arch_scale_cpu_capacity(cpu));
 }
 
 static inline u64
@@ -824,7 +824,7 @@ static inline bool select_cpu_same_energy(int cpu, int best_cpu, int prev_cpu)
 
 static inline unsigned int capacity_spare_of(int cpu)
 {
-	return capacity_orig_of(cpu) - cpu_util(cpu);
+	return arch_scale_cpu_capacity(cpu) - cpu_util(cpu);
 }
 
 static DEFINE_PER_CPU(cpumask_t, energy_cpus);

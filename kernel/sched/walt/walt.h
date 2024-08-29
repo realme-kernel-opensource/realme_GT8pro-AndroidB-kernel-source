@@ -479,18 +479,13 @@ int waltgov_register(void);
 extern void walt_lb_init(void);
 extern unsigned int walt_rotation_enabled;
 
-static inline unsigned long capacity_orig_of(int cpu)
-{
-	return 1024;
-}
-
 /*
  * Returns the current capacity of cpu after applying both
  * cpu and freq scaling.
  */
 static inline unsigned long capacity_curr_of(int cpu)
 {
-	unsigned long max_cap = capacity_orig_of(cpu);
+	unsigned long max_cap = arch_scale_cpu_capacity(cpu);
 	unsigned long scale_freq = arch_scale_freq_capacity(cpu);
 
 	return cap_scale(max_cap, scale_freq);
@@ -508,7 +503,7 @@ static inline unsigned long cpu_util(int cpu)
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
 	u64 walt_cpu_util = wrq->walt_stats.cumulative_runnable_avg_scaled;
 
-	return min_t(unsigned long, walt_cpu_util, capacity_orig_of(cpu));
+	return min_t(unsigned long, walt_cpu_util, arch_scale_cpu_capacity(cpu));
 }
 
 static inline unsigned long cpu_util_cum(int cpu)
@@ -649,7 +644,7 @@ static inline unsigned long capacity_of(int cpu)
 
 static inline bool __cpu_overutilized(int cpu, int delta)
 {
-	return (capacity_orig_of(cpu) * 1024) <
+	return (arch_scale_cpu_capacity(cpu) * 1024) <
 		((cpu_util(cpu) + delta) * sched_capacity_margin_up[cpu]);
 }
 
@@ -846,7 +841,7 @@ static bool check_for_higher_capacity(int cpu1, int cpu2)
 	if (is_min_possible_cluster_cpu(cpu1) && cpu_partial_halted(cpu2))
 		return false;
 
-	return capacity_orig_of(cpu1) > capacity_orig_of(cpu2);
+	return arch_scale_cpu_capacity(cpu1) > arch_scale_cpu_capacity(cpu2);
 }
 
 /* Migration margins for topapp */
@@ -856,7 +851,7 @@ static inline bool task_fits_capacity(struct task_struct *p,
 					int dst_cpu)
 {
 	unsigned int margin;
-	unsigned long capacity = capacity_orig_of(dst_cpu);
+	unsigned long capacity = arch_scale_cpu_capacity(dst_cpu);
 
 	/*
 	 * Derive upmigration/downmigrate margin wrt the src/dest CPU.
@@ -922,7 +917,7 @@ static inline unsigned int cpu_max_possible_freq(int cpu)
 
 static inline unsigned int cpu_max_freq(int cpu)
 {
-	return mult_frac(cpu_max_possible_freq(cpu), capacity_orig_of(cpu),
+	return mult_frac(cpu_max_possible_freq(cpu), arch_scale_cpu_capacity(cpu),
 			 arch_scale_cpu_capacity(cpu));
 }
 
