@@ -1806,13 +1806,13 @@ TRACE_EVENT(sched_pipeline_tasks,
 		memcpy(__entry->comm, wts_to_ts(heavy_wts)->comm, TASK_COMM_LEN);
 		__entry->pid		= wts_to_ts(heavy_wts)->pid;
 		__entry->demand_scaled	= heavy_wts->demand_scaled;
-		__entry->coloc_demand	= heavy_wts->coloc_demand;
+		__entry->coloc_demand	= scale_time_to_util(heavy_wts->coloc_demand);
 		__entry->pipeline_cpu	= heavy_wts->pipeline_cpu;
 		__entry->low_latency	= heavy_wts->low_latency;
 		__entry->nr		= nr;
 		__entry->special_pid	= pipeline_special_task ? pipeline_special_task->pid : -1;
 		__entry->util_thres	= sysctl_sched_pipeline_util_thres;
-		__entry->total_util	= total_util;
+		__entry->total_util	= scale_time_to_util(total_util);
 	),
 
 	TP_printk("type=%d index=%d pid=%d comm=%s demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d special_pid=%d util_thres=%u total_util=%u",
