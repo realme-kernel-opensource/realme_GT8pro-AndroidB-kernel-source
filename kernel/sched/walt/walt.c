@@ -5164,6 +5164,8 @@ static void android_rvh_sched_exec(void *unused, bool *cond)
 
 static void android_rvh_build_perf_domains(void *unused, bool *eas_check)
 {
+	if (unlikely(walt_disabled))
+		return;
 	*eas_check = true;
 }
 
