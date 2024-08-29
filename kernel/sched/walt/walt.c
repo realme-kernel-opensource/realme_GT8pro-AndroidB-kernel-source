@@ -4386,9 +4386,8 @@ void update_cpu_capacity_helper(int cpu)
 {
 	unsigned long fmax_capacity = arch_scale_cpu_capacity(cpu);
 	unsigned long thermal_pressure = arch_scale_thermal_pressure(cpu);
-	unsigned long thermal_cap, old;
+	unsigned long thermal_cap, old, temp;
 	struct walt_sched_cluster *cluster;
-	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
 
 	if (unlikely(walt_disabled))
 		return;
@@ -4408,11 +4407,10 @@ void update_cpu_capacity_helper(int cpu)
 					 cluster->max_possible_freq);
 
 	old = capacity_orig_of(cpu);
-	wrq->cpu_capacity_orig = min(fmax_capacity, thermal_cap);
+	temp = min(fmax_capacity, thermal_cap);
 
-	if (old != wrq->cpu_capacity_orig)
-		trace_update_cpu_capacity(cpu, fmax_capacity, wrq->cpu_capacity_orig);
-
+	if (old != temp)
+		trace_update_cpu_capacity(cpu, fmax_capacity, temp);
 }
 
 /*
@@ -4709,7 +4707,6 @@ static void walt_sched_init_rq(struct rq *rq)
 	wrq->high_irqload = false;
 	wrq->task_exec_scale = 1024;
 	wrq->push_task = NULL;
-	wrq->cpu_capacity_orig = arch_scale_cpu_capacity(cpu_of(rq));
 
 	wrq->curr_runnable_sum = wrq->prev_runnable_sum = 0;
 	wrq->nt_curr_runnable_sum = wrq->nt_prev_runnable_sum = 0;

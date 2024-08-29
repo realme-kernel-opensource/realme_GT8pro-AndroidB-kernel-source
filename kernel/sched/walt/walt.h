@@ -164,7 +164,6 @@ struct walt_rq {
 	int                     num_mvp_tasks;
 	u64			latest_clock;
 	u32			enqueue_counter;
-	unsigned long	cpu_capacity_orig;
 };
 
 DECLARE_PER_CPU(struct walt_rq, walt_rq);
@@ -482,9 +481,7 @@ extern unsigned int walt_rotation_enabled;
 
 static inline unsigned long capacity_orig_of(int cpu)
 {
-	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
-
-	return wrq->cpu_capacity_orig;
+	return 1024;
 }
 
 /*
