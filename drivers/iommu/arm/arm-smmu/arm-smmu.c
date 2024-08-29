@@ -2603,7 +2603,18 @@ static void arm_smmu_get_resv_regions(struct device *dev,
 				      struct list_head *head)
 {
 	struct iommu_resv_region *region;
+	struct device_node *np;
 	int prot = IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO;
+
+	if (dev->of_node) {
+		np = of_parse_phandle(dev->of_node, "qcom,iommu-group", 0);
+		if (!np)
+			np = dev->of_node;
+
+		if (of_property_present(np, "qcom,iommu-dma-addr-pool"))
+			WARN(1, "%s: qcom,iommu-dma-addr-pool is deprecated. Switch to using iommu-addresses.",
+				dev_name(dev));
+	}
 
 	region = iommu_alloc_resv_region(MSI_IOVA_BASE, MSI_IOVA_LENGTH,
 					 prot, IOMMU_RESV_SW_MSI, GFP_KERNEL);
@@ -2613,8 +2624,6 @@ static void arm_smmu_get_resv_regions(struct device *dev,
 	list_add_tail(&region->list, head);
 
 	iommu_dma_get_resv_regions(dev, head);
-
-	qcom_iommu_generate_resv_regions(dev, head);
 }
 
 static int arm_smmu_def_domain_type(struct device *dev)

@@ -103,10 +103,6 @@ struct qcom_iommu_ops {
 int register_qcom_iommu_ops(struct qcom_iommu_ops *ops);
 
 struct device_node *qcom_iommu_group_parse_phandle(struct device *dev);
-int qcom_iommu_generate_dma_regions(struct device *dev,
-				    struct list_head *head);
-void qcom_iommu_generate_resv_regions(struct device *dev,
-				      struct list_head *list);
 int qcom_iommu_get_fast_iova_range(struct device *dev,
 				   dma_addr_t *ret_iova_base,
 				   dma_addr_t *ret_iova_end);
