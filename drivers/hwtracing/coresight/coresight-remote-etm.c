@@ -294,7 +294,7 @@ static int remote_etm_probe(struct platform_device *pdev)
 	dev_info(dev, "Remote ETM initialized\n");
 
 	if (boot_enable)
-		coresight_enable(drvdata->csdev);
+		coresight_enable_sysfs(drvdata->csdev);
 
 	return 0;
 
@@ -329,13 +329,13 @@ static struct platform_driver remote_etm_driver = {
 	},
 };
 
-int __init remote_etm_init(void)
+static int __init remote_etm_init(void)
 {
 	return platform_driver_register(&remote_etm_driver);
 }
 module_init(remote_etm_init);
 
-void __exit remote_etm_exit(void)
+static void __exit remote_etm_exit(void)
 {
 	platform_driver_unregister(&remote_etm_driver);
 }
