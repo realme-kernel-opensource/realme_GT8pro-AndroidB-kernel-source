@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -9,8 +9,9 @@
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
 
+#include <linux/gunyah/gh_errno.h>
 #include <linux/gunyah/gh_dbl.h>
-#include <linux/gunyah_rsc_mgr.h>
+#include <linux/gunyah.h>
 #include "hcall_dbl.h"
 
 struct gh_dbl_desc {
@@ -148,7 +149,7 @@ int gh_dbl_read_and_clean(void *dbl_client_desc, gh_dbl_flags_t *clear_flags,
 	gh_ret = gh_hcall_dbl_recv(cap_table_entry->rx_cap_id,
 					*clear_flags, &recv_resp);
 
-	ret = gh_error_remap(gh_ret);
+	ret = gh_remap_error(gh_ret);
 	if (ret != 0)
 		pr_err("%s: Hypercall failed, ret = %d\n", __func__, gh_ret);
 	else
@@ -191,7 +192,7 @@ int gh_dbl_set_mask(void *dbl_client_desc, gh_dbl_flags_t enable_mask,
 	gh_ret = gh_hcall_dbl_mask(cap_table_entry->rx_cap_id,
 						enable_mask, ack_mask);
 
-	ret = gh_error_remap(gh_ret);
+	ret = gh_remap_error(gh_ret);
 	if (ret != 0)
 		pr_err("%s: Hypercall failed ret = %d\n", __func__, gh_ret);
 
@@ -235,7 +236,7 @@ int gh_dbl_send(void *dbl_client_desc, gh_dbl_flags_t *newflags,
 	gh_ret = gh_hcall_dbl_send(cap_table_entry->tx_cap_id, *newflags,
 								&send_resp);
 
-	ret = gh_error_remap(gh_ret);
+	ret = gh_remap_error(gh_ret);
 	if (ret != 0)
 		pr_err("%s: Hypercall failed ret = %d\n", __func__, gh_ret);
 	else
@@ -272,7 +273,7 @@ int gh_dbl_reset(void *dbl_client_desc, const unsigned long flags)
 
 	gh_ret = gh_hcall_dbl_reset(cap_table_entry->rx_cap_id);
 
-	ret = gh_error_remap(gh_ret);
+	ret = gh_remap_error(gh_ret);
 	if (ret != 0)
 		pr_err("%s: Hypercall failed ret = %d\n", __func__, gh_ret);
 

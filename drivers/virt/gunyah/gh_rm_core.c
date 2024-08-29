@@ -24,7 +24,10 @@
 #include <linux/gunyah/gh_msgq.h>
 #include <linux/gunyah/gh_common.h>
 #include <linux/gunyah/gh_rm_drv.h>
+#include <linux/gunyah.h>
 
+#include "rsc_mgr.h"
+#include "gh_guest_pops.h"
 #include "gh_rm_drv_private.h"
 
 #define GH_RM_MAX_NUM_FRAGMENTS	62
@@ -100,7 +103,7 @@ SRCU_NOTIFIER_HEAD_STATIC(gh_rm_notifier);
 
 /* non-static: used by gh_rm_iface */
 bool gh_rm_core_initialized;
-struct gh_rm *rm;
+struct gunyah_rm *rm;
 
 static void gh_rm_get_svm_res_work_fn(struct work_struct *work);
 static DECLARE_WORK(gh_rm_get_svm_res_work, gh_rm_get_svm_res_work_fn);
@@ -1078,7 +1081,7 @@ static int gh_rm_drv_probe(struct auxiliary_device *adev,
 		return -ENXIO;
 	}
 
-	ret = gh_rm_notifier_register(rm, &gh_rm_core_notifier_blk);
+	ret = gunyah_rm_notifier_register(rm, &gh_rm_core_notifier_blk);
 	if (ret) {
 		dev_err(dev, "Failed to register to RM notifier %d\n", ret);
 		return ret;
@@ -1089,13 +1092,18 @@ static int gh_rm_drv_probe(struct auxiliary_device *adev,
 	if (ret < 0 && ret != -ENODEV)
 		return ret;
 
+	ret = gh_guest_pops_init();
+	if (ret < 0 && ret != -ENODEV)
+		return ret;
+
 	return 0;
 
 }
 
 static void gh_rm_drv_remove(struct auxiliary_device *adev)
 {
-	gh_rm_notifier_unregister(rm, &gh_rm_core_notifier_blk);
+	gh_guest_pops_remove();
+	gunyah_rm_notifier_unregister(rm, &gh_rm_core_notifier_blk);
 	idr_destroy(&gh_rm_call_idr);
 }
 

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _UAPI_LINUX_GUNYAH
@@ -154,7 +154,7 @@ struct gh_userspace_memory_region {
  * Input: gh_userspace_memory_region structure for userspace memory descripion
  * Return: 0 if success, -errno on failure
  */
-#define GH_VM_SET_USER_MEM_REGION		_IOW(GH_IOCTL_TYPE, 0x45, \
+#define GH_VM_SET_USER_MEM_REGION_FW		_IOW(GH_IOCTL_TYPE, 0x45, \
 								struct gh_userspace_memory_region)
 /*
  *  IOCTLs supported by virtio backend driver

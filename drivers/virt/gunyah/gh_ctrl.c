@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "gunyah: " fmt
@@ -14,6 +14,7 @@
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/gunyah.h>
+#include <linux/gunyah/gh_errno.h>
 #include "hcall_ctrl.h"
 
 #define QC_HYP_SMCCC_CALL_UID                                                  \
@@ -148,18 +149,18 @@ static void gh_control_hyp_uart(int val)
 
 static int gh_dbgfs_trace_class_set(void *data, u64 val)
 {
-	return gh_error_remap(gh_hcall_trace_update_class_flags(val, 0, NULL));
+	return gh_remap_error(gh_hcall_trace_update_class_flags(val, 0, NULL));
 }
 
 static int gh_dbgfs_trace_class_clear(void *data, u64 val)
 {
-	return gh_error_remap(gh_hcall_trace_update_class_flags(0, val, NULL));
+	return gh_remap_error(gh_hcall_trace_update_class_flags(0, val, NULL));
 }
 
 static int gh_dbgfs_trace_class_get(void *data, u64 *val)
 {
 	*val = 0;
-	return gh_error_remap(gh_hcall_trace_update_class_flags(0, 0, val));
+	return gh_remap_error(gh_hcall_trace_update_class_flags(0, 0, val));
 }
 
 static int gh_dbgfs_hyp_uart_set(void *data, u64 val)

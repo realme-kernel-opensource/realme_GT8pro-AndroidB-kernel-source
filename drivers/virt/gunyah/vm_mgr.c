@@ -3,40 +3,46 @@
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#define pr_fmt(fmt) "gh_vm_mgr: " fmt
+#define pr_fmt(fmt) "gunyah_vm_mgr: " fmt
 
 #include <linux/anon_inodes.h>
 #include <linux/compat.h>
 #include <linux/file.h>
-#include <linux/gunyah_rsc_mgr.h>
-#include <linux/gunyah_vm_mgr.h>
 #include <linux/miscdevice.h>
-#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/xarray.h>
 
 #include <uapi/linux/gunyah.h>
 
+#include "rsc_mgr.h"
 #include "vm_mgr.h"
 
-static void gh_vm_free(struct work_struct *work);
+#define GUNYAH_VM_ADDRSPACE_LABEL 0
+// "To" extent for memory private to guest
+#define GUNYAH_VM_MEM_EXTENT_GUEST_PRIVATE_LABEL 0
+// "From" extent for memory shared with guest
+#define GUNYAH_VM_MEM_EXTENT_HOST_SHARED_LABEL 1
+// "To" extent for memory shared with the guest
+#define GUNYAH_VM_MEM_EXTENT_GUEST_SHARED_LABEL 3
+// "From" extent for memory private to guest
+#define GUNYAH_VM_MEM_EXTENT_HOST_PRIVATE_LABEL 2
 
-static DEFINE_XARRAY(gh_vm_functions);
+static DEFINE_XARRAY(gunyah_vm_functions);
 
-static void gh_vm_put_function(struct gh_vm_function *fn)
+static void gunyah_vm_put_function(struct gunyah_vm_function *fn)
 {
 	module_put(fn->mod);
 }
 
-static struct gh_vm_function *gh_vm_get_function(u32 type)
+static struct gunyah_vm_function *gunyah_vm_get_function(u32 type)
 {
-	struct gh_vm_function *fn;
+	struct gunyah_vm_function *fn;
 
-	fn = xa_load(&gh_vm_functions, type);
+	fn = xa_load(&gunyah_vm_functions, type);
 	if (!fn) {
 		request_module("ghfunc:%d", type);
 
-		fn = xa_load(&gh_vm_functions, type);
+		fn = xa_load(&gunyah_vm_functions, type);
 	}
 
 	if (!fn || !try_module_get(fn->mod))
@@ -45,36 +51,38 @@ static struct gh_vm_function *gh_vm_get_function(u32 type)
 	return fn;
 }
 
-static void gh_vm_remove_function_instance(struct gh_vm_function_instance *inst)
+static void
+gunyah_vm_remove_function_instance(struct gunyah_vm_function_instance *inst)
 	__must_hold(&inst->ghvm->fn_lock)
 {
 	inst->fn->unbind(inst);
 	list_del(&inst->vm_list);
-	gh_vm_put_function(inst->fn);
+	gunyah_vm_put_function(inst->fn);
 	kfree(inst->argp);
 	kfree(inst);
 }
 
-static void gh_vm_remove_functions(struct gh_vm *ghvm)
+static void gunyah_vm_remove_functions(struct gunyah_vm *ghvm)
 {
-	struct gh_vm_function_instance *inst, *iiter;
+	struct gunyah_vm_function_instance *inst, *iiter;
 
 	mutex_lock(&ghvm->fn_lock);
 	list_for_each_entry_safe(inst, iiter, &ghvm->functions, vm_list) {
-		gh_vm_remove_function_instance(inst);
+		gunyah_vm_remove_function_instance(inst);
 	}
 	mutex_unlock(&ghvm->fn_lock);
 }
 
-static long gh_vm_add_function_instance(struct gh_vm *ghvm, struct gh_fn_desc *f)
+static long gunyah_vm_add_function_instance(struct gunyah_vm *ghvm,
+					    struct gunyah_fn_desc *f)
 {
-	struct gh_vm_function_instance *inst;
+	struct gunyah_vm_function_instance *inst;
 	void __user *argp;
 	long r = 0;
 
-	if (f->arg_size > GH_FN_MAX_ARG_SIZE) {
+	if (f->arg_size > GUNYAH_FN_MAX_ARG_SIZE) {
 		dev_err_ratelimited(ghvm->parent, "%s: arg_size > %d\n",
-					__func__, GH_FN_MAX_ARG_SIZE);
+				    __func__, GUNYAH_FN_MAX_ARG_SIZE);
 		return -EINVAL;
 	}
 
@@ -97,7 +105,7 @@ static long gh_vm_add_function_instance(struct gh_vm *ghvm, struct gh_fn_desc *f
 		}
 	}
 
-	inst->fn = gh_vm_get_function(f->type);
+	inst->fn = gunyah_vm_get_function(f->type);
 	if (IS_ERR(inst->fn)) {
 		r = PTR_ERR(inst->fn);
 		goto free_arg;
@@ -110,7 +118,7 @@ static long gh_vm_add_function_instance(struct gh_vm *ghvm, struct gh_fn_desc *f
 	r = inst->fn->bind(inst);
 	if (r < 0) {
 		mutex_unlock(&ghvm->fn_lock);
-		gh_vm_put_function(inst->fn);
+		gunyah_vm_put_function(inst->fn);
 		goto free_arg;
 	}
 
@@ -125,72 +133,79 @@ free:
 	return r;
 }
 
-static long gh_vm_rm_function_instance(struct gh_vm *ghvm, struct gh_fn_desc *f)
+static long gunyah_vm_rm_function_instance(struct gunyah_vm *ghvm,
+					   struct gunyah_fn_desc *f)
 {
-	struct gh_vm_function_instance *inst, *iter;
+	struct gunyah_vm_function_instance *inst, *iter;
 	void __user *user_argp;
-	void *argp;
+	void *argp __free(kfree) = NULL;
 	long r = 0;
+
+	if (f->arg_size) {
+		argp = kzalloc(f->arg_size, GFP_KERNEL);
+		if (!argp)
+			return -ENOMEM;
+
+		user_argp = u64_to_user_ptr(f->arg);
+		if (copy_from_user(argp, user_argp, f->arg_size))
+			return -EFAULT;
+	}
 
 	r = mutex_lock_interruptible(&ghvm->fn_lock);
 	if (r)
 		return r;
 
-	if (f->arg_size) {
-		argp = kzalloc(f->arg_size, GFP_KERNEL);
-		if (!argp) {
-			r = -ENOMEM;
-			goto out;
+	r = -ENOENT;
+	list_for_each_entry_safe(inst, iter, &ghvm->functions, vm_list) {
+		if (inst->fn->type == f->type &&
+		    inst->fn->compare(inst, argp, f->arg_size)) {
+			gunyah_vm_remove_function_instance(inst);
+			r = 0;
 		}
-
-		user_argp = u64_to_user_ptr(f->arg);
-		if (copy_from_user(argp, user_argp, f->arg_size)) {
-			r = -EFAULT;
-			kfree(argp);
-			goto out;
-		}
-
-		r = -ENOENT;
-		list_for_each_entry_safe(inst, iter, &ghvm->functions, vm_list) {
-			if (inst->fn->type == f->type &&
-				inst->fn->compare(inst, argp, f->arg_size)) {
-				gh_vm_remove_function_instance(inst);
-				r = 0;
-			}
-		}
-
-		kfree(argp);
 	}
 
-out:
 	mutex_unlock(&ghvm->fn_lock);
 	return r;
 }
 
-int gh_vm_function_register(struct gh_vm_function *fn)
+int gunyah_vm_function_register(struct gunyah_vm_function *fn)
 {
 	if (!fn->bind || !fn->unbind)
 		return -EINVAL;
 
-	return xa_err(xa_store(&gh_vm_functions, fn->type, fn, GFP_KERNEL));
+	return xa_err(xa_store(&gunyah_vm_functions, fn->type, fn, GFP_KERNEL));
 }
-EXPORT_SYMBOL_GPL(gh_vm_function_register);
+EXPORT_SYMBOL_GPL(gunyah_vm_function_register);
 
-void gh_vm_function_unregister(struct gh_vm_function *fn)
+void gunyah_vm_function_unregister(struct gunyah_vm_function *fn)
 {
-	xa_erase(&gh_vm_functions, fn->type);
+	/* Expecting unregister to only come when unloading a module */
+	WARN_ON(fn->mod && module_refcount(fn->mod));
+	xa_erase(&gunyah_vm_functions, fn->type);
 }
-EXPORT_SYMBOL_GPL(gh_vm_function_unregister);
+EXPORT_SYMBOL_GPL(gunyah_vm_function_unregister);
 
-int gh_vm_add_resource_ticket(struct gh_vm *ghvm, struct gh_vm_resource_ticket *ticket)
+static bool gunyah_vm_resource_ticket_populate_noop(
+	struct gunyah_vm_resource_ticket *ticket, struct gunyah_resource *ghrsc)
 {
-	struct gh_vm_resource_ticket *iter;
-	struct gh_resource *ghrsc, *rsc_iter;
+	return true;
+}
+static void gunyah_vm_resource_ticket_unpopulate_noop(
+	struct gunyah_vm_resource_ticket *ticket, struct gunyah_resource *ghrsc)
+{
+}
+
+int gunyah_vm_add_resource_ticket(struct gunyah_vm *ghvm,
+				  struct gunyah_vm_resource_ticket *ticket)
+{
+	struct gunyah_vm_resource_ticket *iter;
+	struct gunyah_resource *ghrsc, *rsc_iter;
 	int ret = 0;
 
 	mutex_lock(&ghvm->resources_lock);
 	list_for_each_entry(iter, &ghvm->resource_tickets, vm_list) {
-		if (iter->resource_type == ticket->resource_type && iter->label == ticket->label) {
+		if (iter->resource_type == ticket->resource_type &&
+		    iter->label == ticket->label) {
 			ret = -EEXIST;
 			goto out;
 		}
@@ -205,7 +220,8 @@ int gh_vm_add_resource_ticket(struct gh_vm *ghvm, struct gh_vm_resource_ticket *
 	INIT_LIST_HEAD(&ticket->resources);
 
 	list_for_each_entry_safe(ghrsc, rsc_iter, &ghvm->resources, list) {
-		if (ghrsc->type == ticket->resource_type && ghrsc->rm_label == ticket->label) {
+		if (ghrsc->type == ticket->resource_type &&
+		    ghrsc->rm_label == ticket->label) {
 			if (ticket->populate(ticket, ghrsc))
 				list_move(&ghrsc->list, &ticket->resources);
 		}
@@ -214,13 +230,14 @@ out:
 	mutex_unlock(&ghvm->resources_lock);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(gh_vm_add_resource_ticket);
+EXPORT_SYMBOL_GPL(gunyah_vm_add_resource_ticket);
 
-void gh_vm_remove_resource_ticket(struct gh_vm *ghvm, struct gh_vm_resource_ticket *ticket)
+static void
+__gunyah_vm_remove_resource_ticket(struct gunyah_vm *ghvm,
+				   struct gunyah_vm_resource_ticket *ticket)
 {
-	struct gh_resource *ghrsc, *iter;
+	struct gunyah_resource *ghrsc, *iter;
 
-	mutex_lock(&ghvm->resources_lock);
 	list_for_each_entry_safe(ghrsc, iter, &ticket->resources, list) {
 		ticket->unpopulate(ticket, ghrsc);
 		list_move(&ghrsc->list, &ghvm->resources);
@@ -228,17 +245,26 @@ void gh_vm_remove_resource_ticket(struct gh_vm *ghvm, struct gh_vm_resource_tick
 
 	module_put(ticket->owner);
 	list_del(&ticket->vm_list);
+}
+
+void gunyah_vm_remove_resource_ticket(struct gunyah_vm *ghvm,
+				      struct gunyah_vm_resource_ticket *ticket)
+{
+	mutex_lock(&ghvm->resources_lock);
+	__gunyah_vm_remove_resource_ticket(ghvm, ticket);
 	mutex_unlock(&ghvm->resources_lock);
 }
-EXPORT_SYMBOL_GPL(gh_vm_remove_resource_ticket);
+EXPORT_SYMBOL_GPL(gunyah_vm_remove_resource_ticket);
 
-static void gh_vm_add_resource(struct gh_vm *ghvm, struct gh_resource *ghrsc)
+static void gunyah_vm_add_resource(struct gunyah_vm *ghvm,
+				   struct gunyah_resource *ghrsc)
 {
-	struct gh_vm_resource_ticket *ticket;
+	struct gunyah_vm_resource_ticket *ticket;
 
 	mutex_lock(&ghvm->resources_lock);
 	list_for_each_entry(ticket, &ghvm->resource_tickets, vm_list) {
-		if (ghrsc->type == ticket->resource_type && ghrsc->rm_label == ticket->label) {
+		if (ghrsc->type == ticket->resource_type &&
+		    ghrsc->rm_label == ticket->label) {
 			if (ticket->populate(ticket, ghrsc))
 				list_add(&ghrsc->list, &ticket->resources);
 			else
@@ -255,30 +281,34 @@ found:
 	mutex_unlock(&ghvm->resources_lock);
 }
 
-static void gh_vm_clean_resources(struct gh_vm *ghvm)
+static void gunyah_vm_clean_resources(struct gunyah_vm *ghvm)
 {
-	struct gh_vm_resource_ticket *ticket, *titer;
-	struct gh_resource *ghrsc, *riter;
+	struct gunyah_vm_resource_ticket *ticket, *titer;
+	struct gunyah_resource *ghrsc, *riter;
 
 	mutex_lock(&ghvm->resources_lock);
 	if (!list_empty(&ghvm->resource_tickets)) {
 		dev_warn(ghvm->parent, "Dangling resource tickets:\n");
-		list_for_each_entry_safe(ticket, titer, &ghvm->resource_tickets, vm_list) {
+		list_for_each_entry_safe(ticket, titer, &ghvm->resource_tickets,
+					 vm_list) {
 			dev_warn(ghvm->parent, "  %pS\n", ticket->populate);
-			gh_vm_remove_resource_ticket(ghvm, ticket);
+			__gunyah_vm_remove_resource_ticket(ghvm, ticket);
 		}
 	}
 
 	list_for_each_entry_safe(ghrsc, riter, &ghvm->resources, list) {
-		gh_rm_free_resource(ghrsc);
+		gunyah_rm_free_resource(ghrsc);
 	}
 	mutex_unlock(&ghvm->resources_lock);
 }
 
-static int _gh_vm_io_handler_compare(const struct rb_node *node, const struct rb_node *parent)
+static int _gunyah_vm_io_handler_compare(const struct rb_node *node,
+					 const struct rb_node *parent)
 {
-	struct gh_vm_io_handler *n = container_of(node, struct gh_vm_io_handler, node);
-	struct gh_vm_io_handler *p = container_of(parent, struct gh_vm_io_handler, node);
+	struct gunyah_vm_io_handler *n =
+		container_of(node, struct gunyah_vm_io_handler, node);
+	struct gunyah_vm_io_handler *p =
+		container_of(parent, struct gunyah_vm_io_handler, node);
 
 	if (n->addr < p->addr)
 		return -1;
@@ -304,22 +334,24 @@ static int _gh_vm_io_handler_compare(const struct rb_node *node, const struct rb
 	return 0;
 }
 
-static int gh_vm_io_handler_compare(struct rb_node *node, const struct rb_node *parent)
+static int gunyah_vm_io_handler_compare(struct rb_node *node,
+					const struct rb_node *parent)
 {
-	return _gh_vm_io_handler_compare(node, parent);
+	return _gunyah_vm_io_handler_compare(node, parent);
 }
 
-static int gh_vm_io_handler_find(const void *key, const struct rb_node *node)
+static int gunyah_vm_io_handler_find(const void *key,
+				     const struct rb_node *node)
 {
-	const struct gh_vm_io_handler *k = key;
+	const struct gunyah_vm_io_handler *k = key;
 
-	return _gh_vm_io_handler_compare(&k->node, node);
+	return _gunyah_vm_io_handler_compare(&k->node, node);
 }
 
-static struct gh_vm_io_handler *gh_vm_mgr_find_io_hdlr(struct gh_vm *ghvm, u64 addr,
-								u64 len, u64 data)
+static struct gunyah_vm_io_handler *
+gunyah_vm_mgr_find_io_hdlr(struct gunyah_vm *ghvm, u64 addr, u64 len, u64 data)
 {
-	struct gh_vm_io_handler key = {
+	struct gunyah_vm_io_handler key = {
 		.addr = addr,
 		.len = len,
 		.datamatch = true,
@@ -327,22 +359,23 @@ static struct gh_vm_io_handler *gh_vm_mgr_find_io_hdlr(struct gh_vm *ghvm, u64 a
 	};
 	struct rb_node *node;
 
-	node = rb_find(&key, &ghvm->mmio_handler_root, gh_vm_io_handler_find);
+	node = rb_find(&key, &ghvm->mmio_handler_root,
+		       gunyah_vm_io_handler_find);
 	if (!node)
 		return NULL;
 
-	return container_of(node, struct gh_vm_io_handler, node);
+	return container_of(node, struct gunyah_vm_io_handler, node);
 }
 
-int gh_vm_mmio_write(struct gh_vm *ghvm, u64 addr, u32 len, u64 data)
+int gunyah_vm_mmio_write(struct gunyah_vm *ghvm, u64 addr, u32 len, u64 data)
 {
-	struct gh_vm_io_handler *io_hdlr = NULL;
+	struct gunyah_vm_io_handler *io_hdlr = NULL;
 	int ret;
 
 	down_read(&ghvm->mmio_handler_lock);
-	io_hdlr = gh_vm_mgr_find_io_hdlr(ghvm, addr, len, data);
+	io_hdlr = gunyah_vm_mgr_find_io_hdlr(ghvm, addr, len, data);
 	if (!io_hdlr || !io_hdlr->ops || !io_hdlr->ops->write) {
-		ret = -ENODEV;
+		ret = -ENOENT;
 		goto out;
 	}
 
@@ -352,40 +385,44 @@ out:
 	up_read(&ghvm->mmio_handler_lock);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(gh_vm_mmio_write);
+EXPORT_SYMBOL_GPL(gunyah_vm_mmio_write);
 
-int gh_vm_add_io_handler(struct gh_vm *ghvm, struct gh_vm_io_handler *io_hdlr)
+int gunyah_vm_add_io_handler(struct gunyah_vm *ghvm,
+			     struct gunyah_vm_io_handler *io_hdlr)
 {
 	struct rb_node *found;
 
-	if (io_hdlr->datamatch && (!io_hdlr->len || io_hdlr->len > sizeof(io_hdlr->data)))
+	if (io_hdlr->datamatch &&
+	    (!io_hdlr->len || io_hdlr->len > sizeof(io_hdlr->data)))
 		return -EINVAL;
 
 	down_write(&ghvm->mmio_handler_lock);
-	found = rb_find_add(&io_hdlr->node, &ghvm->mmio_handler_root, gh_vm_io_handler_compare);
+	found = rb_find_add(&io_hdlr->node, &ghvm->mmio_handler_root,
+			    gunyah_vm_io_handler_compare);
 	up_write(&ghvm->mmio_handler_lock);
 
 	return found ? -EEXIST : 0;
 }
-EXPORT_SYMBOL_GPL(gh_vm_add_io_handler);
+EXPORT_SYMBOL_GPL(gunyah_vm_add_io_handler);
 
-void gh_vm_remove_io_handler(struct gh_vm *ghvm, struct gh_vm_io_handler *io_hdlr)
+void gunyah_vm_remove_io_handler(struct gunyah_vm *ghvm,
+				 struct gunyah_vm_io_handler *io_hdlr)
 {
 	down_write(&ghvm->mmio_handler_lock);
 	rb_erase(&io_hdlr->node, &ghvm->mmio_handler_root);
 	up_write(&ghvm->mmio_handler_lock);
 }
-EXPORT_SYMBOL_GPL(gh_vm_remove_io_handler);
+EXPORT_SYMBOL_GPL(gunyah_vm_remove_io_handler);
 
-static int gh_vm_rm_notification_status(struct gh_vm *ghvm, void *data)
+static int gunyah_vm_rm_notification_status(struct gunyah_vm *ghvm, void *data)
 {
-	struct gh_rm_vm_status_payload *payload = data;
+	struct gunyah_rm_vm_status_payload *payload = data;
 
 	if (le16_to_cpu(payload->vmid) != ghvm->vmid)
 		return NOTIFY_OK;
 
 	/* All other state transitions are synchronous to a corresponding RM call */
-	if (payload->vm_status == GH_RM_VM_STATUS_RESET) {
+	if (payload->vm_status == GUNYAH_RM_VM_STATUS_RESET) {
 		down_write(&ghvm->status_lock);
 		ghvm->vm_status = payload->vm_status;
 		up_write(&ghvm->status_lock);
@@ -395,209 +432,370 @@ static int gh_vm_rm_notification_status(struct gh_vm *ghvm, void *data)
 	return NOTIFY_DONE;
 }
 
-static int gh_vm_rm_notification_exited(struct gh_vm *ghvm, void *data)
+static int gunyah_vm_rm_notification_exited(struct gunyah_vm *ghvm, void *data)
 {
-	struct gh_rm_vm_exited_payload *payload = data;
+	struct gunyah_rm_vm_exited_payload *payload = data;
 
 	if (le16_to_cpu(payload->vmid) != ghvm->vmid)
 		return NOTIFY_OK;
 
 	down_write(&ghvm->status_lock);
-	ghvm->vm_status = GH_RM_VM_STATUS_EXITED;
+	ghvm->vm_status = GUNYAH_RM_VM_STATUS_EXITED;
 	ghvm->exit_info.type = le16_to_cpu(payload->exit_type);
 	ghvm->exit_info.reason_size = le32_to_cpu(payload->exit_reason_size);
 	memcpy(&ghvm->exit_info.reason, payload->exit_reason,
-		min(GH_VM_MAX_EXIT_REASON_SIZE, ghvm->exit_info.reason_size));
+	       min(GUNYAH_VM_MAX_EXIT_REASON_SIZE,
+		   ghvm->exit_info.reason_size));
 	up_write(&ghvm->status_lock);
 	wake_up(&ghvm->vm_status_wait);
 
 	return NOTIFY_DONE;
 }
 
-static int gh_vm_rm_notification(struct notifier_block *nb, unsigned long action, void *data)
+static int gunyah_vm_rm_notification(struct notifier_block *nb,
+				     unsigned long action, void *data)
 {
-	struct gh_vm *ghvm = container_of(nb, struct gh_vm, nb);
+	struct gunyah_vm *ghvm = container_of(nb, struct gunyah_vm, nb);
 
 	switch (action) {
-	case GH_RM_NOTIFICATION_VM_STATUS:
-		return gh_vm_rm_notification_status(ghvm, data);
-	case GH_RM_NOTIFICATION_VM_EXITED:
-		return gh_vm_rm_notification_exited(ghvm, data);
+	case GUNYAH_RM_NOTIFICATION_VM_STATUS:
+		return gunyah_vm_rm_notification_status(ghvm, data);
+	case GUNYAH_RM_NOTIFICATION_VM_EXITED:
+		return gunyah_vm_rm_notification_exited(ghvm, data);
 	default:
 		return NOTIFY_OK;
 	}
 }
 
-static void gh_vm_stop(struct gh_vm *ghvm)
+static void gunyah_vm_stop(struct gunyah_vm *ghvm)
 {
 	int ret;
 
-	down_write(&ghvm->status_lock);
-	if (ghvm->vm_status == GH_RM_VM_STATUS_RUNNING) {
-		ret = gh_rm_vm_stop(ghvm->rm, ghvm->vmid);
+	if (ghvm->vm_status == GUNYAH_RM_VM_STATUS_RUNNING) {
+		ret = gunyah_rm_vm_stop(ghvm->rm, ghvm->vmid);
 		if (ret)
 			dev_warn(ghvm->parent, "Failed to stop VM: %d\n", ret);
 	}
-	up_write(&ghvm->status_lock);
 
-	wait_event(ghvm->vm_status_wait, ghvm->vm_status == GH_RM_VM_STATUS_EXITED);
+	wait_event(ghvm->vm_status_wait,
+		   ghvm->vm_status != GUNYAH_RM_VM_STATUS_RUNNING);
 }
 
-static __must_check struct gh_vm *gh_vm_alloc(struct gh_rm *rm)
+static inline void setup_extent_ticket(struct gunyah_vm *ghvm,
+				       struct gunyah_vm_resource_ticket *ticket,
+				       u32 label)
 {
-	struct gh_vm *ghvm;
+	ticket->resource_type = GUNYAH_RESOURCE_TYPE_MEM_EXTENT;
+	ticket->label = label;
+	ticket->populate = gunyah_vm_resource_ticket_populate_noop;
+	ticket->unpopulate = gunyah_vm_resource_ticket_unpopulate_noop;
+	gunyah_vm_add_resource_ticket(ghvm, ticket);
+}
+
+static __must_check struct gunyah_vm *gunyah_vm_alloc(struct gunyah_rm *rm)
+{
+	struct gunyah_vm *ghvm;
 
 	ghvm = kzalloc(sizeof(*ghvm), GFP_KERNEL);
 	if (!ghvm)
 		return ERR_PTR(-ENOMEM);
 
-	ghvm->parent = gh_rm_get(rm);
-	ghvm->vmid = GH_VMID_INVAL;
+	ghvm->parent = gunyah_rm_get(rm);
+	ghvm->vmid = GUNYAH_VMID_INVAL;
 	ghvm->rm = rm;
 
 	mmgrab(current->mm);
-	ghvm->mm = current->mm;
-	mutex_init(&ghvm->mm_lock);
-	INIT_LIST_HEAD(&ghvm->memory_mappings);
+	ghvm->mm_s = current->mm;
 	init_rwsem(&ghvm->status_lock);
 	init_waitqueue_head(&ghvm->vm_status_wait);
-	INIT_WORK(&ghvm->free_work, gh_vm_free);
 	kref_init(&ghvm->kref);
+	ghvm->vm_status = GUNYAH_RM_VM_STATUS_NO_STATE;
+
+	INIT_LIST_HEAD(&ghvm->functions);
+	mutex_init(&ghvm->fn_lock);
 	mutex_init(&ghvm->resources_lock);
 	INIT_LIST_HEAD(&ghvm->resources);
 	INIT_LIST_HEAD(&ghvm->resource_tickets);
+	xa_init(&ghvm->boot_context);
+
 	init_rwsem(&ghvm->mmio_handler_lock);
 	ghvm->mmio_handler_root = RB_ROOT;
-	INIT_LIST_HEAD(&ghvm->functions);
-	ghvm->vm_status = GH_RM_VM_STATUS_NO_STATE;
+
+	mt_init(&ghvm->mm);
+	mt_init(&ghvm->bindings);
+	init_rwsem(&ghvm->bindings_lock);
+
+	ghvm->addrspace_ticket.resource_type = GUNYAH_RESOURCE_TYPE_ADDR_SPACE;
+	ghvm->addrspace_ticket.label = GUNYAH_VM_ADDRSPACE_LABEL;
+	ghvm->addrspace_ticket.populate =
+		gunyah_vm_resource_ticket_populate_noop;
+	ghvm->addrspace_ticket.unpopulate =
+		gunyah_vm_resource_ticket_unpopulate_noop;
+	gunyah_vm_add_resource_ticket(ghvm, &ghvm->addrspace_ticket);
+
+	setup_extent_ticket(ghvm, &ghvm->host_private_extent_ticket,
+			    GUNYAH_VM_MEM_EXTENT_HOST_PRIVATE_LABEL);
+	setup_extent_ticket(ghvm, &ghvm->host_shared_extent_ticket,
+			    GUNYAH_VM_MEM_EXTENT_HOST_SHARED_LABEL);
+	setup_extent_ticket(ghvm, &ghvm->guest_private_extent_ticket,
+			    GUNYAH_VM_MEM_EXTENT_GUEST_PRIVATE_LABEL);
+	setup_extent_ticket(ghvm, &ghvm->guest_shared_extent_ticket,
+			    GUNYAH_VM_MEM_EXTENT_GUEST_SHARED_LABEL);
 
 	return ghvm;
 }
 
-static int gh_vm_start(struct gh_vm *ghvm)
+static long gunyah_vm_set_boot_context(struct gunyah_vm *ghvm,
+				       struct gunyah_vm_boot_context *boot_ctx)
 {
-	struct gh_vm_mem *mapping;
-	struct gh_rm_hyp_resources *resources;
-	struct gh_resource *ghrsc;
-	u64 dtb_offset;
-	u32 mem_handle;
+	u8 reg_set, reg_index; /* to check values are reasonable */
+	int ret;
+
+	reg_set = (boot_ctx->reg >> GUNYAH_VM_BOOT_CONTEXT_REG_SHIFT) & 0xff;
+	reg_index = boot_ctx->reg & 0xff;
+
+	switch (reg_set) {
+	case REG_SET_X:
+		if (reg_index > 31)
+			return -EINVAL;
+		break;
+	case REG_SET_PC:
+		if (reg_index)
+			return -EINVAL;
+		break;
+	case REG_SET_SP:
+		if (reg_index > 2)
+			return -EINVAL;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = down_read_interruptible(&ghvm->status_lock);
+	if (ret)
+		return ret;
+
+	if (ghvm->vm_status != GUNYAH_RM_VM_STATUS_NO_STATE) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = xa_err(xa_store(&ghvm->boot_context, boot_ctx->reg,
+			      (void *)boot_ctx->value, GFP_KERNEL));
+out:
+	up_read(&ghvm->status_lock);
+	return ret;
+}
+
+static inline int gunyah_vm_fill_boot_context(struct gunyah_vm *ghvm)
+{
+	unsigned long reg_set, reg_index, id;
+	void *entry;
+	int ret;
+
+	xa_for_each(&ghvm->boot_context, id, entry) {
+		reg_set = (id >> GUNYAH_VM_BOOT_CONTEXT_REG_SHIFT) & 0xff;
+		reg_index = id & 0xff;
+		ret = gunyah_rm_vm_set_boot_context(
+			ghvm->rm, ghvm->vmid, reg_set, reg_index, (u64)entry);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+int gunyah_gup_setup_demand_paging(struct gunyah_vm *ghvm)
+{
+	struct gunyah_rm_mem_entry *entries;
+	struct gunyah_vm_gup_binding *b;
+	unsigned long index = 0;
+	u32 count = 0, i;
+	int ret = 0;
+
+	down_read(&ghvm->bindings_lock);
+	mt_for_each(&ghvm->bindings, b, index, ULONG_MAX)
+		if (b->share_type == VM_MEM_LEND &&
+			(b->guest_phys_addr != ghvm->fw.config.guest_phys_addr))
+			count++;
+
+	if (!count)
+		goto out;
+
+	entries = kcalloc(count, sizeof(*entries), GFP_KERNEL);
+	if (!entries) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	index = i = 0;
+	mt_for_each(&ghvm->bindings, b, index, ULONG_MAX) {
+		if (b->share_type != VM_MEM_LEND ||
+			(b->guest_phys_addr == ghvm->fw.config.guest_phys_addr))
+			continue;
+		entries[i].phys_addr = cpu_to_le64(b->guest_phys_addr);
+		entries[i].size = cpu_to_le64(b->size);
+		if (++i == count)
+			break;
+	}
+
+	ret = gunyah_rm_vm_set_demand_paging(ghvm->rm, ghvm->vmid, i, entries);
+	kfree(entries);
+out:
+	up_read(&ghvm->bindings_lock);
+	return ret;
+}
+
+static int gunyah_vm_start(struct gunyah_vm *ghvm)
+{
+	struct gunyah_rm_hyp_resources *resources;
+	struct gunyah_resource *ghrsc;
 	int ret, i, n;
 
 	down_write(&ghvm->status_lock);
-	if (ghvm->vm_status != GH_RM_VM_STATUS_NO_STATE) {
+	if (ghvm->vm_status != GUNYAH_RM_VM_STATUS_NO_STATE) {
 		up_write(&ghvm->status_lock);
 		return 0;
 	}
 
-	ghvm->nb.notifier_call = gh_vm_rm_notification;
-	ret = gh_rm_notifier_register(ghvm->rm, &ghvm->nb);
+	ghvm->nb.notifier_call = gunyah_vm_rm_notification;
+	ret = gunyah_rm_notifier_register(ghvm->rm, &ghvm->nb);
 	if (ret)
 		goto err;
 
-	ret = gh_rm_alloc_vmid(ghvm->rm, 0);
+	ret = gunyah_rm_alloc_vmid(ghvm->rm, 0);
 	if (ret < 0) {
-		gh_rm_notifier_unregister(ghvm->rm, &ghvm->nb);
+		gunyah_rm_notifier_unregister(ghvm->rm, &ghvm->nb);
 		goto err;
 	}
 	ghvm->vmid = ret;
-	ghvm->vm_status = GH_RM_VM_STATUS_LOAD;
+	ghvm->vm_status = GUNYAH_RM_VM_STATUS_LOAD;
 
-	mutex_lock(&ghvm->mm_lock);
-	list_for_each_entry(mapping, &ghvm->memory_mappings, list) {
-		mapping->parcel.acl_entries[0].vmid = cpu_to_le16(ghvm->vmid);
-		switch (mapping->share_type) {
-		case VM_MEM_LEND:
-			ret = gh_rm_mem_lend(ghvm->rm, &mapping->parcel);
-			break;
-		case VM_MEM_SHARE:
-			ret = gh_rm_mem_share(ghvm->rm, &mapping->parcel);
-			break;
-		}
-		if (ret) {
-			dev_warn(ghvm->parent, "Failed to %s parcel %d: %d\n",
-				mapping->share_type == VM_MEM_LEND ? "lend" : "share",
-				mapping->parcel.label, ret);
-			mutex_unlock(&ghvm->mm_lock);
-			goto err;
-		}
-	}
-	mutex_unlock(&ghvm->mm_lock);
-
-	mapping = gh_vm_mem_find_by_addr(ghvm, ghvm->dtb_config.guest_phys_addr,
-					ghvm->dtb_config.size);
-	if (!mapping) {
-		dev_warn(ghvm->parent, "Failed to find the memory_handle for DTB\n");
-		ret = -EINVAL;
+	ghvm->dtb.parcel_start = ghvm->dtb.config.guest_phys_addr >> PAGE_SHIFT;
+	ghvm->dtb.parcel_pages = ghvm->dtb.config.size >> PAGE_SHIFT;
+	ret = gunyah_gup_share_parcel(ghvm, &ghvm->dtb.parcel,
+					&ghvm->dtb.parcel_start,
+					&ghvm->dtb.parcel_pages);
+	if (ret) {
+		dev_warn(ghvm->parent,
+			 "Failed to allocate parcel for DTB: %d\n", ret);
 		goto err;
 	}
 
-	mem_handle = mapping->parcel.mem_handle;
-	dtb_offset = ghvm->dtb_config.guest_phys_addr - mapping->guest_phys_addr;
-
-	ret = gh_rm_vm_configure(ghvm->rm, ghvm->vmid, ghvm->auth, mem_handle,
-				0, 0, dtb_offset, ghvm->dtb_config.size);
+	if (ghvm->auth == GUNYAH_RM_VM_AUTH_QCOM_ANDROID_PVM) {
+		ghvm->fw.parcel_start = ghvm->fw.config.guest_phys_addr >> PAGE_SHIFT;
+		ghvm->fw.parcel_pages = ghvm->fw.config.size >> PAGE_SHIFT;
+		ret = gunyah_gup_share_parcel(ghvm, &ghvm->fw.parcel,
+				&ghvm->fw.parcel_start,
+				&ghvm->fw.parcel_pages);
+		if (ret) {
+			dev_warn(ghvm->parent,
+					"Failed to allocate parcel for FW: %d\n", ret);
+			goto err;
+		}
+	}
+	ret = gunyah_rm_vm_configure(ghvm->rm, ghvm->vmid, ghvm->auth,
+				     ghvm->dtb.parcel.mem_handle, 0, 0,
+				     ghvm->dtb.config.guest_phys_addr -
+					     (ghvm->dtb.parcel_start
+					      << PAGE_SHIFT),
+				     ghvm->dtb.config.size);
 	if (ret) {
 		dev_warn(ghvm->parent, "Failed to configure VM: %d\n", ret);
 		goto err;
 	}
 
-	if (ghvm->auth == GH_RM_VM_AUTH_QCOM_ANDROID_PVM) {
-		mapping = gh_vm_mem_find_by_addr(ghvm, ghvm->fw_config.guest_phys_addr,
-						ghvm->fw_config.size);
-		if (!mapping) {
-			pr_warn("Failed to find the memory handle for pVM firmware\n");
-			ret = -EINVAL;
-			goto err;
-		}
-		ret = gh_rm_vm_set_firmware_mem(ghvm->rm, ghvm->vmid, &mapping->parcel,
-				ghvm->fw_config.guest_phys_addr - mapping->guest_phys_addr,
-				ghvm->fw_config.size);
+	if (ghvm->auth == GUNYAH_RM_VM_AUTH_QCOM_ANDROID_PVM) {
+		ret = gunyah_rm_vm_set_firmware_mem(ghvm->rm, ghvm->vmid, &ghvm->fw.parcel,
+				ghvm->fw.config.guest_phys_addr - (ghvm->fw.parcel_start << PAGE_SHIFT),
+				ghvm->fw.config.size);
 		if (ret) {
 			pr_warn("Failed to configure pVM firmware\n");
 			goto err;
 		}
 	}
 
-	ret = gh_rm_vm_init(ghvm->rm, ghvm->vmid);
+	ret = gunyah_gup_setup_demand_paging(ghvm);
 	if (ret) {
-		ghvm->vm_status = GH_RM_VM_STATUS_INIT_FAILED;
+		dev_warn(ghvm->parent,
+			 "Failed to set up gmem demand paging: %d\n", ret);
+		goto err;
+	}
+
+	ret = gunyah_rm_vm_set_address_layout(
+		ghvm->rm, ghvm->vmid, GUNYAH_RM_RANGE_ID_IMAGE,
+		ghvm->dtb.parcel_start << PAGE_SHIFT,
+		ghvm->dtb.parcel_pages << PAGE_SHIFT);
+	if (ret) {
+		dev_warn(ghvm->parent,
+			 "Failed to set location of DTB mem parcel: %d\n", ret);
+		goto err;
+	}
+
+	ret = gunyah_rm_vm_init(ghvm->rm, ghvm->vmid);
+	if (ret) {
+		ghvm->vm_status = GUNYAH_RM_VM_STATUS_INIT_FAILED;
 		dev_warn(ghvm->parent, "Failed to initialize VM: %d\n", ret);
 		goto err;
 	}
-	ghvm->vm_status = GH_RM_VM_STATUS_READY;
+	ghvm->vm_status = GUNYAH_RM_VM_STATUS_READY;
 
-	ret = gh_rm_get_hyp_resources(ghvm->rm, ghvm->vmid, &resources);
+	if (ghvm->auth != GUNYAH_RM_VM_AUTH_QCOM_ANDROID_PVM) {
+		ret = gunyah_vm_fill_boot_context(ghvm);
+		if (ret) {
+			dev_warn(ghvm->parent, "Failed to setup boot context: %d\n",
+				 ret);
+			goto err;
+		}
+	}
+
+	ret = gunyah_rm_get_hyp_resources(ghvm->rm, ghvm->vmid, &resources);
 	if (ret) {
-		dev_warn(ghvm->parent, "Failed to get hypervisor resources for VM: %d\n", ret);
+		dev_warn(ghvm->parent,
+			 "Failed to get hypervisor resources for VM: %d\n",
+			 ret);
 		goto err;
 	}
 
 	for (i = 0, n = le32_to_cpu(resources->n_entries); i < n; i++) {
-		ghrsc = gh_rm_alloc_resource(ghvm->rm, &resources->entries[i]);
+		ghrsc = gunyah_rm_alloc_resource(ghvm->rm,
+						 &resources->entries[i]);
 		if (!ghrsc) {
 			ret = -ENOMEM;
 			goto err;
 		}
 
-		gh_vm_add_resource(ghvm, ghrsc);
+		gunyah_vm_add_resource(ghvm, ghrsc);
 	}
 
-	ret = gh_rm_vm_start(ghvm->rm, ghvm->vmid);
+	ret = gunyah_vm_parcel_to_paged(ghvm, &ghvm->dtb.parcel,
+					ghvm->dtb.parcel_start,
+					ghvm->dtb.parcel_pages);
+	if (ret)
+		goto err;
+
+	ret = gunyah_rm_vm_start(ghvm->rm, ghvm->vmid);
 	if (ret) {
+		/**
+		 * need to rollback parcel_to_paged because RM is still
+		 * tracking the parcel
+		 */
+		gunyah_vm_mm_erase_range(ghvm, ghvm->dtb.parcel_start,
+					 ghvm->dtb.parcel_pages);
 		dev_warn(ghvm->parent, "Failed to start VM: %d\n", ret);
 		goto err;
 	}
 
-	ghvm->vm_status = GH_RM_VM_STATUS_RUNNING;
+	ghvm->vm_status = GUNYAH_RM_VM_STATUS_RUNNING;
 	up_write(&ghvm->status_lock);
 	return ret;
 err:
-	/* gh_vm_free will handle releasing resources and reclaiming memory */
+	/* gunyah_vm_free will handle releasing resources and reclaiming memory */
 	up_write(&ghvm->status_lock);
 	return ret;
 }
 
-static int gh_vm_ensure_started(struct gh_vm *ghvm)
+static int gunyah_vm_ensure_started(struct gunyah_vm *ghvm)
 {
 	int ret;
 
@@ -606,98 +804,112 @@ static int gh_vm_ensure_started(struct gh_vm *ghvm)
 		return ret;
 
 	/* Unlikely because VM is typically started */
-	if (unlikely(ghvm->vm_status == GH_RM_VM_STATUS_NO_STATE)) {
+	if (unlikely(ghvm->vm_status == GUNYAH_RM_VM_STATUS_NO_STATE)) {
 		up_read(&ghvm->status_lock);
-		ret = gh_vm_start(ghvm);
+		ret = gunyah_vm_start(ghvm);
 		if (ret)
 			return ret;
-		/** gh_vm_start() is guaranteed to bring status out of
-		 * GH_RM_VM_STATUS_LOAD, thus infinitely recursive call is not
-		 * possible
-		 */
-		return gh_vm_ensure_started(ghvm);
+		ret = down_read_interruptible(&ghvm->status_lock);
+		if (ret)
+			return ret;
 	}
 
 	/* Unlikely because VM is typically running */
-	if (unlikely(ghvm->vm_status != GH_RM_VM_STATUS_RUNNING))
+	if (unlikely(ghvm->vm_status != GUNYAH_RM_VM_STATUS_RUNNING))
 		ret = -ENODEV;
 
 	up_read(&ghvm->status_lock);
 	return ret;
 }
 
-static long gh_vm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+static long gunyah_vm_ioctl(struct file *filp, unsigned int cmd,
+			    unsigned long arg)
 {
-	struct gh_vm *ghvm = filp->private_data;
+	struct gunyah_vm *ghvm = filp->private_data;
 	void __user *argp = (void __user *)arg;
 	long r;
 	bool lend = false;
 
 	switch (cmd) {
-	case GH_VM_ANDROID_LEND_USER_MEM:
-		lend = true;
-		fallthrough;
-	case GH_VM_SET_USER_MEM_REGION: {
-		struct gh_userspace_memory_region region;
-
-		/* only allow owner task to add memory */
-		if (ghvm->mm != current->mm)
-			return -EPERM;
-
-		if (copy_from_user(&region, argp, sizeof(region)))
-			return -EFAULT;
-
-		/* All other flag bits are reserved for future use */
-		if (region.flags & ~(GH_MEM_ALLOW_READ | GH_MEM_ALLOW_WRITE | GH_MEM_ALLOW_EXEC))
-			return -EINVAL;
-
-		r = gh_vm_mem_alloc(ghvm, &region, lend);
-		break;
-	}
-	case GH_VM_SET_DTB_CONFIG: {
-		struct gh_vm_dtb_config dtb_config;
+	case GUNYAH_VM_SET_DTB_CONFIG: {
+		struct gunyah_vm_dtb_config dtb_config;
 
 		if (copy_from_user(&dtb_config, argp, sizeof(dtb_config)))
 			return -EFAULT;
 
-		if (overflows_type(dtb_config.guest_phys_addr + dtb_config.size, u64))
+		if (overflows_type(dtb_config.guest_phys_addr + dtb_config.size,
+				   u64))
 			return -EOVERFLOW;
 
-		ghvm->dtb_config = dtb_config;
+		ghvm->dtb.config = dtb_config;
 
 		r = 0;
 		break;
 	}
 	case GH_VM_ANDROID_SET_FW_CONFIG: {
-		r = -EFAULT;
-		if (copy_from_user(&ghvm->fw_config, argp, sizeof(ghvm->fw_config)))
-			break;
+		struct gunyah_vm_firmware_config fw_config;
 
-		ghvm->auth = GH_RM_VM_AUTH_QCOM_ANDROID_PVM;
+		if (copy_from_user(&fw_config, argp, sizeof(fw_config)))
+			return -EFAULT;
+
+		if (overflows_type(fw_config.guest_phys_addr + fw_config.size,
+				   u64))
+			return -EOVERFLOW;
+
+		ghvm->fw.config = fw_config;
+		ghvm->auth = GUNYAH_RM_VM_AUTH_QCOM_ANDROID_PVM;
 		r = 0;
 		break;
 	}
-	case GH_VM_START: {
-		r = gh_vm_ensure_started(ghvm);
+	case GUNYAH_VM_START: {
+		r = gunyah_vm_ensure_started(ghvm);
 		break;
 	}
-	case GH_VM_ADD_FUNCTION: {
-		struct gh_fn_desc f;
+	case GUNYAH_VM_ADD_FUNCTION: {
+		struct gunyah_fn_desc f;
 
 		if (copy_from_user(&f, argp, sizeof(f)))
 			return -EFAULT;
 
-		r = gh_vm_add_function_instance(ghvm, &f);
+		r = gunyah_vm_add_function_instance(ghvm, &f);
 		break;
 	}
-	case GH_VM_REMOVE_FUNCTION: {
-		struct gh_fn_desc f;
+	case GUNYAH_VM_REMOVE_FUNCTION: {
+		struct gunyah_fn_desc f;
 
 		if (copy_from_user(&f, argp, sizeof(f)))
 			return -EFAULT;
 
-		r = gh_vm_rm_function_instance(ghvm, &f);
+		r = gunyah_vm_rm_function_instance(ghvm, &f);
 		break;
+	}
+	case GH_VM_ANDROID_LEND_USER_MEM:
+		lend = true;
+		fallthrough;
+	case GH_VM_SET_USER_MEM_REGION: {
+		struct gunyah_userspace_memory_region region;
+
+		/* only allow owner task to add memory */
+		if (ghvm->mm_s != current->mm)
+			return -EPERM;
+		if (copy_from_user(&region, argp, sizeof(region)))
+			return -EFAULT;
+
+		if (region.flags & ~(GUNYAH_MEM_ALLOW_READ |
+					GUNYAH_MEM_ALLOW_WRITE |
+					GUNYAH_MEM_ALLOW_EXEC))
+			return -EINVAL;
+
+		r = gunyah_vm_binding_alloc(ghvm, &region, lend);
+		break;
+	}
+	case GUNYAH_VM_SET_BOOT_CONTEXT: {
+		struct gunyah_vm_boot_context boot_ctx;
+
+		if (copy_from_user(&boot_ctx, argp, sizeof(boot_ctx)))
+			return -EFAULT;
+
+		return gunyah_vm_set_boot_context(ghvm, &boot_ctx);
 	}
 	default:
 		r = -ENOTTY;
@@ -707,82 +919,171 @@ static long gh_vm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	return r;
 }
 
-static void gh_vm_free(struct work_struct *work)
-{
-	struct gh_vm *ghvm = container_of(work, struct gh_vm, free_work);
-	int ret;
-
-	if (ghvm->vm_status == GH_RM_VM_STATUS_RUNNING)
-		gh_vm_stop(ghvm);
-
-	gh_vm_remove_functions(ghvm);
-	gh_vm_clean_resources(ghvm);
-
-	if (ghvm->vm_status != GH_RM_VM_STATUS_NO_STATE &&
-	    ghvm->vm_status != GH_RM_VM_STATUS_LOAD &&
-	    ghvm->vm_status != GH_RM_VM_STATUS_RESET) {
-		ret = gh_rm_vm_reset(ghvm->rm, ghvm->vmid);
-		if (ret)
-			dev_err(ghvm->parent, "Failed to reset the vm: %d\n", ret);
-		wait_event(ghvm->vm_status_wait, ghvm->vm_status == GH_RM_VM_STATUS_RESET);
-	}
-
-	gh_vm_mem_reclaim(ghvm);
-
-	if (ghvm->vm_status > GH_RM_VM_STATUS_NO_STATE) {
-		gh_rm_notifier_unregister(ghvm->rm, &ghvm->nb);
-
-		ret = gh_rm_dealloc_vmid(ghvm->rm, ghvm->vmid);
-		if (ret)
-			dev_warn(ghvm->parent, "Failed to deallocate vmid: %d\n", ret);
-	}
-
-	gh_rm_put(ghvm->rm);
-	mmdrop(ghvm->mm);
-	kfree(ghvm);
-}
-
-int __must_check gh_vm_get(struct gh_vm *ghvm)
+int __must_check gunyah_vm_get(struct gunyah_vm *ghvm)
 {
 	return kref_get_unless_zero(&ghvm->kref);
 }
-EXPORT_SYMBOL_GPL(gh_vm_get);
+EXPORT_SYMBOL_GPL(gunyah_vm_get);
 
-static void _gh_vm_put(struct kref *kref)
+int gunyah_gup_reclaim_parcel(struct gunyah_vm *ghvm,
+			       struct gunyah_rm_mem_parcel *parcel, u64 gfn,
+			       u64 nr)
 {
-	struct gh_vm *ghvm = container_of(kref, struct gh_vm, kref);
+	struct gunyah_rm_mem_entry *entry;
+	struct folio *folio;
+	pgoff_t i;
+	int ret;
 
-	/* VM will be reset and make RM calls which can interruptible sleep.
-	 * Defer to a work so this thread can receive signal.
-	 */
-	schedule_work(&ghvm->free_work);
-}
+	if (parcel->mem_handle != GUNYAH_MEM_HANDLE_INVAL) {
+		ret = gunyah_rm_mem_reclaim(ghvm->rm, parcel);
+		if (ret) {
+			dev_err(ghvm->parent, "Failed to reclaim parcel: %d\n",
+				ret);
+			/* We can't reclaim the pages -- hold onto the pages
+			 * forever because we don't know what state the memory
+			 * is in
+			 */
+			return ret;
+		}
+		parcel->mem_handle = GUNYAH_MEM_HANDLE_INVAL;
 
-void gh_vm_put(struct gh_vm *ghvm)
-{
-	kref_put(&ghvm->kref, _gh_vm_put);
-}
-EXPORT_SYMBOL_GPL(gh_vm_put);
+		for (i = 0; i < parcel->n_mem_entries; i++) {
+			entry = &parcel->mem_entries[i];
 
-static int gh_vm_release(struct inode *inode, struct file *filp)
-{
-	struct gh_vm *ghvm = filp->private_data;
+			folio = pfn_folio(PHYS_PFN(le64_to_cpu(entry->phys_addr)));
 
-	gh_vm_put(ghvm);
+			if (folio_test_private(folio))
+				gunyah_folio_host_reclaim(folio);
+
+			folio_put(folio);
+		}
+
+		kfree(parcel->mem_entries);
+		kfree(parcel->acl_entries);
+	}
+
 	return 0;
 }
 
-static const struct file_operations gh_vm_fops = {
+static void _gunyah_vm_put(struct kref *kref)
+{
+	struct gunyah_vm *ghvm = container_of(kref, struct gunyah_vm, kref);
+	struct gunyah_vm_gup_binding *b;
+	unsigned long index = 0;
+	int ret;
+
+	/**
+	 * We might race with a VM exit notification, but that's ok:
+	 * gh_rm_vm_stop() will just return right away.
+	 */
+	if (ghvm->vm_status == GUNYAH_RM_VM_STATUS_RUNNING)
+		gunyah_vm_stop(ghvm);
+
+	if (ghvm->vm_status == GUNYAH_RM_VM_STATUS_LOAD ||
+	    ghvm->vm_status == GUNYAH_RM_VM_STATUS_READY ||
+	    ghvm->vm_status == GUNYAH_RM_VM_STATUS_INIT_FAILED) {
+		ret = gunyah_gup_reclaim_parcel(ghvm, &ghvm->dtb.parcel,
+						 ghvm->dtb.parcel_start,
+						 ghvm->dtb.parcel_pages);
+		if (ret)
+			dev_err(ghvm->parent,
+				"Failed to reclaim DTB parcel: %d\n", ret);
+	}
+
+	gunyah_vm_remove_functions(ghvm);
+
+	down_write(&ghvm->bindings_lock);
+	mt_for_each(&ghvm->bindings, b, index, ULONG_MAX) {
+		mtree_erase(&ghvm->bindings, gunyah_gpa_to_gfn(b->guest_phys_addr));
+		kfree(b);
+	}
+	up_write(&ghvm->bindings_lock);
+	WARN_ON(!mtree_empty(&ghvm->bindings));
+	mtree_destroy(&ghvm->bindings);
+
+	/**
+	 * If this fails, we're going to lose the memory for good and is
+	 * BUG_ON-worthy, but not unrecoverable (we just lose memory).
+	 * This call should always succeed though because the VM is in not
+	 * running and RM will let us reclaim all the memory.
+	 */
+	WARN_ON(gunyah_vm_reclaim_range(ghvm, 0, U64_MAX));
+
+	/* clang-format off */
+	gunyah_vm_remove_resource_ticket(ghvm, &ghvm->addrspace_ticket);
+	gunyah_vm_remove_resource_ticket(ghvm, &ghvm->host_shared_extent_ticket);
+	gunyah_vm_remove_resource_ticket(ghvm, &ghvm->host_private_extent_ticket);
+	gunyah_vm_remove_resource_ticket(ghvm, &ghvm->guest_shared_extent_ticket);
+	gunyah_vm_remove_resource_ticket(ghvm, &ghvm->guest_private_extent_ticket);
+	/* clang-format on */
+
+	gunyah_vm_clean_resources(ghvm);
+
+	if (ghvm->vm_status == GUNYAH_RM_VM_STATUS_EXITED ||
+	    ghvm->vm_status == GUNYAH_RM_VM_STATUS_READY ||
+	    ghvm->vm_status == GUNYAH_RM_VM_STATUS_INIT_FAILED) {
+		ret = gunyah_rm_vm_reset(ghvm->rm, ghvm->vmid);
+		/* clang-format off */
+		if (!ret)
+			wait_event(ghvm->vm_status_wait,
+				   ghvm->vm_status == GUNYAH_RM_VM_STATUS_RESET);
+		else
+			dev_err(ghvm->parent, "Failed to reset the vm: %d\n",ret);
+		/* clang-format on */
+	}
+
+	WARN_ON(!mtree_empty(&ghvm->mm));
+	mtree_destroy(&ghvm->mm);
+
+	if (ghvm->auth == GUNYAH_RM_VM_AUTH_QCOM_ANDROID_PVM) {
+		ret = gunyah_gup_reclaim_parcel(ghvm, &ghvm->fw.parcel,
+				ghvm->fw.parcel_start,
+				ghvm->fw.parcel_pages);
+		if (ret)
+			dev_err(ghvm->parent,
+					"Failed to reclaim firmware parcel: %d\n", ret);
+	}
+
+	if (ghvm->vm_status > GUNYAH_RM_VM_STATUS_NO_STATE) {
+		gunyah_rm_notifier_unregister(ghvm->rm, &ghvm->nb);
+
+		ret = gunyah_rm_dealloc_vmid(ghvm->rm, ghvm->vmid);
+		if (ret)
+			dev_warn(ghvm->parent,
+				 "Failed to deallocate vmid: %d\n", ret);
+	}
+
+	xa_destroy(&ghvm->boot_context);
+	gunyah_rm_put(ghvm->rm);
+	mmdrop(ghvm->mm_s);
+	kfree(ghvm);
+}
+
+void gunyah_vm_put(struct gunyah_vm *ghvm)
+{
+	kref_put(&ghvm->kref, _gunyah_vm_put);
+}
+EXPORT_SYMBOL_GPL(gunyah_vm_put);
+
+static int gunyah_vm_release(struct inode *inode, struct file *filp)
+{
+	struct gunyah_vm *ghvm = filp->private_data;
+
+	gunyah_vm_put(ghvm);
+	return 0;
+}
+
+static const struct file_operations gunyah_vm_fops = {
 	.owner = THIS_MODULE,
-	.unlocked_ioctl = gh_vm_ioctl,
-	.compat_ioctl	= compat_ptr_ioctl,
-	.release = gh_vm_release,
+	.unlocked_ioctl = gunyah_vm_ioctl,
+	.compat_ioctl = compat_ptr_ioctl,
+	.release = gunyah_vm_release,
 	.llseek = noop_llseek,
 };
 
-static long gh_dev_ioctl_create_vm(struct gh_rm *rm, unsigned long arg)
+static long gunyah_dev_ioctl_create_vm(struct gunyah_rm *rm, unsigned long arg)
 {
-	struct gh_vm *ghvm;
+	struct gunyah_vm *ghvm;
 	struct file *file;
 	int fd, err;
 
@@ -790,7 +1091,7 @@ static long gh_dev_ioctl_create_vm(struct gh_rm *rm, unsigned long arg)
 	if (arg)
 		return -EINVAL;
 
-	ghvm = gh_vm_alloc(rm);
+	ghvm = gunyah_vm_alloc(rm);
 	if (IS_ERR(ghvm))
 		return PTR_ERR(ghvm);
 
@@ -800,7 +1101,7 @@ static long gh_dev_ioctl_create_vm(struct gh_rm *rm, unsigned long arg)
 		goto err_destroy_vm;
 	}
 
-	file = anon_inode_getfile("gunyah-vm", &gh_vm_fops, ghvm, O_RDWR);
+	file = anon_inode_getfile("gunyah-vm", &gunyah_vm_fops, ghvm, O_RDWR);
 	if (IS_ERR(file)) {
 		err = PTR_ERR(file);
 		goto err_put_fd;
@@ -813,15 +1114,17 @@ static long gh_dev_ioctl_create_vm(struct gh_rm *rm, unsigned long arg)
 err_put_fd:
 	put_unused_fd(fd);
 err_destroy_vm:
-	gh_vm_put(ghvm);
+	gunyah_rm_put(ghvm->rm);
+	kfree(ghvm);
 	return err;
 }
 
-long gh_dev_vm_mgr_ioctl(struct gh_rm *rm, unsigned int cmd, unsigned long arg)
+long gunyah_dev_vm_mgr_ioctl(struct gunyah_rm *rm, unsigned int cmd,
+			     unsigned long arg)
 {
 	switch (cmd) {
-	case GH_CREATE_VM:
-		return gh_dev_ioctl_create_vm(rm, arg);
+	case GUNYAH_CREATE_VM:
+		return gunyah_dev_ioctl_create_vm(rm, arg);
 	default:
 		return -ENOTTY;
 	}
