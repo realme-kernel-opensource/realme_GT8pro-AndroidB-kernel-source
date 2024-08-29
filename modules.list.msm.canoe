@@ -16,6 +16,7 @@ icc-bcm-voter.ko
 icc-debug.ko
 icc-rpmh.ko
 proxy-consumer.ko
+rpmh-regulator.ko
 stub-regulator.ko
 spmi-pmic-arb.ko
 regmap-spmi.ko

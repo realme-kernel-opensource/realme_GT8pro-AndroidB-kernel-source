@@ -49,6 +49,7 @@ def define_canoe():
         "drivers/regulator/debug-regulator.ko",
         "drivers/regulator/proxy-consumer.ko",
         "drivers/regulator/qti-fixed-regulator.ko",
+        "drivers/regulator/rpmh-regulator.ko",
         "drivers/regulator/stub-regulator.ko",
         "drivers/scsi/sg.ko",
         "drivers/soc/qcom/boot_stats.ko",
