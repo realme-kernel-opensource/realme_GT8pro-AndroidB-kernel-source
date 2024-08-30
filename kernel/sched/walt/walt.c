@@ -15,6 +15,7 @@
 #include <linux/cpu.h>
 #include <linux/sysctl.h>
 #include <linux/of_platform.h>
+#include <linux/delay.h>
 
 #include <trace/hooks/sched.h>
 #include <trace/hooks/cpufreq.h>
@@ -60,11 +61,9 @@ u64 (*walt_get_cycle_counts_cb)(int cpu, u64 wc);
 
 static u64 walt_load_reported_window;
 
-static struct irq_work walt_cpufreq_irq_work;
+struct irq_work walt_cpufreq_irq_work;
 struct irq_work walt_migration_irq_work;
 unsigned int walt_rotation_enabled;
-cpumask_t asym_cap_sibling_cpus = CPU_MASK_NONE;
-cpumask_t shared_rail_sibling_cpus = CPU_MASK_NONE;
 
 unsigned int __read_mostly sched_ravg_window = 20000000;
 int min_possible_cluster_id;
@@ -81,7 +80,10 @@ unsigned int __read_mostly sched_init_task_load_windows;
  */
 unsigned int __read_mostly sched_load_granule;
 
-unsigned int enable_pipeline_boost;
+bool walt_is_idle_task(struct task_struct *p)
+{
+	return walt_flag_test(p, WALT_IDLE_TASK_BIT);
+}
 
 u64 walt_sched_clock(void)
 {
@@ -187,7 +189,6 @@ static DEFINE_SPINLOCK(sched_ravg_window_lock);
 static u64 sched_ravg_window_change_time;
 
 static unsigned int __read_mostly sched_init_task_load_windows_scaled;
-static unsigned int __read_mostly sysctl_sched_init_task_load_pct = 15;
 
 /* Size of bitmaps maintained to track top tasks */
 static const unsigned int top_tasks_bitmap_size =
@@ -527,6 +528,25 @@ unsigned int walt_big_tasks(int cpu)
 	return wrq->walt_stats.nr_big_tasks;
 }
 
+int walt_trailblazer_tasks(int cpu)
+{
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
+
+	return wrq->walt_stats.nr_trailblazer_tasks;
+}
+
+bool trailblazer_on_prime(void)
+{
+	int cpu;
+
+	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
+		if (walt_trailblazer_tasks(cpu))
+			return true;
+	}
+
+	return false;
+}
+
 static void clear_walt_request(int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
@@ -598,7 +618,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason)
 
 	if (sched_freq_aggr_en) {
 		load = wrq->prev_runnable_sum + aggr_grp_load;
-		*reason = CPUFREQ_REASON_FREQ_AGR;
+		*reason = CPUFREQ_REASON_FREQ_AGR_BIT;
 	} else {
 		load = wrq->prev_runnable_sum +
 					wrq->grp_time.prev_runnable_sum;
@@ -608,14 +628,14 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason)
 		kload = task_load(cpu_ksoftirqd);
 		if (kload > load) {
 			load = kload;
-			*reason = CPUFREQ_REASON_KSOFTIRQD;
+			*reason = CPUFREQ_REASON_KSOFTIRQD_BIT;
 		}
 	}
 
 	tt_load = top_task_load(rq);
 	if (tt_load > load) {
 		load = tt_load;
-		*reason = CPUFREQ_REASON_TT_LOAD;
+		*reason = CPUFREQ_REASON_TT_LOAD_BIT;
 	}
 
 	if (should_apply_suh_freq_boost(cluster)) {
@@ -624,17 +644,22 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason)
 		else
 			load = div64_u64(load * sysctl_sched_user_hint,
 					 (u64)100);
-		*reason = CPUFREQ_REASON_SUH;
+		*reason = CPUFREQ_REASON_SUH_BIT;
 	}
 
 	if (wrq->ed_task) {
 		load = mult_frac(load, 100 + sysctl_ed_boost_pct, 100);
-		*reason = CPUFREQ_REASON_EARLY_DET;
+		*reason = CPUFREQ_REASON_EARLY_DET_BIT;
 	}
 
 	if (walt_rotation_enabled) {
 		load = sched_ravg_window;
-		*reason = CPUFREQ_REASON_BTR;
+		*reason = CPUFREQ_REASON_BTR_BIT;
+	}
+
+	if (walt_trailblazer_tasks(cpu_of(rq)) && walt_feat(WALT_FEAT_TRAILBLAZER_BIT)) {
+		load = sched_ravg_window;
+		*reason = CPUFREQ_REASON_TRAILBLAZER_CPU_BIT;
 	}
 
 	trace_sched_load_to_gov(rq, aggr_grp_load, tt_load, sched_freq_aggr_en,
@@ -678,6 +703,7 @@ __cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *rea
 			walt_load->ed_active = true;
 		else
 			walt_load->ed_active = false;
+		walt_load->trailblazer_state = trailblazer_state;
 	}
 
 	return (util >= capacity) ? capacity : util;
@@ -696,15 +722,18 @@ cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *reaso
 	unsigned long capacity = capacity_orig_of(cpu);
 	int i, mpct = PRIME_FACTOR;
 	unsigned long max_nl_other = 0, max_pl_other = 0;
+	unsigned long max_nl_prime = 0, max_pl_prime = 0;
 
 	util =  __cpu_util_freq_walt(cpu, walt_load, reason);
 
-	if (cpumask_test_cpu(cpu, &shared_rail_sibling_cpus) &&
-			enable_pipeline_boost) {
-		for_each_cpu(i, &shared_rail_sibling_cpus) {
-			if (i == (num_possible_cpus() - 1))
-				util_prime = __cpu_util_freq_walt(i, &wl_prime, reason);
-			else {
+	if (enable_load_sync(cpu)) {
+		for_each_cpu(i, &pipeline_sync_cpus) {
+			if (cpumask_test_cpu(i, &cpu_array[0][num_sched_clusters-1])) {
+				util_prime = max(util_prime,
+						__cpu_util_freq_walt(i, &wl_prime, reason));
+				max_nl_prime = max(max_nl_prime, wl_prime.nl);
+				max_pl_prime = max(max_pl_prime, wl_prime.pl);
+			} else {
 				util_other = max(util_other,
 						__cpu_util_freq_walt(i, &wl_other, reason));
 				max_nl_other = max(max_nl_other, wl_other.nl);
@@ -712,12 +741,12 @@ cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *reaso
 			}
 		}
 
-		if (cpu == (num_possible_cpus() - 1))
+		if (cpumask_test_cpu(cpu, &cpu_array[0][num_sched_clusters-1]))
 			mpct = 100;
 
 		util = ADJUSTED_SHARED_RAIL_UTIL(util_other, util_prime, mpct);
-		walt_load->nl = ADJUSTED_SHARED_RAIL_UTIL(max_nl_other, wl_prime.nl, mpct);
-		walt_load->pl = ADJUSTED_SHARED_RAIL_UTIL(max_pl_other, wl_prime.pl, mpct);
+		walt_load->nl = ADJUSTED_SHARED_RAIL_UTIL(max_nl_other, max_nl_prime, mpct);
+		walt_load->pl = ADJUSTED_SHARED_RAIL_UTIL(max_pl_other, max_pl_prime, mpct);
 	}
 
 	if (!cpumask_test_cpu(cpu, &asym_cap_sibling_cpus))
@@ -1356,7 +1385,7 @@ static void update_task_pred_demand(struct rq *rq, struct task_struct *p, int ev
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	u16 curr_window_scaled;
 
-	if (is_idle_task(p))
+	if (walt_is_idle_task(p))
 		return;
 
 	if (event != PUT_PREV_TASK && event != TASK_UPDATE &&
@@ -1381,8 +1410,7 @@ static void update_task_pred_demand(struct rq *rq, struct task_struct *p, int ev
 	new_pred_demand_scaled = get_pred_busy(p, busy_to_bucket(curr_window_scaled),
 			     curr_window_scaled, wts->bucket_bitmask);
 
-	if (task_on_rq_queued(p) && (!task_has_dl_policy(p) ||
-				!p->dl.dl_throttled))
+	if (task_on_rq_queued(p))
 		fixup_walt_sched_stats_common(rq, p,
 				wts->demand_scaled,
 				new_pred_demand_scaled);
@@ -1563,7 +1591,7 @@ static inline int cpu_is_waiting_on_io(struct rq *rq)
 static int account_busy_for_cpu_time(struct rq *rq, struct task_struct *p,
 				     u64 irqtime, int event)
 {
-	if (is_idle_task(p)) {
+	if (walt_is_idle_task(p)) {
 		/* TASK_WAKE && TASK_MIGRATE is not possible on idle task! */
 		if (event == PICK_NEXT_TASK)
 			return 0;
@@ -1738,7 +1766,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 	 * idle task.
 	 */
 	if (new_window) {
-		if (!is_idle_task(p))
+		if (!walt_is_idle_task(p))
 			rollover_task_window(p, full_window);
 		wts->window_start = window_start;
 	}
@@ -1774,7 +1802,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 		 * same window.
 		 */
 
-		if (!irqtime || !is_idle_task(p) || cpu_is_waiting_on_io(rq))
+		if (!irqtime || !walt_is_idle_task(p) || cpu_is_waiting_on_io(rq))
 			delta = wallclock - mark_start;
 		else
 			delta = irqtime;
@@ -1783,7 +1811,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 		if (new_task)
 			*nt_curr_runnable_sum += delta;
 
-		if (!is_idle_task(p)) {
+		if (!walt_is_idle_task(p)) {
 			wts->curr_window += delta;
 			wts->curr_window_cpu[cpu] += delta;
 		}
@@ -1850,7 +1878,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 		goto done;
 	}
 
-	if (!irqtime || !is_idle_task(p) || cpu_is_waiting_on_io(rq)) {
+	if (!irqtime || !walt_is_idle_task(p) || cpu_is_waiting_on_io(rq)) {
 		/*
 		 * account_busy_for_cpu_time() = 1 so busy time needs
 		 * to be accounted to the current window. A new window
@@ -1870,7 +1898,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 			 * contribution to previous completed window.
 			 */
 			delta = scale_exec_time(window_start - mark_start, rq, wts);
-			if (!is_idle_task(p)) {
+			if (!walt_is_idle_task(p)) {
 				wts->prev_window += delta;
 				wts->prev_window_cpu[cpu] += delta;
 			}
@@ -1881,7 +1909,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 			 * full window (window_size).
 			 */
 			delta = scale_exec_time(window_size, rq, wts);
-			if (!is_idle_task(p)) {
+			if (!walt_is_idle_task(p)) {
 				wts->prev_window = delta;
 				wts->prev_window_cpu[cpu] = delta;
 			}
@@ -1897,7 +1925,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 		if (new_task)
 			*nt_curr_runnable_sum += delta;
 
-		if (!is_idle_task(p)) {
+		if (!walt_is_idle_task(p)) {
 			wts->curr_window = delta;
 			wts->curr_window_cpu[cpu] = delta;
 		}
@@ -1918,7 +1946,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 		 * started at wallclock - irqtime.
 		 */
 
-		WALT_PANIC(!is_idle_task(p));
+		WALT_PANIC(!walt_is_idle_task(p));
 		/* mark_start here becomes the starting time of interrupt */
 		mark_start = wallclock - irqtime;
 
@@ -1949,7 +1977,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 	}
 
 done:
-	if (!is_idle_task(p))
+	if (!walt_is_idle_task(p))
 		update_top_tasks(p, rq, old_curr_window,
 					new_window, full_window);
 }
@@ -1973,7 +2001,7 @@ account_busy_for_task_demand(struct rq *rq, struct task_struct *p, int event)
 	/*
 	 * No need to bother updating task demand for the idle task.
 	 */
-	if (is_idle_task(p))
+	if (walt_is_idle_task(p))
 		return 0;
 
 	/*
@@ -2007,9 +2035,8 @@ account_busy_for_task_demand(struct rq *rq, struct task_struct *p, int event)
 	return 1;
 }
 
-#define RAMP_UP_THRES 230
-#define FINAL_BUCKET_DEMAND ((NUM_BUSY_BUCKETS - 2) << \
-		(SCHED_CAPACITY_SHIFT - NUM_BUSY_BUCKETS_SHIFT))
+#define TRAILBLAZER_THRES 230
+#define TRAILBLAZER_BYPASS 243
 #define FINAL_BUCKET_STEP_UP 8
 #define FINAL_BUCKET_STEP_DOWN 1
 
@@ -2018,11 +2045,46 @@ static inline u32 scale_util_to_time(u16 util)
 	return util * walt_scale_demand_divisor;
 }
 
-static void update_high_util_history(struct task_struct *p, u16 runtime_scaled)
+static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
+		u32 runtime, u16 runtime_scaled, u32 *demand, u16 *trailblazer_demand)
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
+	bool is_prev_trailblazer = walt_flag_test(p, WALT_TRAILBLAZER_BIT);
+	u64 trailblazer_capacity;
 
-	if (runtime_scaled >= FINAL_BUCKET_DEMAND) {
+	if (walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
+			(((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
+			wts->high_util_history >= TRAILBLAZER_BYPASS)) {
+		*trailblazer_demand = 1 << SCHED_CAPACITY_SHIFT;
+		*demand = scale_util_to_time(*trailblazer_demand);
+		walt_flag_set(p, WALT_TRAILBLAZER_BIT, 1);
+	} else if (is_prev_trailblazer) {
+		walt_flag_set(p, WALT_TRAILBLAZER_BIT, 0);
+	}
+
+	/*
+	 * In the event that a trailblazer task is detected (or an existing trailblazer task
+	 * no longer matches the criteria) and is already enqueued on the cpu, ensure to
+	 * close the prod-sum accounts for this task before the next update takes place.
+	 */
+	if (task_on_rq_queued(p)) {
+		if (is_prev_trailblazer != walt_flag_test(p, WALT_TRAILBLAZER_BIT))
+			sched_update_nr_prod(rq->cpu, 0);
+		if (is_prev_trailblazer && !walt_flag_test(p, WALT_TRAILBLAZER_BIT))
+			wrq->walt_stats.nr_trailblazer_tasks--;
+		else if (!is_prev_trailblazer && walt_flag_test(p, WALT_TRAILBLAZER_BIT))
+			wrq->walt_stats.nr_trailblazer_tasks++;
+	}
+
+	/*
+	 * The CPU might be running with capped capacities. In order for a runtime to be considered
+	 * as trailblazer worthy, it must be 87.5% or more of the prime CPU capacity.
+	 */
+	trailblazer_capacity =
+		capacity_orig_of(cpumask_first(&cpu_array[0][num_sched_clusters - 1]));
+	trailblazer_capacity = trailblazer_capacity - (trailblazer_capacity >> 3);
+	if (runtime_scaled >= (u16)trailblazer_capacity) {
 		if (wts->high_util_history > U8_MAX - FINAL_BUCKET_STEP_UP)
 			wts->high_util_history = U8_MAX;
 		else
@@ -2048,11 +2110,16 @@ static void update_history(struct rq *rq, struct task_struct *p,
 	u32 max = 0, avg, demand;
 	u64 sum = 0;
 	u16 demand_scaled, pred_demand_scaled, runtime_scaled;
-	u16 ramp_up_demand = 0;
+	u16 trailblazer_demand = 0;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
+	/* clear yield status of task if there is a change in window */
+
+	if ((wts->yield_state & YIELD_CNT_MASK) < MAX_YIELD_CNT_PER_TASK_THR)
+		wts->yield_state = 0;
+
 	/* Ignore windows where task had no activity */
-	if (!runtime || is_idle_task(p) || !samples)
+	if (!runtime || walt_is_idle_task(p) || !samples)
 		goto done;
 
 	runtime_scaled = scale_time_to_util(runtime);
@@ -2087,18 +2154,15 @@ static void update_history(struct rq *rq, struct task_struct *p,
 		demand = max(avg, runtime);
 	}
 
-	if ((demand == runtime) && (wts->high_util_history >= RAMP_UP_THRES)) {
-		ramp_up_demand = 1 << SCHED_CAPACITY_SHIFT;
-		demand = scale_util_to_time(ramp_up_demand);
-	}
-
+	if (walt_fair_task(p))
+		update_trailblazer_accounting(p, rq, runtime, runtime_scaled,
+				&demand, &trailblazer_demand);
 	pred_demand_scaled = predict_and_update_buckets(p, runtime_scaled);
 	demand_scaled = scale_time_to_util(demand);
 
 	/*
-	 * A throttled deadline sched class task gets dequeued without
-	 * changing p->on_rq. Since the dequeue decrements walt stats
-	 * avoid decrementing it here again.
+	 * Avoid double accounting of task demand as demand will be updated
+	 * to CRA as part of enqueue/dequeue.
 	 *
 	 * When window is rolled over, the cumulative window demand
 	 * is reset to the cumulative runnable average (contribution from
@@ -2107,11 +2171,9 @@ static void update_history(struct rq *rq, struct task_struct *p,
 	 * average. So add the task demand separately to cumulative window
 	 * demand.
 	 */
-	if (!task_has_dl_policy(p) || !p->dl.dl_throttled) {
-		if (task_on_rq_queued(p))
-			fixup_walt_sched_stats_common(rq, p,
-					demand_scaled, pred_demand_scaled);
-	}
+	if (task_on_rq_queued(p))
+		fixup_walt_sched_stats_common(rq, p,
+					      demand_scaled, pred_demand_scaled);
 
 	wts->demand = demand;
 	wts->demand_scaled = demand_scaled;
@@ -2124,9 +2186,8 @@ static void update_history(struct rq *rq, struct task_struct *p,
 		if (wts->unfilter)
 			wts->unfilter = max_t(int, 0,
 				wts->unfilter - wrq->prev_window_size);
-	update_high_util_history(p, runtime_scaled);
 done:
-	trace_sched_update_history(rq, p, runtime, samples, event, wrq, wts, ramp_up_demand);
+	trace_sched_update_history(rq, p, runtime, samples, event, wrq, wts, trailblazer_demand);
 }
 
 static u64 add_to_task_demand(struct rq *rq, struct task_struct *p, u64 delta)
@@ -2294,7 +2355,7 @@ update_task_rq_cpu_cycles(struct task_struct *p, struct rq *rq, int event,
 	 * for IO wait time accounting.  Use the previously
 	 * calculated frequency in such a case.
 	 */
-	if (!is_idle_task(rq->curr) || irqtime) {
+	if (!walt_is_idle_task(rq->curr) || irqtime) {
 		if (unlikely(cur_cycles < wts->cpu_cycles))
 			cycles_delta = cur_cycles + (U64_MAX -
 				wts->cpu_cycles);
@@ -2302,7 +2363,7 @@ update_task_rq_cpu_cycles(struct task_struct *p, struct rq *rq, int event,
 			cycles_delta = cur_cycles - wts->cpu_cycles;
 		cycles_delta = cycles_delta * NSEC_PER_MSEC;
 
-		if (event == IRQ_UPDATE && is_idle_task(p))
+		if (event == IRQ_UPDATE && walt_is_idle_task(p))
 			/*
 			 * Time between mark_start of idle task and IRQ handler
 			 * entry time is CPU cycle counter stall period.
@@ -2447,6 +2508,7 @@ static void init_new_task_load(struct task_struct *p)
 	wts->prev_on_rq = 0;
 	wts->prev_on_rq_cpu = -1;
 	wts->pipeline_cpu = -1;
+	wts->yield_state = 0;
 
 	for (i = 0; i < NUM_BUSY_BUCKETS; ++i)
 		wts->busy_buckets[i] = 0;
@@ -2481,7 +2543,8 @@ static void init_new_task_load(struct task_struct *p)
 	wts->mark_start_birth_ts = 0;
 	wts->high_util_history = 0;
 	__sched_fork_init(p);
-	walt_flag_set(p, WALT_INIT, 1);
+	walt_flag_set(p, WALT_INIT_BIT, 1);
+	walt_flag_set(p, WALT_TRAILBLAZER_BIT, 0);
 }
 
 int remove_heavy(struct walt_task_struct *wts);
@@ -2491,11 +2554,14 @@ static void walt_task_dead(struct task_struct *p)
 
 	sched_set_group_id(p, 0);
 
-	if (wts->low_latency & WALT_LOW_LATENCY_PIPELINE)
+	if (wts->low_latency & WALT_LOW_LATENCY_PIPELINE_BIT)
 		remove_pipeline(wts);
 
-	if (wts->low_latency & WALT_LOW_LATENCY_HEAVY)
+	if (wts->low_latency & WALT_LOW_LATENCY_HEAVY_BIT)
 		remove_heavy(wts);
+
+	if (p == pipeline_special_task)
+		remove_special_task();
 }
 
 static void mark_task_starting(struct task_struct *p)
@@ -2550,7 +2616,6 @@ static struct walt_sched_cluster init_cluster = {
 	.max_possible_freq	= 1,
 	.aggr_grp_load		= 0,
 	.found_ts		= 0,
-	.smart_fmax_cap		= 1,
 };
 
 static void init_clusters(void)
@@ -2592,7 +2657,6 @@ static struct walt_sched_cluster *alloc_new_cluster(const struct cpumask *cpus)
 	raw_spin_lock_init(&cluster->load_lock);
 	cluster->cpus			= *cpus;
 	cluster->found_ts		= 0;
-	cluster->smart_fmax_cap		= 1;
 
 	return cluster;
 }
@@ -2901,28 +2965,6 @@ static void walt_update_cluster_topology(void)
 	 */
 	move_list(&cluster_head, &new_head, false);
 	update_all_clusters_stats();
-	cluster = NULL;
-
-	if (num_sched_clusters > 1)
-		/* assume sched_cluster[0] are smalls */
-		for (i = 1; i < num_sched_clusters; i++)
-			nr_big_cpus += cpumask_weight(&sched_cluster[i]->cpus);
-
-	if (soc_feat(SOC_ENABLE_ASYM_SIBLINGS)) {
-		cluster = NULL;
-		cpumask_clear(&asym_cap_sibling_cpus);
-		cpumask_clear(&shared_rail_sibling_cpus);
-		for_each_sched_cluster(cluster) {
-			if (cluster->id != 0 && cluster->id != num_sched_clusters - 1) {
-				cpumask_or(&asym_cap_sibling_cpus,
-					&asym_cap_sibling_cpus, &cluster->cpus);
-			}
-			if (cluster->id == 1 || cluster->id == num_sched_clusters - 1) {
-				cpumask_or(&shared_rail_sibling_cpus,
-					&shared_rail_sibling_cpus, &cluster->cpus);
-			}
-		}
-	}
 
 	init_cpu_array();
 	build_cpu_array();
@@ -2937,7 +2979,7 @@ static void walt_init_cycle_counter(void)
 	char *walt_cycle_cntr_path = "/soc/walt";
 	struct device_node *np = NULL;
 
-	if (soc_feat(SOC_ENABLE_SW_CYCLE_COUNTER)) {
+	if (soc_feat(SOC_ENABLE_SW_CYCLE_COUNTER_BIT)) {
 		walt_cycle_counter_init();
 	} else {
 		np = of_find_node_by_path(walt_cycle_cntr_path);
@@ -3107,7 +3149,7 @@ static int update_preferred_cluster(struct walt_related_thread_group *grp,
 #define ADD_TASK	0
 #define REM_TASK	1
 
-static inline struct walt_related_thread_group*
+struct walt_related_thread_group*
 lookup_related_thread_group(unsigned int group_id)
 {
 	return related_thread_groups[group_id];
@@ -3267,7 +3309,7 @@ static int __sched_set_group_id(struct task_struct *p, unsigned int group_id)
 	if (group_id >= MAX_NUM_CGROUP_COLOC_ID)
 		return -EINVAL;
 
-	if (unlikely(!walt_flag_test(p, WALT_INIT)))
+	if (unlikely(!walt_flag_test(p, WALT_INIT_BIT)))
 		return -EINVAL;
 
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
@@ -3678,534 +3720,6 @@ static void walt_update_irqload(struct rq *rq)
 		wrq->high_irqload = false;
 }
 
-__read_mostly int nr_big_cpus;
-static DEFINE_RAW_SPINLOCK(pipeline_lock);
-static struct walt_task_struct *pipeline_wts[WALT_NR_CPUS];
-int pipeline_nr;
-
-static DEFINE_RAW_SPINLOCK(heavy_lock);
-static struct walt_task_struct *heavy_wts[WALT_NR_CPUS];
-
-static inline int pipeline_demand(struct walt_task_struct *wts)
-{
-	return wts->coloc_demand;
-}
-
-int add_pipeline(struct walt_task_struct *wts)
-{
-	int i, pos = -1, ret = -ENOSPC;
-	unsigned long flags;
-
-	if (unlikely(walt_disabled))
-		return -EAGAIN;
-
-	raw_spin_lock_irqsave(&pipeline_lock, flags);
-
-	for (i = 0; i < nr_big_cpus; i++) {
-		if (wts == pipeline_wts[i]) {
-			ret = 0;
-			goto out;
-		}
-
-		if (pipeline_wts[i] == NULL)
-			pos = i;
-	}
-
-	if (pos != -1) {
-		pipeline_wts[pos] = wts;
-		pipeline_nr++;
-		ret = 0;
-	}
-out:
-	raw_spin_unlock_irqrestore(&pipeline_lock, flags);
-	return ret;
-}
-
-int remove_pipeline(struct walt_task_struct *wts)
-{
-	int i, ret = 0;
-	unsigned long flags;
-
-	if (unlikely(walt_disabled))
-		return -EAGAIN;
-
-	raw_spin_lock_irqsave(&pipeline_lock, flags);
-
-	/* assume only one entry of wts exists in the lists */
-	for (i = 0; i < WALT_NR_CPUS; i++) {
-		if (wts == pipeline_wts[i]) {
-			pipeline_wts[i] = NULL;
-			pipeline_nr--;
-			goto out;
-		}
-	}
-out:
-	raw_spin_unlock_irqrestore(&pipeline_lock, flags);
-	return ret;
-}
-
-int remove_heavy(struct walt_task_struct *wts)
-{
-	int i, ret = 0;
-	unsigned long flags;
-
-	if (unlikely(walt_disabled))
-		return -EAGAIN;
-
-	raw_spin_lock_irqsave(&heavy_lock, flags);
-
-	/* assume only one entry of wts exists in the lists */
-	for (i = 0; i < WALT_NR_CPUS; i++) {
-		if (wts == heavy_wts[i]) {
-			wts->low_latency &= ~WALT_LOW_LATENCY_HEAVY;
-			heavy_wts[i] = NULL;
-			goto out;
-		}
-	}
-out:
-	raw_spin_unlock_irqrestore(&heavy_lock, flags);
-	return ret;
-}
-
-cpumask_t cpus_for_pipeline = { CPU_BITS_NONE };
-
-/* always set boost for max cluster, for pipeline tasks */
-static inline void pipeline_set_boost(bool boost, int flag)
-{
-	static bool isolation_boost;
-	struct walt_sched_cluster *cluster;
-
-	if (!boost)
-		enable_pipeline_boost &= ~(1 << flag);
-	else
-		enable_pipeline_boost |= (1 << flag);
-
-	if (isolation_boost && !enable_pipeline_boost) {
-		isolation_boost = false;
-
-		for_each_sched_cluster(cluster) {
-			if (cpumask_intersects(&cpus_for_pipeline, &cluster->cpus) ||
-			    is_max_possible_cluster_cpu(cpumask_first(&cluster->cpus)))
-				core_ctl_set_cluster_boost(cluster->id, false);
-		}
-	} else if (!isolation_boost && enable_pipeline_boost) {
-		isolation_boost = true;
-
-		for_each_sched_cluster(cluster) {
-			if (cpumask_intersects(&cpus_for_pipeline, &cluster->cpus) ||
-			    is_max_possible_cluster_cpu(cpumask_first(&cluster->cpus)))
-				core_ctl_set_cluster_boost(cluster->id, true);
-		}
-	}
-}
-
-/*
- * sysctl_sched_heavy_nr can change at any moment in time. as a result,
- * the ability to set/clear boost state for a particular type of pipeline,
- * is hindered. Detect a transition and reset the boost state of the pipeline
- * method no longer in use.
- */
-static inline void pipeline_reset_boost(void)
-{
-	static unsigned int last_sched_heavy_nr;
-
-	if (sysctl_sched_heavy_nr != last_sched_heavy_nr) {
-		if (sysctl_sched_heavy_nr)
-			pipeline_set_boost(false, MANUAL_PIPELINE);
-		else
-			pipeline_set_boost(false, AUTO_PIPELINE);
-
-		last_sched_heavy_nr = sysctl_sched_heavy_nr;
-	}
-}
-
-cpumask_t last_available_big_cpus = CPU_MASK_NONE;
-int have_heavy_list;
-bool find_heaviest_topapp(u64 window_start)
-{
-	struct walt_related_thread_group *grp;
-	struct walt_task_struct *wts;
-	unsigned long flags;
-	static u64 last_rearrange_ns;
-	int i, j;
-	struct walt_task_struct *heavy_wts_to_drop[WALT_NR_CPUS];
-	int sched_heavy_nr = sysctl_sched_heavy_nr;
-
-	if (num_sched_clusters < 2)
-		return false;
-
-	if (last_rearrange_ns && (window_start < (last_rearrange_ns + 100 * MSEC_TO_NSEC)))
-		return false;
-
-	/* lazy enabling disabling until 100mS for colocation or heavy_nr change */
-	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
-	if (!grp || !grp->skip_min || !sched_heavy_nr) {
-		if (have_heavy_list) {
-			raw_spin_lock_irqsave(&heavy_lock, flags);
-			for (i = 0; i < WALT_NR_CPUS; i++) {
-				if (heavy_wts[i]) {
-					heavy_wts[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY;
-					heavy_wts[i]->pipeline_cpu = -1;
-					heavy_wts[i] = NULL;
-				}
-			}
-			raw_spin_unlock_irqrestore(&heavy_lock, flags);
-			have_heavy_list = 0;
-
-			pipeline_set_boost(false, AUTO_PIPELINE);
-		}
-		return false;
-	}
-
-	raw_spin_lock_irqsave(&grp->lock, flags);
-	raw_spin_lock(&heavy_lock);
-
-	/* remember the old ones in _to_drop[] */
-	for (i = 0; i < WALT_NR_CPUS; i++) {
-		heavy_wts_to_drop[i] = heavy_wts[i];
-		heavy_wts[i] = NULL;
-	}
-
-	/* find N top heavy tasks, add to array */
-	list_for_each_entry(wts, &grp->tasks, grp_list) {
-		struct walt_task_struct *to_be_placed_wts = wts;
-
-		/* if the task hasnt seen action recently skip it */
-		if (wts->mark_start < window_start - (sched_ravg_window * 2))
-			continue;
-
-		for (i = 0; i < sched_heavy_nr; i++) {
-			if (!heavy_wts[i]) {
-				heavy_wts[i] = to_be_placed_wts;
-				break;
-			} else if (pipeline_demand(to_be_placed_wts) >=
-					pipeline_demand(heavy_wts[i])) {
-				struct walt_task_struct *tmp;
-
-				tmp = heavy_wts[i];
-				heavy_wts[i] = to_be_placed_wts;
-				to_be_placed_wts = tmp;
-			}
-		}
-	}
-
-	/* reset heavy for tasks that are no longer heavy */
-	for (i = 0; i < WALT_NR_CPUS; i++) {
-		bool reset = true;
-
-		if (!heavy_wts_to_drop[i])
-			continue;
-		for (j = 0; j < WALT_NR_CPUS; j++) {
-			if (!heavy_wts[j])
-				continue;
-			if (heavy_wts_to_drop[i] == heavy_wts[j]) {
-				reset = false;
-				break;
-			}
-		}
-		if (reset) {
-			heavy_wts_to_drop[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY;
-			heavy_wts_to_drop[i]->pipeline_cpu = -1;
-		}
-	}
-
-	pipeline_set_boost(true, AUTO_PIPELINE);
-
-	/* start with non-prime cpus chosen for this chipset (e.g. golds) */
-	cpumask_and(&last_available_big_cpus, cpu_online_mask, &cpus_for_pipeline);
-	cpumask_andnot(&last_available_big_cpus, &last_available_big_cpus, cpu_halt_mask);
-	for (i = 0; i < WALT_NR_CPUS; i++) {
-		wts = heavy_wts[i];
-		if (!wts)
-			continue;
-
-		if (wts->pipeline_cpu != -1) {
-			if (cpumask_test_cpu(wts->pipeline_cpu, &last_available_big_cpus))
-				cpumask_clear_cpu(wts->pipeline_cpu, &last_available_big_cpus);
-			else
-				/* avoid assigning two pipelines to same cpu */
-				wts->pipeline_cpu = -1;
-		}
-	}
-
-	have_heavy_list = 0;
-	/* assign cpus and heavy status to the new heavy */
-	for (i = 0; i < WALT_NR_CPUS; i++) {
-		wts = heavy_wts[i];
-		if (!wts)
-			continue;
-
-		if (wts->pipeline_cpu == -1) {
-			wts->pipeline_cpu = cpumask_first(&last_available_big_cpus);
-			if (wts->pipeline_cpu >= nr_cpu_ids) {
-				/* drop from heavy if it can't be assigned */
-				heavy_wts[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY;
-				heavy_wts[i]->pipeline_cpu = -1;
-				heavy_wts[i] = NULL;
-			} else {
-				wts->low_latency |= WALT_LOW_LATENCY_HEAVY;
-				cpumask_clear_cpu(wts->pipeline_cpu, &last_available_big_cpus);
-			}
-		}
-		if (wts->pipeline_cpu)
-			have_heavy_list++;
-	}
-
-	last_rearrange_ns = window_start;
-
-	if (trace_sched_pipeline_tasks_enabled()) {
-		for (i = 0; i < WALT_NR_CPUS; i++) {
-			if (heavy_wts[i] != NULL)
-				trace_sched_pipeline_tasks(AUTO_PIPELINE, i, heavy_wts[i]);
-		}
-	}
-
-	raw_spin_unlock(&heavy_lock);
-	raw_spin_unlock_irqrestore(&grp->lock, flags);
-	return true;
-}
-
-static inline void swap_pipeline_with_prime_locked(struct walt_task_struct *prime_wts,
-						   struct walt_task_struct *other_wts)
-{
-	if (prime_wts && other_wts) {
-		if (pipeline_demand(prime_wts) < pipeline_demand(other_wts)) {
-			int cpu;
-
-			cpu = other_wts->pipeline_cpu;
-			other_wts->pipeline_cpu = prime_wts->pipeline_cpu;
-			prime_wts->pipeline_cpu = cpu;
-			trace_sched_pipeline_swapped(other_wts, prime_wts);
-		}
-	} else if (!prime_wts && other_wts) {
-		/* if prime preferred died promote gold to prime, assumes 1 prime */
-		other_wts->pipeline_cpu =
-			cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
-	}
-}
-
-#define WINDOW_HYSTERESIS 4
-static inline bool delay_rearrange(u64 window_start, int pipeline_type, bool force)
-{
-	static u64 last_rearrange_ns[MAX_PIPELINE_TYPES];
-
-	if (!force && last_rearrange_ns[pipeline_type] &&
-			(window_start < (last_rearrange_ns[pipeline_type] +
-			(sched_ravg_window*WINDOW_HYSTERESIS))))
-		return true;
-	last_rearrange_ns[pipeline_type] = window_start;
-	return false;
-}
-
-static inline void find_prime_and_max_tasks(struct walt_task_struct **wts_list,
-					    struct walt_task_struct **prime_wts,
-					    struct walt_task_struct **other_wts)
-{
-	int i;
-	int max_demand = 0;
-
-	for (i = 0; i < WALT_NR_CPUS; i++) {
-		struct walt_task_struct *wts = wts_list[i];
-
-		if (wts == NULL)
-			continue;
-
-		if (wts->pipeline_cpu < 0)
-			continue;
-
-		if (is_max_possible_cluster_cpu(wts->pipeline_cpu)) {
-			if (prime_wts)
-				*prime_wts = wts;
-		} else if (other_wts && pipeline_demand(wts) > max_demand) {
-			max_demand = pipeline_demand(wts);
-			*other_wts = wts;
-		}
-	}
-}
-
-static inline bool is_prime_worthy(struct walt_task_struct *wts)
-{
-	struct task_struct *p;
-
-	if (wts == NULL)
-		return false;
-
-	p = wts_to_ts(wts);
-
-	/* assume sched_cluster[1] references gold cpus */
-	return !task_fits_max(p, cpumask_last(&sched_cluster[1]->cpus));
-}
-
-void rearrange_heavy(u64 window_start, bool force)
-{
-	struct walt_related_thread_group *grp;
-	struct walt_task_struct *prime_wts = NULL;
-	struct walt_task_struct *other_wts = NULL;
-	unsigned long flags;
-
-	if (have_heavy_list <= 2) {
-		find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
-
-		if (prime_wts && !is_prime_worthy(prime_wts)) {
-			int assign_cpu;
-
-			/* demote prime_wts, it is not worthy */
-			assign_cpu = cpumask_first(&last_available_big_cpus);
-			if (assign_cpu < nr_cpu_ids) {
-				prime_wts->pipeline_cpu = assign_cpu;
-				cpumask_clear_cpu(assign_cpu, &last_available_big_cpus);
-				prime_wts = NULL;
-			}
-			/* if no pipeline cpu available to assign, leave task on prime */
-		}
-
-		if (!prime_wts && is_prime_worthy(other_wts)) {
-			/* promote other_wts to prime, it is worthy */
-			swap_pipeline_with_prime_locked(NULL, other_wts);
-		}
-
-		return;
-	}
-
-	/* checks to avoid rearrangemment, until the next find_heavy run */
-	if (sysctl_sched_heavy_nr <= 2)
-		return;
-
-	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
-	if (!grp)
-		return;
-	if (!grp->skip_min)
-		return;
-
-	if (delay_rearrange(window_start, AUTO_PIPELINE, force))
-		return;
-
-	raw_spin_lock_irqsave(&heavy_lock, flags);
-
-	find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
-
-	/* swap prime for have_heavy_list >= 3 */
-	swap_pipeline_with_prime_locked(prime_wts, other_wts);
-
-	raw_spin_unlock_irqrestore(&heavy_lock, flags);
-}
-
-void rearrange_pipeline_preferred_cpus(u64 window_start)
-{
-	struct walt_related_thread_group *grp;
-	unsigned long flags;
-	struct walt_task_struct *wts;
-	bool found_pipeline = false;
-	u32 max_demand = 0;
-	struct walt_task_struct *prime_wts = NULL;
-	struct walt_task_struct *other_wts = NULL;
-	static int assign_cpu = -1;
-	static bool last_found_pipeline;
-	int i;
-
-	if (sysctl_sched_heavy_nr)
-		return;
-
-	if (num_sched_clusters < 2)
-		return;
-
-	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
-	if (!grp)
-		goto out;
-	if (!grp->skip_min)
-		goto out;
-	if (delay_rearrange(window_start, MANUAL_PIPELINE, false))
-		goto out;
-
-	raw_spin_lock_irqsave(&pipeline_lock, flags);
-	if (pipeline_nr == 0)
-		goto release_lock;
-
-	found_pipeline = true;
-
-	for (i = 0; i < WALT_NR_CPUS; i++) {
-		wts = pipeline_wts[i];
-
-		if (!wts)
-			continue;
-
-		if (!wts->grp)
-			wts->pipeline_cpu = -1;
-
-		/*
-		 * assummes that if one pipeline doesn't have preferred set,
-		 * all pipelines too do not have it set
-		 */
-		if (wts->pipeline_cpu == -1) {
-			assign_cpu = cpumask_next_and(assign_cpu,
-						&cpus_for_pipeline, cpu_online_mask);
-
-			if (assign_cpu >= nr_cpu_ids)
-				/* reset and rotate the cpus */
-				assign_cpu = cpumask_next_and(-1,
-						&cpus_for_pipeline, cpu_online_mask);
-
-			if (assign_cpu >= nr_cpu_ids)
-				wts->pipeline_cpu = -1;
-			else
-				wts->pipeline_cpu = assign_cpu;
-		}
-
-		if (wts->pipeline_cpu != -1) {
-			if (is_max_possible_cluster_cpu(wts->pipeline_cpu)) {
-				/* assumes just one prime */
-				prime_wts = wts;
-			} else if (pipeline_demand(wts) > max_demand) {
-				max_demand = pipeline_demand(wts);
-				other_wts = wts;
-			}
-		}
-	}
-
-	if (pipeline_nr <= 2) {
-		if (prime_wts && !is_prime_worthy(prime_wts)) {
-			/* demote prime_wts, it is not worthy */
-			assign_cpu = cpumask_next_and(assign_cpu,
-						&cpus_for_pipeline, cpu_online_mask);
-			if (assign_cpu >= nr_cpu_ids)
-				/* reset and rotate the cpus */
-				assign_cpu = cpumask_next_and(-1,
-							&cpus_for_pipeline, cpu_online_mask);
-			if (assign_cpu >= nr_cpu_ids)
-				prime_wts->pipeline_cpu = -1;
-			else
-				prime_wts->pipeline_cpu = assign_cpu;
-			prime_wts = NULL;
-		}
-
-		if (!prime_wts && is_prime_worthy(other_wts)) {
-			/* promote other_wts to prime, it is worthy */
-			swap_pipeline_with_prime_locked(NULL, other_wts);
-		}
-
-		goto release_lock;
-	}
-
-	/* swap prime for nr_piprline >= 3 */
-	swap_pipeline_with_prime_locked(prime_wts, other_wts);
-
-	if (trace_sched_pipeline_tasks_enabled()) {
-		for (i = 0; i < WALT_NR_CPUS; i++) {
-			if (pipeline_wts[i] != NULL)
-				trace_sched_pipeline_tasks(MANUAL_PIPELINE, i, pipeline_wts[i]);
-		}
-	}
-
-release_lock:
-	raw_spin_unlock_irqrestore(&pipeline_lock, flags);
-
-out:
-	if (found_pipeline ^ last_found_pipeline) {
-		pipeline_set_boost(found_pipeline, MANUAL_PIPELINE);
-		last_found_pipeline = found_pipeline;
-	}
-}
-
 /**
  * __walt_irq_work_locked() - common function to process work
  * @is_migration: if true, performing migration work, else rollover
@@ -4222,7 +3736,7 @@ out:
  * involved in the migration.
  */
 static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migration,
-				bool is_shared_rail_migration, struct cpumask *lock_cpus)
+				bool is_pipeline_sync_migration, struct cpumask *lock_cpus)
 {
 	struct walt_sched_cluster *cluster;
 	struct rq *rq;
@@ -4246,9 +3760,9 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 				/* only update ravg for locked cpus */
 				if (cpumask_intersects(lock_cpus, &cluster->cpus)) {
 					if (unlikely(!raw_spin_is_locked(&rq->__lock))) {
-						printk_deferred("WALT-BUG %s unlocked cpu=%d is_migration=%d is_asym_migration=%d is_shared_rail_migration=%d lock_cpus=%*pbl suspended=%d last_clk=%llu stack[%pS <= %pS <= %pS]\n",
+						printk_deferred("WALT-BUG %s unlocked cpu=%d is_migration=%d is_asym_migration=%d is_pipeline_sync_migration=%d lock_cpus=%*pbl suspended=%d last_clk=%llu stack[%pS <= %pS <= %pS]\n",
 						__func__, rq->cpu, is_migration, is_asym_migration,
-						is_shared_rail_migration,
+						is_pipeline_sync_migration,
 						cpumask_pr_args(lock_cpus), walt_clock_suspended,
 						sched_clock_last, (void *)CALLER_ADDR0,
 						(void *)CALLER_ADDR1, (void *)CALLER_ADDR2);
@@ -4299,21 +3813,21 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 			if (is_migration) {
 				if (wrq->notif_pending) {
 					wrq->notif_pending = false;
-					wflag |= WALT_CPUFREQ_IC_MIGRATION;
+					wflag |= WALT_CPUFREQ_IC_MIGRATION_BIT;
 				}
 				if (is_asym_migration)
-					wflag |= WALT_CPUFREQ_ASYM_FIXUP;
-				if (is_shared_rail_migration)
-					wflag |= WALT_CPUFREQ_SHARED_RAIL;
+					wflag |= WALT_CPUFREQ_ASYM_FIXUP_BIT;
+				if (is_pipeline_sync_migration)
+					wflag |= WALT_CPUFREQ_SHARED_RAIL_BIT;
 			} else {
-				wflag |= WALT_CPUFREQ_ROLLOVER;
+				wflag |= WALT_CPUFREQ_ROLLOVER_BIT;
 			}
 
 			if (i == num_cpus)
 				waltgov_run_callback(cpu_rq(cpu), wflag);
 			else
 				waltgov_run_callback(cpu_rq(cpu), wflag |
-							WALT_CPUFREQ_CONTINUE);
+							WALT_CPUFREQ_CONTINUE_BIT);
 			i++;
 
 			if (!is_migration)
@@ -4404,8 +3918,9 @@ void update_cpu_capacity_helper(int cpu)
 	cluster = cpu_cluster(cpu);
 	/* reduce the fmax_capacity under cpufreq constraints */
 	if (cluster->walt_internal_freq_limit != cluster->max_possible_freq)
-		fmax_capacity = mult_frac(fmax_capacity, cluster->walt_internal_freq_limit,
-					 cluster->max_possible_freq);
+		fmax_capacity = mult_frac(fmax_capacity,
+					min(cluster->walt_internal_freq_limit, cluster->max_freq),
+					cluster->max_possible_freq);
 
 	old = capacity_orig_of(cpu);
 	wrq->cpu_capacity_orig = min(fmax_capacity, thermal_cap);
@@ -4427,6 +3942,123 @@ static void android_rvh_update_cpu_capacity(void *unused, int cpu, unsigned long
 	*capacity = max((int)(capacity_orig_of(cpu) - rt_pressure), 0);
 }
 
+/*
+ *	big_task_pid is used by the One Big Enqueue Task feature to track the
+ *	number of big tasks enqueued on largest cluster.
+ *	big_task_pid = {0, pid, -1}
+ *	0 -> indicates there are 0 big tasks enqueued on the CPU
+ *	pid -> indicates that there is one big task enqueued whose PID
+ *	is pid
+ *	-1 -> indicates that there is more than one big task enqueued
+ *	on the CPU.
+ *	The big_task_pid value is checked every window rollover
+ *	and updated according to the rules above.
+ */
+DEFINE_PER_CPU(pid_t, big_task_pid);
+bool is_obet;
+
+/*
+ * check_obet() needs to be called with all the rq locks held.
+ * It resets per cpu big_task_pid and does cpu checks on a
+ * single big task.
+ */
+static void check_obet(void)
+{
+	struct task_struct *p;
+	int is_obet_temp = 0;
+	int mid_cluster_cpu, cpu;
+
+	if (num_sched_clusters < 2)
+		return;
+
+	mid_cluster_cpu = cpumask_first(&cpu_array[0][num_sched_clusters - 2]);
+
+	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
+		if (per_cpu(big_task_pid, cpu) == -1) {
+			is_obet_temp = -1;
+		} else if (per_cpu(big_task_pid, cpu) != 0) {
+			if (is_obet_temp == 0) {
+				is_obet_temp = per_cpu(big_task_pid, cpu);
+			} else {
+				if (is_obet_temp != per_cpu(big_task_pid, cpu))
+					is_obet_temp = -1;
+			}
+		}
+	}
+
+	if (is_obet_temp == -1 || is_obet_temp == 0)
+		is_obet = false;
+	else
+		is_obet = true;
+
+	//reset per CPU big_task_pid for the upcoming window
+	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
+		pid_t pid = per_cpu(big_task_pid, cpu);
+
+		if (pid) {
+			int task_count = 0;
+			int big_task_count = 0;
+
+			list_for_each_entry(p, &(cpu_rq(cpu)->cfs_tasks),
+					se.group_node) {
+				task_count++;
+				if (!task_fits_max(p, mid_cluster_cpu)) {
+					big_task_count++;
+					pid = p->pid;
+					if (big_task_count == 2)
+						break;
+				}
+				if (task_count == 10)
+					break;
+			}
+			if (task_count == 10)
+				per_cpu(big_task_pid, cpu) = -1;
+			else if (big_task_count == 0)
+				per_cpu(big_task_pid, cpu) = 0;
+			else if (big_task_count == 1)
+				per_cpu(big_task_pid, cpu) = pid;
+			else
+				per_cpu(big_task_pid, cpu) = -1;
+		}
+	}
+}
+
+static void check_obet_set_boost(void)
+{
+	static bool prev_is_obet;
+	bool now_is_obet;
+
+	//Determine if core_ctl boost is needed
+	now_is_obet = is_obet;
+	if (prev_is_obet != now_is_obet)
+		core_ctl_set_cluster_boost(num_sched_clusters - 1, is_obet);
+	prev_is_obet = now_is_obet;
+}
+
+#define CORE_UTIL_PERIOD 1000000000
+static void walt_core_utilization(int cpu)
+{
+	static u64 sum[WALT_NR_CPUS];
+	static u64 timestamp;
+	static int nr_windows[WALT_NR_CPUS];
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
+	u64 max_capacity = arch_scale_cpu_capacity(cpu);
+
+	if (wrq->window_start > timestamp + CORE_UTIL_PERIOD) {
+		sysctl_sched_walt_core_util[cpu] = sum[cpu] / nr_windows[cpu];
+		sum[cpu] = 0;
+		nr_windows[cpu] = 0;
+		if (cpu == cpumask_last(cpu_online_mask))
+			timestamp = wrq->window_start;
+	}
+
+	nr_windows[cpu]++;
+	if (max_capacity < wrq->walt_stats.cumulative_runnable_avg_scaled)
+		sum[cpu] += max_capacity;
+	else
+		sum[cpu] += wrq->walt_stats.cumulative_runnable_avg_scaled;
+}
+
 DEFINE_PER_CPU(u32, wakeup_ctr);
 /**
  * walt_irq_work() - perform walt irq work for rollover and migration
@@ -4442,9 +4074,8 @@ static void walt_irq_work(struct irq_work *irq_work)
 	struct walt_rq *wrq;
 	int level;
 	int cpu;
-	bool is_migration = false, is_asym_migration = false, is_shared_rail_migration = false;
+	bool is_migration = false, is_asym_migration = false, is_pipeline_sync_migration = false;
 	u32 wakeup_ctr_sum = 0;
-	bool found_topapp = false;
 
 	if (irq_work == &walt_migration_irq_work)
 		is_migration = true;
@@ -4462,10 +4093,10 @@ static void walt_irq_work(struct irq_work *irq_work)
 		if (cpumask_empty(&lock_cpus))
 			return;
 
-		if (cpumask_intersects(&lock_cpus, &shared_rail_sibling_cpus) &&
+		if (cpumask_intersects(&lock_cpus, &pipeline_sync_cpus) &&
 				enable_pipeline_boost) {
-			cpumask_or(&lock_cpus, &lock_cpus, &shared_rail_sibling_cpus);
-			is_shared_rail_migration = true;
+			cpumask_or(&lock_cpus, &lock_cpus, &pipeline_sync_cpus);
+			is_pipeline_sync_migration = true;
 		}
 		if (!is_state1() &&
 				cpumask_intersects(&lock_cpus, &asym_cap_sibling_cpus)) {
@@ -4484,13 +4115,17 @@ static void walt_irq_work(struct irq_work *irq_work)
 	}
 
 	__walt_irq_work_locked(is_migration, is_asym_migration,
-			is_shared_rail_migration, &lock_cpus);
+			is_pipeline_sync_migration, &lock_cpus);
 
 	if (!is_migration) {
 		for_each_cpu(cpu, cpu_online_mask) {
 			wakeup_ctr_sum += per_cpu(wakeup_ctr, cpu);
 			per_cpu(wakeup_ctr, cpu) = 0;
+
+			walt_core_utilization(cpu);
 		}
+
+		check_obet();
 	}
 
 	for_each_cpu(cpu, &lock_cpus)
@@ -4498,12 +4133,9 @@ static void walt_irq_work(struct irq_work *irq_work)
 
 	if (!is_migration) {
 		wrq = &per_cpu(walt_rq, cpu_of(this_rq()));
-		found_topapp = find_heaviest_topapp(wrq->window_start);
-		/* found_topapp should force rearrangement */
-		rearrange_heavy(wrq->window_start, found_topapp);
-		rearrange_pipeline_preferred_cpus(wrq->window_start);
-		pipeline_reset_boost();
+		pipeline_check(wrq);
 		core_ctl_check(wrq->window_start, wakeup_ctr_sum);
+		check_obet_set_boost();
 	}
 }
 
@@ -4524,87 +4156,12 @@ void walt_rotation_checkpoint(int nr_big)
 
 	for (i = 0; i < num_sched_clusters; i++) {
 		if (walt_rotation_enabled && !prev)
-			fmax_cap[HIGH_PERF_CAP][i] = high_perf_cluster_freq_cap[i];
+			freq_cap[HIGH_PERF_CAP][i] = high_perf_cluster_freq_cap[i];
 		else if (!walt_rotation_enabled && prev)
-			fmax_cap[HIGH_PERF_CAP][i] = FREQ_QOS_MAX_DEFAULT_VALUE;
+			freq_cap[HIGH_PERF_CAP][i] = FREQ_QOS_MAX_DEFAULT_VALUE;
 	}
 
-	update_fmax_cap_capacities(HIGH_PERF_CAP);
-}
-
-#define WAKEUP_CTR_THRESH 50
-#define FMAX_CAP_HYSTERESIS 1000000000
-#define UTIL_THRES 90
-#define UNCAP_THRES 300000000
-bool thres_based_uncap(u64 window_start)
-{
-	struct walt_sched_cluster *cluster;
-	int cpu, i = 0;
-	struct walt_rq *wrq;
-
-	for (i = 0; i < num_sched_clusters; i++) {
-		bool cluster_high_load = false;
-
-		cluster = sched_cluster[i];
-
-		for_each_cpu(cpu, &cluster->cpus) {
-			wrq = &per_cpu(walt_rq, cpu);
-			if (wrq->util >= mult_frac(UTIL_THRES, cluster->smart_fmax_cap, 100)) {
-				cluster_high_load = true;
-				if (!cluster->found_ts)
-					cluster->found_ts = window_start;
-				else if ((window_start - cluster->found_ts) >= UNCAP_THRES)
-					return true;
-			}
-		}
-		if (!cluster_high_load)
-			cluster->found_ts = 0;
-	}
-
-	return false;
-}
-
-void fmax_uncap_checkpoint(int nr_big, u64 window_start, u32 wakeup_ctr_sum)
-{
-	bool fmax_uncap_load_detected;
-	static u64 fmax_uncap_timestamp;
-	int i;
-	bool change = false;
-
-	fmax_uncap_load_detected = (nr_big >= 7 && wakeup_ctr_sum < WAKEUP_CTR_THRESH) ||
-			is_full_throttle_boost() ||
-			is_storage_boost() ||
-			thres_based_uncap(window_start);
-
-	if (fmax_uncap_load_detected) {
-		if (!fmax_uncap_timestamp)
-			for (i = 0; i < num_sched_clusters; i++)
-				fmax_cap[SMART_FMAX_CAP][i] = FREQ_QOS_MAX_DEFAULT_VALUE;
-		fmax_uncap_timestamp = window_start;
-	} else {
-		for (int i = 0; i < num_sched_clusters; i++) {
-			if (fmax_cap[SMART_FMAX_CAP][i] != sysctl_fmax_cap[i]) {
-				change = true;
-				break;
-			}
-		}
-		if (change || (fmax_uncap_timestamp &&
-			(window_start > fmax_uncap_timestamp + FMAX_CAP_HYSTERESIS))) {
-			for (int i = 0; i < num_sched_clusters; i++)
-				fmax_cap[SMART_FMAX_CAP][i] = sysctl_fmax_cap[i];
-			fmax_uncap_timestamp = 0;
-		}
-	}
-
-	update_fmax_cap_capacities(SMART_FMAX_CAP);
-
-	trace_sched_fmax_uncap(nr_big, window_start, wakeup_ctr_sum,
-			fmax_uncap_load_detected, fmax_uncap_timestamp);
-
-	if (trace_sched_cluster_fmax_uncap_enabled()) {
-		for (i = 0; i < num_sched_clusters; i++)
-			trace_sched_cluster_fmax_uncap(i);
-	}
+	update_smart_freq_capacities();
 }
 
 void walt_fill_ta_data(struct core_ctl_notif_data *data)
@@ -4668,13 +4225,13 @@ fill_util:
 	}
 }
 
+#define INIT_TASK_LOAD_PCT 15
 static void walt_init_window_dep(void)
 {
 	walt_scale_demand_divisor = sched_ravg_window >> SCHED_CAPACITY_SHIFT;
-
-	sched_init_task_load_windows =
-		div64_u64((u64)sysctl_sched_init_task_load_pct *
-			  (u64)sched_ravg_window, 100);
+	/* default task to 15 pct */
+	sched_init_task_load_windows = div64_u64((u64)INIT_TASK_LOAD_PCT *
+			(u64)sched_ravg_window, 100);
 	sched_init_task_load_windows_scaled =
 		scale_time_to_util(sched_init_task_load_windows);
 
@@ -4693,15 +4250,13 @@ static void walt_sched_init_rq(struct rq *rq)
 	int j;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
-	if (cpu_of(rq) == 0)
-		walt_init_once();
-
 	cpumask_set_cpu(cpu_of(rq), &wrq->freq_domain_cpumask);
 
 	wrq->walt_stats.cumulative_runnable_avg_scaled = 0;
 	wrq->prev_window_size = sched_ravg_window;
 	wrq->window_start = 0;
 	wrq->walt_stats.nr_big_tasks = 0;
+	wrq->walt_stats.nr_trailblazer_tasks = 0;
 	wrq->walt_flags = 0;
 	wrq->avg_irqload = 0;
 	wrq->prev_irq_time = 0;
@@ -4737,6 +4292,9 @@ static void walt_sched_init_rq(struct rq *rq)
 
 	wrq->num_mvp_tasks = 0;
 	INIT_LIST_HEAD(&wrq->mvp_tasks);
+	wrq->mvp_arrival_time = 0;
+	wrq->mvp_throttle_time = 0;
+	wrq->skip_mvp = false;
 }
 
 void sched_window_nr_ticks_change(void)
@@ -4768,33 +4326,6 @@ walt_dec_cumulative_runnable_avg(struct rq *rq, struct task_struct *p)
 	fixup_cumulative_runnable_avg(rq, p, &wrq->walt_stats,
 				      -(s64)wts->demand_scaled,
 				      -(s64)wts->pred_demand_scaled);
-}
-
-static void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
-{
-	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
-
-	if (wts->misfit)
-		wrq->walt_stats.nr_big_tasks++;
-
-	wts->rtg_high_prio = task_rtg_high_prio(p);
-	if (wts->rtg_high_prio)
-		wrq->walt_stats.nr_rtg_high_prio_tasks++;
-}
-
-static void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
-{
-	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
-
-	if (wts->misfit)
-		wrq->walt_stats.nr_big_tasks--;
-
-	if (wts->rtg_high_prio)
-		wrq->walt_stats.nr_rtg_high_prio_tasks--;
-
-	BUG_ON(wrq->walt_stats.nr_big_tasks < 0);
 }
 
 static void android_rvh_wake_up_new_task(void *unused, struct task_struct *new)
@@ -4867,7 +4398,7 @@ static void android_rvh_account_irq(void *unused, struct task_struct *curr, int 
 	if (unlikely(walt_disabled))
 		return;
 
-	if (!is_idle_task(curr))
+	if (!walt_is_idle_task(curr))
 		return;
 
 	rq = cpu_rq(cpu);
@@ -4904,6 +4435,7 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	bool double_enqueue = false;
+	int mid_cluster_cpu;
 
 	if (unlikely(walt_disabled))
 		return;
@@ -4950,8 +4482,24 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 	if (!double_enqueue)
 		walt_inc_cumulative_runnable_avg(rq, p);
 
-	if ((flags & ENQUEUE_WAKEUP) && do_pl_notif(rq))
-		waltgov_run_callback(rq, WALT_CPUFREQ_PL);
+	if ((flags & ENQUEUE_WAKEUP)) {
+		if (walt_flag_test(p, WALT_TRAILBLAZER_BIT))
+			waltgov_run_callback(rq, WALT_CPUFREQ_TRAILBLAZER_BIT);
+		else if (do_pl_notif(rq))
+			waltgov_run_callback(rq, WALT_CPUFREQ_PL_BIT);
+	}
+
+	if (num_sched_clusters >= 2) {
+		mid_cluster_cpu = cpumask_first(
+				&cpu_array[0][num_sched_clusters - 2]);
+		if (is_max_possible_cluster_cpu(rq->cpu) &&
+				!task_fits_max(p, mid_cluster_cpu)) {
+			if (!per_cpu(big_task_pid, rq->cpu))
+				per_cpu(big_task_pid, rq->cpu) = p->pid;
+			else if (p->pid != per_cpu(big_task_pid, rq->cpu))
+				per_cpu(big_task_pid, rq->cpu) = -1;
+		}
+	}
 
 	trace_sched_enq_deq_task(p, 1, cpumask_bits(p->cpus_ptr)[0], is_mvp(wts));
 }
@@ -4974,7 +4522,7 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 	 * an invalid failure.
 	 */
 	if (wts->prev_on_rq_cpu >= 0 && wts->prev_on_rq_cpu != cpu_of(rq) &&
-			walt_flag_test(p, WALT_INIT))
+			walt_flag_test(p, WALT_INIT_BIT))
 		WALT_BUG(WALT_BUG_UPSTREAM, p, "dequeue cpu %d not same as enqueue %d\n",
 			 cpu_of(rq), wts->prev_on_rq_cpu);
 
@@ -5047,6 +4595,7 @@ static void android_rvh_update_misfit_status(void *unused, struct task_struct *p
 static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 {
 	struct rq *rq = cpu_rq(task_cpu(p));
+	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	struct rq_flags rf;
 	u64 wallclock;
 	unsigned int old_load;
@@ -5058,7 +4607,18 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 	old_load = task_load(p);
 	wallclock = walt_sched_clock();
 
-	if (is_idle_task(rq->curr) && p->in_iowait)
+	/*
+	 * Once task does a sleep(not the yield induce sleep)
+	 * reset the flag, to ensure task is no longer qualified
+	 * as frequent yielder.
+	 * i.e. task needs to qualify again as frequent yielder.
+	 */
+	if (!(wts->yield_state & YIELD_INDUCED_SLEEP))
+		wts->yield_state = 0;
+	else
+		wts->yield_state &= YIELD_CNT_MASK;
+
+	if (walt_is_idle_task(rq->curr) && p->in_iowait)
 		walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
 	walt_update_task_ravg(p, rq, TASK_WAKE, wallclock, 0);
 	note_task_waking(p, wallclock);
@@ -5074,6 +4634,39 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 static u64 tick_sched_clock;
 static DECLARE_COMPLETION(tick_sched_clock_completion);
 
+DEFINE_PER_CPU(unsigned long, intr_cnt);
+DEFINE_PER_CPU(unsigned long, cycle_cnt);
+DEFINE_PER_CPU(unsigned int, ipc_level);
+DEFINE_PER_CPU(unsigned long, ipc_cnt);
+DEFINE_PER_CPU(u64, last_ipc_update);
+DEFINE_PER_CPU(u64, ipc_deactivate_ns);
+DEFINE_PER_CPU(bool, tickless_mode);
+static unsigned long calculate_ipc(int cpu)
+{
+	unsigned long amu_cnt, delta_cycl = 0, delta_intr = 0;
+	unsigned long prev_cycl_cnt = per_cpu(cycle_cnt, cpu);
+	unsigned long prev_intr_cnt = per_cpu(intr_cnt, cpu);
+	unsigned long ipc = 0;
+	struct walt_sched_cluster *cluster = cpu_cluster(cpu);
+
+	amu_cnt = read_sysreg_s(SYS_AMEVCNTR0_CORE_EL0);
+	delta_cycl = amu_cnt - prev_cycl_cnt;
+	per_cpu(cycle_cnt, cpu) = amu_cnt;
+	amu_cnt = read_sysreg_s(SYS_AMEVCNTR0_INST_RET_EL0);
+	per_cpu(intr_cnt, cpu) = amu_cnt;
+	delta_intr = amu_cnt - prev_intr_cnt;
+	if (prev_cycl_cnt && delta_cycl > cluster->smart_freq_info->min_cycles)
+		ipc = (delta_intr * 100) / delta_cycl;
+
+	per_cpu(ipc_cnt, cpu) = ipc;
+	per_cpu(last_ipc_update, cpu) = cpu_rq(cpu)->clock;
+	trace_ipc_update(cpu, per_cpu(cycle_cnt, cpu), per_cpu(intr_cnt, cpu),
+			 per_cpu(ipc_cnt, cpu), per_cpu(last_ipc_update, cpu),
+			 per_cpu(ipc_deactivate_ns, cpu), cpu_rq(cpu)->clock);
+
+	return ipc;
+}
+
 static void android_rvh_tick_entry(void *unused, struct rq *rq)
 {
 	u64 wallclock;
@@ -5087,13 +4680,84 @@ static void android_rvh_tick_entry(void *unused, struct rq *rq)
 	walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
 
 	if (is_ed_task_present(rq, wallclock, NULL))
-		waltgov_run_callback(rq, WALT_CPUFREQ_EARLY_DET);
+		waltgov_run_callback(rq, WALT_CPUFREQ_EARLY_DET_BIT);
+
+}
+
+bool is_sbt_or_oscillate(void)
+{
+	return now_is_sbt || (oscillate_cpu != -1);
+}
+
+bool should_boost_bus_dcvs(void)
+{
+	trace_sched_boost_bus_dcvs(oscillate_cpu);
+
+	return (oscillate_cpu != -1) || is_storage_boost();
+}
+EXPORT_SYMBOL_GPL(should_boost_bus_dcvs);
+
+/*
+ * oscillate_cpu = {-1, cpu} tells if system is currently rotating a big
+ * task between Prime CPUs and on which CPU the big task is currently
+ * executing.
+ * If it is -1, no big task oscillation is occurring.
+ */
+int oscillate_cpu = -1;
+static struct hrtimer walt_oscillate_timer;
+
+bool should_oscillate(void)
+{
+	int cpu;
+	int is_only_one_cpu_active = 0;
+	int this_cpu = raw_smp_processor_id();
+	int thermal_pressure = arch_scale_thermal_pressure(this_cpu);
+
+	if (!thermal_pressure)
+		return false;
+
+	if (!is_obet)
+		return false;
+
+	if (!is_max_possible_cluster_cpu(this_cpu))
+		return false;
+
+	if (cpumask_weight(&cpu_array[0][num_sched_clusters - 1]) == 1)
+		return false;
+
+	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
+		is_only_one_cpu_active += !available_idle_cpu(cpu);
+	}
+	if (is_only_one_cpu_active != 1)
+		return false;
+
+	return true;
+}
+
+static void should_oscillate_tick(void)
+{
+	int this_cpu = raw_smp_processor_id();
+
+	if (should_oscillate()) {
+		if (oscillate_cpu == -1) {
+			hrtimer_start(&walt_oscillate_timer,
+					ns_to_ktime(oscillate_period_ns),
+				HRTIMER_MODE_REL_PINNED_HARD);
+			oscillate_cpu = this_cpu;
+		}
+	}
 }
 
 static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 {
 	struct walt_related_thread_group *grp;
-	u32 old_load;
+	unsigned int old_load, last_ipc_level, curr_ipc_level;
+	unsigned long ipc;
+	int i, cpu = cpu_of(rq);
+	struct walt_sched_cluster *cluster;
+	struct smart_freq_cluster_info *smart_freq_info;
+	u64 last_deactivate_ns;
+	bool inform_governor;
 
 	if (!tick_sched_clock) {
 		/*
@@ -5118,6 +4782,49 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 	rcu_read_unlock();
 
 	walt_lb_tick(rq);
+
+	if (soc_feat(SOC_ENABLE_EXPERIMENT3))
+		should_oscillate_tick();
+
+	/* IPC based smart FMAX */
+	cluster = cpu_cluster(cpu);
+	smart_freq_info = cluster->smart_freq_info;
+	if (smart_freq_init_done &&
+		smart_freq_info->smart_freq_ipc_participation_mask & IPC_PARTICIPATION) {
+		last_ipc_level = per_cpu(ipc_level, cpu);
+		last_deactivate_ns = per_cpu(ipc_deactivate_ns, cpu);
+		ipc = calculate_ipc(cpu);
+		for (i = 0; i < SMART_FMAX_IPC_MAX; i++)
+			if (ipc < smart_freq_info->ipc_reason_config[i].ipc)
+				break;
+
+		if (i >= SMART_FMAX_IPC_MAX)
+			i = SMART_FMAX_IPC_MAX - 1;
+
+		curr_ipc_level = i;
+		if ((curr_ipc_level != last_ipc_level) || per_cpu(tickless_mode, cpu))
+			inform_governor = true;
+
+		if ((curr_ipc_level < last_ipc_level) &&
+		    (smart_freq_info->ipc_reason_config[last_ipc_level].hyst_ns > 0)) {
+			if (!last_deactivate_ns) {
+				per_cpu(ipc_deactivate_ns, cpu) = rq->clock;
+				inform_governor = false;
+			} else {
+				u64 delta = rq->clock - last_deactivate_ns;
+
+				if (smart_freq_info->ipc_reason_config[last_ipc_level].hyst_ns >
+					delta)
+					inform_governor = false;
+			}
+		}
+
+		if (inform_governor) {
+			per_cpu(ipc_level, cpu) = curr_ipc_level;
+			per_cpu(ipc_deactivate_ns, cpu) = 0;
+			waltgov_run_callback(rq, WALT_CPUFREQ_SMART_FREQ_BIT);
+		}
+	}
 }
 
 static void android_rvh_schedule(void *unused, struct task_struct *prev,
@@ -5136,6 +4843,18 @@ static void android_rvh_schedule(void *unused, struct task_struct *prev,
 			wts->last_sleep_ts = wallclock;
 		walt_update_task_ravg(prev, rq, PUT_PREV_TASK, wallclock, 0);
 		walt_update_task_ravg(next, rq, PICK_NEXT_TASK, wallclock, 0);
+		if (soc_feat(SOC_ENABLE_EXPERIMENT3) &&
+				oscillate_cpu == raw_smp_processor_id()) {
+			if (should_oscillate()) {
+				if (!hrtimer_active(&walt_oscillate_timer)) {
+					hrtimer_start(&walt_oscillate_timer,
+						ns_to_ktime(oscillate_period_ns),
+						HRTIMER_MODE_REL_PINNED_HARD);
+				}
+			} else {
+				oscillate_cpu = -1;
+			}
+		}
 	} else {
 		walt_update_task_ravg(prev, rq, TASK_UPDATE, wallclock, 0);
 	}
@@ -5209,6 +4928,45 @@ static void rebuild_sd_workfn(struct work_struct *work)
 	complete(&rebuild_domains_completion);
 }
 
+u8 yield_should_induce_sleep;
+static void walt_do_sched_yield_before(void *unused, long *skip)
+{
+	struct walt_task_struct *wts = (struct walt_task_struct *)current->android_vendor_data1;
+	struct rq *rq = task_rq(current);
+	u8 cnt = wts->yield_state & YIELD_CNT_MASK;
+	static unsigned int total_yield_cnt;
+	static unsigned int total_sleep_cnt;
+	static u64 start_window_ts;
+
+	if (!walt_fair_task(current))
+		return;
+
+	if (rq->clock > (start_window_ts + WINDOW_SIZE_US * 1000ULL)) {
+		if ((total_yield_cnt >= MAX_YIELD_CNT_GLOBAL_THR) ||
+			(total_sleep_cnt >= MAX_YIELD_SLEEP_CNT_GLOBAL_THR))
+			yield_should_induce_sleep++;
+		else
+			yield_should_induce_sleep = 0;
+
+		/* not taking lock here */
+		start_window_ts = rq->clock;
+		total_yield_cnt = 0;
+		total_sleep_cnt = 0;
+	}
+
+	if (cnt >= MAX_YIELD_CNT_PER_TASK_THR) {
+		total_yield_cnt++;
+		if (yield_should_induce_sleep >= YIELD_INDUCE_SLEEP_THR) {
+			wts->yield_state |= YIELD_INDUCED_SLEEP;
+			*skip = true;
+			total_sleep_cnt++;
+			usleep_range_state(YIELD_SLEEP_TIME, YIELD_SLEEP_TIME, TASK_INTERRUPTIBLE);
+		}
+	} else {
+		wts->yield_state++;
+	}
+}
+
 static void walt_do_sched_yield(void *unused, struct rq *rq)
 {
 	struct task_struct *curr = rq->curr;
@@ -5218,6 +4976,7 @@ static void walt_do_sched_yield(void *unused, struct rq *rq)
 		return;
 
 	walt_lockdep_assert_rq(rq, NULL);
+
 	if (!list_empty(&wts->mvp_list) && wts->mvp_list.next)
 		walt_cfs_deactivate_mvp_task(rq, curr);
 
@@ -5280,6 +5039,12 @@ int walt_get_cpus_in_state1(struct cpumask *cpus)
 }
 EXPORT_SYMBOL_GPL(walt_get_cpus_in_state1);
 
+cpumask_t walt_get_halted_cpus(void)
+{
+	return *(cpu_halt_mask);
+}
+EXPORT_SYMBOL_GPL(walt_get_halted_cpus);
+
 static void register_walt_hooks(void)
 {
 	register_trace_android_rvh_wake_up_new_task(android_rvh_wake_up_new_task, NULL);
@@ -5305,6 +5070,7 @@ static void register_walt_hooks(void)
 	register_trace_android_rvh_build_perf_domains(android_rvh_build_perf_domains, NULL);
 	register_trace_cpu_frequency_limits(walt_cpu_frequency_limits, NULL);
 	register_trace_android_rvh_do_sched_yield(walt_do_sched_yield, NULL);
+	register_trace_android_rvh_before_do_sched_yield(walt_do_sched_yield_before, NULL);
 	register_trace_android_rvh_update_thermal_stats(android_rvh_update_thermal_stats, NULL);
 }
 
@@ -5328,15 +5094,23 @@ static int walt_init_stop_handler(void *data)
 		level++;
 	}
 
+	/* existing tasks get a demand of 0, including idle task */
 	for_each_process_thread(g, p) {
 		init_new_task_load(p);
 	}
 
 	for_each_possible_cpu(cpu) {
+		/* Create task members for idle thread */
+		init_new_task_load(cpu_rq(cpu)->idle);
+		walt_flag_set(cpu_rq(cpu)->idle, WALT_IDLE_TASK_BIT, 1);
+	}
+
+	/* post walt_init_once() a new task will get a non zero demand */
+	walt_init_once();
+
+	for_each_possible_cpu(cpu) {
 		struct rq *rq = cpu_rq(cpu);
 
-		/* Create task members for idle thread */
-		init_new_task_load(rq->idle);
 
 		walt_sched_init_rq(rq);
 
@@ -5390,10 +5164,11 @@ static void walt_init(struct work_struct *work)
 	walt_rt_init();
 	walt_cfs_init();
 	walt_halt_init();
+	walt_mvp_lock_ordering_init();
 
 	wait_for_completion_interruptible(&tick_sched_clock_completion);
 
-	if (!rcu_dereference(rd->pd)) {
+	if (!rcu_access_pointer(rd->pd)) {
 		/*
 		 * perf domains not properly configured.  this is a must as
 		 * create_util_to_cost depends on rd->pd being properly
@@ -5404,6 +5179,7 @@ static void walt_init(struct work_struct *work)
 	}
 
 	walt_update_cluster_topology();
+	walt_config();
 	walt_init_cycle_counter();
 
 	stop_machine(walt_init_stop_handler, NULL, NULL);
@@ -5415,12 +5191,13 @@ static void walt_init(struct work_struct *work)
 	 * see walt_find_energy_efficient_cpu(), and
 	 * create_util_to_cost().
 	 */
-	if (!rcu_dereference(rd->pd) && num_sched_clusters > 1)
+	if (!rcu_access_pointer(rd->pd) && num_sched_clusters > 1)
 		WALT_BUG(WALT_BUG_WALT, NULL,
 			 "root domain's perf-domain values not initialized rd->pd=%p.",
 			 rd->pd);
 
 	walt_register_sysctl();
+	walt_register_debugfs();
 
 	input_boost_init();
 	core_ctl_init();
@@ -5431,6 +5208,11 @@ static void walt_init(struct work_struct *work)
 	if (i >= 0) {
 		static_key_disable(&sched_feat_keys[i]);
 		sysctl_sched_features &= ~(1UL << i);
+	}
+
+	if (soc_feat(SOC_ENABLE_EXPERIMENT3)) {
+		hrtimer_init(&walt_oscillate_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_HARD);
+		walt_oscillate_timer.function = walt_oscillate_timer_cb;
 	}
 
 	topology_clear_scale_freq_source(SCALE_FREQ_SOURCE_ARCH, cpu_online_mask);
@@ -5451,8 +5233,6 @@ static int walt_module_init(void)
 	/* compile time checks for vendor data size */
 	WALT_VENDOR_DATA_SIZE_TEST(struct walt_task_struct, struct task_struct);
 	WALT_VENDOR_DATA_SIZE_TEST(struct walt_task_group, struct task_group);
-
-	walt_config();
 
 	register_trace_android_vh_update_topology_flags_workfn(
 			android_vh_update_topology_flags_workfn, NULL);

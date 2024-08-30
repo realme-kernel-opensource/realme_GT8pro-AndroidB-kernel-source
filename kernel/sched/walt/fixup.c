@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <trace/hooks/cpufreq.h>
+#include <trace/hooks/topology.h>
 
 #include "walt.h"
 
 unsigned int cpuinfo_max_freq_cached;
 
 char sched_lib_name[LIB_PATH_LENGTH];
+char sched_lib_task[LIB_PATH_LENGTH];
 unsigned int sched_lib_mask_force;
 
 static bool is_sched_lib_based_app(pid_t pid)
@@ -74,6 +76,17 @@ release_sem:
 	return found;
 }
 
+bool is_sched_lib_task(void)
+{
+	if (strnlen(sched_lib_task, LIB_PATH_LENGTH) == 0)
+		return false;
+
+	if (strnstr(current->comm, sched_lib_task, strnlen(current->comm, LIB_PATH_LENGTH)))
+		return true;
+
+	return false;
+}
+
 static void android_rvh_show_max_freq(void *unused, struct cpufreq_policy *policy,
 				     unsigned int *max_freq)
 {
@@ -83,11 +96,23 @@ static void android_rvh_show_max_freq(void *unused, struct cpufreq_policy *polic
 	if (!(BIT(policy->cpu) & sched_lib_mask_force))
 		return;
 
-	if (is_sched_lib_based_app(current->pid))
+	if (is_sched_lib_based_app(current->pid) || is_sched_lib_task())
 		*max_freq = cpuinfo_max_freq_cached << 1;
+}
+
+static void android_rvh_cpu_capacity_show(void *unused,
+		unsigned long *capacity, int cpu)
+{
+	if (!soc_sched_lib_name_capacity)
+		return;
+
+	if ((is_sched_lib_based_app(current->pid) || is_sched_lib_task()) &&
+			cpu < soc_sched_lib_name_capacity)
+		*capacity = 100;
 }
 
 void walt_fixup_init(void)
 {
 	register_trace_android_rvh_show_max_freq(android_rvh_show_max_freq, NULL);
+	register_trace_android_rvh_cpu_capacity_show(android_rvh_cpu_capacity_show, NULL);
 }

@@ -8,6 +8,11 @@
 #include <soc/qcom/socinfo.h>
 
 unsigned long __read_mostly soc_flags;
+unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
+cpumask_t asym_cap_sibling_cpus;
+cpumask_t pipeline_sync_cpus;
+int oscillate_period_ns;
+int soc_sched_lib_name_capacity;
 
 void walt_config(void)
 {
@@ -39,6 +44,8 @@ void walt_config(void)
 	sysctl_em_inflate_pct = 100;
 	sysctl_em_inflate_thres = 1024;
 	sysctl_max_freq_partial_halt = FREQ_QOS_MAX_DEFAULT_VALUE;
+	asym_cap_sibling_cpus = CPU_MASK_NONE;
+	pipeline_sync_cpus = CPU_MASK_NONE;
 
 	for (i = 0; i < MAX_MARGIN_LEVELS; i++) {
 		sysctl_sched_capacity_margin_up_pct[i] = 95; /* ~5% margin */
@@ -56,36 +63,66 @@ void walt_config(void)
 	}
 
 	for (i = 0; i < MAX_CLUSTERS; i++) {
-		sysctl_fmax_cap[i] = FREQ_QOS_MAX_DEFAULT_VALUE;
+		sysctl_freq_cap[i] = FREQ_QOS_MAX_DEFAULT_VALUE;
 		high_perf_cluster_freq_cap[i] = FREQ_QOS_MAX_DEFAULT_VALUE;
 		sysctl_sched_idle_enough_clust[i] = SCHED_IDLE_ENOUGH_DEFAULT;
 		sysctl_sched_cluster_util_thres_pct_clust[i] = SCHED_CLUSTER_UTIL_THRES_PCT_DEFAULT;
+		trailblazer_floor_freq[i] = 0;
 	}
 
 	for (i = 0; i < MAX_FREQ_CAP; i++) {
 		for (j = 0; j < MAX_CLUSTERS; j++)
-			fmax_cap[i][j] = FREQ_QOS_MAX_DEFAULT_VALUE;
+			freq_cap[i][j] = FREQ_QOS_MAX_DEFAULT_VALUE;
 	}
 
-	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP);
-	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_FG);
-	soc_feat_set(SOC_ENABLE_UCLAMP_BOOSTED);
-	soc_feat_set(SOC_ENABLE_PER_TASK_BOOST_ON_MID);
-
+	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
+	soc_feat_set(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
+	soc_feat_set(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
+	soc_feat_set(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
+	soc_feat_set(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
+	soc_feat_set(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
 	/* return if socinfo is not available */
 	if (!name)
 		return;
 
-	soc_feat_set(SOC_AVAILABLE);
 	if (!strcmp(name, "SUN")) {
 		sysctl_sched_suppress_region2		= 1;
-		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP);
-		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG);
-		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED);
-		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID);
+		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
+		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
+		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
+		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
+		trailblazer_floor_freq[0] = 1000000;
+		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
+		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
+		oscillate_period_ns = 8000000;
+		soc_feat_unset(SOC_ENABLE_EXPERIMENT3);
+		/*G + P*/
+		cpumask_copy(&pipeline_sync_cpus, cpu_possible_mask);
+		soc_sched_lib_name_capacity = 2;
+		soc_feat_unset(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
 	} else if (!strcmp(name, "PINEAPPLE")) {
-		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD);
-		soc_feat_set(SOC_ENABLE_ASYM_SIBLINGS);
-		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER);
+		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
+		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
+
+		/* T + G */
+		cpumask_or(&asym_cap_sibling_cpus,
+			&asym_cap_sibling_cpus, &cpu_array[0][1]);
+		cpumask_or(&asym_cap_sibling_cpus,
+			&asym_cap_sibling_cpus, &cpu_array[0][2]);
+
+		/*
+		 * Treat Golds and Primes as candidates for load sync under pipeline usecase.
+		 * However, it is possible that a single CPU is not present. As prime is the
+		 * only cluster with only one CPU, guard this setting by ensuring 4 clusters
+		 * are present.
+		 */
+		if (num_sched_clusters == 4) {
+			cpumask_or(&pipeline_sync_cpus,
+				&pipeline_sync_cpus, &cpu_array[0][2]);
+			cpumask_or(&pipeline_sync_cpus,
+				&pipeline_sync_cpus, &cpu_array[0][3]);
+		}
 	}
+
+	smart_freq_init(name);
 }
