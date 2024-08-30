@@ -187,7 +187,11 @@ static int gh_exit_vm(struct gh_vm *vm, u32 stop_reason, u8 stop_flags)
 		return -ENODEV;
 
 	mutex_lock(&vm->vm_lock);
-	if (vm->status.vm_status != GH_RM_VM_STATUS_RUNNING) {
+	if (vm->status.vm_status == GH_RM_VM_STATUS_EXITED) {
+		pr_info("VM:%d already exited\n", vmid);
+		mutex_unlock(&vm->vm_lock);
+		return 0;
+	} else if (vm->status.vm_status != GH_RM_VM_STATUS_RUNNING) {
 		pr_err("VM:%d is not running\n", vmid);
 		mutex_unlock(&vm->vm_lock);
 		return -ENODEV;
@@ -211,7 +215,8 @@ static int gh_stop_vm(struct gh_vm *vm)
 	gh_vmid_t vmid = vm->vmid;
 	int ret = -EINVAL;
 
-	if (vm->proxy_vm)
+	if (vm->proxy_vm && !(vm->keep_running == true &&
+			      vm->status.vm_status == GH_RM_VM_STATUS_RUNNING))
 		ret = gh_exit_vm(vm, GH_VM_STOP_RESTART,
 					GH_RM_VM_STOP_FLAG_FORCE_STOP);
 	else
@@ -240,14 +245,16 @@ void gh_destroy_vcpu(struct gh_vcpu *vcpu)
 	vm->created_vcpus--;
 }
 
-void gh_destroy_vm(struct gh_vm *vm)
+int gh_destroy_vm(struct gh_vm *vm)
 {
-	int vcpu_id = 0;
+	int vcpu_id = 0, ret;
 
 	if (vm->status.vm_status == GH_RM_VM_STATUS_NO_STATE)
 		goto clean_vm;
 
-	gh_stop_vm(vm);
+	ret = gh_stop_vm(vm);
+	if (ret)
+		return ret;
 
 	while (vm->created_vcpus && vcpu_id < GH_MAX_VCPUS) {
 		if (!vm->vcpus[vcpu_id])
@@ -267,6 +274,7 @@ clean_vm:
 	gh_rm_unregister_notifier(&vm->rm_nb);
 	mutex_destroy(&vm->vm_lock);
 	kfree(vm);
+	return 0;
 }
 
 static void gh_get_vm(struct gh_vm *vm)
@@ -274,24 +282,33 @@ static void gh_get_vm(struct gh_vm *vm)
 	refcount_inc(&vm->users_count);
 }
 
-static void gh_put_vm(struct gh_vm *vm)
+static int gh_put_vm(struct gh_vm *vm)
 {
-	if (refcount_dec_and_test(&vm->users_count))
-		gh_destroy_vm(vm);
+	int ret = 0;
+
+	if (refcount_dec_and_test(&vm->users_count)) {
+		ret = gh_destroy_vm(vm);
+		if (ret)
+			pr_err("Failed to destroy VM:%d ret %d\n", vm->vmid,
+			       ret);
+	}
+
+	return ret;
 }
 
 static int gh_vcpu_release(struct inode *inode, struct file *filp)
 {
 	struct gh_vcpu *vcpu = filp->private_data;
+	int ret;
 
 	/* need to create workqueue if critical vm */
 	if (vcpu->vm->keep_running &&
 	    vcpu->vm->status.vm_status == GH_RM_VM_STATUS_RUNNING)
 		gh_vcpu_create_wq(vcpu->vm->vmid, vcpu->vcpu_id);
-	else
-		gh_put_vm(vcpu->vm);
 
-	return 0;
+	ret = gh_put_vm(vcpu->vm);
+
+	return ret;
 }
 
 static int gh_vcpu_ioctl_run(struct gh_vcpu *vcpu)
@@ -773,11 +790,11 @@ static long gh_vm_ioctl(struct file *filp,
 	case GH_VM_GET_VCPU_COUNT:
 		ret = gh_vm_ioctl_get_vcpu_count(vm);
 		break;
-	case GH_VM_GET_RESV_MEMORY_SIZE:
-		ret = gh_vm_ioctl_get_reserved_memory_size(vm, arg);
+	case GH_VM_GET_FW_RESV_MEM_SIZE:
+		ret = gh_vm_ioctl_get_fw_resv_mem_size(vm, arg);
 		break;
-	case GH_VM_SET_USER_MEM_REGION:
-		ret = gh_vm_ioctl_set_user_mem_region(vm, arg);
+	case GH_VM_SET_FW_USER_MEM_REGION:
+		ret = gh_vm_ioctl_set_fw_user_mem_region(vm, arg);
 		break;
 	default:
 		ret = gh_virtio_backend_ioctl(vm->fw_name, cmd, arg);
@@ -799,11 +816,11 @@ static int gh_vm_mmap(struct file *file, struct vm_area_struct *vma)
 static int gh_vm_release(struct inode *inode, struct file *filp)
 {
 	struct gh_vm *vm = filp->private_data;
+	int ret;
 
-	if (!(vm->keep_running &&
-	      vm->status.vm_status == GH_RM_VM_STATUS_RUNNING))
-		gh_put_vm(vm);
-	return 0;
+	ret = gh_put_vm(vm);
+
+	return ret;
 }
 
 static const struct file_operations gh_vm_fops = {

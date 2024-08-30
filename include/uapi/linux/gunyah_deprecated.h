@@ -135,7 +135,7 @@ struct gh_userspace_memory_region {
  */
 #define GH_VM_GET_VCPU_COUNT		_IO(GH_IOCTL_TYPE, 0x43)
 /**
- * GH_VM_GET_RESV_MEMORY_SIZE - Userspace can use this IOCTL to query the CMA  or
+ * GH_VM_GET_FW_RESV_MEM_SIZE - Userspace can use this IOCTL to query the CMA  or
  *            carve out memory size of the VM.
  *
  * Input: gh_fw_name structure to be filled with Secure VM name as the
@@ -144,9 +144,9 @@ struct gh_userspace_memory_region {
  * Return: 0 if success with memory size as u64 in the third argument,
  *         -errno on failure
  */
-#define GH_VM_GET_RESV_MEMORY_SIZE	_IOW(GH_IOCTL_TYPE, 0x44, struct gh_fw_name)
+#define GH_VM_GET_FW_RESV_MEM_SIZE	_IOW(GH_IOCTL_TYPE, 0x44, struct gh_fw_name)
 /**
- * GH_VM_SET_USER_MEM_REGION - Userspace will specify the userspace memory
+ * GH_VM_SET_FW_USER_MEM_REGION - Userspace will specify the userspace memory
  *             address and size that will to be appended to VM system memory
  *		       The loaded VM memory details are forwarded to Gunyah Hypervisor
  *             underneath.
@@ -154,7 +154,7 @@ struct gh_userspace_memory_region {
  * Input: gh_userspace_memory_region structure for userspace memory descripion
  * Return: 0 if success, -errno on failure
  */
-#define GH_VM_SET_USER_MEM_REGION_FW		_IOW(GH_IOCTL_TYPE, 0x45, \
+#define GH_VM_SET_FW_USER_MEM_REGION		_IOW(GH_IOCTL_TYPE, 0x45, \
 								struct gh_userspace_memory_region)
 /*
  *  IOCTLs supported by virtio backend driver
