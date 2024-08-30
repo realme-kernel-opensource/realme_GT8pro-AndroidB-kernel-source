@@ -700,6 +700,7 @@
   devm_clk_hw_register
   devm_clk_put
   devm_clk_register
+  devm_pm_runtime_enable
   dev_mc_sync
   dev_mc_sync_multiple
   dev_mc_unsync
