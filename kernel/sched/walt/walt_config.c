@@ -132,8 +132,8 @@ void walt_config(void)
 		load_sync_low_pct[0][1]		= sysctl_cluster01_load_sync[1];
 		load_sync_high_pct[0][1]	= sysctl_cluster01_load_sync[2];
 		load_sync_util_thres[1][0]	= sysctl_cluster10_load_sync[0];
-		load_sync_low_pct[0][1]		= sysctl_cluster10_load_sync[1];
-		load_sync_high_pct[0][1]	= sysctl_cluster10_load_sync[2];
+		load_sync_low_pct[1][0]		= sysctl_cluster10_load_sync[1];
+		load_sync_high_pct[1][0]	= sysctl_cluster10_load_sync[2];
 
 		sysctl_cluster01_load_sync_60fps[0]	= 400;
 		sysctl_cluster01_load_sync_60fps[1]	= 60;
@@ -145,8 +145,8 @@ void walt_config(void)
 		load_sync_low_pct_60fps[0][1]		= sysctl_cluster01_load_sync_60fps[1];
 		load_sync_high_pct_60fps[0][1]		= sysctl_cluster01_load_sync_60fps[2];
 		load_sync_util_thres_60fps[1][0]	= sysctl_cluster10_load_sync_60fps[0];
-		load_sync_low_pct_60fps[0][1]		= sysctl_cluster10_load_sync_60fps[1];
-		load_sync_high_pct_60fps[0][1]		= sysctl_cluster10_load_sync_60fps[2];
+		load_sync_low_pct_60fps[1][0]		= sysctl_cluster10_load_sync_60fps[1];
+		load_sync_high_pct_60fps[1][0]		= sysctl_cluster10_load_sync_60fps[2];
 
 		/* CPU0 needs an 9mS bias for all legacy smart freq reasons */
 		for (i = 1; i < LEGACY_SMART_FREQ; i++)
