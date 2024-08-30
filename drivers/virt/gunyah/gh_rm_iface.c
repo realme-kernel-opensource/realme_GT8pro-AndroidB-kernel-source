@@ -21,12 +21,18 @@
 
 #define GH_RM_MEM_RELEASE_VALID_FLAGS GH_RM_MEM_RELEASE_CLEAR
 #define GH_RM_MEM_RECLAIM_VALID_FLAGS GH_RM_MEM_RECLAIM_CLEAR
-#define GH_RM_MEM_ACCEPT_VALID_FLAGS\
+#define GH_RM_MEM_ACCEPT_VALID_GH_FLAGS\
 	(GH_RM_MEM_ACCEPT_VALIDATE_SANITIZED |\
 	 GH_RM_MEM_ACCEPT_VALIDATE_ACL_ATTRS |\
 	 GH_RM_MEM_ACCEPT_VALIDATE_LABEL |\
 	 GH_RM_MEM_ACCEPT_MAP_IPA_CONTIGUOUS |\
+	 GH_RM_MEM_ACCEPT_SANITIZE_ON_RELEASE |\
 	 GH_RM_MEM_ACCEPT_DONE)
+#define GH_RM_MEM_ACCEPT_VALID_DRIVER_FLAGS\
+	 (GH_RM_MEM_ACCEPT_NO_SANITIZE_ON_RELEASE)
+#define GH_RM_MEM_ACCEPT_VALID_FLAGS\
+	(GH_RM_MEM_ACCEPT_VALID_GH_FLAGS |\
+	 GH_RM_MEM_ACCEPT_VALID_DRIVER_FLAGS)
 #define GH_RM_MEM_SHARE_VALID_FLAGS GH_RM_MEM_SHARE_SANITIZE
 #define GH_RM_MEM_LEND_VALID_FLAGS GH_RM_MEM_LEND_SANITIZE
 #define GH_RM_MEM_DONATE_VALID_FLAGS GH_RM_MEM_DONATE_SANITIZE
@@ -1874,9 +1880,47 @@ static int gh_rm_mem_accept_check_resp(struct gh_mem_accept_resp_payload *resp,
 	return -EINVAL;
 }
 
+/*
+ * Linux wants a santize-by-default policy.
+ * We set the appropriate gunyah flag, unless overridden by
+ * GH_RM_MEM_ACCEPT_NO_SANITIZE_ON_RELEASE, or disallowed by memory type==IO or
+ * lack of write-permission.
+ *
+ * A client explicitly setting GH_RM_MEM_ACCEPT_SANITIZE_ON_RELEASE will take
+ * priority over the above.
+ */
+static u8 gh_rm_mem_accept_sanitize_policy(u8 mem_type,
+				 u8 trans_type, u32 flags,
+				 struct gh_acl_desc *acl_desc)
+{
+	u8 sanitize = GH_RM_MEM_ACCEPT_SANITIZE_ON_RELEASE;
+	int i;
+	gh_vmid_t this_vmid;
+
+	if (flags & GH_RM_MEM_ACCEPT_NO_SANITIZE_ON_RELEASE)
+		return 0;
+
+	if (mem_type == GH_RM_MEM_TYPE_IO || trans_type == GH_RM_TRANS_TYPE_SHARE)
+		return 0;
+
+	if (WARN(gh_rm_get_this_vmid(&this_vmid), "gh_rm_get_this_vmid failed\n"))
+		return sanitize;
+
+	if (WARN(!acl_desc, "Policy requires gh_rm_mem_accept to be called with acl_desc\n"))
+		return sanitize;
+
+	for (i = 0; i < acl_desc->n_acl_entries; i++) {
+		if (acl_desc->acl_entries[i].vmid == this_vmid &&
+		    !(acl_desc->acl_entries[i].perms & GH_RM_ACL_W))
+			return 0;
+	}
+
+	return sanitize;
+}
+
 static struct gh_mem_accept_req_payload_hdr *
 gh_rm_mem_accept_prepare_request(gh_memparcel_handle_t handle, u8 mem_type,
-				 u8 trans_type, u8 flags, gh_label_t label,
+				 u8 trans_type, u32 flags, gh_label_t label,
 				 struct gh_acl_desc *acl_desc,
 				 struct gh_sgl_desc *sgl_desc,
 				 struct gh_mem_attr_desc *mem_attr_desc,
@@ -1924,7 +1968,9 @@ gh_rm_mem_accept_prepare_request(gh_memparcel_handle_t handle, u8 mem_type,
 	req_payload_hdr->memparcel_handle = handle;
 	req_payload_hdr->mem_type = mem_type;
 	req_payload_hdr->trans_type = trans_type;
-	req_payload_hdr->flags = flags;
+	req_payload_hdr->flags = flags & GH_RM_MEM_ACCEPT_VALID_GH_FLAGS;
+	req_payload_hdr->flags |= gh_rm_mem_accept_sanitize_policy(mem_type,
+						trans_type, flags, acl_desc);
 	if (flags & GH_RM_MEM_ACCEPT_VALIDATE_LABEL)
 		req_payload_hdr->validate_label = label;
 	gh_rm_populate_mem_request(req_buf, fn_id, acl_desc, sgl_desc, map_vmid,
@@ -1969,7 +2015,7 @@ gh_rm_mem_accept_prepare_request(gh_memparcel_handle_t handle, u8 mem_type,
  * and multiple calls are needed to obtain the full value.
  */
 struct gh_sgl_desc *gh_rm_mem_accept(gh_memparcel_handle_t handle, u8 mem_type,
-				     u8 trans_type, u8 flags, gh_label_t label,
+				     u8 trans_type, u32 flags, gh_label_t label,
 				     struct gh_acl_desc *acl_desc,
 				     struct gh_sgl_desc *sgl_desc,
 				     struct gh_mem_attr_desc *mem_attr_desc,

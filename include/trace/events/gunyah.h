@@ -62,7 +62,7 @@ static inline const char *__print_acl_arr(struct trace_seq *p, u8 *acl_perms, u1
 
 DECLARE_EVENT_CLASS(gh_rm_mem_accept_donate_lend_share,
 
-	TP_PROTO(u8 mem_type, u8 flags, gh_label_t label,
+	TP_PROTO(u8 mem_type, u32 flags, gh_label_t label,
 		struct gh_acl_desc *acl_desc, struct gh_sgl_desc *sgl_desc,
 		struct gh_mem_attr_desc *mem_attr_desc,
 		gh_memparcel_handle_t *handle, u16 map_vmid, u8 trans_type),
@@ -74,7 +74,7 @@ DECLARE_EVENT_CLASS(gh_rm_mem_accept_donate_lend_share,
 
 	TP_STRUCT__entry(
 		__field(u8, mem_type)
-		__field(u8, flags)
+		__field(u32, flags)
 		__field(gh_label_t, label)
 
 		/* gh_acl_desc */
@@ -227,7 +227,7 @@ DECLARE_EVENT_CLASS(gh_rm_mem_accept_donate_lend_share,
 
 DEFINE_EVENT(gh_rm_mem_accept_donate_lend_share, gh_rm_mem_accept,
 
-	TP_PROTO(u8 mem_type, u8 flags, gh_label_t label,
+	TP_PROTO(u8 mem_type, u32 flags, gh_label_t label,
 		struct gh_acl_desc *acl_desc, struct gh_sgl_desc *sgl_desc,
 		struct gh_mem_attr_desc *mem_attr_desc,
 		gh_memparcel_handle_t *handle, u16 map_vmid, u8 trans_type),
@@ -240,7 +240,7 @@ DEFINE_EVENT(gh_rm_mem_accept_donate_lend_share, gh_rm_mem_accept,
 
 DEFINE_EVENT(gh_rm_mem_accept_donate_lend_share, gh_rm_mem_donate,
 
-	TP_PROTO(u8 mem_type, u8 flags, gh_label_t label,
+	TP_PROTO(u8 mem_type, u32 flags, gh_label_t label,
 		struct gh_acl_desc *acl_desc, struct gh_sgl_desc *sgl_desc,
 		struct gh_mem_attr_desc *mem_attr_desc,
 		gh_memparcel_handle_t *handle, u16 map_vmid, u8 trans_type),
@@ -253,7 +253,7 @@ DEFINE_EVENT(gh_rm_mem_accept_donate_lend_share, gh_rm_mem_donate,
 
 DEFINE_EVENT(gh_rm_mem_accept_donate_lend_share, gh_rm_mem_lend,
 
-	TP_PROTO(u8 mem_type, u8 flags, gh_label_t label,
+	TP_PROTO(u8 mem_type, u32 flags, gh_label_t label,
 		struct gh_acl_desc *acl_desc, struct gh_sgl_desc *sgl_desc,
 		struct gh_mem_attr_desc *mem_attr_desc,
 		gh_memparcel_handle_t *handle, u16 map_vmid, u8 trans_type),
@@ -266,7 +266,7 @@ DEFINE_EVENT(gh_rm_mem_accept_donate_lend_share, gh_rm_mem_lend,
 
 DEFINE_EVENT(gh_rm_mem_accept_donate_lend_share, gh_rm_mem_share,
 
-	TP_PROTO(u8 mem_type, u8 flags, gh_label_t label,
+	TP_PROTO(u8 mem_type, u32 flags, gh_label_t label,
 		struct gh_acl_desc *acl_desc, struct gh_sgl_desc *sgl_desc,
 		struct gh_mem_attr_desc *mem_attr_desc,
 		gh_memparcel_handle_t *handle, u16 map_vmid, u8 trans_type),

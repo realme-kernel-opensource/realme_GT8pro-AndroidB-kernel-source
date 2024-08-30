@@ -40,7 +40,10 @@
 #define GH_RM_MEM_ACCEPT_VALIDATE_ACL_ATTRS	BIT(1)
 #define GH_RM_MEM_ACCEPT_VALIDATE_LABEL		BIT(2)
 #define GH_RM_MEM_ACCEPT_MAP_IPA_CONTIGUOUS	BIT(4)
+#define GH_RM_MEM_ACCEPT_SANITIZE_ON_RELEASE	BIT(5)
 #define GH_RM_MEM_ACCEPT_DONE			BIT(7)
+/* linux driver flag - not passed to gunyah */
+#define GH_RM_MEM_ACCEPT_NO_SANITIZE_ON_RELEASE	BIT(31)
 
 #define GH_RM_MEM_SHARE_SANITIZE		BIT(0)
 #define GH_RM_MEM_SHARE_APPEND			BIT(1)
@@ -413,7 +416,7 @@ int gh_rm_mem_qcom_lookup_sgl(u8 mem_type, gh_label_t label,
 int gh_rm_mem_release(gh_memparcel_handle_t handle, u8 flags);
 int ghd_rm_mem_reclaim(gh_memparcel_handle_t handle, u8 flags);
 struct gh_sgl_desc *gh_rm_mem_accept(gh_memparcel_handle_t handle, u8 mem_type,
-				     u8 trans_type, u8 flags, gh_label_t label,
+				     u8 trans_type, u32 flags, gh_label_t label,
 				     struct gh_acl_desc *acl_desc,
 				     struct gh_sgl_desc *sgl_desc,
 				     struct gh_mem_attr_desc *mem_attr_desc,
@@ -663,7 +666,7 @@ static inline int ghd_rm_mem_reclaim(gh_memparcel_handle_t handle, u8 flags)
 
 static inline struct gh_sgl_desc *gh_rm_mem_accept(gh_memparcel_handle_t handle,
 				     u8 mem_type,
-				     u8 trans_type, u8 flags, gh_label_t label,
+				     u8 trans_type, u32 flags, gh_label_t label,
 				     struct gh_acl_desc *acl_desc,
 				     struct gh_sgl_desc *sgl_desc,
 				     struct gh_mem_attr_desc *mem_attr_desc,
