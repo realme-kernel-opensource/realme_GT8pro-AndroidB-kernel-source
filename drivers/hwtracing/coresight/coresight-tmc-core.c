@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Description: CoreSight Trace Memory Controller driver
  */
@@ -27,6 +28,7 @@
 
 #include "coresight-priv.h"
 #include "coresight-tmc.h"
+#include "coresight-common.h"
 
 DEFINE_CORESIGHT_DEVLIST(etb_devs, "tmc_etb");
 DEFINE_CORESIGHT_DEVLIST(etf_devs, "tmc_etf");
@@ -482,6 +484,15 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 		drvdata->size = readl_relaxed(drvdata->base + TMC_RSZ) * 4;
 	}
 
+	ret = of_get_coresight_csr_name(adev->dev.of_node, &drvdata->csr_name);
+	if (ret) {
+		dev_dbg(dev, "No csr data\n");
+	} else {
+		drvdata->csr = coresight_csr_get(drvdata->csr_name);
+		if (IS_ERR(drvdata->csr))
+			return dev_err_probe(dev, -EPROBE_DEFER, "failed to get csr\n");
+	}
+
 	desc.dev = dev;
 
 	switch (drvdata->config_type) {
@@ -504,6 +515,10 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 		idr_init(&drvdata->idr);
 		mutex_init(&drvdata->idr_mutex);
 		dev_list = &etr_devs;
+
+		if (!of_property_read_u32(dev->of_node, "csr-atid-offset",
+					&drvdata->atid_offset))
+			coresight_set_csr_ops(&csr_atid_ops);
 		break;
 	case TMC_CONFIG_TYPE_ETF:
 		desc.groups = coresight_etf_groups;
@@ -582,6 +597,8 @@ static void tmc_remove(struct amba_device *adev)
 	 * etb fops in this case, device is there until last file
 	 * handler to this device is closed.
 	 */
+
+	coresight_remove_csr_ops();
 	misc_deregister(&drvdata->miscdev);
 	coresight_unregister(drvdata->csdev);
 }
