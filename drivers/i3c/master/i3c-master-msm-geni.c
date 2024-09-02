@@ -4180,6 +4180,18 @@ static int geni_i3c_suspend_late(struct device *dev)
 		}
 	}
 
+	if (gi3c->pm_ctrl_client) {
+		if (!pm_runtime_status_suspended(dev)) {
+			I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
+				    ":%s: Wait for pm client to call put_sync\n", __func__);
+			return -EBUSY;
+		}
+		I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
+			    "%s: Do not allow system suspend when PM runtime is not suspended\n",
+			    __func__);
+		return 0;
+	}
+
 	if (!pm_runtime_status_suspended(dev)) {
 		I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
 				"%s: Forced suspend\n", __func__);
