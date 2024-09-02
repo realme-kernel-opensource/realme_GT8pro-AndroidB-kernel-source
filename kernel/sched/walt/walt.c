@@ -5249,12 +5249,18 @@ u8 contiguous_yielding_windows;
 static void walt_do_sched_yield_before(void *unused, long *skip)
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *)current->android_vendor_data1;
-	struct walt_sched_cluster *cluster = cpu_cluster(task_cpu(current));
-	struct smart_freq_cluster_info *smart_freq_info = cluster->smart_freq_info;
+	struct walt_sched_cluster *cluster;
+	struct smart_freq_cluster_info *smart_freq_info;
 	bool in_legacy_uncap;
+
+	if (unlikely(walt_disabled))
+		return;
 
 	if (!walt_fair_task(current))
 		return;
+
+	cluster = cpu_cluster(task_cpu(current));
+	smart_freq_info = cluster->smart_freq_info;
 
 	if ((wts->yield_state & YIELD_CNT_MASK) >= MAX_YIELD_CNT_PER_TASK_THR) {
 		total_yield_cnt++;
