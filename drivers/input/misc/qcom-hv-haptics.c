@@ -4654,6 +4654,8 @@ static int swr_slave_reg_enable(struct regulator_dev *rdev)
 	int rc;
 	u8 mask = SWR_PAT_INPUT_EN_BIT | SWR_PAT_RES_N_BIT | SWR_PAT_CFG_EN_BIT;
 
+	if (chip->swr_slave_enabled)
+		return 0;
 	rc = haptics_masked_write(chip, chip->cfg_addr_base,
 			HAP_CFG_SWR_ACCESS_REG, mask, mask);
 	if (rc < 0) {
@@ -4702,6 +4704,13 @@ static int swr_slave_reg_disable(struct regulator_dev *rdev)
 	struct haptics_chip *chip = rdev_get_drvdata(rdev);
 	int rc;
 
+	if (!chip->swr_slave_enabled)
+		return 0;
+
+	/* Keep SWR slave always enabled for HAP530_HV */
+	if (chip->hw_type == HAP530_HV)
+		goto done;
+
 	rc = haptics_masked_write(chip, chip->cfg_addr_base,
 			HAP_CFG_SWR_ACCESS_REG,
 			SWR_PAT_INPUT_EN_BIT | SWR_PAT_RES_N_BIT |
@@ -4710,7 +4719,7 @@ static int swr_slave_reg_disable(struct regulator_dev *rdev)
 		dev_err(chip->dev, "Failed to disable SWR_PAT, rc=%d\n", rc);
 		return rc;
 	}
-
+done:
 	chip->swr_slave_enabled = false;
 	return 0;
 }
@@ -4742,17 +4751,19 @@ static int haptics_init_swr_slave_regulator(struct haptics_chip *chip)
 	u8 val, mask;
 	int rc = 0;
 
-	rc = haptics_read(chip, chip->cfg_addr_base,
-			HAP_CFG_SWR_ACCESS_REG, &val, 1);
-	if (rc < 0) {
-		dev_err(chip->dev, "Failed to read SWR_ACCESS, rc=%d\n",
-				rc);
-		return rc;
-	}
+	if (chip->hw_type != HAP530_HV) {
+		rc = haptics_read(chip, chip->cfg_addr_base,
+				HAP_CFG_SWR_ACCESS_REG, &val, 1);
+		if (rc < 0) {
+			dev_err(chip->dev, "Failed to read SWR_ACCESS, rc=%d\n",
+					rc);
+			return rc;
+		}
 
-	mask = SWR_PAT_INPUT_EN_BIT | SWR_PAT_RES_N_BIT | SWR_PAT_CFG_EN_BIT;
-	val &= mask;
-	chip->swr_slave_enabled = ((val == mask) ? true : false);
+		mask = SWR_PAT_INPUT_EN_BIT | SWR_PAT_RES_N_BIT | SWR_PAT_CFG_EN_BIT;
+		val &= mask;
+		chip->swr_slave_enabled = ((val == mask) ? true : false);
+	}
 
 	cfg.dev = chip->dev;
 	cfg.driver_data = chip;
