@@ -183,6 +183,43 @@ static int __tpda_enable(struct tpda_drvdata *drvdata, int port)
 	return ret;
 }
 
+static int tpda_alloc_trace_id(struct coresight_device *csdev)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+	int trace_id;
+	int i, nr_conns;
+
+	nr_conns = csdev->pdata->nr_inconns;
+
+	for (i = 0; i < nr_conns; i++)
+		if (atomic_read(&csdev->pdata->in_conns[i]->dest_refcnt) != 0)
+			return 0;
+
+	trace_id = coresight_trace_id_get_system_id();
+	if (trace_id < 0)
+		return trace_id;
+
+	drvdata->atid = trace_id;
+
+	return 0;
+}
+
+static void tpda_release_trace_id(struct coresight_device *csdev)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+	int i, nr_conns;
+
+	nr_conns = csdev->pdata->nr_inconns;
+
+	for (i = 0; i < nr_conns; i++)
+		if (atomic_read(&csdev->pdata->in_conns[i]->dest_refcnt) != 0)
+			return;
+
+	coresight_trace_id_put_system_id(drvdata->atid);
+
+	drvdata->atid = 0;
+}
+
 static int tpda_enable(struct coresight_device *csdev,
 		       struct coresight_connection *in,
 		       struct coresight_connection *out)
@@ -191,6 +228,13 @@ static int tpda_enable(struct coresight_device *csdev,
 	int ret = 0;
 
 	spin_lock(&drvdata->spinlock);
+
+	ret = tpda_alloc_trace_id(csdev);
+	if (ret < 0) {
+		spin_unlock(&drvdata->spinlock);
+		return ret;
+	}
+
 	if (atomic_read(&in->dest_refcnt) == 0) {
 		ret = __tpda_enable(drvdata, in->dest_port);
 		if (!ret) {
@@ -228,6 +272,7 @@ static void tpda_disable(struct coresight_device *csdev,
 		__tpda_disable(drvdata, in->dest_port);
 		csdev->refcnt--;
 	}
+	tpda_release_trace_id(csdev);
 	spin_unlock(&drvdata->spinlock);
 
 	dev_dbg(drvdata->dev, "TPDA inport %d disabled\n", in->dest_port);
