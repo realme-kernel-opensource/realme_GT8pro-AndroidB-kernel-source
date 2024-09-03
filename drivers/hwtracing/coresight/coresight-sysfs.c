@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2019, Linaro Limited, All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Author: Mike Leach <mike.leach@linaro.org>
  */
 
@@ -200,6 +201,10 @@ int coresight_enable_sysfs(struct coresight_device *csdev)
 		ret = -EINVAL;
 		goto out;
 	}
+
+	ret = coresight_validate_sink(csdev, sink);
+	if (ret)
+		goto out;
 
 	path = coresight_build_path(csdev, sink);
 	if (IS_ERR(path)) {

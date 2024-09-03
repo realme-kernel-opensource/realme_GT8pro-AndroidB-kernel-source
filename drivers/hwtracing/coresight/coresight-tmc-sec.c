@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -72,7 +72,6 @@ struct secure_etr_drvdata {
 	struct mutex	mem_lock;
 	spinlock_t	spinlock;
 	bool	reading;
-	u32	mode;
 
 	struct secure_etr_buf	*etr_buf;
 
@@ -305,7 +304,7 @@ static int secure_etr_open(struct inode *inode, struct file *file)
 		goto out;
 	}
 
-	if (drvdata->mode != CS_MODE_SYSFS) {
+	if (coresight_get_mode(drvdata->csdev) != CS_MODE_SYSFS) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -454,8 +453,8 @@ static int enable_secure_etr_sink(struct coresight_device *csdev,
 		goto unlock_out;
 	}
 
-	if (drvdata->mode == CS_MODE_SYSFS) {
-		atomic_inc(&csdev->refcnt);
+	if (coresight_get_mode(csdev) == CS_MODE_SYSFS) {
+		csdev->refcnt++;
 		goto unlock_out;
 	}
 	/*
@@ -469,8 +468,8 @@ static int enable_secure_etr_sink(struct coresight_device *csdev,
 		ret = -EINVAL;
 		goto unlock_out;
 	}
-	if (real_sink->mode == CS_MODE_SYSFS ||
-				real_sink->mode == CS_MODE_PERF) {
+	if (coresight_get_mode(real_sink->csdev) == CS_MODE_SYSFS ||
+			coresight_get_mode(real_sink->csdev) == CS_MODE_PERF) {
 		dev_info(drvdata->dev, "%s is enabled, please disable it\n",
 			drvdata->real_name);
 		ret = -EBUSY;
@@ -496,14 +495,14 @@ static int enable_secure_etr_sink(struct coresight_device *csdev,
 		goto err;
 
 	dev_info(drvdata->dev, "modem etr enable\n");
-	drvdata->mode = CS_MODE_SYSFS;
+	coresight_set_mode(csdev, CS_MODE_SYSFS);
 	/*
 	 * set real etr busy to true. This ensures that
 	 * real ETR cannot be enabled when secure etr is used.
 	 */
 	real_sink->busy = true;
 	drvdata->real_sink = real_sink;
-	atomic_inc(&csdev->refcnt);
+	csdev->refcnt++;
 	goto unlock_out;
 
 err:
@@ -526,7 +525,8 @@ static int disable_secure_etr_sink(struct coresight_device *csdev)
 		goto unlock_out;
 	}
 
-	if (atomic_dec_return(&csdev->refcnt)) {
+	csdev->refcnt--;
+	if (csdev->refcnt) {
 		ret = -EBUSY;
 		goto unlock_out;
 	}
@@ -541,9 +541,9 @@ static int disable_secure_etr_sink(struct coresight_device *csdev)
 	secure_etr_unmap_mem_permission(drvdata->etr_buf);
 	secure_etr_free_mem(drvdata);
 	dev_info(drvdata->dev, "disable modem etr\n");
-	drvdata->mode = CS_MODE_DISABLED;
+	coresight_set_mode(csdev, CS_MODE_DISABLED);
 	if (drvdata->real_sink) {
-		drvdata->real_sink->mode = CS_MODE_DISABLED;
+		coresight_set_mode(drvdata->real_sink->csdev, CS_MODE_DISABLED);
 		drvdata->real_sink = NULL;
 	}
 

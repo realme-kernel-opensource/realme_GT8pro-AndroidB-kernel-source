@@ -139,6 +139,8 @@ coresight_find_sink(struct coresight_device *csdev, int *depth);
 struct coresight_device *coresight_get_sink_by_id(u32 id);
 struct coresight_device *
 coresight_find_default_sink(struct coresight_device *csdev);
+int coresight_validate_sink(struct coresight_device *source,
+			    struct coresight_device *sink);
 struct list_head *coresight_build_path(struct coresight_device *csdev,
 				       struct coresight_device *sink);
 void coresight_release_path(struct list_head *path);
@@ -167,6 +169,8 @@ struct cti_assoc_op {
 
 extern void coresight_set_cti_ops(const struct cti_assoc_op *cti_op);
 extern void coresight_remove_cti_ops(void);
+
+bool of_coresight_secure_node(struct coresight_device *csdev);
 
 /*
  * Macros and inline functions to handle CoreSight UCI data and driver
