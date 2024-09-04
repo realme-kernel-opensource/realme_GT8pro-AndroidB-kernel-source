@@ -14,6 +14,7 @@
 #include <linux/mutex.h>
 #include <linux/refcount.h>
 #include "coresight-priv.h"
+#include "coresight-byte-cntr.h"
 
 #define TMC_RSZ			0x004
 #define TMC_STS			0x00c
@@ -142,6 +143,12 @@ enum etr_mode {
 
 struct etr_buf_operations;
 
+enum tmc_etr_out_mode {
+	TMC_ETR_OUT_MODE_NONE,
+	TMC_ETR_OUT_MODE_MEM,
+	TMC_ETR_OUT_MODE_USB,
+};
+
 /**
  * struct etr_buf - Details of the buffer used by ETR
  * refcount	; Number of sources currently using this etr_buf.
@@ -214,9 +221,11 @@ struct tmc_drvdata {
 	struct mutex		idr_mutex;
 	struct etr_buf		*sysfs_buf;
 	struct etr_buf		*perf_buf;
+	struct byte_cntr	*byte_cntr;
 	struct coresight_csr	*csr;
 	const char		*csr_name;
 	u32			atid_offset;
+	enum tmc_etr_out_mode	out_mode;
 };
 
 struct etr_buf_operations {
@@ -275,15 +284,20 @@ extern const struct coresight_ops tmc_etf_cs_ops;
 
 ssize_t tmc_etb_get_sysfs_trace(struct tmc_drvdata *drvdata,
 				loff_t pos, size_t len, char **bufpp);
+ssize_t tmc_etr_buf_get_data(struct etr_buf *etr_buf,
+				u64 offset, size_t len, char **bufpp);
 /* ETR functions */
 int tmc_read_prepare_etr(struct tmc_drvdata *drvdata);
 int tmc_read_unprepare_etr(struct tmc_drvdata *drvdata);
 void tmc_etr_disable_hw(struct tmc_drvdata *drvdata);
+struct byte_cntr *byte_cntr_init(struct amba_device *adev,
+					struct tmc_drvdata *drvdata);
+void byte_cntr_remove(struct byte_cntr *byte_cntr);
 extern const struct coresight_ops tmc_etr_cs_ops;
 extern const struct csr_set_atid_op csr_atid_ops;
 ssize_t tmc_etr_get_sysfs_trace(struct tmc_drvdata *drvdata,
 				loff_t pos, size_t len, char **bufpp);
-
+long tmc_get_rwp_offset(struct tmc_drvdata *drvdata);
 
 #define TMC_REG_PAIR(name, lo_off, hi_off)				\
 static inline u64							\

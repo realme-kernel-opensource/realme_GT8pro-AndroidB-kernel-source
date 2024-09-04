@@ -266,6 +266,39 @@ void tmc_free_sg_table(struct tmc_sg_table *sg_table)
 }
 EXPORT_SYMBOL_GPL(tmc_free_sg_table);
 
+static long tmc_flat_get_rwp_offset(struct tmc_drvdata *drvdata)
+{
+	dma_addr_t paddr = drvdata->sysfs_buf->hwaddr;
+	u64 rwp;
+
+	rwp = tmc_read_rwp(drvdata);
+	return rwp - paddr;
+}
+
+static long tmc_sg_get_rwp_offset(struct tmc_drvdata *drvdata)
+{
+	struct etr_buf *etr_buf = drvdata->sysfs_buf;
+	struct etr_sg_table *etr_table = etr_buf->private;
+	struct tmc_sg_table *table = etr_table->sg_table;
+	u64 rwp;
+	long w_offset;
+
+	rwp = tmc_read_rwp(drvdata);
+	w_offset = tmc_sg_get_data_page_offset(table, rwp);
+
+	return w_offset;
+}
+
+long tmc_get_rwp_offset(struct tmc_drvdata *drvdata)
+{
+	struct etr_buf *etr_buf = drvdata->sysfs_buf;
+
+	if (etr_buf->mode == ETR_MODE_FLAT)
+		return tmc_flat_get_rwp_offset(drvdata);
+	else
+		return tmc_sg_get_rwp_offset(drvdata);
+}
+
 /*
  * Alloc pages for the table. Since this will be used by the device,
  * allocate the pages closer to the device (i.e, dev_to_node(dev)
@@ -928,7 +961,7 @@ static void tmc_free_etr_buf(struct etr_buf *etr_buf)
  * Returns: The size of the linear data available @pos, with *bufpp
  * updated to point to the buffer.
  */
-static ssize_t tmc_etr_buf_get_data(struct etr_buf *etr_buf,
+ssize_t tmc_etr_buf_get_data(struct etr_buf *etr_buf,
 				    u64 offset, size_t len, char **bufpp)
 {
 	/* Adjust the length to limit this transaction to end of buffer */
@@ -1246,8 +1279,10 @@ static int tmc_enable_etr_sink_sysfs(struct coresight_device *csdev)
 out:
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
-	if (!ret)
+	if (!ret) {
+		tmc_etr_byte_cntr_start(drvdata->byte_cntr);
 		dev_dbg(&csdev->dev, "TMC-ETR enabled\n");
+	}
 
 	return ret;
 }
@@ -1737,6 +1772,7 @@ static int tmc_disable_etr_sink(struct coresight_device *csdev)
 	drvdata->perf_buf = NULL;
 
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	tmc_etr_byte_cntr_stop(drvdata->byte_cntr);
 
 	dev_dbg(&csdev->dev, "TMC-ETR disabled\n");
 	return 0;
@@ -1775,6 +1811,11 @@ int tmc_read_prepare_etr(struct tmc_drvdata *drvdata)
 	 * If drvdata::sysfs_data is NULL the trace data has been read already.
 	 */
 	if (!drvdata->sysfs_buf) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (drvdata->byte_cntr && drvdata->byte_cntr->enable) {
 		ret = -EINVAL;
 		goto out;
 	}
