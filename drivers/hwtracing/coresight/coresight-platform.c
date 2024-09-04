@@ -184,16 +184,6 @@ static int of_coresight_get_cpu(struct device *dev)
 	return cpu;
 }
 
-int of_coresight_get_atid(struct coresight_device *csdev)
-{
-	int atid, ret = 0;
-
-	ret = of_property_read_u32(csdev->dev.parent->of_node, "atid", &atid);
-	if (ret)
-		return ret;
-	return atid;
-}
-
 static const char *of_coresight_get_device_name(struct device *dev)
 {
 	const char *name = NULL;

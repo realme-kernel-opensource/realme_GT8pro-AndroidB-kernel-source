@@ -516,9 +516,6 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 		mutex_init(&drvdata->idr_mutex);
 		dev_list = &etr_devs;
 
-		if (!of_property_read_u32(dev->of_node, "csr-atid-offset",
-					&drvdata->atid_offset))
-			coresight_set_csr_ops(&csr_atid_ops);
 		break;
 	case TMC_CONFIG_TYPE_ETF:
 		desc.groups = coresight_etf_groups;
@@ -597,8 +594,6 @@ static void tmc_remove(struct amba_device *adev)
 	 * etb fops in this case, device is there until last file
 	 * handler to this device is closed.
 	 */
-
-	coresight_remove_csr_ops();
 	misc_deregister(&drvdata->miscdev);
 	coresight_unregister(drvdata->csdev);
 }

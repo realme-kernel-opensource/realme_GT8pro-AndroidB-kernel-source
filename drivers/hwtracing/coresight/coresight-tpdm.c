@@ -17,9 +17,14 @@
 #include <linux/of.h>
 
 #include "coresight-priv.h"
+#include "coresight-common.h"
+#include "coresight-tpda.h"
 #include "coresight-tpdm.h"
+#include "coresight-trace-noc.h"
 
 DEFINE_CORESIGHT_DEVLIST(tpdm_devs, "tpdm");
+
+static int coresight_get_aggre_atid(struct coresight_device *csdev);
 
 /* Read dataset array member with the index number */
 static ssize_t tpdm_simple_dataset_show(struct device *dev,
@@ -471,6 +476,7 @@ static int tpdm_enable(struct coresight_device *csdev, struct perf_event *event,
 		       enum cs_mode mode)
 {
 	struct tpdm_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+	int ret = -EINVAL;
 
 	if (!coresight_take_mode(csdev, mode)) {
 		/* Someone is already using the tracer */
@@ -478,6 +484,13 @@ static int tpdm_enable(struct coresight_device *csdev, struct perf_event *event,
 	}
 
 	spin_lock(&drvdata->spinlock);
+	ret = coresight_get_aggre_atid(csdev);
+	if (ret < 0) {
+		spin_unlock(&drvdata->spinlock);
+		return ret;
+	}
+	drvdata->traceid = ret;
+	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true);
 	__tpdm_enable(drvdata);
 	spin_unlock(&drvdata->spinlock);
 
@@ -531,6 +544,8 @@ static void tpdm_disable(struct coresight_device *csdev,
 	if (coresight_get_mode(csdev) == CS_MODE_SYSFS) {
 		spin_lock(&drvdata->spinlock);
 		__tpdm_disable(drvdata);
+		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+		drvdata->traceid = 0;
 		spin_unlock(&drvdata->spinlock);
 
 		coresight_set_mode(csdev, CS_MODE_DISABLED);
@@ -650,9 +665,69 @@ static ssize_t integration_test_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(integration_test);
 
+static bool coresight_is_tpda_device(struct coresight_device *csdev)
+{
+	if (strnstr(dev_name(&csdev->dev), TPDA_KEY,
+			strlen(dev_name(&csdev->dev))))
+		return true;
+
+	return false;
+}
+
+static bool coresight_is_trace_noc_device(struct coresight_device *csdev)
+{
+	if (strnstr(dev_name(&csdev->dev), TRACE_NOC_KEY,
+			strlen(dev_name(&csdev->dev))))
+		return true;
+
+	return false;
+}
+static int coresight_get_aggre_atid(struct coresight_device *csdev)
+{
+	int i, atid;
+	struct tpda_drvdata *tpda_drvdata;
+	struct trace_noc_drvdata *trace_noc_drvdata;
+
+	if (coresight_is_tpda_device(csdev)) {
+		tpda_drvdata = dev_get_drvdata(csdev->dev.parent);
+		return tpda_drvdata->atid;
+	} else if (coresight_is_trace_noc_device(csdev)) {
+		trace_noc_drvdata = dev_get_drvdata(csdev->dev.parent);
+		return trace_noc_drvdata->atid;
+	}
+
+	/*
+	 * Recursively explore each port found on this element.
+	 */
+	for (i = 0; i < csdev->pdata->nr_outconns; i++) {
+		struct coresight_device *child_dev;
+
+		child_dev = csdev->pdata->out_conns[i]->dest_dev;
+		if (child_dev)
+			atid = coresight_get_aggre_atid(child_dev);
+		if (atid > 0)
+			return atid;
+	}
+
+	return -EINVAL;
+}
+
+static ssize_t traceid_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	unsigned long atid;
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	atid = drvdata->traceid;
+
+	return scnprintf(buf, PAGE_SIZE, "%#lx\n", atid);
+}
+static DEVICE_ATTR_RO(traceid);
+
 static struct attribute *tpdm_attrs[] = {
 	&dev_attr_reset_dataset.attr,
 	&dev_attr_integration_test.attr,
+	&dev_attr_traceid.attr,
 	NULL,
 };
 

@@ -227,6 +227,9 @@
 		tpdm_simple_dataset_rw(msr##nr,			\
 		CMB_MSR, nr)
 
+#define TPDA_KEY	"-tpda-"
+#define TRACE_NOC_KEY	"-tracenoc-"
+
 /**
  * struct dsb_dataset - specifics associated to dsb dataset
  * @mode:             DSB programming mode
@@ -314,6 +317,7 @@ struct tpdm_drvdata {
 	struct device		*dev;
 	struct coresight_device	*csdev;
 	spinlock_t		spinlock;
+	int			traceid;
 	unsigned long		datasets;
 	struct dsb_dataset	*dsb;
 	struct cmb_dataset	*cmb;

@@ -136,6 +136,7 @@ int coresight_enable_path(struct list_head *path, enum cs_mode mode,
 struct coresight_device *coresight_get_sink(struct list_head *path);
 struct coresight_device *
 coresight_find_sink(struct coresight_device *csdev, int *depth);
+struct list_head *coresight_get_path(struct coresight_device *csdev);
 struct coresight_device *coresight_get_sink_by_id(u32 id);
 struct coresight_device *
 coresight_find_default_sink(struct coresight_device *csdev);
@@ -153,6 +154,9 @@ int coresight_make_links(struct coresight_device *orig,
 			 struct coresight_device *target);
 void coresight_remove_links(struct coresight_device *orig,
 			    struct coresight_connection *conn);
+int coresight_store_path(struct coresight_device *csdev,
+		struct list_head *path);
+struct list_head *coresight_remove_path(struct coresight_device *csdev);
 
 #if IS_ENABLED(CONFIG_CORESIGHT_SOURCE_ETM3X)
 extern int etm_readl_cp14(u32 off, unsigned int *val);
@@ -169,15 +173,7 @@ struct cti_assoc_op {
 
 extern void coresight_set_cti_ops(const struct cti_assoc_op *cti_op);
 extern void coresight_remove_cti_ops(void);
-
 struct coresight_device *coresight_get_enabled_sink_from_bus(bool deactivate);
-struct csr_set_atid_op {
-	int (*set_atid)(struct coresight_device *csdev, u32 atid, bool enable);
-};
-
-extern void coresight_set_csr_ops(const struct csr_set_atid_op *csr_op);
-extern void coresight_remove_csr_ops(void);
-int of_coresight_get_atid(struct coresight_device *src_dev);
 bool of_coresight_secure_node(struct coresight_device *csdev);
 
 /*
