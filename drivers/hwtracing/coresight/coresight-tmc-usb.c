@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Description: CoreSight TMC USB driver
  */
@@ -38,7 +38,7 @@ static int usb_bypass_start(struct byte_cntr *byte_cntr_data)
 
 	dev_info(&tmcdrvdata->csdev->dev,
 			"%s: Start usb bypass\n", __func__);
-	if (tmcdrvdata->mode != CS_MODE_SYSFS) {
+	if (coresight_get_mode(tmcdrvdata->csdev) != CS_MODE_SYSFS) {
 		mutex_unlock(&byte_cntr_data->usb_bypass_lock);
 		return -EINVAL;
 	}
@@ -200,18 +200,19 @@ static void usb_read_work_fn(struct work_struct *work)
 	struct tmc_drvdata *tmcdrvdata = drvdata->tmcdrvdata;
 	struct etr_buf *etr_buf = tmcdrvdata->sysfs_buf;
 
-	while (tmcdrvdata->mode == CS_MODE_SYSFS
+	while (coresight_get_mode(tmcdrvdata->csdev) == CS_MODE_SYSFS
 		&& tmcdrvdata->out_mode == TMC_ETR_OUT_MODE_USB) {
 		if (!atomic_read(&drvdata->irq_cnt)) {
 			ret =  wait_event_interruptible_timeout(
 				drvdata->usb_wait_wq,
 				atomic_read(&drvdata->irq_cnt) > 0
-				|| tmcdrvdata->mode != CS_MODE_SYSFS || tmcdrvdata->out_mode
-				!= TMC_ETR_OUT_MODE_USB
+				|| coresight_get_mode(tmcdrvdata->csdev) != CS_MODE_SYSFS
+				|| tmcdrvdata->out_mode != TMC_ETR_OUT_MODE_USB
 				|| !drvdata->read_active, USB_TIME_OUT);
-			if (ret == -ERESTARTSYS || tmcdrvdata->mode != CS_MODE_SYSFS
-			|| tmcdrvdata->out_mode != TMC_ETR_OUT_MODE_USB
-			|| !drvdata->read_active)
+			if (ret == -ERESTARTSYS
+			    || coresight_get_mode(tmcdrvdata->csdev) != CS_MODE_SYSFS
+			    || tmcdrvdata->out_mode != TMC_ETR_OUT_MODE_USB
+			    || !drvdata->read_active)
 				break;
 
 			if (ret == 0) {
@@ -333,7 +334,7 @@ static int usb_bypass_init(struct byte_cntr *byte_cntr_data)
 	return 0;
 }
 
-void usb_notifier(void *priv, unsigned int event, struct qdss_request *d_req,
+static void usb_notifier(void *priv, unsigned int event, struct qdss_request *d_req,
 		  struct usb_qdss_ch *ch)
 {
 	struct tmc_drvdata *drvdata = priv;
@@ -350,7 +351,7 @@ void usb_notifier(void *priv, unsigned int event, struct qdss_request *d_req,
 
 	switch (event) {
 	case USB_QDSS_CONNECT:
-		if (drvdata->mode == CS_MODE_DISABLED) {
+		if (coresight_get_mode(drvdata->csdev) == CS_MODE_DISABLED) {
 			dev_err_ratelimited(&drvdata->csdev->dev,
 				"%s: ETR is disabled.\n", __func__);
 			return;
@@ -367,7 +368,7 @@ void usb_notifier(void *priv, unsigned int event, struct qdss_request *d_req,
 		break;
 
 	case USB_QDSS_DISCONNECT:
-		if (drvdata->mode == CS_MODE_DISABLED) {
+		if (coresight_get_mode(drvdata->csdev) == CS_MODE_DISABLED) {
 			dev_err_ratelimited(&drvdata->csdev->dev,
 				 "%s: ETR is disabled.\n", __func__);
 			return;
