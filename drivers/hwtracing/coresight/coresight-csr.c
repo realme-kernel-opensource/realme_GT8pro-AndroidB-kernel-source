@@ -426,13 +426,18 @@ static int of_coresight_get_csr_atid_offset(struct coresight_device *csdev,
 
 int coresight_csr_set_etr_atid(struct coresight_device *csdev, int atid, bool enable)
 {
+	struct list_head *path = NULL;
 	struct coresight_device *sink_csdev;
 	int atid_offset;
 	struct coresight_csr *csr;
 	const char *csr_name;
-	int depth = 0;
 
-	sink_csdev = coresight_find_sink(csdev, &depth);
+	path = coresight_get_path(csdev);
+	if (!path)
+		return -EINVAL;
+
+	sink_csdev = coresight_get_sink(path);
+
 	if (!sink_csdev)
 		return -EINVAL;
 	/* if no csr for this sink, indicates this sink is not etr.*/

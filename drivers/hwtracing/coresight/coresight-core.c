@@ -860,7 +860,7 @@ coresight_select_best_sink(struct coresight_device *sink, int *depth,
  *
  * return best sink found, or NULL if not found at this node or child nodes.
  */
-struct coresight_device *
+static struct coresight_device *
 coresight_find_sink(struct coresight_device *csdev, int *depth)
 {
 	int i, curr_depth = *depth + 1, found_depth = 0;
@@ -899,7 +899,6 @@ return_def_sink:
 		*depth = found_depth;
 	return found_sink;
 }
-EXPORT_SYMBOL_GPL(coresight_find_sink);
 
 /**
  * coresight_find_default_sink: Find a sink suitable for use as a
