@@ -235,6 +235,7 @@ struct tmc_drvdata {
 	u32			atid_offset;
 	enum tmc_etr_out_mode	out_mode;
 	struct tmc_usb_data	*usb_data;
+	bool			stop_on_flush;
 };
 
 struct etr_buf_operations {
@@ -281,6 +282,7 @@ struct tmc_sg_table {
 /* Generic functions */
 int tmc_wait_for_tmcready(struct tmc_drvdata *drvdata);
 void tmc_flush_and_stop(struct tmc_drvdata *drvdata);
+void tmc_disable_stop_on_flush(struct tmc_drvdata *drvdata);
 void tmc_enable_hw(struct tmc_drvdata *drvdata);
 extern int tmc_etr_usb_init(struct amba_device *adev,
 		struct tmc_drvdata *drvdata);
