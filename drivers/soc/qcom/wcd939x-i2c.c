@@ -1299,31 +1299,22 @@ int wcd_usbss_switch_update(enum wcd_usbss_cable_types ctype,
 			if (wcd_usbss_ctxt_->version == WCD_USBSS_2_0)
 				regmap_update_bits(wcd_usbss_ctxt_->regmap,
 						WCD_USBSS_PMP_OUT1, 0x40, 0x40);
-			/* for GND MIC Swap, change mode to FSM */
-			audio_fsm_mode = WCD_USBSS_AUDIO_FSM;
-			/* Disable all switches */
+
+			/* Disable MIC switch */
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x7F, 0x00);
-			/* Select L, R, GSBU1, MG2 */
-			regmap_update_bits(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_SWITCH_SELECT0, 0x3F, 0x01);
+					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x02, 0x00);
 			/* Disable OVP_MG1_BIAS PCOMP_DYN_BST_EN */
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
 					WCD_USBSS_MG1_BIAS, 0x08, 0x00);
-			/* Enable SENSE, MIC switches */
-			regmap_update_bits(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x06, 0x06);
 			/* Select MG1 for AGND_SWITCHES */
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
 					WCD_USBSS_SWITCH_SELECT1, 0x01, 0x00);
-			/* Enable AGND switches */
+			/* Select L, R, GSBU1, MG2 */
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x01, 0x01);
-			/* Enable DPR, DNL */
+					WCD_USBSS_SWITCH_SELECT0, 0x3F, 0x01);
+			/* Enable MIC switch */
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x18, 0x18);
-			regmap_update_bits_base(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_AUDIO_FSM_START, 0x01, 0x01, NULL, false, true);
+					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x02, 0x02);
 			break;
 		case WCD_USBSS_HSJ_CONNECT:
 			/* Update power mode to mode 1 for AATC */
