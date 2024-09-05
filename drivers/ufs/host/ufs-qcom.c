@@ -1710,7 +1710,7 @@ static void ufs_qcom_cpufreq_dwork(struct work_struct *work)
 
 out:
 	queue_delayed_work(host->ufs_qos->workq, &host->fwork,
-			   msecs_to_jiffies(UFS_QCOM_LOAD_MON_DLY_MS));
+			   msecs_to_jiffies(host->boost_monitor_timer));
 }
 
 static int add_group_qos(struct qos_cpu_group *qcg, enum constraint type)
@@ -3007,6 +3007,14 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 		host->irq_affinity_support = true;
 }
 
+/* ufs_qcom_storage_boost_param_init - Init Storage boost param */
+static void ufs_qcom_storage_boost_param_init(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	host->boost_monitor_timer = UFS_QCOM_LOAD_MON_DLY_MS;
+}
+
 /* Returns the max mitigation level supported */
 static int ufs_qcom_get_max_therm_state(struct thermal_cooling_device *tcd,
 				  unsigned long *data)
@@ -3676,6 +3684,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	ufs_qcom_qos_init(hba);
 	ufs_qcom_parse_irq_affinity(hba);
 	ufs_qcom_ber_mon_init(hba);
+	ufs_qcom_storage_boost_param_init(hba);
 	host->ufs_ipc_log_ctx = ipc_log_context_create(UFS_QCOM_MAX_LOG_SZ,
 							"ufs-qcom", 0);
 	if (!host->ufs_ipc_log_ctx)
@@ -3899,10 +3908,8 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 			if (!host->cpufreq_dis &&
 			    !(atomic_read(&host->therm_mitigation))) {
 				atomic_set(&host->num_reqs_threshold, 0);
-				queue_delayed_work(host->ufs_qos->workq,
-						  &host->fwork,
-					msecs_to_jiffies(
-						UFS_QCOM_LOAD_MON_DLY_MS));
+				queue_delayed_work(host->ufs_qos->workq, &host->fwork,
+						msecs_to_jiffies(host->boost_monitor_timer));
 			}
 		} else {
 			err = ufs_qcom_clk_scale_down_pre_change(hba);
@@ -5304,6 +5311,39 @@ static ssize_t irq_affinity_support_show(struct device *dev,
 
 static DEVICE_ATTR_RW(irq_affinity_support);
 
+static ssize_t boost_monitor_timer_ms_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	int ret;
+	u32 val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
+	ret = kstrtouint(buf, 0, &val);
+	if (ret) {
+		dev_err(hba->dev, "boost max thres store failed\n");
+		return -EINVAL;
+	}
+
+	host->boost_monitor_timer = val;
+	return count;
+}
+
+static ssize_t boost_monitor_timer_ms_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", host->boost_monitor_timer);
+}
+
+static DEVICE_ATTR_RW(boost_monitor_timer_ms);
+
 static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_err_state.attr,
 	&dev_attr_power_mode.attr,
@@ -5315,6 +5355,7 @@ static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_hibern8_count.attr,
 	&dev_attr_ber_th_exceeded.attr,
 	&dev_attr_irq_affinity_support.attr,
+	&dev_attr_boost_monitor_timer_ms.attr,
 	NULL
 };
 
