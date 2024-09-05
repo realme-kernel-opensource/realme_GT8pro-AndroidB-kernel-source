@@ -31,7 +31,7 @@
 #include <linux/vmalloc.h>
 #include <linux/workqueue.h>
 #include <linux/qpnp/qpnp-pbs.h>
-
+#include <linux/remoteproc/qcom_rproc.h>
 #include <linux/soc/qcom/battery_charger.h>
 #include <linux/soc/qcom/qcom_hv_haptics.h>
 
@@ -268,6 +268,9 @@
 #define CURRENT_SEL_VAL_250MA			1
 
 /* Only for HAP530 */
+#define HAP_CFG_DIG_SPARE_REG			0xB8
+#define EN_FE_PU_CHECK_BIT			BIT(3)
+
 #define HAP_CFG_ICOMP_AVG_CTL1_REG		0xC0
 #define ICOMP_THRESH_MASK			GENMASK(6, 0)
 #define ICOMP_THRESH_STEP_NA			7812500
@@ -345,8 +348,13 @@
 #define PTRN_AMP_MSB_MASK			BIT(0)
 #define PTRN_AMP_LSB_MASK			GENMASK(7, 0)
 
-#define HAP_PTN_CL_VDRIVE_CTL_REG		0x4A /* only for HAP530_HV */
+/* For HAP530_HV */
+#define HAP_PTN_VISENSE_ADC_CFG			0x47
+#define EN_VISENSE_PD_PROT_BIT			BIT(3)
+
+#define HAP_PTN_CL_VDRIVE_CTL_REG		0x4A
 #define EN_CL_VDRIVE_BIT			BIT(7)
+/* End for HAP530_HV */
 
 #define HAP_PTN_PTRN2_CFG_REG			0x50
 
@@ -578,6 +586,7 @@ enum wa_flags {
 	TOGGLE_EN_TO_FLUSH_FIFO = BIT(3),
 	RECOVER_SWR_SLAVE = BIT(4),
 	EN_RUNTIME_PM = BIT(5),
+	VISENSE_RECOVERY_EN = BIT(6),
 };
 
 static const char * const src_str[] = {
@@ -764,6 +773,7 @@ struct haptics_chip {
 	struct regulator		*hpwr_vreg;
 	struct hrtimer			hbst_off_timer;
 	struct notifier_block		hboost_nb;
+	struct notifier_block		lpass_ssr_nb;
 	struct mutex			vmax_lock;
 	struct work_struct		set_gain_work;
 	struct list_head		mmap_effect_list;
@@ -791,7 +801,9 @@ struct haptics_chip {
 	bool				is_hv_haptics;
 	bool				hboost_enabled;
 	bool				visense_enabled;
+	bool				visense_hs_disabled;
 	ktime_t				pattern_start_time;
+	void				*lpass_ssr_handle;
 };
 
 struct haptics_reg_info {
@@ -1897,6 +1909,36 @@ static int haptics_open_loop_drive_config(struct haptics_chip *chip, bool en)
 			return rc;
 	}
 
+	return 0;
+}
+
+static int haptics_visense_handshake_enable(struct haptics_chip *chip, bool enable)
+{
+	u8 mask, val;
+	int rc;
+
+	if (chip->visense_hs_disabled != enable)
+		return 0;
+
+	mask = EN_FE_PU_CHECK_BIT;
+	val = enable ? mask : 0;
+	rc = haptics_masked_write(chip, chip->cfg_addr_base, HAP_CFG_DIG_SPARE_REG, mask, val);
+	if (rc < 0)
+		return rc;
+
+	mask = EN_VISENSE_PD_PROT_BIT;
+	val = enable ? mask : 0;
+	rc = haptics_masked_write(chip, chip->ptn_addr_base, HAP_PTN_VISENSE_ADC_CFG, mask, val);
+	if (rc < 0)
+		return rc;
+
+	mask = EN_CL_VDRIVE_BIT;
+	val = enable ? mask : 0;
+	rc = haptics_masked_write(chip, chip->ptn_addr_base, HAP_PTN_CL_VDRIVE_CTL_REG, mask, val);
+	if (rc < 0)
+		return rc;
+
+	chip->visense_hs_disabled = !enable;
 	return 0;
 }
 
@@ -3816,7 +3858,7 @@ static int haptics_config_wa(struct haptics_chip *chip)
 			chip->wa_flags |= SW_CTRL_HBST;
 		break;
 	case HAP530_HV:
-		chip->wa_flags |= EN_RUNTIME_PM;
+		chip->wa_flags |= EN_RUNTIME_PM | VISENSE_RECOVERY_EN;
 		break;
 	default:
 		dev_err(chip->dev, "HW type %d does not match\n",
@@ -4751,6 +4793,12 @@ static int swr_slave_reg_enable(struct regulator_dev *rdev)
 	rc = haptics_runtime_resume_get(chip);
 	if (rc < 0)
 		return rc;
+
+	if (chip->wa_flags & VISENSE_RECOVERY_EN) {
+		rc = haptics_visense_handshake_enable(chip, true);
+		if (rc < 0)
+			goto auto_suspend;
+	}
 
 	rc = haptics_masked_write(chip, chip->cfg_addr_base,
 			HAP_CFG_SWR_ACCESS_REG, mask, mask);
@@ -5999,6 +6047,43 @@ static int haptics_boost_notifier(struct notifier_block *nb, unsigned long event
 
 #include "qcom-hv-haptics-debugfs.c"
 
+static int haptics_lpass_ssr_notifier(struct notifier_block *nb, unsigned long event, void *data)
+{
+	struct haptics_chip *chip = container_of(nb, struct haptics_chip, lpass_ssr_nb);
+	u8 val;
+	int rc;
+
+	if (!(chip->wa_flags & VISENSE_RECOVERY_EN))
+		return NOTIFY_DONE;
+
+	switch (event) {
+	case QCOM_SSR_BEFORE_SHUTDOWN:
+		val = 0;
+		rc = haptics_write(chip, chip->cfg_addr_base, HAP_CFG_SWR_ACCESS_REG,  &val, 1);
+		if (rc < 0)
+			return rc;
+
+		rc = haptics_visense_handshake_enable(chip, false);
+		if (rc < 0)
+			return rc;
+
+		dev_dbg(chip->dev, "QCOM_SSR_BEFORE_SHUTDOWN is handled\n");
+		break;
+	case QCOM_SSR_BEFORE_POWERUP:
+		val = SWR_PAT_INPUT_EN_BIT | SWR_PAT_RES_N_BIT | SWR_PAT_CFG_EN_BIT;
+		rc = haptics_write(chip, chip->cfg_addr_base, HAP_CFG_SWR_ACCESS_REG,  &val, 1);
+		if (rc < 0)
+			return rc;
+
+		dev_dbg(chip->dev, "QCOM_SSR_BEFORE_POWERUP is handled\n");
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
 static int haptics_probe(struct platform_device *pdev)
 {
 	struct haptics_chip *chip;
@@ -6123,6 +6208,18 @@ static int haptics_probe(struct platform_device *pdev)
 
 	chip->hboost_nb.notifier_call = haptics_boost_notifier;
 	register_hboost_event_notifier(&chip->hboost_nb);
+
+	if (chip->hw_type == HAP530_HV) {
+		chip->lpass_ssr_nb.notifier_call = haptics_lpass_ssr_notifier;
+		chip->lpass_ssr_handle =
+			qcom_register_ssr_notifier("lpass", &chip->lpass_ssr_nb);
+		if (IS_ERR(chip->lpass_ssr_handle)) {
+			rc = PTR_ERR(chip->lpass_ssr_handle);
+			dev_err(chip->dev, "register SSR notifier failed, rc=%d\n", rc);
+			goto destroy_ff;
+		}
+	}
+
 	rc = haptics_create_debugfs(chip);
 	if (rc < 0)
 		dev_err(chip->dev, "Creating debugfs failed, rc=%d\n", rc);
@@ -6142,6 +6239,9 @@ static void haptics_remove(struct platform_device *pdev)
 	phapchip = NULL;
 	if (chip->pbs_node)
 		of_node_put(chip->pbs_node);
+
+	if (chip->hw_type == HAP530_HV)
+		qcom_unregister_ssr_notifier(chip->lpass_ssr_handle, &chip->lpass_ssr_nb);
 
 	unregister_hboost_event_notifier(&chip->hboost_nb);
 	class_unregister(&chip->hap_class);
