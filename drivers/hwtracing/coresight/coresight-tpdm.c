@@ -1471,7 +1471,7 @@ static int tpdm_probe(struct amba_device *adev, const struct amba_id *id)
 	spin_lock_init(&drvdata->spinlock);
 
 	/* Decrease pm refcount when probe is done.*/
-	pm_runtime_put(&adev->dev);
+	pm_runtime_put_sync(&adev->dev);
 
 	return 0;
 }

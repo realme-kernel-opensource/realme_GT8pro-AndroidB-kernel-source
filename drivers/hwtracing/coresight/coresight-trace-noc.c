@@ -249,11 +249,9 @@ static int trace_noc_enable(struct coresight_device *csdev, struct coresight_con
 	int ret;
 	u32 val;
 
-	ret = pm_runtime_get_sync(drvdata->dev);
-	if (ret < 0) {
-		pm_runtime_put(drvdata->dev);
+	ret = pm_runtime_resume_and_get(drvdata->dev);
+	if (ret < 0)
 		return ret;
-	}
 
 	spin_lock(&drvdata->spinlock);
 
@@ -306,7 +304,7 @@ static void trace_noc_disable(struct coresight_device *csdev, struct coresight_c
 	trace_noc_release_trace_id(csdev);
 	spin_unlock(&drvdata->spinlock);
 
-	pm_runtime_put(drvdata->dev);
+	pm_runtime_put_sync(drvdata->dev);
 	dev_info(drvdata->dev, "Trace NOC is disabled\n");
 }
 
@@ -361,7 +359,7 @@ static int trace_noc_probe(struct amba_device *adev, const struct amba_id *id)
 	if (IS_ERR(drvdata->csdev))
 		return PTR_ERR(drvdata->csdev);
 
-	pm_runtime_put(&adev->dev);
+	pm_runtime_put_sync(&adev->dev);
 
 	spin_lock_init(&drvdata->spinlock);
 	trace_noc_init_default_data(drvdata);

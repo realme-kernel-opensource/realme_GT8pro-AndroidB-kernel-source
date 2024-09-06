@@ -653,7 +653,7 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 	if (ret)
 		coresight_unregister(drvdata->csdev);
 	else
-		pm_runtime_put(&adev->dev);
+		pm_runtime_put_sync(&adev->dev);
 out:
 	return ret;
 }

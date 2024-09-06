@@ -193,12 +193,15 @@ static ssize_t funnel_ctrl_show(struct device *dev,
 {
 	u32 val;
 	struct funnel_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	int ret;
 
-	pm_runtime_get_sync(dev->parent);
+	ret = pm_runtime_resume_and_get(dev->parent);
+	if (ret < 0)
+		return ret;
 
 	val = get_funnel_ctrl_hw(drvdata);
 
-	pm_runtime_put(dev->parent);
+	pm_runtime_put_sync(dev->parent);
 
 	return sprintf(buf, "%#x\n", val);
 }
@@ -313,7 +316,7 @@ static int funnel_probe(struct device *dev, struct resource *res)
 		goto out_disable_clk;
 	}
 
-	pm_runtime_put(dev);
+	pm_runtime_put_sync(dev);
 	ret = 0;
 
 out_disable_clk:

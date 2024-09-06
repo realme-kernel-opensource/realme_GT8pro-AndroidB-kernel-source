@@ -623,7 +623,7 @@ static inline void coresight_put_ref(struct coresight_device *csdev)
 {
 	struct device *dev = csdev->dev.parent;
 
-	pm_runtime_put(dev);
+	pm_runtime_put_sync(dev);
 	put_device(dev);
 	module_put(dev->driver->owner);
 }

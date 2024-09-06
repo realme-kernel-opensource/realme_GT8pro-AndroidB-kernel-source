@@ -350,7 +350,7 @@ static int tpda_probe(struct amba_device *adev, const struct amba_id *id)
 	if (IS_ERR(drvdata->csdev))
 		return PTR_ERR(drvdata->csdev);
 
-	pm_runtime_put(&adev->dev);
+	pm_runtime_put_sync(&adev->dev);
 
 	dev_dbg(drvdata->dev, "TPDA initialized\n");
 	return 0;

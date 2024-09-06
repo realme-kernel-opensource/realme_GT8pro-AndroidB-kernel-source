@@ -196,6 +196,7 @@ static void stm_enable_hw(struct stm_drvdata *drvdata)
 static int stm_enable(struct coresight_device *csdev, struct perf_event *event,
 		      enum cs_mode mode)
 {
+	int ret;
 	struct stm_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
 	if (mode != CS_MODE_SYSFS)
@@ -207,7 +208,12 @@ static int stm_enable(struct coresight_device *csdev, struct perf_event *event,
 	}
 	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true);
 
-	pm_runtime_get_sync(csdev->dev.parent);
+	ret = pm_runtime_resume_and_get(csdev->dev.parent);
+	if (ret < 0) {
+		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+		coresight_set_mode(csdev, CS_MODE_DISABLED);
+		return ret;
+	}
 
 	spin_lock(&drvdata->spinlock);
 	stm_enable_hw(drvdata);
@@ -274,7 +280,7 @@ static void stm_disable(struct coresight_device *csdev,
 		/* Wait until the engine has completely stopped */
 		coresight_timeout(csa, STMTCSR, STMTCSR_BUSY_BIT, 0);
 
-		pm_runtime_put(csdev->dev.parent);
+		pm_runtime_put_sync(csdev->dev.parent);
 
 		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
 		coresight_set_mode(csdev, CS_MODE_DISABLED);
@@ -898,7 +904,7 @@ static int stm_probe(struct amba_device *adev, const struct amba_id *id)
 	}
 	drvdata->traceid = (u8)trace_id;
 
-	pm_runtime_put(&adev->dev);
+	pm_runtime_put_sync(&adev->dev);
 
 	dev_info(&drvdata->csdev->dev, "%s initialized\n",
 		 (char *)coresight_get_uci_data(id));
