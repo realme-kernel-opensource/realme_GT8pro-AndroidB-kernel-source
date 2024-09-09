@@ -26,6 +26,8 @@
 
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
 
+#include "../../thermal/thermal_core.h"
+
 static LIST_HEAD(adc_tm_device_list);
 
 #define ADC5_GEN3_REGMAP_ID			0x40

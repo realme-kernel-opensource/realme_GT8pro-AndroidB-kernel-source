@@ -42,7 +42,7 @@ static void qcom_cpufreq_thermal_rx(struct mbox_client *cl, void *msg)
 
 	domain->freq_limit = throttled_freq;
 
-	arch_update_thermal_pressure(domain->policy->related_cpus, throttled_freq);
+	arch_update_hw_pressure(domain->policy->related_cpus, throttled_freq);
 }
 
 static ssize_t dcvsh_freq_limit_show(struct device *dev,
