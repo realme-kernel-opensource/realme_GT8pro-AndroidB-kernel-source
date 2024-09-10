@@ -31,6 +31,7 @@ qcom-reboot-reason.ko
 qcom-scm.ko
 qcom_hwspinlock.ko
 qcom_aoss.ko
+qrtr.ko
 msm_qmp.ko
 dwc3-msm.ko
 phy-generic.ko
