@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define TRACE_NOC_CTRL	0x008
@@ -16,12 +16,19 @@
 #define TRACE_NOC_CTRL_FLUSHSTATUS	BIT(2)
 /* Writing 1 to issue a FREQ or FREQ_TS packet*/
 #define TRACE_NOC_CTRL_FREQTSREQ	BIT(5)
+#define TRACE_NOC_CTRL_FREQTSREQ_V2	BIT(6)
 /* Sets the type of issued ATB FLAG packets. 0: 'FLAG' packets; 1: 'FLAG_TS' packets.*/
-#define TRACE_NOC_CTRL_FLAGTYPE	BIT(7)
+#define TRACE_NOC_CTRL_FLAGTYPE		BIT(7)
+#define TRACE_NOC_CTRL_FLAGTYPE_V2	BIT(8)
 /* sets the type of issued ATB FREQ packets. 0: 'FREQ' packets; 1: 'FREQ_TS' packets.*/
-#define TRACE_NOC_CTRL_FREQTYPE	BIT(8)
-
+#define TRACE_NOC_CTRL_FREQTYPE		BIT(8)
+#define TRACE_NOC_CTRL_FREQTYPE_V2	BIT(9)
 DEFINE_CORESIGHT_DEVLIST(trace_noc_devs, "traceNoc");
+
+enum trace_noc_version {
+	TRACE_NOC_VERSION_V1,
+	TRACE_NOC_VERSION_V2,
+};
 
 /**
  * struct trace_noc_drvdata - specifics associated to a trace noc component
@@ -43,6 +50,7 @@ struct trace_noc_drvdata {
 	struct device		*dev;
 	struct coresight_device	*csdev;
 	spinlock_t		spinlock;
+	enum trace_noc_version	version;
 	bool			enable;
 	bool			flushReq;
 	bool			freqTsReq;

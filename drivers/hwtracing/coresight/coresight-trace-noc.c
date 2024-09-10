@@ -177,7 +177,10 @@ static ssize_t freq_ts_req_store(struct device *dev,
 
 	if (val) {
 		reg = readl_relaxed(drvdata->base + TRACE_NOC_CTRL);
-		reg = reg | TRACE_NOC_CTRL_FREQTSREQ;
+		if (drvdata->version == TRACE_NOC_VERSION_V2)
+			reg = reg | TRACE_NOC_CTRL_FREQTSREQ_V2;
+		else
+			reg = reg | TRACE_NOC_CTRL_FREQTSREQ;
 		writel_relaxed(reg, drvdata->base + TRACE_NOC_CTRL);
 	}
 	spin_unlock(&drvdata->spinlock);
@@ -248,13 +251,18 @@ static int trace_noc_enable(struct coresight_device *csdev, struct coresight_con
 	struct trace_noc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 	int ret;
 	u32 val;
-
-	ret = pm_runtime_resume_and_get(drvdata->dev);
-	if (ret < 0)
-		return ret;
+	int i, nr_conns;
 
 	spin_lock(&drvdata->spinlock);
 
+	nr_conns = csdev->pdata->nr_inconns;
+	for (i = 0; i < nr_conns; i++) {
+		if (atomic_read(&csdev->pdata->in_conns[i]->dest_refcnt) != 0) {
+			atomic_inc(&inport->dest_refcnt);
+			spin_unlock(&drvdata->spinlock);
+			return 0;
+		}
+	}
 	ret = trace_noc_alloc_trace_id(csdev);
 	if (ret < 0) {
 		spin_unlock(&drvdata->spinlock);
@@ -273,19 +281,30 @@ static int trace_noc_enable(struct coresight_device *csdev, struct coresight_con
 
 	/* Set Ctrl register */
 	val = readl_relaxed(drvdata->base + TRACE_NOC_CTRL);
-	if (drvdata->flagType == FLAG_TS)
-		val = val | TRACE_NOC_CTRL_FLAGTYPE;
-	else
-		val = val & ~TRACE_NOC_CTRL_FLAGTYPE;
-	if (drvdata->freqType == FREQ_TS)
-		val = val | TRACE_NOC_CTRL_FREQTYPE;
-	else
-		val = val & ~TRACE_NOC_CTRL_FREQTYPE;
+	if (drvdata->version == TRACE_NOC_VERSION_V2) {
+		if (drvdata->flagType == FLAG_TS)
+			val = val | TRACE_NOC_CTRL_FLAGTYPE_V2;
+		else
+			val = val & ~TRACE_NOC_CTRL_FLAGTYPE_V2;
+		if (drvdata->freqType == FREQ_TS)
+			val = val | TRACE_NOC_CTRL_FREQTYPE_V2;
+		else
+			val = val & ~TRACE_NOC_CTRL_FREQTYPE_V2;
+	} else {
+		if (drvdata->flagType == FLAG_TS)
+			val = val | TRACE_NOC_CTRL_FLAGTYPE;
+		else
+			val = val & ~TRACE_NOC_CTRL_FLAGTYPE;
+		if (drvdata->freqType == FREQ_TS)
+			val = val | TRACE_NOC_CTRL_FREQTYPE;
+		else
+			val = val & ~TRACE_NOC_CTRL_FREQTYPE;
+	}
+
 	val = val | TRACE_NOC_CTRL_PORTEN;
 	writel_relaxed(val, drvdata->base + TRACE_NOC_CTRL);
-
-	drvdata->enable = true;
 	atomic_inc(&inport->dest_refcnt);
+	drvdata->enable = true;
 	spin_unlock(&drvdata->spinlock);
 
 	dev_info(drvdata->dev, "Trace NOC is enabled\n");
@@ -296,15 +315,23 @@ static void trace_noc_disable(struct coresight_device *csdev, struct coresight_c
 							struct coresight_connection *outport)
 {
 	struct trace_noc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+	int i, nr_conns;
 
 	spin_lock(&drvdata->spinlock);
+	atomic_dec(&inport->dest_refcnt);
+
+	nr_conns = csdev->pdata->nr_inconns;
+	for (i = 0; i < nr_conns; i++) {
+		if (atomic_read(&csdev->pdata->in_conns[i]->dest_refcnt) != 0) {
+			spin_unlock(&drvdata->spinlock);
+			return;
+		}
+	}
+
 	writel_relaxed(0x0, drvdata->base + TRACE_NOC_CTRL);
 	drvdata->enable = false;
-	atomic_dec(&inport->dest_refcnt);
 	trace_noc_release_trace_id(csdev);
 	spin_unlock(&drvdata->spinlock);
-
-	pm_runtime_put_sync(drvdata->dev);
 	dev_info(drvdata->dev, "Trace NOC is disabled\n");
 }
 
@@ -316,6 +343,67 @@ static const struct coresight_ops_link trace_noc_link_ops = {
 static const struct coresight_ops trace_noc_cs_ops = {
 	.link_ops	= &trace_noc_link_ops,
 };
+
+static int interconnect_trace_noc_enable(struct coresight_device *csdev,
+		struct coresight_connection *inport, struct coresight_connection *outport)
+{
+	struct trace_noc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+	u32 val;
+	int i, nr_conns;
+
+	spin_lock(&drvdata->spinlock);
+	nr_conns = csdev->pdata->nr_inconns;
+	for (i = 0; i < nr_conns; i++) {
+		if (atomic_read(&csdev->pdata->in_conns[i]->dest_refcnt) != 0) {
+			atomic_inc(&inport->dest_refcnt);
+			spin_unlock(&drvdata->spinlock);
+			return 0;
+		}
+	}
+	/* Set Ctrl register */
+	val = readl_relaxed(drvdata->base + TRACE_NOC_CTRL);
+	val = val | TRACE_NOC_CTRL_PORTEN;
+	writel_relaxed(val, drvdata->base + TRACE_NOC_CTRL);
+
+	drvdata->enable = true;
+	atomic_inc(&inport->dest_refcnt);
+	spin_unlock(&drvdata->spinlock);
+
+	dev_info(drvdata->dev, "Trace NOC is enabled\n");
+	return 0;
+}
+
+static void interconnect_trace_noc_disable(struct coresight_device *csdev,
+		struct coresight_connection *inport, struct coresight_connection *outport)
+{
+	struct trace_noc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+	int i, nr_conns;
+
+	spin_lock(&drvdata->spinlock);
+	atomic_dec(&inport->dest_refcnt);
+
+	nr_conns = csdev->pdata->nr_inconns;
+	for (i = 0; i < nr_conns; i++) {
+		if (atomic_read(&csdev->pdata->in_conns[i]->dest_refcnt) != 0) {
+			spin_unlock(&drvdata->spinlock);
+			return;
+		}
+	}
+	writel_relaxed(0x0, drvdata->base + TRACE_NOC_CTRL);
+	drvdata->enable = false;
+	spin_unlock(&drvdata->spinlock);
+	dev_info(drvdata->dev, "Trace NOC is disabled\n");
+}
+
+static const struct coresight_ops_link interconnect_trace_noc_link_ops = {
+	.enable		= interconnect_trace_noc_enable,
+	.disable	= interconnect_trace_noc_disable,
+};
+
+static const struct coresight_ops interconnect_trace_noc_cs_ops = {
+	.link_ops	= &interconnect_trace_noc_link_ops,
+};
+
 
 static void trace_noc_init_default_data(struct trace_noc_drvdata *drvdata)
 {
@@ -349,12 +437,22 @@ static int trace_noc_probe(struct amba_device *adev, const struct amba_id *id)
 	if (!drvdata->base)
 		return -ENOMEM;
 
+	if (of_property_read_bool(dev->of_node, "qcom,trace-noc-v2"))
+		drvdata->version = TRACE_NOC_VERSION_V2;
+
+	if (of_property_read_bool(dev->of_node, "qcom,interconnect-trace-noc")) {
+		drvdata->atid = 0;
+		desc.ops = &interconnect_trace_noc_cs_ops;
+	} else {
+		trace_noc_init_default_data(drvdata);
+		desc.ops = &trace_noc_cs_ops;
+		desc.groups = trace_noc_attr_grps;
+	}
+
 	desc.type = CORESIGHT_DEV_TYPE_LINK;
 	desc.subtype.link_subtype = CORESIGHT_DEV_SUBTYPE_LINK_MERG;
-	desc.ops = &trace_noc_cs_ops;
 	desc.pdata = adev->dev.platform_data;
 	desc.dev = &adev->dev;
-	desc.groups = trace_noc_attr_grps;
 	drvdata->csdev = coresight_register(&desc);
 	if (IS_ERR(drvdata->csdev))
 		return PTR_ERR(drvdata->csdev);
@@ -362,7 +460,6 @@ static int trace_noc_probe(struct amba_device *adev, const struct amba_id *id)
 	pm_runtime_put_sync(&adev->dev);
 
 	spin_lock_init(&drvdata->spinlock);
-	trace_noc_init_default_data(drvdata);
 
 	dev_dbg(drvdata->dev, "Trace Noc initialized\n");
 	return 0;

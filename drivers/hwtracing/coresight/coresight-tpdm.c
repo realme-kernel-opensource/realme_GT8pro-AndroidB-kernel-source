@@ -694,7 +694,8 @@ static int coresight_get_aggre_atid(struct coresight_device *csdev)
 		return tpda_drvdata->atid;
 	} else if (coresight_is_trace_noc_device(csdev)) {
 		trace_noc_drvdata = dev_get_drvdata(csdev->dev.parent);
-		return trace_noc_drvdata->atid;
+		if (trace_noc_drvdata->atid)
+			return trace_noc_drvdata->atid;
 	}
 
 	/*
