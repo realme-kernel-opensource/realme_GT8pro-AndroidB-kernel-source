@@ -109,7 +109,7 @@ static struct configfs_attribute *ost_t_policy_attrs[] = {
 	NULL,
 };
 
-static ssize_t notrace ost_write(struct stm_data *data,
+static ssize_t notrace __nocfi ost_write(struct stm_data *data,
 		struct stm_output *output, unsigned int chan,
 		const char *buf, size_t count)
 {
