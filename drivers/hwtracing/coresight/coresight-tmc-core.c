@@ -25,6 +25,7 @@
 #include <linux/of.h>
 #include <linux/coresight.h>
 #include <linux/amba/bus.h>
+#include <linux/pm_domain.h>
 
 #include "coresight-priv.h"
 #include "coresight-tmc.h"
@@ -33,6 +34,10 @@
 DEFINE_CORESIGHT_DEVLIST(etb_devs, "tmc_etb");
 DEFINE_CORESIGHT_DEVLIST(etf_devs, "tmc_etf");
 DEFINE_CORESIGHT_DEVLIST(etr_devs, "tmc_etr");
+
+static LIST_HEAD(delay_probe_list);
+static enum cpuhp_state hp_online;
+static DEFINE_SPINLOCK(delay_lock);
 
 int tmc_wait_for_tmcready(struct tmc_drvdata *drvdata)
 {
@@ -526,7 +531,7 @@ static u32 tmc_etr_get_max_burst_size(struct device *dev)
 	return burst_size;
 }
 
-static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
+static int tmc_add_coresight_dev(struct amba_device *adev, const struct amba_id *id)
 {
 	int ret = 0;
 	u32 devid;
@@ -539,11 +544,9 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 	struct coresight_dev_list *dev_list = NULL;
 
 	ret = -ENOMEM;
-	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
+	drvdata = dev_get_drvdata(dev);
 	if (!drvdata)
 		goto out;
-
-	dev_set_drvdata(dev, drvdata);
 
 	/* Validity for the resource is already checked by the AMBA core */
 	base = devm_ioremap_resource(dev, res);
@@ -583,6 +586,7 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 	}
 
 	desc.dev = dev;
+	drvdata->stop_on_flush = false;
 
 	switch (drvdata->config_type) {
 	case TMC_CONFIG_TYPE_ETB:
@@ -658,6 +662,84 @@ out:
 	return ret;
 }
 
+static int tmc_online_cpu(unsigned int cpu)
+{
+	struct delay_probe_arg *init_arg, *tmp;
+	int ret;
+	struct tmc_drvdata *drvdata;
+
+	if (list_empty(&delay_probe_list))
+		return 0;
+	list_for_each_entry_safe(init_arg, tmp, &delay_probe_list, link) {
+		if (cpumask_test_cpu(cpu, init_arg->cpumask)) {
+			drvdata = amba_get_drvdata(init_arg->adev);
+			spin_lock(&delay_lock);
+			drvdata->delayed = NULL;
+			list_del(&init_arg->link);
+			spin_unlock(&delay_lock);
+			ret = pm_runtime_resume_and_get(&init_arg->adev->dev);
+			if (ret < 0)
+				return ret;
+			ret = tmc_add_coresight_dev(init_arg->adev, init_arg->id);
+			if (ret)
+				pm_runtime_put_sync(&init_arg->adev->dev);
+		}
+	}
+	return 0;
+}
+
+static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
+{
+	struct device *dev = &adev->dev;
+	struct generic_pm_domain *pd;
+	struct delay_probe_arg *init_arg;
+	struct tmc_drvdata *drvdata;
+	int cpu, ret;
+	struct cpumask *cpumask;
+
+	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
+	if (!drvdata)
+		return -ENOMEM;
+
+	dev_set_drvdata(dev, drvdata);
+
+	if (dev->pm_domain) {
+		pd = pd_to_genpd(dev->pm_domain);
+		cpumask = pd->cpus;
+
+		if (cpumask_empty(cpumask))
+			return tmc_add_coresight_dev(adev, id);
+
+		cpus_read_lock();
+		for_each_online_cpu(cpu) {
+			if (cpumask_test_cpu(cpu, cpumask)) {
+				ret = tmc_add_coresight_dev(adev, id);
+				if (ret)
+					dev_err(dev, "add coresight_dev fail:%d\n", ret);
+				cpus_read_unlock();
+				return ret;
+			}
+		}
+
+		init_arg = devm_kzalloc(dev, sizeof(*init_arg), GFP_KERNEL);
+		if (!init_arg) {
+			cpus_read_unlock();
+			return -ENOMEM;
+		}
+		spin_lock(&delay_lock);
+		init_arg->adev = adev;
+		init_arg->cpumask = pd->cpus;
+		list_add(&init_arg->link, &delay_probe_list);
+		drvdata->delayed = init_arg;
+		spin_unlock(&delay_lock);
+		cpus_read_unlock();
+		pm_runtime_put_sync(&adev->dev);
+		return 0;
+	}
+
+	return tmc_add_coresight_dev(adev, id);
+}
+
 static void tmc_shutdown(struct amba_device *adev)
 {
 	unsigned long flags;
@@ -687,6 +769,16 @@ static void tmc_remove(struct amba_device *adev)
 {
 	struct tmc_drvdata *drvdata = dev_get_drvdata(&adev->dev);
 
+	spin_lock(&delay_lock);
+	if (drvdata->delayed) {
+		list_del(&drvdata->delayed->link);
+		spin_unlock(&delay_lock);
+		return;
+	}
+	spin_unlock(&delay_lock);
+
+	if (!drvdata->csdev)
+		return;
 	/*
 	 * Since misc_open() holds a refcount on the f_ops, which is
 	 * etb fops in this case, device is there until last file
@@ -726,7 +818,43 @@ static struct amba_driver tmc_driver = {
 	.id_table	= tmc_ids,
 };
 
-module_amba_driver(tmc_driver);
+static int __init tmc_init(void)
+{
+	int ret;
+
+	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+				"arm/coresight-tmc:online",
+				tmc_online_cpu, NULL);
+
+	if (ret > 0)
+		hp_online = ret;
+	else
+		return ret;
+
+	ret = amba_driver_register(&tmc_driver);
+	if (ret) {
+		pr_err("Error registering tmc AMBA driver\n");
+		goto clear_pm;
+	}
+
+	return ret;
+
+clear_pm:
+	cpuhp_remove_state_nocalls(hp_online);
+	hp_online = 0;
+	return ret;
+}
+
+static void __exit tmc_exit(void)
+{
+	amba_driver_unregister(&tmc_driver);
+
+	cpuhp_remove_state_nocalls(hp_online);
+	hp_online = 0;
+}
+
+module_init(tmc_init);
+module_exit(tmc_exit);
 
 MODULE_AUTHOR("Pratik Patel <pratikp@codeaurora.org>");
 MODULE_DESCRIPTION("Arm CoreSight Trace Memory Controller driver");

@@ -19,6 +19,7 @@
 #include <linux/clk.h>
 #include <linux/of.h>
 #include <linux/coresight.h>
+#include <linux/pm_domain.h>
 
 #include "coresight-priv.h"
 
@@ -26,6 +27,10 @@
 #define REPLICATOR_IDFILTER1		0x004
 
 DEFINE_CORESIGHT_DEVLIST(replicator_devs, "replicator");
+
+static LIST_HEAD(delay_probe_list);
+static enum cpuhp_state hp_online;
+static DEFINE_SPINLOCK(delay_lock);
 
 /**
  * struct replicator_drvdata - specifics associated to a replicator component
@@ -35,6 +40,7 @@ DEFINE_CORESIGHT_DEVLIST(replicator_devs, "replicator");
  * @csdev:	component vitals needed by the framework
  * @spinlock:	serialize enable/disable operations.
  * @check_idfilter_val: check if the context is lost upon clock removal.
+ * @delayed:	parameter for delayed probe.
  */
 struct replicator_drvdata {
 	void __iomem		*base;
@@ -42,6 +48,7 @@ struct replicator_drvdata {
 	struct coresight_device	*csdev;
 	spinlock_t		spinlock;
 	bool			check_idfilter_val;
+	struct delay_probe_arg	*delayed;
 };
 
 static void dynamic_replicator_reset(struct replicator_drvdata *drvdata)
@@ -216,7 +223,7 @@ static const struct attribute_group *replicator_groups[] = {
 	NULL,
 };
 
-static int replicator_probe(struct device *dev, struct resource *res)
+static int replicator_add_coresight_dev(struct device *dev, struct resource *res)
 {
 	int ret = 0;
 	struct coresight_platform_data *pdata = NULL;
@@ -233,7 +240,7 @@ static int replicator_probe(struct device *dev, struct resource *res)
 	if (!desc.name)
 		return -ENOMEM;
 
-	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
+	drvdata = dev_get_drvdata(dev);
 	if (!drvdata)
 		return -ENOMEM;
 
@@ -262,8 +269,6 @@ static int replicator_probe(struct device *dev, struct resource *res)
 	if (fwnode_property_present(dev_fwnode(dev),
 				    "qcom,replicator-loses-context"))
 		drvdata->check_idfilter_val = true;
-
-	dev_set_drvdata(dev, drvdata);
 
 	pdata = coresight_get_platform_data(dev);
 	if (IS_ERR(pdata)) {
@@ -298,6 +303,8 @@ static int replicator_remove(struct device *dev)
 {
 	struct replicator_drvdata *drvdata = dev_get_drvdata(dev);
 
+	if (!drvdata->csdev)
+		return 0;
 	coresight_unregister(drvdata->csdev);
 	return 0;
 }
@@ -305,13 +312,19 @@ static int replicator_remove(struct device *dev)
 static int static_replicator_probe(struct platform_device *pdev)
 {
 	int ret;
+	struct replicator_drvdata *drvdata;
 
+	drvdata = devm_kzalloc(&pdev->dev, sizeof(*drvdata), GFP_KERNEL);
+	if (!drvdata)
+		return -ENOMEM;
+
+	dev_set_drvdata(&pdev->dev, drvdata);
 	pm_runtime_get_noresume(&pdev->dev);
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 
 	/* Static replicators do not have programming base */
-	ret = replicator_probe(&pdev->dev, NULL);
+	ret = replicator_add_coresight_dev(&pdev->dev, NULL);
 
 	if (ret) {
 		pm_runtime_put_noidle(&pdev->dev);
@@ -384,14 +397,99 @@ static struct platform_driver static_replicator_driver = {
 	},
 };
 
+static int replicator_online_cpu(unsigned int cpu)
+{
+	struct delay_probe_arg *init_arg, *tmp;
+	int ret;
+	struct replicator_drvdata *drvdata;
+
+	if (list_empty(&delay_probe_list))
+		return 0;
+
+	list_for_each_entry_safe(init_arg, tmp, &delay_probe_list, link) {
+		if (cpumask_test_cpu(cpu, init_arg->cpumask)) {
+			drvdata = amba_get_drvdata(init_arg->adev);
+			spin_lock(&delay_lock);
+			drvdata->delayed = NULL;
+			list_del(&init_arg->link);
+			spin_unlock(&delay_lock);
+			ret = pm_runtime_resume_and_get(&init_arg->adev->dev);
+			if (ret < 0)
+				return ret;
+			ret = replicator_add_coresight_dev(&init_arg->adev->dev,
+					&init_arg->adev->res);
+			if (ret)
+				pm_runtime_put_sync(&init_arg->adev->dev);
+		}
+	}
+	return 0;
+}
+
 static int dynamic_replicator_probe(struct amba_device *adev,
 				    const struct amba_id *id)
 {
-	return replicator_probe(&adev->dev, &adev->res);
+	struct device *dev = &adev->dev;
+	struct generic_pm_domain *pd;
+	struct delay_probe_arg *init_arg;
+	int cpu, ret;
+	struct cpumask *cpumask;
+	struct replicator_drvdata *drvdata;
+
+	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
+	if (!drvdata)
+		return -ENOMEM;
+
+	dev_set_drvdata(dev, drvdata);
+
+	if (dev->pm_domain) {
+		pd = pd_to_genpd(dev->pm_domain);
+		cpumask = pd->cpus;
+
+		if (cpumask_empty(cpumask))
+			return replicator_add_coresight_dev(dev, &adev->res);
+
+		cpus_read_lock();
+		for_each_online_cpu(cpu) {
+			if (cpumask_test_cpu(cpu, cpumask)) {
+				ret = replicator_add_coresight_dev(dev, &adev->res);
+				if (ret)
+					dev_err(dev, "add coresight_dev fail:%d\n", ret);
+				cpus_read_unlock();
+				return ret;
+			}
+		}
+
+		init_arg = devm_kzalloc(dev, sizeof(*init_arg), GFP_KERNEL);
+		if (!init_arg) {
+			cpus_read_unlock();
+			return -ENOMEM;
+		}
+		spin_lock(&delay_lock);
+		init_arg->adev = adev;
+		init_arg->cpumask = pd->cpus;
+		list_add(&init_arg->link, &delay_probe_list);
+		drvdata->delayed = init_arg;
+		spin_unlock(&delay_lock);
+		pm_runtime_put_sync(&adev->dev);
+		cpus_read_unlock();
+		return 0;
+	}
+
+	return replicator_add_coresight_dev(dev, &adev->res);
 }
 
 static void dynamic_replicator_remove(struct amba_device *adev)
 {
+	struct replicator_drvdata *drvdata = amba_get_drvdata(adev);
+
+	spin_lock(&delay_lock);
+	if (drvdata->delayed) {
+		list_del(&drvdata->delayed->link);
+		spin_unlock(&delay_lock);
+		return;
+	}
+	spin_unlock(&delay_lock);
+
 	replicator_remove(&adev->dev);
 }
 
@@ -419,17 +517,32 @@ static int __init replicator_init(void)
 {
 	int ret;
 
+	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+				"arm/coresight-replicator:online",
+				replicator_online_cpu, NULL);
+
+	if (ret > 0)
+		hp_online = ret;
+	else
+		return ret;
+
 	ret = platform_driver_register(&static_replicator_driver);
 	if (ret) {
 		pr_info("Error registering platform driver\n");
-		return ret;
+		goto clear_pm;
 	}
 
 	ret = amba_driver_register(&dynamic_replicator_driver);
 	if (ret) {
 		pr_info("Error registering amba driver\n");
 		platform_driver_unregister(&static_replicator_driver);
+		goto clear_pm;
 	}
+	return ret;
+
+clear_pm:
+	cpuhp_remove_state_nocalls(hp_online);
+	hp_online = 0;
 
 	return ret;
 }
@@ -438,6 +551,8 @@ static void __exit replicator_exit(void)
 {
 	platform_driver_unregister(&static_replicator_driver);
 	amba_driver_unregister(&dynamic_replicator_driver);
+	cpuhp_remove_state_nocalls(hp_online);
+	hp_online = 0;
 }
 
 module_init(replicator_init);
