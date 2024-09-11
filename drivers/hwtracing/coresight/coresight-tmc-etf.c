@@ -188,6 +188,14 @@ static int tmc_enable_etf_sink_sysfs(struct coresight_device *csdev)
 	unsigned long flags;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
+
+	if (drvdata->dclk) {
+
+		ret = clk_prepare_enable(drvdata->dclk);
+		if (ret)
+			return ret;
+	}
+
 	/*
 	 * If we don't have a buffer release the lock and allocate memory.
 	 * Otherwise keep the lock and move along.
@@ -198,8 +206,10 @@ static int tmc_enable_etf_sink_sysfs(struct coresight_device *csdev)
 
 		/* Allocating the memory here while outside of the spinlock */
 		buf = kzalloc(drvdata->size, GFP_KERNEL);
-		if (!buf)
-			return -ENOMEM;
+		if (!buf) {
+			ret = -ENOMEM;
+			goto out;
+		}
 
 		/* Let's try again */
 		spin_lock_irqsave(&drvdata->spinlock, flags);
@@ -251,6 +261,9 @@ out:
 	if (!used)
 		kfree(buf);
 
+	if (ret && drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
+
 	return ret;
 }
 
@@ -265,6 +278,12 @@ static int tmc_enable_etf_sink_perf(struct coresight_device *csdev, void *data)
 
 	if (buf == NULL)
 		return -EINVAL;
+
+	if (drvdata->dclk) {
+		ret = clk_prepare_enable(drvdata->dclk);
+		if (ret)
+			return ret;
+	}
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 	do {
@@ -311,6 +330,9 @@ static int tmc_enable_etf_sink_perf(struct coresight_device *csdev, void *data)
 	} while (0);
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
+	if (ret && drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
+
 	return ret;
 }
 
@@ -342,19 +364,22 @@ static int tmc_enable_etf_sink(struct coresight_device *csdev,
 static int tmc_disable_etf_sink(struct coresight_device *csdev)
 {
 	unsigned long flags;
+	int ret = 0;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 
 	if (drvdata->reading) {
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto disable_clk;
 	}
 
 	csdev->refcnt--;
 	if (csdev->refcnt) {
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto disable_clk;
 	}
 
 	/* Complain if we (somehow) got out of sync */
@@ -367,7 +392,12 @@ static int tmc_disable_etf_sink(struct coresight_device *csdev)
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
 	dev_dbg(&csdev->dev, "TMC-ETB/ETF disabled\n");
-	return 0;
+
+disable_clk:
+	if (drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
+
+	return ret;
 }
 
 static int tmc_enable_etf_link(struct coresight_device *csdev,
@@ -379,10 +409,17 @@ static int tmc_enable_etf_link(struct coresight_device *csdev,
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 	bool first_enable = false;
 
+	if (drvdata->dclk) {
+		ret = clk_prepare_enable(drvdata->dclk);
+		if (ret)
+			return ret;
+	}
+
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 	if (drvdata->reading) {
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto disable_clk;
 	}
 
 	if (csdev->refcnt == 0) {
@@ -398,6 +435,9 @@ static int tmc_enable_etf_link(struct coresight_device *csdev,
 
 	if (first_enable)
 		dev_dbg(&csdev->dev, "TMC-ETF enabled\n");
+disable_clk:
+	if (ret && drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
 	return ret;
 }
 
@@ -422,6 +462,9 @@ static void tmc_disable_etf_link(struct coresight_device *csdev,
 		last_disable = true;
 	}
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
+
+	if (drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
 
 	if (last_disable)
 		dev_dbg(&csdev->dev, "TMC-ETF disabled\n");

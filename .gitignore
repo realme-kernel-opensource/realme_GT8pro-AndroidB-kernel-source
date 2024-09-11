@@ -177,3 +177,5 @@ sphinx_*/
 
 # Rust analyzer configuration
 /rust-project.json
+
+git_fetch_and_checkout.sh

@@ -229,6 +229,14 @@ static int tpda_enable(struct coresight_device *csdev,
 
 	spin_lock(&drvdata->spinlock);
 
+	if (drvdata->dclk) {
+		ret = clk_prepare_enable(drvdata->dclk);
+		if (ret) {
+			spin_unlock(&drvdata->spinlock);
+			return ret;
+		}
+	}
+
 	ret = tpda_alloc_trace_id(csdev);
 	if (ret < 0) {
 		spin_unlock(&drvdata->spinlock);
@@ -273,6 +281,8 @@ static void tpda_disable(struct coresight_device *csdev,
 		csdev->refcnt--;
 	}
 	tpda_release_trace_id(csdev);
+	if (drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
 	spin_unlock(&drvdata->spinlock);
 
 	dev_dbg(drvdata->dev, "TPDA inport %d disabled\n", in->dest_port);
@@ -326,6 +336,14 @@ static int tpda_probe(struct amba_device *adev, const struct amba_id *id)
 	drvdata->dev = &adev->dev;
 	dev_set_drvdata(dev, drvdata);
 
+	drvdata->dclk = devm_clk_get(dev, "dynamic_clk");
+	if (!IS_ERR(drvdata->dclk)) {
+		ret = clk_prepare_enable(drvdata->dclk);
+		if (ret)
+			return ret;
+	} else
+		drvdata->dclk = NULL;
+
 	base = devm_ioremap_resource(dev, &adev->res);
 	if (IS_ERR(base))
 		return PTR_ERR(base);
@@ -351,7 +369,8 @@ static int tpda_probe(struct amba_device *adev, const struct amba_id *id)
 		return PTR_ERR(drvdata->csdev);
 
 	pm_runtime_put_sync(&adev->dev);
-
+	if (drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
 	dev_dbg(drvdata->dev, "TPDA initialized\n");
 	return 0;
 }

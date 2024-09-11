@@ -484,10 +484,18 @@ static int tpdm_enable(struct coresight_device *csdev, struct perf_event *event,
 		return -EBUSY;
 	}
 
+	if (drvdata->dclk) {
+		ret = clk_prepare_enable(drvdata->dclk);
+		if (ret)
+			return ret;
+	}
+
 	spin_lock(&drvdata->spinlock);
 	ret = coresight_get_aggre_atid(csdev);
 	if (ret < 0) {
 		spin_unlock(&drvdata->spinlock);
+		if (drvdata->dclk)
+			clk_disable_unprepare(drvdata->dclk);
 		return ret;
 	}
 	drvdata->traceid = ret;
@@ -547,6 +555,8 @@ static void tpdm_disable(struct coresight_device *csdev,
 		__tpdm_disable(drvdata);
 		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
 		drvdata->traceid = 0;
+		if (drvdata->dclk)
+			clk_disable_unprepare(drvdata->dclk);
 		spin_unlock(&drvdata->spinlock);
 
 		coresight_set_mode(csdev, CS_MODE_DISABLED);
@@ -1436,6 +1446,14 @@ static int tpdm_probe(struct amba_device *adev, const struct amba_id *id)
 	drvdata->dev = &adev->dev;
 	dev_set_drvdata(dev, drvdata);
 
+	drvdata->dclk = devm_clk_get(dev, "dynamic_clk");
+	if (!IS_ERR(drvdata->dclk)) {
+		ret = clk_prepare_enable(drvdata->dclk);
+		if (ret)
+			return ret;
+	} else
+		drvdata->dclk = NULL;
+
 	base = devm_ioremap_resource(dev, &adev->res);
 	if (IS_ERR(base))
 		return PTR_ERR(base);
@@ -1473,7 +1491,8 @@ static int tpdm_probe(struct amba_device *adev, const struct amba_id *id)
 
 	/* Decrease pm refcount when probe is done.*/
 	pm_runtime_put_sync(&adev->dev);
-
+	if (drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
 	return 0;
 }
 
