@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2019, 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -8,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
 #include <linux/slab.h>
 
 #include "common.h"
@@ -82,9 +84,11 @@ const struct reset_control_ops dummy_reset_ops = {
 static struct clk *clk_register_dummy(struct device *dev, const char *name,
 				       unsigned long flags, struct device_node *node)
 {
+	struct generic_pm_domain *pd;
 	struct clk_dummy *dummy;
 	struct clk *clk;
 	struct clk_init_data init = {};
+	int ret;
 
 	/* allocate dummy clock */
 	dummy = devm_kzalloc(dev, sizeof(*dummy), GFP_KERNEL);
@@ -110,6 +114,22 @@ static struct clk *clk_register_dummy(struct device *dev, const char *name,
 		pr_err("Failed to register reset controller for %s\n", name);
 	else
 		pr_info("Successfully registered dummy reset controller for %s\n", name);
+
+	pd = devm_kzalloc(dev, sizeof(*pd), GFP_KERNEL);
+	if (!pd)
+		return ERR_PTR(-ENOMEM);
+
+	pd->name = name;
+
+	ret = pm_genpd_init(pd, NULL, true);
+	if (ret)
+		pr_err("Failed to initialize genpd for %s, ret=%d\n", name, ret);
+
+	ret = of_genpd_add_provider_simple(node, pd);
+	if (ret)
+		pr_err("Failed to register genpd for %s, ret=%d\n", name, ret);
+	else
+		pr_info("Successfully registered dummy genpd for %s\n", name);
 
 	return clk;
 }
