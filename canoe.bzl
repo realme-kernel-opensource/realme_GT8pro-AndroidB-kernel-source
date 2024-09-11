@@ -61,6 +61,7 @@ def define_canoe():
         "drivers/soc/qcom/eud.ko",
         "drivers/soc/qcom/llcc-qcom.ko",
         "drivers/soc/qcom/mdt_loader.ko",
+        "drivers/soc/qcom/mem-offline.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
         "drivers/soc/qcom/mem_buf/mem_buf_dev.ko",
         "drivers/soc/qcom/memshare/heap_mem_ext_v01.ko",
