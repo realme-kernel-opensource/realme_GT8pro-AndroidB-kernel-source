@@ -7,3 +7,4 @@ pinctrl-vienna.ko
 qcom-scm.ko
 cmd-db.ko
 qcom_rpmh.ko
+stub-regulator.ko
