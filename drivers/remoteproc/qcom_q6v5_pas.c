@@ -2015,6 +2015,42 @@ static const struct adsp_data sun_soccp_resource = {
 	.auto_boot = true,
 };
 
+static const struct adsp_data canoe_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.dtb_firmware_name = "adsp_dtb.mdt",
+	.pas_id = 1,
+	.dtb_pas_id = 0x24,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
+};
+
+static const struct adsp_data canoe_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.minidump_id = 7,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+	.uses_elf64 = true,
+	.region_assign_idx = 2,
+	.region_assign_count = 1,
+	.region_assign_shared = true,
+	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
+};
+
 static const struct adsp_data pineapple_adsp_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
@@ -2135,6 +2171,8 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,sun-cdsp-pas", .data = &sun_cdsp_resource},
 	{ .compatible = "qcom,sun-modem-pas", .data = &sun_mpss_resource},
 	{ .compatible = "qcom,sun-soccp-pas", .data = &sun_soccp_resource},
+	{ .compatible = "qcom,canoe-adsp-pas", .data = &canoe_adsp_resource},
+	{ .compatible = "qcom,canoe-cdsp-pas", .data = &canoe_cdsp_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);
