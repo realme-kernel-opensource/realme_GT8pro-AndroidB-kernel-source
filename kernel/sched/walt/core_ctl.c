@@ -25,7 +25,7 @@
 cpumask_t cpus_paused_by_us = { CPU_BITS_NONE };
 
 /* mask of all CPUS with a partial pause claim outstanding */
-static cpumask_t cpus_part_paused_by_us = { CPU_BITS_NONE };
+cpumask_t cpus_part_paused_by_us = { CPU_BITS_NONE };
 
 /* global to indicate which cpus to pause for sbt */
 cpumask_t cpus_for_sbt_pause = { CPU_BITS_NONE };
@@ -991,8 +991,10 @@ static void update_running_avg(u64 window_start, u32 wakeup_ctr_sum)
 	spin_unlock_irqrestore(&state_lock, flags);
 
 	last_nr_big = big_avg;
+
 	walt_rotation_checkpoint(big_avg);
-	fmax_uncap_checkpoint(big_avg, window_start, wakeup_ctr_sum);
+	/* Update the SMART freq configuration for NON-IPC reasons. */
+	smart_freq_update_reason_common(window_start, big_avg, wakeup_ctr_sum);
 }
 
 #define MAX_NR_THRESHOLD	4
@@ -1295,10 +1297,12 @@ static bool core_ctl_check_masks_set(void)
 	return all_masks_set;
 }
 
+bool prev_is_sbt;
+#define SBT_LIMIT 45
 /* is the system in a single-big-thread case? */
-static inline bool is_sbt(bool prev_is_sbt, int prev_is_sbt_windows)
+static inline bool core_ctl_is_sbt(int prev_is_sbt_windows, u32 wakeup_ctr_sum)
 {
-	struct cluster_data *cluster = &cluster_state[MAX_CLUSTERS - 1];
+	struct cluster_data *cluster = &cluster_state[num_sched_clusters - 1];
 	bool ret = false;
 
 	if (!sysctl_sched_sbt_enable)
@@ -1310,6 +1314,9 @@ static inline bool is_sbt(bool prev_is_sbt, int prev_is_sbt_windows)
 	if (cluster->nr_big != 1)
 		goto out;
 
+	if (wakeup_ctr_sum > SBT_LIMIT)
+		goto out;
+
 	ret = true;
 out:
 	trace_core_ctl_sbt(&cpus_for_sbt_pause, prev_is_sbt, ret,
@@ -1318,6 +1325,7 @@ out:
 	return ret;
 }
 
+bool now_is_sbt;
 /**
  * sbt_ctl_check
  *
@@ -1328,11 +1336,10 @@ out:
  * note: depends on update_running_average
  * note: must be called every window rollover
  */
-void sbt_ctl_check(void)
+void sbt_ctl_check(u32 wakeup_ctr_sum)
 {
-	static bool prev_is_sbt;
 	static int prev_is_sbt_windows;
-	bool now_is_sbt = is_sbt(prev_is_sbt, prev_is_sbt_windows);
+	now_is_sbt = core_ctl_is_sbt(prev_is_sbt_windows, wakeup_ctr_sum);
 	cpumask_t local_cpus;
 
 	/* if there are cpus to adjust */
@@ -1357,8 +1364,8 @@ void sbt_ctl_check(void)
 			walt_resume_cpus(&local_cpus, PAUSE_SBT);
 
 		prev_is_sbt_windows = sysctl_sched_sbt_delay_windows;
-		prev_is_sbt = now_is_sbt;
 	}
+	prev_is_sbt = now_is_sbt;
 }
 
 /*
@@ -1414,7 +1421,7 @@ void core_ctl_check(u64 window_start, u32 wakeup_ctr_sum)
 	core_ctl_call_notifier();
 
 	/* independent check from eval_need */
-	sbt_ctl_check();
+	sbt_ctl_check(wakeup_ctr_sum);
 }
 
 /* must be called with state_lock held */

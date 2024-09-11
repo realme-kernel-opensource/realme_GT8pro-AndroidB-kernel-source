@@ -31,6 +31,7 @@ void walt_init_tg(struct task_group *tg)
 	wtg->sched_boost_enable[CONSERVATIVE_BOOST] = false;
 	wtg->sched_boost_enable[RESTRAINED_BOOST] = false;
 	wtg->sched_boost_enable[STORAGE_BOOST] = true;
+	wtg->sched_boost_enable[BALANCE_BOOST] = false;
 }
 
 void walt_init_topapp_tg(struct task_group *tg)
@@ -43,9 +44,10 @@ void walt_init_topapp_tg(struct task_group *tg)
 	wtg->sched_boost_enable[NO_BOOST] = false;
 	wtg->sched_boost_enable[FULL_THROTTLE_BOOST] = true;
 	wtg->sched_boost_enable[CONSERVATIVE_BOOST] =
-		soc_feat(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP);
+		soc_feat(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 	wtg->sched_boost_enable[RESTRAINED_BOOST] = false;
 	wtg->sched_boost_enable[STORAGE_BOOST] = true;
+	wtg->sched_boost_enable[BALANCE_BOOST] = true;
 }
 
 void walt_init_foreground_tg(struct task_group *tg)
@@ -57,9 +59,11 @@ void walt_init_foreground_tg(struct task_group *tg)
 	wtg->colocate = false;
 	wtg->sched_boost_enable[NO_BOOST] = false;
 	wtg->sched_boost_enable[FULL_THROTTLE_BOOST] = true;
-	wtg->sched_boost_enable[CONSERVATIVE_BOOST] = soc_feat(SOC_ENABLE_CONSERVATIVE_BOOST_FG);
+	wtg->sched_boost_enable[CONSERVATIVE_BOOST] =
+		soc_feat(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
 	wtg->sched_boost_enable[RESTRAINED_BOOST] = false;
 	wtg->sched_boost_enable[STORAGE_BOOST] = true;
+	wtg->sched_boost_enable[BALANCE_BOOST] = true;
 }
 
 /*
@@ -90,7 +94,7 @@ static void set_boost_policy(int type)
 
 static bool verify_boost_params(int type)
 {
-	return type >= STORAGE_BOOST_DISABLE && type <= STORAGE_BOOST;
+	return type >= BALANCE_BOOST_DISABLE && type <= BALANCE_BOOST;
 }
 
 static void sched_no_boost_nop(void)
@@ -137,6 +141,16 @@ static void sched_storage_boost_exit(void)
 	core_ctl_set_boost(false);
 }
 
+static void sched_balance_boost_enter(void)
+{
+	core_ctl_set_boost(true);
+}
+
+static void sched_balance_boost_exit(void)
+{
+	core_ctl_set_boost(false);
+}
+
 struct sched_boost_data {
 	int	refcount;
 	void	(*enter)(void);
@@ -169,11 +183,15 @@ static struct sched_boost_data sched_boosts[] = {
 		.enter		= sched_storage_boost_enter,
 		.exit		= sched_storage_boost_exit,
 	},
-
+	[BALANCE_BOOST] = {
+		.refcount	= 0,
+		.enter		= sched_balance_boost_enter,
+		.exit		= sched_balance_boost_exit,
+	},
 };
 
 #define SCHED_BOOST_START FULL_THROTTLE_BOOST
-#define SCHED_BOOST_END (STORAGE_BOOST + 1)
+#define SCHED_BOOST_END (BALANCE_BOOST + 1)
 
 static int sched_effective_boost(void)
 {

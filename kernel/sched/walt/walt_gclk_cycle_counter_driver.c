@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
+#include <linux/platform_device.h>
 
 #include "walt.h"
 
@@ -30,11 +31,14 @@ u64 walt_get_ncc_gclk_cycle_counter(int cpu, u64 wc)
 	struct walt_ncc_data *data;
 	u64 cycle_counter_ret;
 	unsigned long flags;
+	int index;
 	u64 val;
 
-	data = &ncc_data[cpu_cluster(cpu)->id];
+	index = topology_cluster_id(cpu);
 
-	ncc_counter = &walt_gclk_counter[cpu_cluster(cpu)->id];
+	data = &ncc_data[index];
+
+	ncc_counter = &walt_gclk_counter[index];
 	spin_lock_irqsave(&ncc_counter->lock, flags);
 
 	val = readq_relaxed(data->base);
@@ -56,7 +60,7 @@ u64 walt_get_ncc_gclk_cycle_counter(int cpu, u64 wc)
 	cycle_counter_ret = ncc_counter->total_cycle_counter;
 	spin_unlock_irqrestore(&ncc_counter->lock, flags);
 
-	pr_debug("CPU %u, cluster-id %d\n", cpu, cpu_cluster(cpu)->id);
+	pr_debug("CPU %u, cluster-id %d\n", cpu, index);
 
 	return cycle_counter_ret;
 }
@@ -70,8 +74,7 @@ static int walt_gclk_cycle_counter_driver_probe(struct platform_device *pdev)
 	struct walt_sched_cluster *cluster;
 
 	for_each_sched_cluster(cluster) {
-		index = cluster->id;
-
+		index = topology_cluster_id(cpumask_first(&cluster->cpus));
 		res = platform_get_resource(pdev, IORESOURCE_MEM, index);
 		if (!res) {
 			dev_err(dev, "failed to get mem resource %d\n", index);
@@ -88,8 +91,7 @@ static int walt_gclk_cycle_counter_driver_probe(struct platform_device *pdev)
 			dev_err(dev, "failed to map resource %pR\n", res);
 			return -ENOMEM;
 		}
-
-		ncc_data[cluster->id].base = base;
+		ncc_data[index].base = base;
 	}
 
 	if (!walt_get_cycle_counts_cb) {

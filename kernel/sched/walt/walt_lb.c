@@ -293,7 +293,7 @@ static inline bool need_active_lb(struct task_struct *p, int dst_cpu,
 	return true;
 }
 
-static int walt_lb_pull_tasks(int dst_cpu, int src_cpu, struct task_struct *pulled_task)
+static int walt_lb_pull_tasks(int dst_cpu, int src_cpu, struct task_struct **pulled_task_struct)
 {
 	struct rq *dst_rq = cpu_rq(dst_cpu);
 	struct rq *src_rq = cpu_rq(src_cpu);
@@ -342,7 +342,6 @@ static int walt_lb_pull_tasks(int dst_cpu, int src_cpu, struct task_struct *pull
 	}
 	if (pull_me) {
 		walt_detach_task(pull_me, src_rq, dst_rq);
-		pulled_task = pull_me;
 		goto unlock;
 	}
 
@@ -376,7 +375,6 @@ static int walt_lb_pull_tasks(int dst_cpu, int src_cpu, struct task_struct *pull
 	}
 	if (pull_me) {
 		walt_detach_task(pull_me, src_rq, dst_rq);
-		pulled_task = pull_me;
 		goto unlock;
 	}
 
@@ -402,7 +400,8 @@ static int walt_lb_pull_tasks(int dst_cpu, int src_cpu, struct task_struct *pull
 				 * the push_task is really pulled onto this CPU.
 				 */
 				wts = (struct walt_task_struct *) p->android_vendor_data1;
-				trace_walt_active_load_balance(p, src_cpu, dst_cpu, wts);
+				trace_walt_active_load_balance(p, src_cpu, dst_cpu, wts,
+						-1);
 				success = stop_one_cpu_nowait(src_cpu,
 						stop_walt_lb_active_migration,
 						src_rq, &src_rq->active_balance_work);
@@ -418,13 +417,14 @@ unlock:
 	/* lock must be dropped before waking the stopper */
 	raw_spin_unlock_irqrestore(&src_rq->__lock, flags);
 
-	if (!pulled_task)
+	if (!pull_me)
 		return 0;
 
 	raw_spin_lock_irqsave(&dst_rq->__lock, flags);
-	walt_attach_task(pulled_task, dst_rq);
+	walt_attach_task(pull_me, dst_rq);
 	raw_spin_unlock_irqrestore(&dst_rq->__lock, flags);
 
+	*pulled_task_struct = pull_me;
 	return 1; /* we pulled 1 task */
 }
 
@@ -737,7 +737,7 @@ void walt_lb_tick(struct rq *rq)
 	mark_reserved(new_cpu);
 	raw_spin_unlock_irqrestore(&walt_lb_migration_lock, flags);
 
-	trace_walt_active_load_balance(p, prev_cpu, new_cpu, wts);
+	trace_walt_active_load_balance(p, prev_cpu, new_cpu, wts, -1);
 	ret = stop_one_cpu_nowait(prev_cpu,
 			stop_walt_lb_active_migration, rq,
 			&rq->active_balance_work);
@@ -896,7 +896,7 @@ static void walt_newidle_balance(struct rq *this_rq,
 	if (walt_balance_rt(this_rq) || this_rq->nr_running)
 		goto rt_pulled;
 
-	if (!force_overload && !READ_ONCE(this_rq->rd->overload))
+	if (!force_overload && !READ_ONCE(this_rq->rd->overloaded))
 		goto repin;
 
 	if (atomic_read(&this_rq->nr_iowait) && !enough_idle)
@@ -962,7 +962,7 @@ found_busy_cpu:
 	if (this_rq->nr_running > 0 || (busy_cpu == this_cpu))
 		goto unlock;
 
-	*pulled_task = walt_lb_pull_tasks(this_cpu, busy_cpu, pulled_task_struct);
+	*pulled_task = walt_lb_pull_tasks(this_cpu, busy_cpu, &pulled_task_struct);
 
 unlock:
 	raw_spin_lock(&this_rq->__lock);
@@ -1103,6 +1103,74 @@ static void walt_sched_newidle_balance(void *unused, struct rq *this_rq,
 				       int *done)
 {
 	walt_newidle_balance(this_rq, rf, pulled_task, done, false);
+}
+
+enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt)
+{
+	struct rq *src_rq;
+	struct walt_rq *src_wrq;
+	int dst_cpu, src_cpu;
+	struct task_struct *p;
+	struct walt_task_struct *wts;
+	unsigned long flags;
+
+	src_cpu = raw_smp_processor_id();
+
+	if (!should_oscillate()) {
+		oscillate_cpu = -1;
+		return HRTIMER_NORESTART;
+	}
+
+	dst_cpu = src_cpu + 1;
+	if (dst_cpu > cpumask_last(&cpu_array[0][num_sched_clusters - 1]))
+		dst_cpu = cpumask_first(&cpu_array[0][num_sched_clusters - 1]);
+
+	src_rq = cpu_rq(src_cpu);
+	src_wrq = &per_cpu(walt_rq, src_cpu);
+
+	raw_spin_lock_irqsave(&src_rq->__lock, flags);
+
+	p = src_rq->curr;
+	if (cpumask_test_cpu(dst_cpu, p->cpus_ptr)) {
+		bool success;
+
+		if (src_rq->active_balance)
+			goto unlock;
+
+		src_rq->active_balance = 1;
+		src_rq->push_cpu = dst_cpu;
+		get_task_struct(p);
+		src_wrq->push_task = p;
+		mark_reserved(dst_cpu);
+
+		/* lock must be dropped before waking the stopper */
+		raw_spin_unlock_irqrestore(&src_rq->__lock, flags);
+
+		/*
+		 * Using our custom active load balance callback so that
+		 * the push_task is really pulled onto this CPU.
+		 */
+		wts = (struct walt_task_struct *) p->android_vendor_data1;
+		trace_walt_active_load_balance(p, src_cpu, dst_cpu, wts,
+				oscillate_cpu);
+		oscillate_cpu = dst_cpu;
+		success = stop_one_cpu_nowait(src_cpu,
+				stop_walt_lb_active_migration,
+				src_rq, &src_rq->active_balance_work);
+
+		if (!success) {
+			oscillate_cpu = -1;
+			clear_reserved(dst_cpu);
+		} else {
+			wake_up_if_idle(dst_cpu);
+		}
+		return HRTIMER_NORESTART;
+
+	}
+unlock:
+	raw_spin_unlock_irqrestore(&src_rq->__lock, flags);
+	oscillate_cpu = -1;
+	return HRTIMER_NORESTART;
 }
 
 void walt_lb_init(void)
