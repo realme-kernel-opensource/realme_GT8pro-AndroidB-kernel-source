@@ -136,6 +136,7 @@ obj-$(CONFIG_SM_GCC_8450) += gcc-sm8450.o
 obj-$(CONFIG_SM_GCC_SUN) += gcc-sun.o
 obj-$(CONFIG_SM_GCC_8550) += gcc-sm8550.o
 obj-$(CONFIG_SM_GCC_8650) += gcc-sm8650.o
+obj-$(CONFIG_SM_EVACC_CANOE) += evacc-canoe.o
 obj-$(CONFIG_SM_GCC_CANOE) += gcc-canoe.o
 obj-$(CONFIG_SM_GCC_PINEAPPLE) += gcc-pineapple.o
 obj-$(CONFIG_SM_GCC_PINEAPPLE) += gcc-pineapple.o
