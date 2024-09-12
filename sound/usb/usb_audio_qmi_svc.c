@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -130,8 +130,6 @@ static struct uaudio_qmi_dev *uaudio_qdev;
 
 struct uaudio_qmi_svc {
 	struct qmi_handle *uaudio_svc_hdl;
-	struct work_struct qmi_disconnect_work;
-	struct workqueue_struct *uaudio_wq;
 	struct sockaddr_qrtr client_sq;
 	bool client_connected;
 	void *uaudio_ipc_log;
@@ -1433,12 +1431,14 @@ response:
 		ktime_to_ms(ktime_sub(ktime_get(), t_request_recvd)));
 }
 
-static void uaudio_qmi_disconnect_work(struct work_struct *w)
+static void uaudio_qmi_disconnect(void)
 {
 	struct intf_info *info;
 	int idx, if_idx;
 	struct snd_usb_substream *subs;
 	struct snd_usb_audio *chip;
+	struct usb_host_endpoint *ep;
+	int pcm_card_num;
 
 	/* find all active intf for set alt 0 and cleanup usb audio dev */
 	for (idx = 0; idx < SNDRV_CARDS; idx++) {
@@ -1449,6 +1449,7 @@ static void uaudio_qmi_disconnect_work(struct work_struct *w)
 			if (!uadev[idx].info || !uadev[idx].info[if_idx].in_use)
 				continue;
 			info = &uadev[idx].info[if_idx];
+			pcm_card_num = info->pcm_card_num;
 			subs = find_substream(info->pcm_card_num,
 						info->pcm_dev_num,
 						info->direction);
@@ -1460,6 +1461,22 @@ static void uaudio_qmi_disconnect_work(struct work_struct *w)
 						info->direction);
 				continue;
 			}
+
+			/* Release XHCI endpoints */
+			if (info->data_ep_pipe) {
+				ep = usb_pipe_endpoint(uadev[pcm_card_num].udev,
+						info->data_ep_pipe);
+				xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb,
+								ep);
+			}
+
+			if (info->sync_ep_pipe) {
+				ep = usb_pipe_endpoint(uadev[pcm_card_num].udev,
+						info->sync_ep_pipe);
+				xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb,
+								ep);
+			}
+
 			disable_audio_stream(subs);
 		}
 		atomic_set(&uadev[idx].in_use, 0);
@@ -1478,7 +1495,7 @@ static void uaudio_qmi_bye_cb(struct qmi_handle *handle, unsigned int node)
 
 	if (svc->client_connected && svc->client_sq.sq_node == node) {
 		uaudio_dbg("node: %d\n", node);
-		queue_work(svc->uaudio_wq, &svc->qmi_disconnect_work);
+		uaudio_qmi_disconnect();
 		svc->client_sq.sq_node = 0;
 		svc->client_sq.sq_port = 0;
 		svc->client_sq.sq_family = 0;
@@ -1503,7 +1520,7 @@ static void uaudio_qmi_svc_disconnect_cb(struct qmi_handle *handle,
 	if (svc->client_connected && svc->client_sq.sq_node == node &&
 			svc->client_sq.sq_port == port) {
 		uaudio_dbg("client node:%x port:%x\n", node, port);
-		queue_work(svc->uaudio_wq, &svc->qmi_disconnect_work);
+		uaudio_qmi_disconnect();
 		svc->client_sq.sq_node = 0;
 		svc->client_sq.sq_port = 0;
 		svc->client_sq.sq_family = 0;
@@ -1628,16 +1645,10 @@ static int uaudio_qmi_svc_init(void)
 	if (!svc)
 		return -ENOMEM;
 
-	svc->uaudio_wq = create_singlethread_workqueue("uaudio_svc");
-	if (!svc->uaudio_wq) {
-		ret = -ENOMEM;
-		goto free_svc;
-	}
-
 	svc->uaudio_svc_hdl = kzalloc(sizeof(struct qmi_handle), GFP_KERNEL);
 	if (!svc->uaudio_svc_hdl) {
 		ret = -ENOMEM;
-		goto destroy_uaudio_wq;
+		goto free_svc;
 	}
 
 	ret = qmi_handle_init(svc->uaudio_svc_hdl,
@@ -1650,7 +1661,6 @@ static int uaudio_qmi_svc_init(void)
 	}
 
 	uaudio_svc = svc;
-	INIT_WORK(&svc->qmi_disconnect_work, uaudio_qmi_disconnect_work);
 	ret = qmi_add_server(svc->uaudio_svc_hdl, UAUDIO_STREAM_SERVICE_ID_V01,
 					UAUDIO_STREAM_SERVICE_VERS_V01, 0);
 	if (ret < 0) {
@@ -1669,8 +1679,6 @@ release_uaudio_svs_hdl:
 	uaudio_svc = NULL;
 free_svc_hdl:
 	kfree(svc->uaudio_svc_hdl);
-destroy_uaudio_wq:
-	destroy_workqueue(svc->uaudio_wq);
 free_svc:
 	kfree(svc);
 	return ret;
@@ -1681,8 +1689,6 @@ static void uaudio_qmi_svc_exit(void)
 	struct uaudio_qmi_svc *svc = uaudio_svc;
 
 	qmi_handle_release(svc->uaudio_svc_hdl);
-	flush_workqueue(svc->uaudio_wq);
-	destroy_workqueue(svc->uaudio_wq);
 	kfree(svc->uaudio_svc_hdl);
 	ipc_log_context_destroy(svc->uaudio_ipc_log);
 	kfree(svc);
