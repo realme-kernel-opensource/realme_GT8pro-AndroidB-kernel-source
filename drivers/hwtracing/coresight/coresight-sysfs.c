@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 
 #include "coresight-priv.h"
+#include "coresight-common.h"
 
 /*
  * Use IDR to map the hash of the source's device name
@@ -196,7 +197,13 @@ int coresight_enable_sysfs(struct coresight_device *csdev)
 		goto out;
 	}
 
-	sink = coresight_find_activated_sysfs_sink(csdev);
+	if (csdev->def_sink) {
+		sink = csdev->def_sink;
+		sink->sysfs_sink_activated = true;
+	} else {
+		sink = coresight_find_activated_sysfs_sink(csdev);
+	}
+
 	if (!sink) {
 		ret = -EINVAL;
 		goto out;
@@ -323,12 +330,21 @@ static ssize_t enable_sink_store(struct device *dev,
 {
 	int ret;
 	unsigned long val;
+	struct coresight_device *sink;
 	struct coresight_device *csdev = to_coresight_device(dev);
 
 	ret = kstrtoul(buf, 10, &val);
 	if (ret)
 		return ret;
 
+	if (val) {
+		sink = coresight_get_enabled_sink_from_bus(false);
+		if (sink && sink->type != csdev->type) {
+			dev_err(&csdev->dev,
+				"Another type sink is enabled.\n");
+			return -EINVAL;
+		}
+	}
 	csdev->sysfs_sink_activated = !!val;
 
 	return size;
@@ -370,6 +386,57 @@ static ssize_t enable_source_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(enable_source);
 
+static ssize_t sink_name_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct coresight_device *csdev = to_coresight_device(dev);
+
+	if (csdev->def_sink)
+		return scnprintf(buf, PAGE_SIZE, "%s\n", dev_name(&csdev->def_sink->dev));
+	else
+		return scnprintf(buf, PAGE_SIZE, "\n");
+}
+
+static ssize_t sink_name_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t size)
+{
+	u32 hash;
+	char *sink_name;
+	struct coresight_device *new_sink, *current_sink;
+	struct coresight_device *csdev = to_coresight_device(dev);
+
+	if (size >= MAX_SINK_NAME)
+		return -EINVAL;
+
+	if (size == 0) {
+		csdev->def_sink = NULL;
+		return size;
+	}
+
+	sink_name = kstrdup(buf, GFP_KERNEL);
+	sink_name[size-1] = 0;
+
+	hash = hashlen_hash(hashlen_string(NULL, sink_name));
+	new_sink = coresight_get_sink_by_id(hash);
+	current_sink = coresight_get_enabled_sink_from_bus(false);
+
+	if (!new_sink || (current_sink &&
+				new_sink && current_sink->type !=
+				new_sink->type)) {
+		dev_err(&csdev->dev,
+			"Sink name is invalid or another type sink is enabled.\n");
+		kfree(sink_name);
+		return -EINVAL;
+	}
+
+	csdev->def_sink = new_sink;
+	kfree(sink_name);
+
+	return size;
+}
+static DEVICE_ATTR_RW(sink_name);
+
 static struct attribute *coresight_sink_attrs[] = {
 	&dev_attr_enable_sink.attr,
 	NULL,
@@ -378,6 +445,7 @@ ATTRIBUTE_GROUPS(coresight_sink);
 
 static struct attribute *coresight_source_attrs[] = {
 	&dev_attr_enable_source.attr,
+	&dev_attr_sink_name.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(coresight_source);

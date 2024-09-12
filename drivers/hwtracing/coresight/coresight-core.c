@@ -23,6 +23,7 @@
 
 #include "coresight-etm-perf.h"
 #include "coresight-priv.h"
+#include "coresight-common.h"
 #include "coresight-syscfg.h"
 
 /*
@@ -51,6 +52,7 @@ const u32 coresight_barrier_pkt[4] = {0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fff
 EXPORT_SYMBOL_GPL(coresight_barrier_pkt);
 
 static const struct cti_assoc_op *cti_assoc_ops;
+static const struct csr_set_atid_op *csr_set_atid_ops;
 
 void coresight_set_cti_ops(const struct cti_assoc_op *cti_op)
 {
@@ -75,6 +77,18 @@ struct coresight_device *coresight_get_percpu_sink(int cpu)
 	return per_cpu(csdev_sink, cpu);
 }
 EXPORT_SYMBOL_GPL(coresight_get_percpu_sink);
+
+void coresight_set_csr_ops(const struct csr_set_atid_op *csr_op)
+{
+	csr_set_atid_ops = csr_op;
+}
+EXPORT_SYMBOL_GPL(coresight_set_csr_ops);
+
+void coresight_remove_csr_ops(void)
+{
+	csr_set_atid_ops = NULL;
+}
+EXPORT_SYMBOL_GPL(coresight_remove_csr_ops);
 
 static struct coresight_connection *
 coresight_find_out_connection(struct coresight_device *src_dev,
@@ -332,6 +346,50 @@ void coresight_disable_source(struct coresight_device *csdev, void *data)
 }
 EXPORT_SYMBOL_GPL(coresight_disable_source);
 
+/**
+ * coresight_get_source - Get the source from the path
+ *
+ * @path: The list of devices.
+ *
+ * Returns the soruce csdev.
+ *
+ */
+static struct coresight_device *coresight_get_source(struct list_head *path)
+{
+	struct coresight_device *csdev;
+
+	if (!path)
+		return NULL;
+
+	csdev = list_first_entry(path, struct coresight_node, link)->csdev;
+	if (csdev->type != CORESIGHT_DEV_TYPE_SOURCE)
+		return NULL;
+
+	return csdev;
+}
+
+static int coresight_set_csr_atid(struct list_head *path,
+			struct coresight_device *sink_csdev, bool enable)
+{
+	int atid, ret = 0;
+	struct coresight_device *src_csdev;
+
+	src_csdev = coresight_get_source(path);
+	if (!src_csdev)
+		ret = -EINVAL;
+
+	atid = of_coresight_get_atid(src_csdev);
+	if (atid < 0)
+		ret = -EINVAL;
+
+	if (csr_set_atid_ops)
+		ret = csr_set_atid_ops->set_atid(sink_csdev, atid, enable);
+	else
+		ret = -EINVAL;
+
+	return ret;
+}
+
 /*
  * coresight_disable_path_from : Disable components in the given path beyond
  * @nd in the list. If @nd is NULL, all the components, except the SOURCE are
@@ -363,6 +421,9 @@ static void coresight_disable_path_from(struct list_head *path,
 
 		switch (type) {
 		case CORESIGHT_DEV_TYPE_SINK:
+			if (csdev->type == CORESIGHT_DEV_TYPE_SINK)
+				coresight_set_csr_atid(path, csdev, false);
+
 			coresight_disable_sink(csdev);
 			break;
 		case CORESIGHT_DEV_TYPE_SOURCE:
@@ -450,6 +511,13 @@ int coresight_enable_path(struct list_head *path, enum cs_mode mode,
 			 */
 			if (ret)
 				goto out;
+
+			if (csdev->type == CORESIGHT_DEV_TYPE_SINK) {
+				ret = coresight_set_csr_atid(path, csdev, true);
+				if (ret)
+					dev_dbg(&csdev->dev, "Set csr atid register fail\n");
+			}
+
 			break;
 		case CORESIGHT_DEV_TYPE_SOURCE:
 			/* sources are enabled from either sysFS or Perf */
@@ -486,6 +554,52 @@ struct coresight_device *coresight_get_sink(struct list_head *path)
 		return NULL;
 
 	return csdev;
+}
+
+static int coresight_enabled_sink(struct device *dev, const void *data)
+{
+	const bool *reset = data;
+	struct coresight_device *csdev = to_coresight_device(dev);
+
+	if ((csdev->type == CORESIGHT_DEV_TYPE_SINK ||
+	     csdev->type == CORESIGHT_DEV_TYPE_LINKSINK) &&
+	     csdev->sysfs_sink_activated) {
+		/*
+		 * Now that we have a handle on the sink for this session,
+		 * disable the sysFS "enable_sink" flag so that possible
+		 * concurrent perf session that wish to use another sink don't
+		 * trip on it.  Doing so has no ramification for the current
+		 * session.
+		 */
+		if (*reset)
+			csdev->sysfs_sink_activated = false;
+
+		return 1;
+	}
+
+	return 0;
+}
+
+/**
+ * coresight_get_enabled_sink_from_bus - returns the first enabled sink found on the bus
+ * @deactivate:	Whether the 'enable_sink' flag should be reset
+ *
+ * When operated from perf the deactivate parameter should be set to 'true'.
+ * That way the "enabled_sink" flag of the sink that was selected can be reset,
+ * allowing for other concurrent perf sessions to choose a different sink.
+ *
+ * When operated from sysFS users have full control and as such the deactivate
+ * parameter should be set to 'false', hence mandating users to explicitly
+ * clear the flag.
+ */
+struct coresight_device *coresight_get_enabled_sink_from_bus(bool deactivate)
+{
+	struct device *dev = NULL;
+
+	dev = bus_find_device(&coresight_bustype, NULL, &deactivate,
+			      coresight_enabled_sink);
+
+	return dev ? to_coresight_device(dev) : NULL;
 }
 
 static int coresight_sink_by_id(struct device *dev, const void *data)
