@@ -318,6 +318,9 @@ bool find_heaviest_topapp(u64 window_start)
 			heavy_wts_to_drop[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY_BIT;
 			heavy_wts_to_drop[i]->pipeline_cpu = -1;
 		}
+
+		if (heavy_wts[i])
+			heavy_wts[i]->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
 	}
 
 	if (heavy_wts[MAX_NR_PIPELINE - 1])
@@ -392,7 +395,10 @@ void assign_heaviest_topapp(bool found_topapp)
 				heavy_wts[i]->pipeline_cpu = -1;
 				heavy_wts[i] = NULL;
 			} else {
-				wts->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
+				/*
+				 * clear cpu from the avalilable list of pipeline cpus.
+				 * as pipeline_cpu is assigned for the task.
+				 */
 				cpumask_clear_cpu(wts->pipeline_cpu, &last_available_big_cpus);
 			}
 		}
