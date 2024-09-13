@@ -59,7 +59,7 @@
 #define VDDP_REF_CLK_MAX_UV        1200000
 #define VCCQ_DEFAULT_1_2V	1200000
 
-#define UFS_QCOM_LOAD_MON_DLY_MS 30
+#define UFS_QCOM_LOAD_MON_DLY_MS 5
 
 #define	ANDROID_BOOT_DEV_MAX	30
 
@@ -441,6 +441,10 @@ static inline void cancel_dwork_unvote_cpufreq(struct ufs_hba *hba)
 		return;
 
 	cancel_delayed_work_sync(&host->fwork);
+#if IS_ENABLED(CONFIG_SCHED_WALT)
+	sched_set_boost(STORAGE_BOOST_DISABLE);
+#endif
+
 	if (!host->cur_freq_vote)
 		return;
 	atomic_set(&host->num_reqs_threshold, 0);
@@ -1707,7 +1711,6 @@ static void ufs_qcom_cpufreq_dwork(struct work_struct *work)
 		dev_dbg(host->hba->dev, "cur_freq_vote=%d,freq_val=%u,cth=%lu,cpu=%u\n",
 			host->cur_freq_vote, freq_val, cur_thres, host->cpu_info[i].cpu);
 	}
-
 out:
 	queue_delayed_work(host->ufs_qos->workq, &host->fwork,
 			   msecs_to_jiffies(host->boost_monitor_timer));
@@ -2520,6 +2523,7 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 				ufs_qcom_bw_table[MODE_MIN][0][0].cfg_bw);
 
 			err = ufs_qcom_unvote_qos_all(hba);
+			cancel_dwork_unvote_cpufreq(hba);
 			idle_start = ktime_get();
 		} else {
 			err = ufs_qcom_phy_power_on(hba);
@@ -2535,6 +2539,11 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 			for (mode = 0; mode < UFS_QCOM_BER_MODE_MAX; mode++)
 				idle_time[mode] += ktime_to_ms(ktime_sub(ktime_get(),
 									idle_start));
+
+			if (!host->cpufreq_dis && !atomic_read(&host->therm_mitigation)) {
+				queue_delayed_work(host->ufs_qos->workq, &host->fwork,
+				msecs_to_jiffies(host->boost_monitor_timer));
+			}
 		}
 		if (!err)
 			atomic_set(&host->clks_on, on);
@@ -2725,8 +2734,7 @@ static void ufs_qcom_qos(struct ufs_hba *hba, int tag)
 	if (!qcg)
 		return;
 
-	if (qcg->perf_core && !host->cpufreq_dis &&
-					!!atomic_read(&host->scale_up))
+	if (qcg->perf_core && !host->cpufreq_dis)
 		atomic_inc(&host->num_reqs_threshold);
 
 	if (qcg->voted) {
@@ -3907,12 +3915,6 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 			return err;
 		if (scale_up) {
 			err = ufs_qcom_clk_scale_up_pre_change(hba);
-			if (!host->cpufreq_dis &&
-			    !(atomic_read(&host->therm_mitigation))) {
-				atomic_set(&host->num_reqs_threshold, 0);
-				queue_delayed_work(host->ufs_qos->workq, &host->fwork,
-						msecs_to_jiffies(host->boost_monitor_timer));
-			}
 		} else {
 			err = ufs_qcom_clk_scale_down_pre_change(hba);
 			cancel_dwork_unvote_cpufreq(hba);
