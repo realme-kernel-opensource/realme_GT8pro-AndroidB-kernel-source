@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
  * Copyright (c) 2024, Danila Tikhonov <danila@jiaxyga.com>
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -1743,12 +1744,6 @@ static int __init qnoc_driver_init(void)
 	return platform_driver_register(&qnoc_driver);
 }
 core_initcall(qnoc_driver_init);
-
-static void __exit qnoc_driver_exit(void)
-{
-	platform_driver_unregister(&qnoc_driver);
-}
-module_exit(qnoc_driver_exit);
 
 MODULE_DESCRIPTION("Qualcomm SM7150 NoC driver");
 MODULE_LICENSE("GPL");
