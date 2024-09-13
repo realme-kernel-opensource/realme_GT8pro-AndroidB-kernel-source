@@ -102,6 +102,9 @@ do {									\
 #define CSR_MAX_ATID	128
 #define CSR_ATID_REG_SIZE	0xc
 
+#define CSR_NAME_PROP		"coresight-csr"
+#define DEV_NAME_PROP		"device-name"
+
 struct csr_drvdata {
 	void __iomem		*base;
 	phys_addr_t		pbase;
@@ -468,11 +471,11 @@ int of_get_coresight_csr_name(struct device_node *node, const char **csr_name)
 	int ret;
 	struct device_node *csr_node;
 
-	csr_node = of_parse_phandle(node, "coresight-csr", 0);
+	csr_node = of_parse_phandle(node, CSR_NAME_PROP, 0);
 	if (!csr_node)
 		return -EINVAL;
 
-	ret = of_property_read_string(csr_node, "coresight-name", csr_name);
+	ret = of_property_read_string(csr_node, DEV_NAME_PROP, csr_name);
 	of_node_put(csr_node);
 	return ret;
 }
