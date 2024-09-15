@@ -146,6 +146,7 @@ struct stm_drvdata {
 	u32			stmheer;
 	u32			stmheter;
 	u32			stmhebsr;
+	bool			static_atid;
 };
 
 static void stm_hwevent_enable_hw(struct stm_drvdata *drvdata)
@@ -205,6 +206,14 @@ static int stm_enable(struct coresight_device *csdev, struct perf_event *event,
 	if (!coresight_take_mode(csdev, mode)) {
 		/* Someone is already using the tracer */
 		return -EBUSY;
+	}
+	if (drvdata->static_atid) {
+		ret = coresight_trace_id_reserve_id(drvdata->traceid);
+		if (ret) {
+			coresight_set_mode(csdev, CS_MODE_DISABLED);
+			dev_err(&csdev->dev, "reserve ATID: %d fail\n", drvdata->traceid);
+			return ret;
+		}
 	}
 	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true);
 
@@ -283,6 +292,8 @@ static void stm_disable(struct coresight_device *csdev,
 		pm_runtime_put_sync(csdev->dev.parent);
 
 		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+		if (drvdata->static_atid)
+			coresight_trace_id_free_reserved_id(drvdata->traceid);
 		coresight_set_mode(csdev, CS_MODE_DISABLED);
 		dev_dbg(&csdev->dev, "STM tracing disabled\n");
 	}
@@ -897,10 +908,14 @@ static int stm_probe(struct amba_device *adev, const struct amba_id *id)
 		goto stm_unregister;
 	}
 
-	trace_id = coresight_trace_id_get_system_id();
-	if (trace_id < 0) {
-		ret = trace_id;
-		goto cs_unregister;
+	if (!of_property_read_u32(adev->dev.of_node, "atid", &trace_id))
+		drvdata->static_atid = true;
+	else {
+		trace_id = coresight_trace_id_get_system_id();
+		if (trace_id < 0) {
+			ret = trace_id;
+			goto cs_unregister;
+		}
 	}
 	drvdata->traceid = (u8)trace_id;
 
@@ -922,7 +937,8 @@ static void stm_remove(struct amba_device *adev)
 {
 	struct stm_drvdata *drvdata = dev_get_drvdata(&adev->dev);
 
-	coresight_trace_id_put_system_id(drvdata->traceid);
+	if (!drvdata->static_atid)
+		coresight_trace_id_put_system_id(drvdata->traceid);
 	coresight_unregister(drvdata->csdev);
 
 	stm_unregister_device(&drvdata->stm);
