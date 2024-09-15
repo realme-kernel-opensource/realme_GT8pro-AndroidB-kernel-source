@@ -245,6 +245,8 @@ struct tmc_drvdata {
 	bool			stop_on_flush;
 	struct delay_probe_arg	*delayed;
 	struct clk		*dclk;
+	struct pm_config	pm_config;
+	struct list_head	link;
 };
 
 struct etr_buf_operations {

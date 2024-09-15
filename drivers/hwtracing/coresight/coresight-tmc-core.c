@@ -25,6 +25,7 @@
 #include <linux/of.h>
 #include <linux/coresight.h>
 #include <linux/amba/bus.h>
+#include <linux/cpu_pm.h>
 #include <linux/pm_domain.h>
 
 #include "coresight-priv.h"
@@ -36,6 +37,7 @@ DEFINE_CORESIGHT_DEVLIST(etf_devs, "tmc_etf");
 DEFINE_CORESIGHT_DEVLIST(etr_devs, "tmc_etr");
 
 static LIST_HEAD(delay_probe_list);
+static LIST_HEAD(cpu_pm_list);
 static enum cpuhp_state hp_online;
 static DEFINE_SPINLOCK(delay_lock);
 
@@ -277,39 +279,78 @@ static ssize_t coresight_tmc_reg32_show(struct device *dev,
 					char *buf)
 {
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct cs_off_attribute *cs_attr = container_of(attr, struct cs_off_attribute, attr);
 	int ret;
+	u32 val;
+
+	ret = pm_runtime_resume_and_get(dev->parent);
+	if (ret < 0)
+		return ret;
 
 	if (drvdata->dclk) {
 		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret)
+		if (ret) {
+			pm_runtime_put_sync(dev->parent);
 			return ret;
+		}
 	}
-	ret = coresight_simple_show32(dev, attr, buf);
 
+	spin_lock(&drvdata->spinlock);
+	if (!drvdata->pm_config.hw_powered) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	val = readl_relaxed(drvdata->base + cs_attr->off);
+out:
+	spin_unlock(&drvdata->spinlock);
 	if (drvdata->dclk)
 		clk_disable_unprepare(drvdata->dclk);
-
-	return ret;
+	pm_runtime_put_sync(dev->parent);
+	if (ret)
+		return ret;
+	else
+		return sysfs_emit(buf, "0x%x\n", val);
 }
 static ssize_t coresight_tmc_reg64_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct cs_pair_attribute *cs_attr = container_of(attr, struct cs_pair_attribute, attr);
 	int ret;
+	u64 val;
+
+	ret = pm_runtime_resume_and_get(dev->parent);
+	if (ret < 0)
+		return ret;
 
 	if (drvdata->dclk) {
 		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret)
+		if (ret) {
+			pm_runtime_put_sync(dev->parent);
 			return ret;
+		}
 	}
 
-	ret = coresight_simple_show_pair(dev, attr, buf);
+	spin_lock(&drvdata->spinlock);
+	if (!drvdata->pm_config.hw_powered) {
+		ret = -EINVAL;
+		goto out;
+	}
 
+	val = readl_relaxed(drvdata->base + cs_attr->lo_off) |
+			((u64)readl_relaxed(drvdata->base + cs_attr->hi_off) << 32);
+out:
+	spin_unlock(&drvdata->spinlock);
 	if (drvdata->dclk)
 		clk_disable_unprepare(drvdata->dclk);
+	pm_runtime_put_sync(dev->parent);
 
-	return ret;
+	if (ret)
+		return ret;
+	else
+		return sysfs_emit(buf, "0x%llx\n", val);
 }
 
 #define coresight_tmc_reg32(name, offset)				\
@@ -326,6 +367,7 @@ static ssize_t coresight_tmc_reg64_show(struct device *dev,
 		lo_off, hi_off						\
 	   }								\
 	})[0].attr.attr)
+
 static struct attribute *coresight_tmc_mgmt_attrs[] = {
 	coresight_tmc_reg32(rsz, TMC_RSZ),
 	coresight_tmc_reg32(sts, TMC_STS),
@@ -718,8 +760,10 @@ static int tmc_add_coresight_dev(struct amba_device *adev, const struct amba_id 
 	ret = misc_register(&drvdata->miscdev);
 	if (ret)
 		coresight_unregister(drvdata->csdev);
-	else
+	else {
+		drvdata->pm_config.hw_powered = true;
 		pm_runtime_put_sync(&adev->dev);
+	}
 
 	if (drvdata->dclk)
 		clk_disable_unprepare(drvdata->dclk);
@@ -727,17 +771,104 @@ out:
 	return ret;
 }
 
+static int tmc_cpu_pm_notify(struct notifier_block *nb, unsigned long cmd,
+			      void *v)
+{
+	unsigned int cpu = smp_processor_id();
+	struct tmc_drvdata *drvdata, *tmp;
+	struct pm_config *pm_config;
+	unsigned long flags;
+
+	switch (cmd) {
+	case CPU_PM_ENTER:
+		list_for_each_entry_safe(drvdata, tmp, &cpu_pm_list, link) {
+			pm_config = &drvdata->pm_config;
+			if (!cpumask_test_cpu(cpu, pm_config->pd_cpumask))
+				continue;
+
+			spin_lock_irqsave(&drvdata->spinlock, flags);
+			if (!cpumask_test_cpu(cpu, &pm_config->online_cpus)) {
+				spin_unlock_irqrestore(&drvdata->spinlock, flags);
+				continue;
+			}
+
+			cpumask_clear_cpu(cpu, &pm_config->powered_cpus);
+			if (cpumask_empty(&pm_config->powered_cpus))
+				pm_config->hw_powered = false;
+
+			spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		}
+		break;
+	case CPU_PM_EXIT:
+	case CPU_PM_ENTER_FAILED:
+		list_for_each_entry_safe(drvdata, tmp, &cpu_pm_list, link) {
+			pm_config = &drvdata->pm_config;
+			if (!cpumask_test_cpu(cpu, pm_config->pd_cpumask))
+				continue;
+			spin_lock_irqsave(&drvdata->spinlock, flags);
+
+			if (!cpumask_test_cpu(cpu, &pm_config->online_cpus)) {
+				spin_unlock_irqrestore(&drvdata->spinlock, flags);
+				continue;
+			}
+
+			pm_config->hw_powered = true;
+			cpumask_set_cpu(cpu, &pm_config->powered_cpus);
+			spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		}
+		break;
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block tmc_cpu_pm_nb = {
+	.notifier_call = tmc_cpu_pm_notify,
+};
+
+static int tmc_offline_cpu(unsigned int cpu)
+{
+	struct tmc_drvdata *drvdata, *tmp;
+	struct pm_config *pm_config;
+	unsigned long flags;
+
+	list_for_each_entry_safe(drvdata, tmp, &cpu_pm_list, link) {
+		pm_config = &drvdata->pm_config;
+		if (!cpumask_test_cpu(cpu, pm_config->pd_cpumask))
+			continue;
+
+		spin_lock_irqsave(&drvdata->spinlock, flags);
+		cpumask_clear_cpu(cpu, &pm_config->online_cpus);
+		cpumask_clear_cpu(cpu, &pm_config->powered_cpus);
+		if (cpumask_empty(&pm_config->powered_cpus))
+			pm_config->hw_powered = false;
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	}
+	return 0;
+}
+
 static int tmc_online_cpu(unsigned int cpu)
 {
-	struct delay_probe_arg *init_arg, *tmp;
 	int ret;
-	struct tmc_drvdata *drvdata;
+	struct tmc_drvdata *drvdata, *tmp;
+	struct pm_config *pm_config;
+	unsigned long flags;
+	struct delay_probe_arg *init_arg, *arg_tmp;
 
-	if (list_empty(&delay_probe_list))
-		return 0;
-	list_for_each_entry_safe(init_arg, tmp, &delay_probe_list, link) {
+	list_for_each_entry_safe(drvdata, tmp, &cpu_pm_list, link) {
+		pm_config = &drvdata->pm_config;
+		if (!cpumask_test_cpu(cpu, pm_config->pd_cpumask))
+			continue;
+		spin_lock_irqsave(&drvdata->spinlock, flags);
+		cpumask_set_cpu(cpu, &pm_config->powered_cpus);
+		cpumask_set_cpu(cpu, &pm_config->online_cpus);
+		pm_config->hw_powered = true;
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	}
+
+	list_for_each_entry_safe(init_arg, arg_tmp, &delay_probe_list, link) {
 		if (cpumask_test_cpu(cpu, init_arg->cpumask)) {
 			drvdata = amba_get_drvdata(init_arg->adev);
+			pm_config = &drvdata->pm_config;
 			spin_lock(&delay_lock);
 			drvdata->delayed = NULL;
 			list_del(&init_arg->link);
@@ -748,6 +879,15 @@ static int tmc_online_cpu(unsigned int cpu)
 			ret = tmc_add_coresight_dev(init_arg->adev, init_arg->id);
 			if (ret)
 				pm_runtime_put_sync(&init_arg->adev->dev);
+			else {
+				pm_config->pd_cpumask = init_arg->cpumask;
+				cpumask_set_cpu(cpu, &pm_config->powered_cpus);
+				cpumask_set_cpu(cpu, &pm_config->online_cpus);
+				pm_config->pm_enable = true;
+				spin_lock(&delay_lock);
+				list_add(&drvdata->link, &cpu_pm_list);
+				spin_unlock(&delay_lock);
+			}
 		}
 	}
 	return 0;
@@ -761,12 +901,14 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 	struct tmc_drvdata *drvdata;
 	int cpu, ret;
 	struct cpumask *cpumask;
+	struct pm_config *pm_config;
 
 	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
 	if (!drvdata)
 		return -ENOMEM;
 
 	dev_set_drvdata(dev, drvdata);
+	pm_config = &drvdata->pm_config;
 
 	if (dev->pm_domain) {
 		pd = pd_to_genpd(dev->pm_domain);
@@ -780,7 +922,18 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 			if (cpumask_test_cpu(cpu, cpumask)) {
 				ret = tmc_add_coresight_dev(adev, id);
 				if (ret)
-					dev_err(dev, "add coresight_dev fail:%d\n", ret);
+					dev_dbg(dev, "add coresight_dev fail:%d\n", ret);
+				else {
+					pm_config->pd_cpumask = cpumask;
+					cpumask_and(&pm_config->powered_cpus,
+							cpumask, cpu_online_mask);
+					cpumask_copy(&pm_config->online_cpus,
+							&pm_config->powered_cpus);
+					pm_config->pm_enable = true;
+					spin_lock(&delay_lock);
+					list_add(&drvdata->link, &cpu_pm_list);
+					spin_unlock(&delay_lock);
+				}
 				cpus_read_unlock();
 				return ret;
 			}
@@ -840,6 +993,8 @@ static void tmc_remove(struct amba_device *adev)
 		spin_unlock(&delay_lock);
 		return;
 	}
+	if (drvdata->pm_config.pm_enable)
+		list_del(&drvdata->delayed->link);
 	spin_unlock(&delay_lock);
 
 	if (!drvdata->csdev)
@@ -856,6 +1011,36 @@ static void tmc_remove(struct amba_device *adev)
 
 	misc_deregister(&drvdata->miscdev);
 	coresight_unregister(drvdata->csdev);
+}
+
+static int __init tmc_pm_setup(void)
+{
+	int ret;
+
+	ret = cpu_pm_register_notifier(&tmc_cpu_pm_nb);
+	if (ret)
+		return ret;
+
+	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+				"arm/coresight-tmc:online",
+				tmc_online_cpu, tmc_offline_cpu);
+
+	if (ret > 0) {
+		hp_online = ret;
+		return 0;
+	}
+
+	cpu_pm_unregister_notifier(&tmc_cpu_pm_nb);
+	return ret;
+}
+
+static void tmc_pm_clear(void)
+{
+	cpu_pm_unregister_notifier(&tmc_cpu_pm_nb);
+	if (hp_online) {
+		cpuhp_remove_state_nocalls(hp_online);
+		hp_online = 0;
+	}
 }
 
 static const struct amba_id tmc_ids[] = {
@@ -887,35 +1072,25 @@ static int __init tmc_init(void)
 {
 	int ret;
 
-	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
-				"arm/coresight-tmc:online",
-				tmc_online_cpu, NULL);
+	ret = tmc_pm_setup();
 
-	if (ret > 0)
-		hp_online = ret;
-	else
+	if (ret)
 		return ret;
 
 	ret = amba_driver_register(&tmc_driver);
 	if (ret) {
 		pr_err("Error registering tmc AMBA driver\n");
-		goto clear_pm;
+		tmc_pm_clear();
+		return ret;
 	}
 
-	return ret;
-
-clear_pm:
-	cpuhp_remove_state_nocalls(hp_online);
-	hp_online = 0;
 	return ret;
 }
 
 static void __exit tmc_exit(void)
 {
 	amba_driver_unregister(&tmc_driver);
-
-	cpuhp_remove_state_nocalls(hp_online);
-	hp_online = 0;
+	tmc_pm_clear();
 }
 
 module_init(tmc_init);

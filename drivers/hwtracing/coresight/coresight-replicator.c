@@ -20,6 +20,7 @@
 #include <linux/of.h>
 #include <linux/coresight.h>
 #include <linux/pm_domain.h>
+#include <linux/cpu_pm.h>
 
 #include "coresight-priv.h"
 
@@ -29,6 +30,7 @@
 DEFINE_CORESIGHT_DEVLIST(replicator_devs, "replicator");
 
 static LIST_HEAD(delay_probe_list);
+static LIST_HEAD(cpu_pm_list);
 static enum cpuhp_state hp_online;
 static DEFINE_SPINLOCK(delay_lock);
 
@@ -51,6 +53,8 @@ struct replicator_drvdata {
 	bool			check_idfilter_val;
 	struct delay_probe_arg	*delayed;
 	struct clk		*dclk;
+	struct pm_config	pm_config;
+	struct list_head	link;
 };
 
 static void dynamic_replicator_reset(struct replicator_drvdata *drvdata)
@@ -140,6 +144,12 @@ static int replicator_enable(struct coresight_device *csdev,
 	}
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
+
+	if (!drvdata->pm_config.hw_powered) {
+		rc = -EINVAL;
+		goto out;
+	}
+
 	if (atomic_read(&out->src_refcnt) == 0) {
 		if (drvdata->base)
 			rc = dynamic_replicator_enable(drvdata, in->dest_port,
@@ -149,10 +159,15 @@ static int replicator_enable(struct coresight_device *csdev,
 	}
 	if (!rc)
 		atomic_inc(&out->src_refcnt);
+out:
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
 	if (first_enable)
 		dev_dbg(&csdev->dev, "REPLICATOR enabled\n");
+
+	if (rc && drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
+
 	return rc;
 }
 
@@ -194,12 +209,17 @@ static void replicator_disable(struct coresight_device *csdev,
 	bool last_disable = false;
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
+
+	if (!drvdata->pm_config.hw_powered)
+		goto out;
+
 	if (atomic_dec_return(&out->src_refcnt) == 0) {
 		if (drvdata->base)
 			dynamic_replicator_disable(drvdata, in->dest_port,
 						   out->src_port);
 		last_disable = true;
 	}
+out:
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 	if (drvdata->dclk)
 		clk_disable_unprepare(drvdata->dclk);
@@ -239,14 +259,24 @@ static ssize_t replicator_reg_show(struct device *dev,
 	}
 
 	spin_lock(&drvdata->spinlock);
+
+	if (!drvdata->pm_config.hw_powered) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	val = readl_relaxed(drvdata->base + cs_attr->off);
+
+out:
 	spin_unlock(&drvdata->spinlock);
 
 	pm_runtime_put_sync(dev->parent);
 	if (drvdata->dclk)
 		clk_disable_unprepare(drvdata->dclk);
-
-	return sysfs_emit(buf, "0x%x\n", val);
+	if (ret)
+		return ret;
+	else
+		return sysfs_emit(buf, "0x%x\n", val);
 }
 
 #define coresight_replicator_reg(name, offset)				\
@@ -350,6 +380,7 @@ static int replicator_add_coresight_dev(struct device *dev, struct resource *res
 
 	replicator_reset(drvdata);
 	pm_runtime_put_sync(dev);
+	drvdata->pm_config.hw_powered = true;
 
 	if (drvdata->dclk)
 		clk_disable_unprepare(drvdata->dclk);
@@ -458,18 +489,104 @@ static struct platform_driver static_replicator_driver = {
 	},
 };
 
+static int replicator_cpu_pm_notify(struct notifier_block *nb, unsigned long cmd,
+			      void *v)
+{
+	unsigned int cpu = smp_processor_id();
+	struct replicator_drvdata *drvdata, *tmp;
+	struct pm_config *pm_config;
+	unsigned long flags;
+
+	switch (cmd) {
+	case CPU_PM_ENTER:
+		list_for_each_entry_safe(drvdata, tmp, &cpu_pm_list, link) {
+			pm_config = &drvdata->pm_config;
+			if (!cpumask_test_cpu(cpu, pm_config->pd_cpumask))
+				continue;
+
+			spin_lock_irqsave(&drvdata->spinlock, flags);
+			if (!cpumask_test_cpu(cpu, &pm_config->online_cpus)) {
+				spin_unlock_irqrestore(&drvdata->spinlock, flags);
+				continue;
+			}
+
+			cpumask_clear_cpu(cpu, &pm_config->powered_cpus);
+			if (cpumask_empty(&pm_config->powered_cpus))
+				pm_config->hw_powered = false;
+			spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		}
+		break;
+	case CPU_PM_EXIT:
+	case CPU_PM_ENTER_FAILED:
+		list_for_each_entry_safe(drvdata, tmp, &cpu_pm_list, link) {
+			pm_config = &drvdata->pm_config;
+			if (!cpumask_test_cpu(cpu, pm_config->pd_cpumask))
+				continue;
+			spin_lock_irqsave(&drvdata->spinlock, flags);
+
+			if (!cpumask_test_cpu(cpu, &pm_config->online_cpus)) {
+				spin_unlock_irqrestore(&drvdata->spinlock, flags);
+				continue;
+			}
+
+			pm_config->hw_powered = true;
+			cpumask_set_cpu(cpu, &pm_config->powered_cpus);
+			spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		}
+		break;
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block replicator_cpu_pm_nb = {
+	.notifier_call = replicator_cpu_pm_notify,
+};
+
+
+static int replicator_offline_cpu(unsigned int cpu)
+{
+	struct replicator_drvdata *drvdata, *tmp;
+	struct pm_config *pm_config;
+	unsigned long flags;
+
+	list_for_each_entry_safe(drvdata, tmp, &cpu_pm_list, link) {
+		pm_config = &drvdata->pm_config;
+		if (!cpumask_test_cpu(cpu, pm_config->pd_cpumask))
+			continue;
+
+		spin_lock_irqsave(&drvdata->spinlock, flags);
+		cpumask_clear_cpu(cpu, &pm_config->online_cpus);
+		cpumask_clear_cpu(cpu, &pm_config->powered_cpus);
+		if (cpumask_empty(&pm_config->powered_cpus))
+			pm_config->hw_powered = false;
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	}
+	return 0;
+}
+
 static int replicator_online_cpu(unsigned int cpu)
 {
 	struct delay_probe_arg *init_arg, *tmp;
 	int ret;
-	struct replicator_drvdata *drvdata;
+	unsigned long flags;
+	struct replicator_drvdata *drvdata, *tmp_drv;
+	struct pm_config *pm_config;
 
-	if (list_empty(&delay_probe_list))
-		return 0;
+	list_for_each_entry_safe(drvdata, tmp_drv, &cpu_pm_list, link) {
+		pm_config = &drvdata->pm_config;
+		if (!cpumask_test_cpu(cpu, pm_config->pd_cpumask))
+			continue;
+		spin_lock_irqsave(&drvdata->spinlock, flags);
+		cpumask_set_cpu(cpu, &pm_config->powered_cpus);
+		cpumask_set_cpu(cpu, &pm_config->online_cpus);
+		pm_config->hw_powered = true;
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	}
 
 	list_for_each_entry_safe(init_arg, tmp, &delay_probe_list, link) {
 		if (cpumask_test_cpu(cpu, init_arg->cpumask)) {
 			drvdata = amba_get_drvdata(init_arg->adev);
+			pm_config = &drvdata->pm_config;
 			spin_lock(&delay_lock);
 			drvdata->delayed = NULL;
 			list_del(&init_arg->link);
@@ -481,6 +598,15 @@ static int replicator_online_cpu(unsigned int cpu)
 					&init_arg->adev->res);
 			if (ret)
 				pm_runtime_put_sync(&init_arg->adev->dev);
+			else {
+				pm_config->pd_cpumask = init_arg->cpumask;
+				cpumask_set_cpu(cpu, &pm_config->powered_cpus);
+				cpumask_set_cpu(cpu, &pm_config->online_cpus);
+				pm_config->pm_enable = true;
+				spin_lock(&delay_lock);
+				list_add(&drvdata->link, &cpu_pm_list);
+				spin_unlock(&delay_lock);
+			}
 		}
 	}
 	return 0;
@@ -495,12 +621,14 @@ static int dynamic_replicator_probe(struct amba_device *adev,
 	int cpu, ret;
 	struct cpumask *cpumask;
 	struct replicator_drvdata *drvdata;
+	struct pm_config *pm_config;
 
 	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
 	if (!drvdata)
 		return -ENOMEM;
 
 	dev_set_drvdata(dev, drvdata);
+	pm_config = &drvdata->pm_config;
 
 	if (dev->pm_domain) {
 		pd = pd_to_genpd(dev->pm_domain);
@@ -514,7 +642,18 @@ static int dynamic_replicator_probe(struct amba_device *adev,
 			if (cpumask_test_cpu(cpu, cpumask)) {
 				ret = replicator_add_coresight_dev(dev, &adev->res);
 				if (ret)
-					dev_err(dev, "add coresight_dev fail:%d\n", ret);
+					dev_dbg(dev, "add coresight_dev fail:%d\n", ret);
+				else {
+					pm_config->pd_cpumask = cpumask;
+					cpumask_and(&pm_config->powered_cpus,
+							cpumask, cpu_online_mask);
+					cpumask_copy(&pm_config->online_cpus,
+							&pm_config->powered_cpus);
+					pm_config->pm_enable = true;
+					spin_lock(&delay_lock);
+					list_add(&drvdata->link, &cpu_pm_list);
+					spin_unlock(&delay_lock);
+				}
 				cpus_read_unlock();
 				return ret;
 			}
@@ -549,9 +688,41 @@ static void dynamic_replicator_remove(struct amba_device *adev)
 		spin_unlock(&delay_lock);
 		return;
 	}
+	if (drvdata->pm_config.pm_enable)
+		list_del(&drvdata->link);
 	spin_unlock(&delay_lock);
 
 	replicator_remove(&adev->dev);
+}
+
+static int __init replicator_pm_setup(void)
+{
+	int ret;
+
+	ret = cpu_pm_register_notifier(&replicator_cpu_pm_nb);
+	if (ret)
+		return ret;
+
+	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+				"arm/coresight-replicator:online",
+				replicator_online_cpu, replicator_offline_cpu);
+
+	if (ret > 0) {
+		hp_online = ret;
+		return 0;
+	}
+
+	cpu_pm_unregister_notifier(&replicator_cpu_pm_nb);
+	return ret;
+}
+
+static void replicator_pm_clear(void)
+{
+	cpu_pm_unregister_notifier(&replicator_cpu_pm_nb);
+	if (hp_online) {
+		cpuhp_remove_state_nocalls(hp_online);
+		hp_online = 0;
+	}
 }
 
 static const struct amba_id dynamic_replicator_ids[] = {
@@ -578,13 +749,8 @@ static int __init replicator_init(void)
 {
 	int ret;
 
-	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
-				"arm/coresight-replicator:online",
-				replicator_online_cpu, NULL);
-
-	if (ret > 0)
-		hp_online = ret;
-	else
+	ret = replicator_pm_setup();
+	if (ret)
 		return ret;
 
 	ret = platform_driver_register(&static_replicator_driver);
@@ -602,9 +768,7 @@ static int __init replicator_init(void)
 	return ret;
 
 clear_pm:
-	cpuhp_remove_state_nocalls(hp_online);
-	hp_online = 0;
-
+	replicator_pm_clear();
 	return ret;
 }
 
@@ -612,8 +776,7 @@ static void __exit replicator_exit(void)
 {
 	platform_driver_unregister(&static_replicator_driver);
 	amba_driver_unregister(&dynamic_replicator_driver);
-	cpuhp_remove_state_nocalls(hp_online);
-	hp_online = 0;
+	replicator_pm_clear();
 }
 
 module_init(replicator_init);

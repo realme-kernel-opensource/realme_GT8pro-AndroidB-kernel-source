@@ -78,6 +78,15 @@ extern ssize_t coresight_simple_show_pair(struct device *_dev,
 extern const u32 coresight_barrier_pkt[4];
 #define CORESIGHT_BARRIER_PKT_SIZE (sizeof(coresight_barrier_pkt))
 
+struct pm_config {
+	struct cpumask	powered_cpus;
+	struct cpumask	*pd_cpumask;
+	struct cpumask	online_cpus;
+	struct list_head	link;
+	bool		hw_powered;
+	bool		pm_enable;
+};
+
 struct delay_probe_arg {
 	struct amba_device	*adev;
 	struct cpumask		*cpumask;
