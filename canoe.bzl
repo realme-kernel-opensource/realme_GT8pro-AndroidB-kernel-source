@@ -85,6 +85,8 @@ def define_canoe():
         "drivers/usb/gadget/function/usb_f_gsi.ko",
         "drivers/usb/gadget/function/usb_f_qdss.ko",
         "drivers/usb/phy/phy-generic.ko",
+        "drivers/usb/phy/phy-msm-m31-eusb2.ko",
+        "drivers/usb/phy/phy-msm-ssusb-qmp.ko",
         "drivers/usb/phy/phy-qcom-emu.ko",
         "drivers/virt/gunyah/gh_ctrl.ko",
         "drivers/virt/gunyah/gh_dbl.ko",
