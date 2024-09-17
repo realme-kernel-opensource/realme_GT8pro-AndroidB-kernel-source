@@ -1679,11 +1679,11 @@ static void ufs_qcom_cpufreq_dwork(struct work_struct *work)
 
 	atomic_set(&host->num_reqs_threshold, 0);
 
-	if (cur_thres > NUM_REQS_HIGH_THRESH && !host->cur_freq_vote) {
+	if (cur_thres > host->max_boost_thres && !host->cur_freq_vote) {
 		scale_up = 1;
 		if (host->irq_affinity_support)
 			ufs_qcom_toggle_pri_affinity(host->hba, true);
-	} else if (cur_thres < NUM_REQS_LOW_THRESH && host->cur_freq_vote) {
+	} else if (cur_thres < host->min_boost_thres && host->cur_freq_vote) {
 		scale_up = 0;
 		if (host->irq_affinity_support)
 			ufs_qcom_toggle_pri_affinity(host->hba, false);
@@ -3013,6 +3013,8 @@ static void ufs_qcom_storage_boost_param_init(struct ufs_hba *hba)
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	host->boost_monitor_timer = UFS_QCOM_LOAD_MON_DLY_MS;
+	host->min_boost_thres = NUM_REQS_LOW_THRESH;
+	host->max_boost_thres = NUM_REQS_HIGH_THRESH;
 }
 
 /* Returns the max mitigation level supported */
@@ -5311,6 +5313,78 @@ static ssize_t irq_affinity_support_show(struct device *dev,
 
 static DEVICE_ATTR_RW(irq_affinity_support);
 
+static ssize_t boost_min_threshold_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	u32 val;
+	int ret;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
+	ret = kstrtouint(buf, 0, &val);
+	if (ret) {
+		dev_err(hba->dev, "boost min thres load failed\n");
+		return -EINVAL;
+	}
+
+	if (val >= host->max_boost_thres)
+		return -EINVAL;
+
+	host->min_boost_thres = val;
+	return count;
+}
+
+static ssize_t boost_min_threshold_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", host->min_boost_thres);
+}
+
+static DEVICE_ATTR_RW(boost_min_threshold);
+
+static ssize_t boost_max_threshold_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	u32 val;
+	int ret;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
+	ret = kstrtouint(buf, 0, &val);
+	if (ret) {
+		dev_err(hba->dev, "boost max thres load failed\n");
+		return -EINVAL;
+	}
+
+	if (val <= host->min_boost_thres)
+		return -EINVAL;
+
+	host->max_boost_thres = val;
+	return count;
+}
+
+static ssize_t boost_max_threshold_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", host->max_boost_thres);
+}
+
+static DEVICE_ATTR_RW(boost_max_threshold);
+
 static ssize_t boost_monitor_timer_ms_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
@@ -5355,6 +5429,8 @@ static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_hibern8_count.attr,
 	&dev_attr_ber_th_exceeded.attr,
 	&dev_attr_irq_affinity_support.attr,
+	&dev_attr_boost_min_threshold.attr,
+	&dev_attr_boost_max_threshold.attr,
 	&dev_attr_boost_monitor_timer_ms.attr,
 	NULL
 };

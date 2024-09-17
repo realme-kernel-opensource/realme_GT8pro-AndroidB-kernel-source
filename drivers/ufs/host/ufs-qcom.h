@@ -599,6 +599,8 @@ struct ufs_qcom_host {
 	u32 max_cpus;
 	u32 device_id;
 	unsigned int boost_monitor_timer;
+	u32 min_boost_thres;
+	u32 max_boost_thres;
 };
 
 static inline u32
