@@ -563,8 +563,8 @@ struct ufs_qcom_host {
 	atomic_t scale_up;
 	atomic_t clks_on;
 	unsigned long load_delay_ms;
-#define NUM_REQS_HIGH_THRESH 64
-#define NUM_REQS_LOW_THRESH 32
+#define NUM_REQS_HIGH_THRESH 128
+#define NUM_REQS_LOW_THRESH 64
 	atomic_t num_reqs_threshold;
 	bool cur_freq_vote;
 	struct delayed_work fwork;
