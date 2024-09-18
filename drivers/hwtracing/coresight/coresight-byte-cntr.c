@@ -59,7 +59,6 @@ static long tmc_etr_flush_remaining_bytes(struct tmc_drvdata *tmcdrvdata, long o
 {
 	long req_size, actual = 0;
 	struct etr_buf *etr_buf;
-	struct device *dev;
 	struct byte_cntr *byte_cntr_data;
 
 	if (!tmcdrvdata)
@@ -70,7 +69,6 @@ static long tmc_etr_flush_remaining_bytes(struct tmc_drvdata *tmcdrvdata, long o
 		return -EINVAL;
 
 	etr_buf = tmcdrvdata->sysfs_buf;
-	dev = &tmcdrvdata->csdev->dev;
 
 	req_size = ((byte_cntr_data->rwp_offset < offset) ? tmcdrvdata->size : 0) +
 		byte_cntr_data->rwp_offset - offset;
@@ -240,7 +238,7 @@ static int tmc_etr_byte_cntr_open(struct inode *in, struct file *fp)
 		return -EBUSY;
 	}
 
-	if (tmcdrvdata->mode != CS_MODE_SYSFS ||
+	if (coresight_get_mode(tmcdrvdata->csdev) != CS_MODE_SYSFS ||
 			!byte_cntr_data->block_size) {
 		mutex_unlock(&byte_cntr_data->byte_cntr_lock);
 		return -EINVAL;
