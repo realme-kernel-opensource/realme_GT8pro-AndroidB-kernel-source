@@ -171,7 +171,7 @@ uint32_t socinfo_get_partinfo_vulkan_id(unsigned int part_id)
 {
 	return 0;
 }
-uint32_t socinfo_get_cluster_info(enum subset_cluster_type cluster)
+uint32_t socinfo_get_cluster_info(void)
 {
 	return 0;
 }
