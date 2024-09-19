@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_CLK_QCOM_GPU_CC_SM8150_H
@@ -17,6 +18,7 @@
 #define GPU_CC_GMU_CLK_SRC			7
 #define GPU_CC_GX_GMU_CLK			8
 #define GPU_CC_PLL1				9
+#define GPU_CC_SLEEP_CLK			10
 
 /* GPU_CC Resets */
 #define GPUCC_GPU_CC_CX_BCR			0
