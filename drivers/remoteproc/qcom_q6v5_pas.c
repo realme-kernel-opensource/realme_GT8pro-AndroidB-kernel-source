@@ -718,12 +718,27 @@ exit_start:
  */
 static int rproc_config_check(struct qcom_adsp *adsp, u32 state)
 {
+	unsigned int retry_num = 50;
+	u32 val;
+
+	do {
+		usleep_range(SOCCP_SLEEP_US, SOCCP_SLEEP_US + 100);
+		/* Making sure the mem mapped io is read correctly*/
+		dsb(sy);
+		val = readl(adsp->config_addr);
+		if ((state == SOCCP_D0) && (val == SOCCP_D1))
+			return 0;
+	} while (val != state && --retry_num);
+
+	return (val == state) ? 0 : -ETIMEDOUT;
+}
+static int rproc_config_check_atomic(struct qcom_adsp *adsp, u32 state)
+{
 	u32 val;
 
 	return readx_poll_timeout_atomic(readl, adsp->config_addr, val,
 				val == state, SOCCP_SLEEP_US, SOCCP_TIMEOUT_US);
 }
-
 /*
  * rproc_find_status_register: Find the power control regs and INT's
  *
@@ -847,7 +862,9 @@ int rproc_set_state(struct rproc *rproc, bool state)
 
 		ret = rproc_config_check(adsp, SOCCP_D0);
 		if (ret) {
-			dev_err(adsp->dev, "failed to change from D3 to D0\n");
+			dsb(sy);
+			dev_err(adsp->dev, "%s requested D3->D0: soccp failed to update tcsr val=%d\n",
+				current->comm, readl(adsp->config_addr));
 			goto soccp_out;
 		}
 
@@ -868,7 +885,9 @@ int rproc_set_state(struct rproc *rproc, bool state)
 
 			ret = rproc_config_check(adsp, SOCCP_D3);
 			if (ret) {
-				dev_err(adsp->dev, "failed to change from D0 to D3\n");
+				dsb(sy);
+				dev_err(adsp->dev, "%s requested D0->D3 failed: TCSR value:%d\n",
+					current->comm, readl(adsp->config_addr));
 				goto soccp_out;
 			}
 			disable_regulators(adsp);
@@ -878,9 +897,15 @@ int rproc_set_state(struct rproc *rproc, bool state)
 	}
 
 soccp_out:
+	if (ret && (adsp->rproc->state != RPROC_RUNNING)) {
+		dev_err(adsp->dev, "SOCCP has crashed while processing a D transition req by %s\n",
+			current->comm);
+		ret = -EBUSY;
+	}
+
 	mutex_unlock(&adsp->adsp_lock);
 
-	return ret ? -ETIMEDOUT : 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(rproc_set_state);
 
@@ -901,7 +926,7 @@ static int rproc_panic_handler(struct notifier_block *this,
 		dev_err(adsp->dev, "failed to update smem bits for D3 to D0\n");
 		goto done;
 	}
-	ret = rproc_config_check(adsp, SOCCP_D0);
+	ret = rproc_config_check_atomic(adsp, SOCCP_D0);
 	if (ret)
 		dev_err(adsp->dev, "failed to change to D0\n");
 done:
@@ -915,10 +940,13 @@ static void qcom_pas_handover(struct qcom_q6v5 *q6v5)
 
 	if (adsp->check_status) {
 		ret = rproc_config_check(adsp, SOCCP_D3);
+		dsb(sy);
 		if (ret)
-			dev_err(adsp->dev, "state not changed in handover\n");
+			dev_err(adsp->dev, "state not changed in handover TCSR val = %d\n",
+				readl(adsp->config_addr));
 		else
-			dev_info(adsp->dev, "state changed in handover for soccp!\n");
+			dev_info(adsp->dev, "state changed in handover for soccp! TCSR val = %d\n",
+					readl(adsp->config_addr));
 	}
 	if (adsp->px_supply)
 		regulator_disable(adsp->px_supply);
