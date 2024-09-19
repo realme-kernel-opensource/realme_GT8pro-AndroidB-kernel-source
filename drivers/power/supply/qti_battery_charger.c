@@ -56,6 +56,7 @@
 #define WLS_FW_WAIT_TIME_MS		500
 #define WLS_FW_UPDATE_TIME_MS		1000
 #define WLS_FW_BUF_SIZE			128
+#define CPS_WLS_FW_BUF_SIZE		1024
 #define DEFAULT_RESTRICT_FCC_UA		1000000
 
 enum psy_type {
@@ -1521,11 +1522,16 @@ static int wireless_fw_send_firmware(struct battery_chg_dev *bcdev,
 {
 	struct wireless_fw_push_buf_req msg = {};
 	const u8 *ptr;
-	u32 i, num_chunks, partial_chunk_size;
+	u32 i, buf_size, num_chunks, partial_chunk_size;
 	int rc;
 
-	num_chunks = fw->size / WLS_FW_BUF_SIZE;
-	partial_chunk_size = fw->size % WLS_FW_BUF_SIZE;
+	if (strstr(bcdev->wls_fw_name, "cps"))
+		buf_size = CPS_WLS_FW_BUF_SIZE;
+	else
+		buf_size = WLS_FW_BUF_SIZE;
+
+	num_chunks = fw->size / buf_size;
+	partial_chunk_size = fw->size % buf_size;
 
 	if (!num_chunks)
 		return -EINVAL;
@@ -1537,9 +1543,9 @@ static int wireless_fw_send_firmware(struct battery_chg_dev *bcdev,
 	msg.hdr.type = MSG_TYPE_REQ_RESP;
 	msg.hdr.opcode = BC_WLS_FW_PUSH_BUF_REQ;
 
-	for (i = 0; i < num_chunks; i++, ptr += WLS_FW_BUF_SIZE) {
+	for (i = 0; i < num_chunks; i++, ptr += buf_size) {
 		msg.fw_chunk_id = i + 1;
-		memcpy(msg.buf, ptr, WLS_FW_BUF_SIZE);
+		memcpy(msg.buf, ptr, buf_size);
 
 		pr_debug("sending FW chunk %u\n", i + 1);
 		rc = battery_chg_fw_write(bcdev, &msg, sizeof(msg));
@@ -1549,7 +1555,7 @@ static int wireless_fw_send_firmware(struct battery_chg_dev *bcdev,
 
 	if (partial_chunk_size) {
 		msg.fw_chunk_id = i + 1;
-		memset(msg.buf, 0, WLS_FW_BUF_SIZE);
+		memset(msg.buf, 0, buf_size);
 		memcpy(msg.buf, ptr, partial_chunk_size);
 
 		pr_debug("sending partial FW chunk %u\n", i + 1);
@@ -1582,12 +1588,35 @@ static int wireless_fw_check_for_update(struct battery_chg_dev *bcdev,
 #define IDT9415_FW_MINOR_VER_OFFSET		0x86
 #define IDT_FW_MAJOR_VER_OFFSET		0x94
 #define IDT_FW_MINOR_VER_OFFSET		0x96
+#define CPS_FW_MAJOR_VER_OFFSET		0xC2
+#define CPS_FW_MINOR_VER_OFFSET		0xC3
+
+static u32 wireless_fw_version_get(struct battery_chg_dev *bcdev, const u8 *data, bool force)
+{
+	u16 maj_ver = 0, min_ver = 0;
+
+	if (force)
+		return UINT_MAX;
+
+	if (strstr(bcdev->wls_fw_name, "idt9412")) {
+		maj_ver = le16_to_cpu(*(__le16 *)(data + IDT_FW_MAJOR_VER_OFFSET));
+		min_ver = le16_to_cpu(*(__le16 *)(data + IDT_FW_MINOR_VER_OFFSET));
+	} else if (strstr(bcdev->wls_fw_name, "idt")) {
+		maj_ver = le16_to_cpu(*(__le16 *)(data + IDT9415_FW_MAJOR_VER_OFFSET));
+		min_ver = le16_to_cpu(*(__le16 *)(data + IDT9415_FW_MINOR_VER_OFFSET));
+	} else if (strstr(bcdev->wls_fw_name, "cps")) {
+		maj_ver = le16_to_cpu(*(__le16 *)(data + CPS_FW_MAJOR_VER_OFFSET));
+		min_ver = le16_to_cpu(*(__le16 *)(data + CPS_FW_MINOR_VER_OFFSET));
+	}
+
+	return (maj_ver << 16 | min_ver);
+}
+
 static int wireless_fw_update(struct battery_chg_dev *bcdev, bool force)
 {
 	const struct firmware *fw;
 	struct psy_state *pst;
 	u32 version;
-	u16 maj_ver, min_ver;
 	int rc;
 
 	if (!bcdev->wls_fw_name) {
@@ -1637,17 +1666,7 @@ static int wireless_fw_update(struct battery_chg_dev *bcdev, bool force)
 		goto release_fw;
 	}
 
-	if (strstr(bcdev->wls_fw_name, "9412")) {
-		maj_ver = le16_to_cpu(*(__le16 *)(fw->data + IDT_FW_MAJOR_VER_OFFSET));
-		min_ver = le16_to_cpu(*(__le16 *)(fw->data + IDT_FW_MINOR_VER_OFFSET));
-	} else {
-		maj_ver = le16_to_cpu(*(__le16 *)(fw->data + IDT9415_FW_MAJOR_VER_OFFSET));
-		min_ver = le16_to_cpu(*(__le16 *)(fw->data + IDT9415_FW_MINOR_VER_OFFSET));
-	}
-	version = maj_ver << 16 | min_ver;
-
-	if (force)
-		version = UINT_MAX;
+	version = wireless_fw_version_get(bcdev, fw->data, force);
 
 	pr_debug("FW size: %zu version: %#x\n", fw->size, version);
 
