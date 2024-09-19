@@ -700,7 +700,6 @@
   devm_clk_hw_register
   devm_clk_put
   devm_clk_register
-  devm_pm_runtime_enable
   dev_mc_sync
   dev_mc_sync_multiple
   dev_mc_unsync
@@ -761,6 +760,7 @@
   devm_platform_get_and_ioremap_resource
   devm_platform_ioremap_resource
   devm_platform_ioremap_resource_byname
+  devm_pm_runtime_enable
   devm_power_supply_register
   __devm_pwmchip_add
   devm_pwmchip_alloc
@@ -2429,6 +2429,7 @@
   of_node_name_eq
   of_n_size_cells
   __of_parse_phandle_with_args
+  of_pci_parse_bus_range
   of_phandle_iterator_init
   of_phandle_iterator_next
   of_phy_is_fixed_link
@@ -2501,6 +2502,8 @@
   pci_dev_put
   pci_disable_device
   pci_disable_msi
+  pci_ecam_create
+  pci_ecam_map_bus
   pcie_capability_clear_and_set_word
   pcie_capability_clear_and_set_word_unlocked
   pcie_capability_read_word
@@ -2508,6 +2511,8 @@
   pci_enable_pcie_error_reporting
   pci_find_ext_capability
   pci_free_irq_vectors
+  pci_generic_config_read
+  pci_generic_config_write
   pci_get_device
   pci_get_domain_bus_and_slot
   pci_host_probe
