@@ -272,11 +272,11 @@ static int __air_buckpbus_reg_read(struct phy_device *phydev,
 
 	pbus_data_high = __phy_read(phydev, AIR_BPBUS_RD_DATA_HIGH);
 	if (pbus_data_high < 0)
-		return ret;
+		return pbus_data_high;
 
 	pbus_data_low = __phy_read(phydev, AIR_BPBUS_RD_DATA_LOW);
 	if (pbus_data_low < 0)
-		return ret;
+		return pbus_data_low;
 
 	*pbus_data = pbus_data_low | (pbus_data_high << 16);
 	return 0;
@@ -323,11 +323,11 @@ static int __air_buckpbus_reg_modify(struct phy_device *phydev,
 
 	pbus_data_high = __phy_read(phydev, AIR_BPBUS_RD_DATA_HIGH);
 	if (pbus_data_high < 0)
-		return ret;
+		return pbus_data_high;
 
 	pbus_data_low = __phy_read(phydev, AIR_BPBUS_RD_DATA_LOW);
 	if (pbus_data_low < 0)
-		return ret;
+		return pbus_data_low;
 
 	pbus_data_old = pbus_data_low | (pbus_data_high << 16);
 	pbus_data_new = (pbus_data_old & ~mask) | set;
@@ -543,6 +543,10 @@ static int air_hw_led_on_set(struct phy_device *phydev, u8 index, bool on)
 					       &priv->led[index].state);
 
 	changed |= (priv->led[index].rules != 0);
+
+	/* clear netdev trigger rules in case LED_OFF has been set */
+	if (!on)
+		priv->led[index].rules = 0;
 
 	if (changed)
 		return phy_modify_mmd(phydev, MDIO_MMD_VEND2,

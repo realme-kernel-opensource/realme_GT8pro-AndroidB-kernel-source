@@ -42,6 +42,16 @@ definitions:
       - not-in-nw
       - verbose
   -
+    name: tc-flower-key-ctrl-flags
+    type: flags
+    entries:
+      - frag
+      - firstfrag
+      - tuncsum
+      - tundf
+      - tunoam
+      - tuncrit
+  -
     name: tc-stats
     type: struct
     members:
@@ -1988,7 +1998,8 @@ attribute-sets:
         nested-attributes: tc-ematch-attrs
       -
         name: act
-        type: array-nest
+        type: indexed-array
+        sub-type: nest
         nested-attributes: tc-act-attrs
       -
         name: police
@@ -2128,7 +2139,8 @@ attribute-sets:
         type: u32
       -
         name: tin-stats
-        type: array-nest
+        type: indexed-array
+        sub-type: nest
         nested-attributes: tc-cake-tin-stats-attrs
       -
         name: deficit
@@ -2348,7 +2360,8 @@ attribute-sets:
         type: string
       -
         name: act
-        type: array-nest
+        type: indexed-array
+        sub-type: nest
         nested-attributes: tc-act-attrs
       -
         name: key-eth-dst
@@ -2533,10 +2546,14 @@ attribute-sets:
         name: key-flags
         type: u32
         byte-order: big-endian
+        enum: tc-flower-key-ctrl-flags
+        enum-as-flags: true
       -
         name: key-flags-mask
         type: u32
         byte-order: big-endian
+        enum: tc-flower-key-ctrl-flags
+        enum-as-flags: true
       -
         name: key-icmpv4-code
         type: u8
@@ -2746,6 +2763,18 @@ attribute-sets:
         name: key-spi-mask
         type: u32
         byte-order: big-endian
+      -
+        name: key-enc-flags
+        type: u32
+        byte-order: big-endian
+        enum: tc-flower-key-ctrl-flags
+        enum-as-flags: true
+      -
+        name: key-enc-flags-mask
+        type: u32
+        byte-order: big-endian
+        enum: tc-flower-key-ctrl-flags
+        enum-as-flags: true
   -
     name: tc-flower-key-enc-opts-attrs
     attributes:
@@ -2849,7 +2878,8 @@ attribute-sets:
         type: string
       -
         name: act
-        type: array-nest
+        type: indexed-array
+        sub-type: nest
         nested-attributes: tc-act-attrs
       -
         name: mask
@@ -3002,7 +3032,8 @@ attribute-sets:
         type: u32
       -
         name: act
-        type: array-nest
+        type: indexed-array
+        sub-type: nest
         nested-attributes: tc-act-attrs
       -
         name: flags
@@ -3375,7 +3406,8 @@ attribute-sets:
         nested-attributes: tc-police-attrs
       -
         name: act
-        type: array-nest
+        type: indexed-array
+        sub-type: nest
         nested-attributes: tc-act-attrs
   -
     name: tc-taprio-attrs
@@ -3593,7 +3625,8 @@ attribute-sets:
         nested-attributes: tc-police-attrs
       -
         name: act
-        type: array-nest
+        type: indexed-array
+        sub-type: nest
         nested-attributes: tc-act-attrs
       -
         name: indev

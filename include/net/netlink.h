@@ -41,7 +41,8 @@
  *   nlmsg_get_pos()			return current position in message
  *   nlmsg_trim()			trim part of message
  *   nlmsg_cancel()			cancel message construction
- *   nlmsg_free()			free a netlink message
+ *   nlmsg_consume()			free a netlink message (expected)
+ *   nlmsg_free()			free a netlink message (drop)
  *
  * Message Sending:
  *   nlmsg_multicast()			multicast message to several groups
@@ -1082,12 +1083,21 @@ static inline void nlmsg_cancel(struct sk_buff *skb, struct nlmsghdr *nlh)
 }
 
 /**
- * nlmsg_free - free a netlink message
+ * nlmsg_free - drop a netlink message
  * @skb: socket buffer of netlink message
  */
 static inline void nlmsg_free(struct sk_buff *skb)
 {
 	kfree_skb(skb);
+}
+
+/**
+ * nlmsg_consume - free a netlink message
+ * @skb: socket buffer of netlink message
+ */
+static inline void nlmsg_consume(struct sk_buff *skb)
+{
+	consume_skb(skb);
 }
 
 /**
@@ -1895,10 +1905,11 @@ static inline struct nla_bitfield32 nla_get_bitfield32(const struct nlattr *nla)
  * @src: netlink attribute to duplicate from
  * @gfp: GFP mask
  */
-static inline void *nla_memdup(const struct nlattr *src, gfp_t gfp)
+static inline void *nla_memdup_noprof(const struct nlattr *src, gfp_t gfp)
 {
-	return kmemdup(nla_data(src), nla_len(src), gfp);
+	return kmemdup_noprof(nla_data(src), nla_len(src), gfp);
 }
+#define nla_memdup(...)	alloc_hooks(nla_memdup_noprof(__VA_ARGS__))
 
 /**
  * nla_nest_start_noflag - Start a new level of nested attributes

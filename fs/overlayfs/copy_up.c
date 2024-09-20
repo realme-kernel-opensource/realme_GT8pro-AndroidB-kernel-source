@@ -114,7 +114,7 @@ int ovl_copy_xattr(struct super_block *sb, const struct path *oldpath, struct de
 		if (ovl_is_private_xattr(sb, name))
 			continue;
 
-		error = security_inode_copy_up_xattr(name);
+		error = security_inode_copy_up_xattr(old, name);
 		if (error < 0 && error != -EOPNOTSUPP)
 			break;
 		if (error == 1) {
@@ -1225,7 +1225,7 @@ static int ovl_copy_up_flags(struct dentry *dentry, int flags)
 		dput(parent);
 		dput(next);
 	}
-	revert_creds(old_cred);
+	ovl_revert_creds(dentry->d_sb, old_cred);
 
 	return err;
 }
