@@ -9,8 +9,10 @@
 #include <linux/led-class-flash.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/power_supply.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
+#include <linux/soc/qcom/battery_charger.h>
 #include <media/v4l2-flash-led-class.h>
 
 /* registers definitions */
@@ -103,6 +105,18 @@ enum led_strobe {
 	HW_STROBE,
 };
 
+struct flash_current_headroom {
+	u16 current_ma;
+	u16 headroom_mv;
+};
+
+static const struct flash_current_headroom mvflash_4ch_map[4] = {
+	{750,	200},
+	{1000,	250},
+	{1250,	300},
+	{1500,	400},
+};
+
 enum {
 	REG_STATUS1,
 	REG_STATUS2,
@@ -154,6 +168,7 @@ static struct reg_field mvflash_4ch_regs[REG_MAX_COUNT] = {
 struct qcom_flash_data {
 	struct v4l2_flash	**v4l2_flash;
 	struct regmap_field     *r_fields[REG_MAX_COUNT];
+	struct power_supply	*batt_psy;
 	struct mutex		lock;
 	enum hw_type		hw_type;
 	u32			total_ma;
@@ -162,6 +177,7 @@ struct qcom_flash_data {
 	u8			chan_en_bits;
 	u8			revision;
 	bool			trigger_lmh;
+	bool			debug_board_present;
 };
 
 struct qcom_flash_led {
@@ -206,6 +222,9 @@ static int set_lmh_mitigation(struct qcom_flash_led *led, bool enable)
 {
 	struct qcom_flash_data *flash_data = led->flash_data;
 	int rc;
+
+	if (flash_data->debug_board_present)
+		return 0;
 
 	if (enable == flash_data->trigger_lmh)
 		return 0;
@@ -635,6 +654,128 @@ static int qcom_flash_led_brightness_set(struct led_classdev *led_cdev,
 
 	return set_flash_strobe(led, SW_STROBE, enable);
 }
+
+#define MAX_FLASH_CURRENT_MA		2000
+#define IBATT_OCP_THRESH_DEFAULT_UA	4500000
+#define VLED_MAX_DEFAULT_UV		3500000
+#define UCONV				1000000LL
+#define MCONV				1000LL
+#define VIN_FLASH_MIN_UV		3300000LL
+#define BOB_EFFICIENCY			900LL
+#define VFLASH_DIP_MARGIN_UV		50000
+#define VOLTAGE_HDRM_DEFAULT_MV		400
+#define VDIP_THRESH_DEFAULT_UV		2800000LL
+
+static int qcom_flash_led_voltage_headroom_get(struct qcom_flash_data *flash_data)
+{
+	int i, voltage_hdrm_mv = 0;
+	u32 current_ma;
+
+	voltage_hdrm_mv = VOLTAGE_HDRM_DEFAULT_MV;
+	if (flash_data->hw_type == QCOM_MVFLASH_3CH)
+		return voltage_hdrm_mv;
+
+	mutex_lock(&flash_data->lock);
+	current_ma = flash_data->total_ma;
+	mutex_unlock(&flash_data->lock);
+
+	for (i = 0; i < ARRAY_SIZE(mvflash_4ch_map); i++) {
+		if (current_ma <= mvflash_4ch_map[i].current_ma)
+			voltage_hdrm_mv = mvflash_4ch_map[i].headroom_mv;
+	}
+
+	return voltage_hdrm_mv;
+}
+
+static int __qcom_flash_led_get_max_avail_current(
+		struct qcom_flash_data *flash_data, int *max_current_ma)
+{
+	int rbatt_uohm, ocv_uv, ibatt_now_ua, voltage_hdrm_mv;
+	int64_t ibatt_safe_ua, i_flash_ua, i_avail_ua, vflash_vdip,
+		vph_flash_uv, vin_flash_uv, p_flash_fw;
+	union power_supply_propval prop = {};
+	int rc;
+
+	if (!flash_data->batt_psy)
+		flash_data->batt_psy = power_supply_get_by_name("battery");
+
+	if (!flash_data->batt_psy) {
+		*max_current_ma = MAX_FLASH_CURRENT_MA;
+		return 0;
+	}
+
+	rc = qti_battery_charger_get_prop("battery", BATTERY_RESISTANCE,
+						&rbatt_uohm);
+	if (rc < 0) {
+		pr_err("Failed to get battery resistance, rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	if (!rbatt_uohm) {
+		*max_current_ma = MAX_FLASH_CURRENT_MA;
+		flash_data->debug_board_present = true;
+		return 0;
+	}
+
+	rc = power_supply_get_property(flash_data->batt_psy,
+		POWER_SUPPLY_PROP_VOLTAGE_OCV, &prop);
+	if (rc < 0) {
+		pr_err("Failed to get battery OCV, rc=%d\n", rc);
+		return rc;
+	}
+	ocv_uv = prop.intval;
+
+	rc = power_supply_get_property(flash_data->batt_psy,
+		POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
+	if (rc < 0) {
+		pr_err("Failed to get battery current, rc=%d\n", rc);
+		return rc;
+	}
+
+	/* Battery power supply returns -ve value for discharging */
+	ibatt_now_ua = -(prop.intval);
+
+	voltage_hdrm_mv = qcom_flash_led_voltage_headroom_get(flash_data);
+	vflash_vdip = VDIP_THRESH_DEFAULT_UV;
+
+	ibatt_safe_ua = DIV_ROUND_CLOSEST((ocv_uv -
+				(vflash_vdip + VFLASH_DIP_MARGIN_UV)) * UCONV,
+				rbatt_uohm);
+
+	if (ibatt_safe_ua < IBATT_OCP_THRESH_DEFAULT_UA) {
+		i_flash_ua = ibatt_safe_ua - ibatt_now_ua;
+		vph_flash_uv = vflash_vdip + VFLASH_DIP_MARGIN_UV;
+	} else {
+		i_flash_ua = IBATT_OCP_THRESH_DEFAULT_UA - ibatt_now_ua;
+		vph_flash_uv = ocv_uv - DIV_ROUND_CLOSEST((int64_t)rbatt_uohm
+				* IBATT_OCP_THRESH_DEFAULT_UA, UCONV);
+	}
+
+	vin_flash_uv = max(VLED_MAX_DEFAULT_UV +
+				(voltage_hdrm_mv * MCONV), VIN_FLASH_MIN_UV);
+
+	p_flash_fw = BOB_EFFICIENCY * vph_flash_uv * i_flash_ua;
+	i_avail_ua = DIV_ROUND_CLOSEST(p_flash_fw, (vin_flash_uv * MCONV));
+
+	*max_current_ma = min(MAX_FLASH_CURRENT_MA,
+				(int)(DIV_ROUND_CLOSEST(i_avail_ua, MCONV)));
+
+	pr_debug("rbatt_uohm=%d ocv_uv=%d ibatt_now_ua=%d i_avail_ua=%lld\n",
+			rbatt_uohm, ocv_uv, ibatt_now_ua, i_avail_ua);
+
+	return 0;
+}
+
+int qcom_flash_led_get_max_avail_current(
+		struct led_classdev *led_cdev, int *max_current_ma)
+{
+	struct led_classdev_flash *fled_cdev = lcdev_to_flcdev(led_cdev);
+	struct qcom_flash_led *led = flcdev_to_qcom_fled(fled_cdev);
+
+	return __qcom_flash_led_get_max_avail_current(led->flash_data, max_current_ma);
+}
+EXPORT_SYMBOL_GPL(qcom_flash_led_get_max_avail_current);
 
 static const struct led_flash_ops qcom_flash_ops = {
 	.flash_brightness_set = qcom_flash_brightness_set,
