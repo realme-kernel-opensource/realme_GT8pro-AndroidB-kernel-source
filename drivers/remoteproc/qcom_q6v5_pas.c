@@ -651,6 +651,8 @@ static int adsp_start(struct rproc *rproc)
 	}
 
 	qcom_scm_pas_metadata_release(&adsp->pas_metadata, dev);
+
+	adsp->q6v5.seq++;
 	goto exit_start;
 
 unlock_pas_metadata:
@@ -991,6 +993,7 @@ static int adsp_stop(struct rproc *rproc)
 
 	adsp_unassign_memory_region(adsp);
 
+	adsp->q6v5.seq++;
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_stop", "exit");
 
 	return ret;
