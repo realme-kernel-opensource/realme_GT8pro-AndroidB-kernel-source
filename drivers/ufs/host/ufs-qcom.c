@@ -192,10 +192,8 @@ static const struct __ufs_qcom_bw_table {
 static struct ufs_qcom_host *ufs_qcom_hosts[MAX_UFS_QCOM_HOSTS];
 
 static void ufs_qcom_get_default_testbus_cfg(struct ufs_qcom_host *host);
-static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
-						       u32 clk_1us_cycles,
-						       u32 clk_40ns_cycles,
-						       bool scale_up);
+static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, u32 clk_1us_cycles,
+				  u32 clk_40ns_cycles);
 static void ufs_qcom_parse_limits(struct ufs_qcom_host *host);
 static void ufs_qcom_parse_lpm(struct ufs_qcom_host *host);
 static void ufs_qcom_parse_wb(struct ufs_qcom_host *host);
@@ -1282,19 +1280,19 @@ static int ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(struct ufs_hba *hba)
 
 	switch (max_freq) {
 	case 403000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 403, 16, true);
+		err = ufs_qcom_core_clk_ctrl(hba, 403, 16);
 		break;
 	case 300000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 300, 12, true);
+		err = ufs_qcom_core_clk_ctrl(hba, 300, 12);
 		break;
 	case 201500000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 202, 8, true);
+		err = ufs_qcom_core_clk_ctrl(hba, 202, 8);
 		break;
 	case 150000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 150, 6, true);
+		err = ufs_qcom_core_clk_ctrl(hba, 150, 6);
 		break;
 	case 100000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 100, 4, true);
+		err = ufs_qcom_core_clk_ctrl(hba, 100, 4);
 		break;
 	default:
 		err = -EINVAL;
@@ -3993,10 +3991,8 @@ static void ufs_qcom_exit(struct ufs_hba *hba)
 	phy_exit(host->generic_phy);
 }
 
-static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
-						       u32 clk_1us_cycles,
-						       u32 clk_40ns_cycles,
-						       bool scale_up)
+static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, u32 clk_1us_cycles,
+				  u32 clk_40ns_cycles)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int err;
@@ -4021,12 +4017,6 @@ static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
 
 	core_clk_ctrl_reg &= ~(mask << offset);
 	core_clk_ctrl_reg |= clk_1us_cycles << offset;
-
-	/* Clear CORE_CLK_DIV_EN */
-	if (scale_up && !host->disable_lpm)
-		core_clk_ctrl_reg |= DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT;
-	else
-		core_clk_ctrl_reg &= ~DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT;
 
 	err = ufshcd_dme_set(hba,
 			     UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
@@ -4084,23 +4074,7 @@ static int ufs_qcom_clk_scale_up_post_change(struct ufs_hba *hba)
 
 static int ufs_qcom_clk_scale_down_pre_change(struct ufs_hba *hba)
 {
-	int err;
-	u32 core_clk_ctrl_reg;
-
-	err = ufshcd_dme_get(hba,
-			    UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
-			    &core_clk_ctrl_reg);
-
-	/* make sure CORE_CLK_DIV_EN is cleared */
-	if (!err &&
-	    (core_clk_ctrl_reg & DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT)) {
-		core_clk_ctrl_reg &= ~DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT;
-		err = ufshcd_dme_set(hba,
-				    UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
-				    core_clk_ctrl_reg);
-	}
-
-	return err;
+	return 0;
 }
 
 static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
@@ -4130,13 +4104,13 @@ static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
 
 	switch (curr_freq) {
 	case 37500000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 38, 2, false);
+		err = ufs_qcom_core_clk_ctrl(hba, 38, 2);
 		break;
 	case 75000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 75, 3, false);
+		err = ufs_qcom_core_clk_ctrl(hba, 75, 3);
 		break;
 	case 100000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 100, 4, false);
+		err = ufs_qcom_core_clk_ctrl(hba, 100, 4);
 		break;
 	default:
 		err = -EINVAL;
