@@ -13,6 +13,7 @@ def define_canoe():
         "drivers/bus/mhi/devices/mhi_dev_satellite.ko",
         "drivers/bus/mhi/devices/mhi_dev_uci.ko",
         "drivers/bus/mhi/host/mhi.ko",
+        "drivers/clk/qcom/camcc-canoe.ko",
         "drivers/clk/qcom/clk-dummy.ko",
         "drivers/clk/qcom/clk-qcom.ko",
         "drivers/clk/qcom/dispcc-canoe.ko",
