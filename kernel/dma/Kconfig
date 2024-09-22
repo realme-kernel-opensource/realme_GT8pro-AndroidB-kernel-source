@@ -107,6 +107,11 @@ config DMA_BOUNCE_UNALIGNED_KMALLOC
 	bool
 	depends on SWIOTLB
 
+config DMA_NEED_SYNC
+	def_bool ARCH_HAS_SYNC_DMA_FOR_DEVICE || ARCH_HAS_SYNC_DMA_FOR_CPU || \
+		 ARCH_HAS_SYNC_DMA_FOR_CPU_ALL || DMA_API_DEBUG || DMA_OPS || \
+		 SWIOTLB
+
 config DMA_RESTRICTED_POOL
 	bool "DMA Restricted Pool"
 	depends on OF && OF_RESERVED_MEM && SWIOTLB
@@ -118,6 +123,18 @@ config DMA_RESTRICTED_POOL
 	  For more information see
 	  <Documentation/devicetree/bindings/reserved-memory/reserved-memory.txt>
 	  and <kernel/dma/swiotlb.c>.
+	  If unsure, say "n".
+
+config SWIOTLB_NONLINEAR
+	bool "Allow swiotlb to use non-linear memory as bounce buffers"
+	depends on SWIOTLB
+	help
+	  This allows swiotlb driver to work with memory regions where
+	  physical to virtual address translations can't be done using APIs
+	  such as phys_to_virt. These could be reserved memory regions that
+	  are not mapped by default or could be seen as "device" memory
+	  accessed via ioremap().
+
 	  If unsure, say "n".
 
 #

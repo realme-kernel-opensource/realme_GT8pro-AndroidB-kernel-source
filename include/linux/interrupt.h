@@ -5,13 +5,14 @@
 
 #include <linux/kernel.h>
 #include <linux/bitops.h>
-#include <linux/cpumask.h>
+#include <linux/cleanup.h>
 #include <linux/irqreturn.h>
 #include <linux/irqnr.h>
 #include <linux/hardirq.h>
 #include <linux/irqflags.h>
 #include <linux/hrtimer.h>
 #include <linux/kref.h>
+#include <linux/cpumask_types.h>
 #include <linux/workqueue.h>
 #include <linux/jump_label.h>
 
@@ -168,7 +169,7 @@ static inline int __must_check
 request_irq(unsigned int irq, irq_handler_t handler, unsigned long flags,
 	    const char *name, void *dev)
 {
-	return request_threaded_irq(irq, handler, NULL, flags, name, dev);
+	return request_threaded_irq(irq, handler, NULL, flags | IRQF_COND_ONESHOT, name, dev);
 }
 
 extern int __must_check
@@ -234,6 +235,9 @@ extern void enable_irq(unsigned int irq);
 extern void enable_percpu_irq(unsigned int irq, unsigned int type);
 extern bool irq_percpu_is_enabled(unsigned int irq);
 extern void irq_wake_thread(unsigned int irq, void *dev_id);
+
+DEFINE_LOCK_GUARD_1(disable_irq, int,
+		    disable_irq(*_T->lock), enable_irq(*_T->lock))
 
 extern void disable_nmi_nosync(unsigned int irq);
 extern void disable_percpu_nmi(unsigned int irq);
@@ -530,6 +534,17 @@ DECLARE_STATIC_KEY_FALSE(force_irqthreads_key);
 #define set_softirq_pending(x)	(__this_cpu_write(local_softirq_pending_ref, (x)))
 #define or_softirq_pending(x)	(__this_cpu_or(local_softirq_pending_ref, (x)))
 
+/**
+ * __cpu_softirq_pending() - Checks to see if softirq is pending on a cpu
+ *
+ * This helper is inherently racy, as we're accessing per-cpu data w/o locks.
+ * But peeking at the flag can still be useful when deciding where to place a
+ * task.
+ */
+static inline u32 __cpu_softirq_pending(int cpu)
+{
+	return (u32)per_cpu(local_softirq_pending_ref, cpu);
+}
 #endif /* local_softirq_pending */
 
 /* Some architectures might implement lazy enabling/disabling of
@@ -578,6 +593,11 @@ enum
 #define SOFTIRQ_HOTPLUG_SAFE_MASK (BIT(TIMER_SOFTIRQ) | BIT(IRQ_POLL_SOFTIRQ) |\
 				   BIT(HRTIMER_SOFTIRQ) | BIT(RCU_SOFTIRQ))
 
+/* Softirq's where the handling might be long: */
+#define LONG_SOFTIRQ_MASK (BIT(NET_TX_SOFTIRQ)    | \
+			   BIT(NET_RX_SOFTIRQ)    | \
+			   BIT(BLOCK_SOFTIRQ)     | \
+			   BIT(IRQ_POLL_SOFTIRQ))
 
 /* map softirq index to softirq name. update 'softirq_to_name' in
  * kernel/softirq.c when adding a new softirq.
@@ -613,6 +633,10 @@ extern void raise_softirq_irqoff(unsigned int nr);
 extern void raise_softirq(unsigned int nr);
 
 DECLARE_PER_CPU(struct task_struct *, ksoftirqd);
+
+#ifdef CONFIG_RT_SOFTIRQ_AWARE_SCHED
+DECLARE_PER_CPU(u32, active_softirqs);
+#endif
 
 static inline struct task_struct *this_cpu_ksoftirqd(void)
 {

@@ -14,9 +14,7 @@
 #include "fjes.h"
 #include "fjes_trace.h"
 
-#define MAJ 1
-#define MIN 2
-#define DRV_VERSION __stringify(MAJ) "." __stringify(MIN)
+#define DRV_VERSION "1.2"
 #define DRV_NAME	"fjes"
 char fjes_driver_name[] = DRV_NAME;
 char fjes_driver_version[] = DRV_VERSION;
@@ -810,7 +808,7 @@ static int fjes_change_mtu(struct net_device *netdev, int new_mtu)
 		netif_tx_stop_all_queues(netdev);
 	}
 
-	netdev->mtu = new_mtu;
+	WRITE_ONCE(netdev->mtu, new_mtu);
 
 	if (running) {
 		for (epidx = 0; epidx < hw->max_epid; epidx++) {

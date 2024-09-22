@@ -24,9 +24,6 @@ static char ovl_whatisit(struct inode *inode, struct inode *realinode)
 		return 'm';
 }
 
-/* No atime modification on underlying */
-#define OVL_OPEN_FLAGS (O_NOATIME)
-
 static struct file *ovl_open_realfile(const struct file *file,
 				      const struct path *realpath)
 {
@@ -264,11 +261,10 @@ static void ovl_file_accessed(struct file *file)
 static ssize_t ovl_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 {
 	struct file *file = iocb->ki_filp;
-	struct inode *inode = file_inode(file);
 	struct fd real;
 	ssize_t ret;
 	struct backing_file_ctx ctx = {
-		.cred = ovl_creds(inode->i_sb),
+		.cred = ovl_creds(file_inode(file)->i_sb),
 		.user_file = file,
 		.accessed = ovl_file_accessed,
 	};
@@ -279,9 +275,6 @@ static ssize_t ovl_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 	ret = ovl_real_fdget(file, &real);
 	if (ret)
 		return ret;
-
-	if (!OVL_FS(inode->i_sb)->config.override_creds)
-		ctx.cred = NULL;
 
 	ret = backing_file_read_iter(real.file, iter, iocb, iocb->ki_flags,
 				     &ctx);
@@ -317,9 +310,6 @@ static ssize_t ovl_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 	if (!ovl_should_sync(OVL_FS(inode->i_sb)))
 		ifl &= ~(IOCB_DSYNC | IOCB_SYNC);
 
-	if (!OVL_FS(inode->i_sb)->config.override_creds)
-		ctx.cred = NULL;
-
 	/*
 	 * Overlayfs doesn't support deferred completions, don't copy
 	 * this property in case it is set by the issuer.
@@ -338,11 +328,10 @@ static ssize_t ovl_splice_read(struct file *in, loff_t *ppos,
 			       struct pipe_inode_info *pipe, size_t len,
 			       unsigned int flags)
 {
-	struct inode *inode = file_inode(in);
 	struct fd real;
 	ssize_t ret;
 	struct backing_file_ctx ctx = {
-		.cred = ovl_creds(inode->i_sb),
+		.cred = ovl_creds(file_inode(in)->i_sb),
 		.user_file = in,
 		.accessed = ovl_file_accessed,
 	};
@@ -350,9 +339,6 @@ static ssize_t ovl_splice_read(struct file *in, loff_t *ppos,
 	ret = ovl_real_fdget(in, &real);
 	if (ret)
 		return ret;
-
-	if (!OVL_FS(inode->i_sb)->config.override_creds)
-		ctx.cred = NULL;
 
 	ret = backing_file_splice_read(real.file, ppos, pipe, len, flags, &ctx);
 	fdput(real);
@@ -387,9 +373,6 @@ static ssize_t ovl_splice_write(struct pipe_inode_info *pipe, struct file *out,
 	ret = ovl_real_fdget(out, &real);
 	if (ret)
 		goto out_unlock;
-
-	if (!OVL_FS(inode->i_sb)->config.override_creds)
-		ctx.cred = NULL;
 
 	ret = backing_file_splice_write(pipe, real.file, ppos, len, flags, &ctx);
 	fdput(real);
@@ -429,15 +412,11 @@ static int ovl_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 static int ovl_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct file *realfile = file->private_data;
-	struct inode *inode = file_inode(file);
 	struct backing_file_ctx ctx = {
-		.cred = ovl_creds(inode->i_sb),
+		.cred = ovl_creds(file_inode(file)->i_sb),
 		.user_file = file,
 		.accessed = ovl_file_accessed,
 	};
-
-	if (!OVL_FS(inode->i_sb)->config.override_creds)
-		ctx.cred = NULL;
 
 	return backing_file_mmap(realfile, vma, &ctx);
 }

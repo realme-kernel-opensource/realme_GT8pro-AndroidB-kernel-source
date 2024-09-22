@@ -17,6 +17,7 @@
 """This utility generates a single lcov tracefile from a gcov tar file."""
 
 import argparse
+import collections
 import fnmatch
 import glob
 import json
@@ -29,6 +30,14 @@ import tarfile
 
 
 LCOV = "lcov"
+
+# Relative to the root of the source tree..
+OUTPUT_COV_DIR = os.path.join("out", "coverage")
+
+PREBUILT_LLVM_COV_PATH = os.path.join(
+    "prebuilts", "clang", "host", "linux-x86", "llvm-binutils-stable",
+    "llvm-cov"
+)
 
 EXCLUDED_FILES = [
     "*/security/selinux/av_permissions.h",
@@ -44,43 +53,47 @@ OMITTED_GCNO_FILES = [
 ]
 
 
+def create_llvm_gcov_sh(
+    llvm_cov_filename: str,
+    llvm_gcov_sh_filename: str,
+) -> None:
+  """Create a shell script that is compatible with gcov.
+
+  Args:
+    llvm_cov_filename: The absolute path to llvm-cov.
+    llvm_gcov_sh_filename: The path to the script to be created.
+  """
+  file_path = pathlib.Path(llvm_gcov_sh_filename)
+  file_path.parent.mkdir(parents=True, exist_ok=True)
+  file_path.write_text(f'#!/bin/bash\nexec {llvm_cov_filename} gcov "$@"')
+  os.chmod(llvm_gcov_sh_filename, 0o755)
+
+
 def generate_lcov_tracefile(
     gcov_dir: str,
     kernel_source: str,
-    llvm_gcov_sh_filename: str,
-    llvm_gcov_sh: str,
+    gcov_filename: str,
     tracefile_filename: str,
     included_files: [],
 ) -> None:
   """Call lcov to create tracefile based on gcov data files.
-
-  A temporay helper script, 'llvm_gcov.sh', is created that points to a
-  prebuilt copy of llvm-cov.
 
   Args:
     gcov_dir: Directory that contains the extracted gcov data files as retreived
       from debugfs.
     kernel_source: Directory containing the kernel source same as what was used
       to build system under test.
-    llvm_gcov_sh_filename: The full filename of temp llvm_gcov.sh helper script.
-    llvm_gcov_sh: The contents of what should be put into llvm_gcov.sh.
+    gcov_filename: The absolute path to gcov or a compatible script.
     tracefile_filename: The name of tracefile to create.
     included_files: List of source file pattern to include in tracefile. Can be
       empty in which case include allo source.
   """
-
   exclude_args = " ".join([f'--exclude "{f}"' for f in EXCLUDED_FILES])
   include_args = (
       " ".join([f'--include "{f[0]}"' for f in included_files])
       if included_files is not None
       else ""
   )
-
-  # Create helper script to be used during the `lcov` call
-  file_path = pathlib.Path(llvm_gcov_sh_filename)
-  file_path.parent.mkdir(parents=True, exist_ok=True)
-  file_path.write_text(llvm_gcov_sh)
-  os.chmod(llvm_gcov_sh_filename, 0o755)
 
   logging.info("Running lcov on %s", gcov_dir)
   lcov_cmd = (
@@ -89,7 +102,7 @@ def generate_lcov_tracefile(
       "--rc branch_coverage=1 "
       f"-b {kernel_source} "
       f"-d {gcov_dir} "
-      f"--gcov-tool {llvm_gcov_sh_filename} "
+      f"--gcov-tool {gcov_filename} "
       f"{exclude_args} "
       f"{include_args} "
       "--ignore-errors gcov,gcov,unused,unused "
@@ -220,12 +233,26 @@ def append_slash(path: str) -> str:
 
 
 def update_multimap_from_json(
-    json_file: str, base_dir: str, result_multimap: {}
+    json_file: str, base_dir: str, result_multimap: collections.defaultdict
 ) -> None:
   """Reads 'to' and 'from' fields from a JSON file and updates a multimap.
 
+  'from' refers to a bazel sandbox directory.
+  'to' refers to the output directory of gcno files.
   The multimap is implemented as a dictionary of lists allowing multiple 'to'
   values for each 'from' key.
+
+  Sample input:
+  [
+    {
+      "from": "/sandbox/1/execroot/_main/out/android-mainline/common",
+      "to": "bazel-out/k8-fastbuild/bin/common/kernel_x86_64/kernel_x86_64_gcno"
+    },
+    {
+      "from": "/sandbox/2/execroot/_main/out/android-mainline/common",
+      "to": "bazel-out/k8-fastbuild/bin/common-modules/virtual-device/virtual_device_x86_64/virtual_device_x86_64_gcno"
+    }
+  ]
 
   Args:
     json_file: The path to the JSON file.
@@ -237,7 +264,6 @@ def update_multimap_from_json(
   Returns:
     The updated dictionary.
   """
-
   with open(json_file, "r") as file:
     data = json.load(file)
 
@@ -247,18 +273,36 @@ def update_multimap_from_json(
     if to_value and from_value:
       to_value = make_absolute(to_value, base_dir)
       from_value = make_absolute(from_value, base_dir)
-      if from_value not in result_multimap:
-        result_multimap[from_value] = []
       result_multimap[from_value].append(to_value)
 
 
-def read_gcno_mapping_files(search_dir: str, base_dir: str) -> {}:
-  pattern = os.path.join(search_dir, "**", "dist", "gcno_mapping.*")
-  result_multimap = {}
+def read_gcno_mapping_files(
+    search_dir_pattern: str,
+    base_dir: str,
+    result_multimap: collections.defaultdict
+) -> None:
+  """Search a directory for gcno_mapping."""
+  found = False
+  pattern = os.path.join(search_dir_pattern, "gcno_mapping.*.json")
   for filepath in glob.iglob(pattern, recursive=False):
+    found = True
     logging.info("Reading %s", filepath)
     update_multimap_from_json(filepath, base_dir, result_multimap)
-  return result_multimap
+
+  if not found:
+    logging.error("No gcno_mapping in %s", search_dir_pattern)
+
+
+def read_gcno_dir(
+    gcno_dir: str, result_multimap: collections.defaultdict
+) -> None:
+  """Read a directory containing gcno_mapping and gcno files."""
+  multimap = collections.defaultdict(list)
+  read_gcno_mapping_files(gcno_dir, gcno_dir, multimap)
+
+  to_value = append_slash(os.path.abspath(gcno_dir))
+  for from_value in multimap:
+    result_multimap[from_value].append(to_value)
 
 
 def get_testname_from_filename(file_path: str) -> str:
@@ -318,27 +362,58 @@ def get_kernel_repo_dir() -> str:
   return get_parent_path(this_script_full_path, 6)
 
 
-def build_config() -> {}:
-  """Build configuration.
+class Config:
+  """The input and output paths of this script."""
 
-  Returns:
-    A dictionary containing the configuration.
-  """
-  config = {}
-  config["repo_dir"] = get_kernel_repo_dir()
-  config["output_dir"] = f'{config["repo_dir"]}/out'
-  config["output_cov_dir"] = f'{config["output_dir"]}/coverage'
-  config["llvm_cov_prebuilt"] = (
-      f'{config["repo_dir"]}/prebuilts/clang/host/linux-x86/'
-      "llvm-binutils-stable/llvm-cov"
-  )
-  config["llvm_gcov_sh"] = (
-      f'#!/bin/bash\nexec {config["llvm_cov_prebuilt"]} gcov "$@"'
-  )
-  config["llvm_gcov_sh_filename"] = (
-      f'{config["output_cov_dir"]}/tmp/llvm-gcov.sh'
-  )
-  return config
+  def __init__(self, repo_dir: str, llvm_cov_path: str, tmp_dir: str):
+    """Each argument can be empty."""
+    self._repo_dir = os.path.abspath(repo_dir) if repo_dir else None
+    self._llvm_cov_path = (
+        os.path.abspath(llvm_cov_path) if llvm_cov_path else None
+    )
+    self._tmp_dir = os.path.abspath(tmp_dir) if tmp_dir else None
+    self._repo_out_dir = None
+
+  @property
+  def repo_dir(self) -> str:
+    if not self._repo_dir:
+      self._repo_dir = get_kernel_repo_dir()
+    return self._repo_dir
+
+  def _get_repo_path(self, rel_path: str) -> str:
+    repo_path = os.path.join(self.repo_dir, rel_path)
+    if not os.path.exists(repo_path):
+      logging.error(
+          "%s does not exist. If this script is not in the source directory,"
+          " specify --repo-dir. If you do not have full kernel source,"
+          " specify --llvm-cov, --gcno-dir, and --tmp-dir.",
+          repo_path,
+      )
+      sys.exit(-1)
+    return repo_path
+
+  @property
+  def llvm_cov_path(self) -> str:
+    if not self._llvm_cov_path:
+      self._llvm_cov_path = self._get_repo_path(PREBUILT_LLVM_COV_PATH)
+    return self._llvm_cov_path
+
+  @property
+  def repo_out_dir(self) -> str:
+    if not self._repo_out_dir:
+      self._repo_out_dir = self._get_repo_path("out")
+    return self._repo_out_dir
+
+  @property
+  def tmp_dir(self) -> str:
+    if not self._tmp_dir:
+      # Temporary directory does not have to exist.
+      self._tmp_dir = os.path.join(self.repo_dir, OUTPUT_COV_DIR)
+    return self._tmp_dir
+
+  @property
+  def llvm_gcov_sh_path(self) -> str:
+    return os.path.join(self.tmp_dir, "tmp", "llvm-gcov.sh")
 
 
 def main() -> None:
@@ -378,6 +453,43 @@ def main() -> None:
       ),
   )
   arg_parser.add_argument(
+      "--repo-dir",
+      required=False,
+      help="Root directory of kernel source"
+  )
+  arg_parser.add_argument(
+      "--dist-dir",
+      dest="dist_dirs",
+      action="append",
+      default=[],
+      required=False,
+      help="Dist directory containing gcno mapping files"
+  )
+  arg_parser.add_argument(
+      "--gcno-dir",
+      dest="gcno_dirs",
+      action="append",
+      default=[],
+      required=False,
+      help="Path to an extracted .gcno.tar.gz"
+  )
+  arg_parser.add_argument(
+      "--llvm-cov",
+      required=False,
+      help=(
+          "Path to llvm-cov. Default: " +
+          os.path.join("<repo dir>", PREBUILT_LLVM_COV_PATH)
+      )
+  )
+  arg_parser.add_argument(
+      "--tmp-dir",
+      required=False,
+      help=(
+          "Path to the directory where the temporary files are created."
+          " Default: " + os.path.join("<repo dir>", OUTPUT_COV_DIR)
+      )
+  )
+  arg_parser.add_argument(
       "--verbose",
       action="store_true",
       default=False,
@@ -399,17 +511,34 @@ def main() -> None:
     logging.critical("       https://github.com/linux-test-project/lcov")
     sys.exit(-1)
 
-  config = build_config()
+  if args.repo_dir and not os.path.isdir(args.repo_dir):
+    logging.error("%s is not a directory.", args.repo_dir)
+    sys.exit(-1)
 
-  gcno_mappings = read_gcno_mapping_files(
-      config["output_dir"], config["repo_dir"]
-  )
+  if args.llvm_cov and not os.path.isfile(args.llvm_cov):
+    logging.error("%s is not a file.", args.llvm_cov)
+    sys.exit(-1)
+
+  for gcno_dir in args.gcno_dirs + args.dist_dirs:
+    if not os.path.isdir(gcno_dir):
+      logging.error("%s is not a directory.", gcno_dir)
+      sys.exit(-1)
+
+  config = Config(args.repo_dir, args.llvm_cov, args.tmp_dir)
+
+  gcno_mappings = collections.defaultdict(list)
+  if not args.gcno_dirs and not args.dist_dirs:
+    dist_dir_pattern = os.path.join(config.repo_out_dir, "**", "dist")
+    read_gcno_mapping_files(dist_dir_pattern, config.repo_dir, gcno_mappings)
+
+  for dist_dir in args.dist_dirs:
+    read_gcno_mapping_files(dist_dir, config.repo_dir, gcno_mappings)
+
+  for gcno_dir in args.gcno_dirs:
+    read_gcno_dir(gcno_dir, gcno_mappings)
 
   if not gcno_mappings:
-    logging.error(
-        "Either 'to' or 'from' fields not found in the %s.",
-        config["output_dir"],
-    )
+    # read_gcno_mapping_files prints the error messages
     sys.exit(-1)
 
   tar_file = find_most_recent_tarfile(
@@ -419,13 +548,18 @@ def main() -> None:
     logging.error("Unable to find a gcov tar under %s", args.tar_location)
     sys.exit(-1)
 
-  gcov_dir = unpack_gcov_tar(tar_file, config["output_cov_dir"])
+  gcov_dir = unpack_gcov_tar(tar_file, config.tmp_dir)
   correct_symlinks_in_directory(gcov_dir, gcno_mappings)
+
+  create_llvm_gcov_sh(
+      config.llvm_cov_path,
+      config.llvm_gcov_sh_path,
+  )
+
   generate_lcov_tracefile(
       gcov_dir,
-      config["repo_dir"],
-      config["llvm_gcov_sh_filename"],
-      config["llvm_gcov_sh"],
+      config.repo_dir,
+      config.llvm_gcov_sh_path,
       args.out_file,
       args.include,
   )

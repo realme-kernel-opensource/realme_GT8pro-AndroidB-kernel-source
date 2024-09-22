@@ -491,9 +491,6 @@ const struct cred *override_creds(const struct cred *new)
 {
 	const struct cred *old = current->cred;
 
-	if (!new)
-		return NULL;
-
 	kdebug("override_creds(%p{%ld})", new,
 	       atomic_long_read(&new->usage));
 
@@ -525,9 +522,6 @@ EXPORT_SYMBOL(override_creds);
 void revert_creds(const struct cred *old)
 {
 	const struct cred *override = current->cred;
-
-	if (!old)
-		return;
 
 	kdebug("revert_creds(%p{%ld})", old,
 	       atomic_long_read(&old->usage));

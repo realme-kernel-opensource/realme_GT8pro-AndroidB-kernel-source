@@ -41,6 +41,7 @@
 #include <trace/hooks/timer.h>
 #include <trace/hooks/topology.h>
 #include <trace/hooks/hung_task.h>
+#include <trace/hooks/fpsimd.h>
 
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
@@ -119,3 +120,4 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_alter_mutex_list_add);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_mutex_unlock_slowpath);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_arch_set_freq_scale);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_cpu_capacity_show);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_is_fpsimd_save);

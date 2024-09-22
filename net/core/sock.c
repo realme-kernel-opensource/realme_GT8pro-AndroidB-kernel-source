@@ -127,6 +127,7 @@
 #include <net/net_namespace.h>
 #include <net/request_sock.h>
 #include <net/sock.h>
+#include <net/proto_memory.h>
 #include <linux/net_tstamp.h>
 #include <net/xfrm.h>
 #include <linux/ipsec.h>
@@ -284,7 +285,6 @@ __u32 sysctl_rmem_max __read_mostly = SK_RMEM_MAX;
 EXPORT_SYMBOL(sysctl_rmem_max);
 __u32 sysctl_wmem_default __read_mostly = SK_WMEM_MAX;
 __u32 sysctl_rmem_default __read_mostly = SK_RMEM_MAX;
-int sysctl_mem_pcpu_rsv __read_mostly = SK_MEMORY_PCPU_RESERVE;
 
 int sysctl_tstamp_allow_data __read_mostly = 1;
 
@@ -1084,6 +1084,17 @@ bool sockopt_capable(int cap)
 }
 EXPORT_SYMBOL(sockopt_capable);
 
+static int sockopt_validate_clockid(__kernel_clockid_t value)
+{
+	switch (value) {
+	case CLOCK_REALTIME:
+	case CLOCK_MONOTONIC:
+	case CLOCK_TAI:
+		return 0;
+	}
+	return -EINVAL;
+}
+
 /*
  *	This is meant for all protocols to use and covers goings on
  *	at the socket level. Everything here is generic.
@@ -1498,6 +1509,11 @@ set_sndbuf:
 			ret = -EPERM;
 			break;
 		}
+
+		ret = sockopt_validate_clockid(sk_txtime.clockid);
+		if (ret)
+			break;
+
 		sock_valbool_flag(sk, SOCK_TXTIME, true);
 		sk->sk_clockid = sk_txtime.clockid;
 		sk->sk_txtime_deadline_mode =
@@ -2263,7 +2279,12 @@ static void sk_init_common(struct sock *sk)
 	lockdep_set_class_and_name(&sk->sk_error_queue.lock,
 			af_elock_keys + sk->sk_family,
 			af_family_elock_key_strings[sk->sk_family]);
-	lockdep_set_class_and_name(&sk->sk_callback_lock,
+	if (sk->sk_kern_sock)
+		lockdep_set_class_and_name(&sk->sk_callback_lock,
+			af_kern_callback_keys + sk->sk_family,
+			af_family_kern_clock_key_strings[sk->sk_family]);
+	else
+		lockdep_set_class_and_name(&sk->sk_callback_lock,
 			af_callback_keys + sk->sk_family,
 			af_family_clock_key_strings[sk->sk_family]);
 }
@@ -2527,13 +2548,12 @@ EXPORT_SYMBOL(skb_set_owner_w);
 
 static bool can_skb_orphan_partial(const struct sk_buff *skb)
 {
-#ifdef CONFIG_TLS_DEVICE
 	/* Drivers depend on in-order delivery for crypto offload,
 	 * partial orphan breaks out-of-order-OK logic.
 	 */
-	if (skb->decrypted)
+	if (skb_is_decrypted(skb))
 		return false;
-#endif
+
 	return (skb->destructor == sock_wfree ||
 		(IS_ENABLED(CONFIG_INET) && skb->destructor == tcp_wfree));
 }
@@ -3243,8 +3263,8 @@ int sock_no_socketpair(struct socket *sock1, struct socket *sock2)
 }
 EXPORT_SYMBOL(sock_no_socketpair);
 
-int sock_no_accept(struct socket *sock, struct socket *newsock, int flags,
-		   bool kern)
+int sock_no_accept(struct socket *sock, struct socket *newsock,
+		   struct proto_accept_arg *arg)
 {
 	return -EOPNOTSUPP;
 }
@@ -3471,18 +3491,6 @@ void sock_init_data_uid(struct socket *sock, struct sock *sk, kuid_t uid)
 		RCU_INIT_POINTER(sk->sk_wq, NULL);
 	}
 	sk->sk_uid	=	uid;
-
-	rwlock_init(&sk->sk_callback_lock);
-	if (sk->sk_kern_sock)
-		lockdep_set_class_and_name(
-			&sk->sk_callback_lock,
-			af_kern_callback_keys + sk->sk_family,
-			af_family_kern_clock_key_strings[sk->sk_family]);
-	else
-		lockdep_set_class_and_name(
-			&sk->sk_callback_lock,
-			af_callback_keys + sk->sk_family,
-			af_family_clock_key_strings[sk->sk_family]);
 
 	sk->sk_state_change	=	sock_def_wakeup;
 	sk->sk_data_ready	=	sock_def_readable;
@@ -3753,6 +3761,9 @@ void sk_common_release(struct sock *sk)
 	 */
 
 	sk->sk_prot->unhash(sk);
+
+	if (sk->sk_socket)
+		sk->sk_socket->sk = NULL;
 
 	/*
 	 * In this point socket cannot receive new packets, but it is possible
