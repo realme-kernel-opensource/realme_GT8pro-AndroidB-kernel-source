@@ -4971,10 +4971,17 @@ static void ufs_qcom_config_scaling_param(struct ufs_hba *hba,
 					struct devfreq_dev_profile *p,
 					struct devfreq_simple_ondemand_data *d)
 {
+	struct device *dev = hba->dev;
+	struct device_node *np = dev->of_node;
+
 	p->polling_ms = 60;
 	p->timer = DEVFREQ_TIMER_DELAYED;
 	d->upthreshold = 70;
 	d->downdifferential = 65;
+
+	of_property_read_u32(np, "qcom,devfreq_polling_ms", &p->polling_ms);
+	of_property_read_u32(np, "qcom,devfreq_upthreshold", &d->upthreshold);
+	of_property_read_u32(np, "qcom,devfreq_downdifferential", &d->downdifferential);
 
 	hba->clk_scaling.suspend_on_no_request = true;
 }
