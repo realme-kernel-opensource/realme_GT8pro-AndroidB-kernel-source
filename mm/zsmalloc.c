@@ -380,6 +380,7 @@ static void *zs_zpool_map(void *pool, unsigned long handle,
 			enum zpool_mapmode mm)
 {
 	enum zs_mapmode zs_mm;
+	bool unused;
 
 	switch (mm) {
 	case ZPOOL_MM_RO:
@@ -394,7 +395,7 @@ static void *zs_zpool_map(void *pool, unsigned long handle,
 		break;
 	}
 
-	return zs_map_object(pool, handle, zs_mm);
+	return zs_map_object(pool, handle, zs_mm, &unused);
 }
 static void zs_zpool_unmap(void *pool, unsigned long handle)
 {
@@ -1176,8 +1177,27 @@ EXPORT_SYMBOL_GPL(zs_get_total_pages);
  *
  * This function returns with preemption and page faults disabled.
  */
+
+static void *_zs_map_object(struct zs_pool *pool, unsigned long handle,
+			    enum zs_mapmode mm, bool *page_straddle);
+
+void *zs_map_object_straddle_info(struct zs_pool *pool, unsigned long handle,
+				  enum zs_mapmode mm, bool *page_straddle)
+{
+	return _zs_map_object(pool, handle, mm, page_straddle);
+}
+EXPORT_SYMBOL_GPL(zs_map_object_straddle_info);
+
 void *zs_map_object(struct zs_pool *pool, unsigned long handle,
-			enum zs_mapmode mm)
+		    enum zs_mapmode mm)
+{
+	bool __maybe_unused unused;
+
+	return _zs_map_object(pool, handle, mm, &unused);
+}
+
+static void *_zs_map_object(struct zs_pool *pool, unsigned long handle,
+			    enum zs_mapmode mm, bool *page_straddle)
 {
 	struct zspage *zspage;
 	struct page *page;
@@ -1188,6 +1208,7 @@ void *zs_map_object(struct zs_pool *pool, unsigned long handle,
 	struct mapping_area *area;
 	struct page *pages[2];
 	void *ret;
+	*page_straddle = false;
 
 	/*
 	 * Because we use per-cpu mapping areas shared among the
@@ -1230,6 +1251,7 @@ void *zs_map_object(struct zs_pool *pool, unsigned long handle,
 	BUG_ON(!pages[1]);
 
 	ret = __zs_map_object(area, pages, off, class->size);
+	*page_straddle = true;
 out:
 	if (likely(!ZsHugePage(zspage)))
 		ret += ZS_HANDLE_SIZE;

@@ -48,6 +48,8 @@ void zs_free(struct zs_pool *pool, unsigned long obj);
 
 size_t zs_huge_class_size(struct zs_pool *pool);
 
+void *zs_map_object_straddle_info(struct zs_pool *pool, unsigned long handle,
+				  enum zs_mapmode mm, bool *page_straddle);
 void *zs_map_object(struct zs_pool *pool, unsigned long handle,
 			enum zs_mapmode mm);
 void zs_unmap_object(struct zs_pool *pool, unsigned long handle);
