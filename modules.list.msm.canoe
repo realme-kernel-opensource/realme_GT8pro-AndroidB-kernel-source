@@ -6,6 +6,7 @@ cambistmclkcc-canoe.ko
 camcc-canoe.ko
 clk-dummy.ko
 clk-qcom.ko
+clk-rpmh.ko
 cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko

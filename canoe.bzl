@@ -17,6 +17,7 @@ def define_canoe():
         "drivers/clk/qcom/camcc-canoe.ko",
         "drivers/clk/qcom/clk-dummy.ko",
         "drivers/clk/qcom/clk-qcom.ko",
+        "drivers/clk/qcom/clk-rpmh.ko",
         "drivers/clk/qcom/dispcc-canoe.ko",
         "drivers/clk/qcom/evacc-canoe.ko",
         "drivers/clk/qcom/gcc-canoe.ko",
