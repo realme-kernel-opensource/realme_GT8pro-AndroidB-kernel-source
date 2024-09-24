@@ -33,8 +33,10 @@ struct byte_cntr {
 	const char		*name;
 	const char		*class_name;
 	int			irqctrl_offset;
-	unsigned long	offset;
-	unsigned long	rwp_offset;
+	unsigned long		offset;
+	unsigned long		rwp_offset;
+	uint64_t		total_size;
+	uint64_t		total_irq;
 };
 
 extern void tmc_etr_byte_cntr_start(struct byte_cntr *byte_cntr_data);

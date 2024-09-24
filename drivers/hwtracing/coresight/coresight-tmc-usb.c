@@ -17,6 +17,7 @@
 #include "coresight-tmc.h"
 
 #define USB_BLK_SIZE 65536
+#define USB_TOTAL_IRQ (TMC_ETR_SW_USB_BUF_SIZE/USB_BLK_SIZE)
 #define USB_SG_NUM (USB_BLK_SIZE / PAGE_SIZE)
 #define USB_BUF_NUM 255
 #define USB_TIME_OUT (5 * HZ)
@@ -51,6 +52,9 @@ static int usb_bypass_start(struct byte_cntr *byte_cntr_data)
 		return offset;
 	}
 	byte_cntr_data->offset = offset;
+	byte_cntr_data->total_irq = 0;
+	tmcdrvdata->usb_data->drop_data_size = 0;
+	tmcdrvdata->usb_data->data_overwritten = false;
 
 	/*Ensure usbch is ready*/
 	if (!tmcdrvdata->usb_data->usbch) {
@@ -82,6 +86,7 @@ static int usb_bypass_start(struct byte_cntr *byte_cntr_data)
 			USB_BLK_SIZE / 8);
 
 	atomic_set(&byte_cntr_data->irq_cnt, 0);
+	byte_cntr_data->total_size = 0;
 	mutex_unlock(&byte_cntr_data->usb_bypass_lock);
 
 	return 0;
@@ -101,7 +106,15 @@ static void usb_bypass_stop(struct byte_cntr *byte_cntr_data)
 	}
 	wake_up(&byte_cntr_data->usb_wait_wq);
 	pr_info("coresight: stop usb bypass\n");
+	byte_cntr_data->rwp_offset = tmc_get_rwp_offset(byte_cntr_data->tmcdrvdata);
 	coresight_csr_set_byte_cntr(byte_cntr_data->csr, byte_cntr_data->irqctrl_offset, 0);
+	dev_dbg(&byte_cntr_data->tmcdrvdata->csdev->dev,
+		"USB total size: %lld, total irq: %lld,current irq:%d, offset: %ld, rwp_offset: %ld, drop_data: %lld\n",
+		byte_cntr_data->total_size, byte_cntr_data->total_irq,
+		atomic_read(&byte_cntr_data->irq_cnt),
+		byte_cntr_data->offset,
+		byte_cntr_data->rwp_offset,
+		byte_cntr_data->tmcdrvdata->usb_data->drop_data_size);
 	mutex_unlock(&byte_cntr_data->usb_bypass_lock);
 
 }
@@ -122,6 +135,11 @@ static int usb_transfer_small_packet(struct byte_cntr *drvdata, size_t *small_si
 		dev_err_ratelimited(&tmcdrvdata->csdev->dev,
 			"%s: RWP offset is invalid\n", __func__);
 		goto out;
+	}
+
+	if (unlikely(atomic_read(&drvdata->irq_cnt) > USB_TOTAL_IRQ)) {
+		tmcdrvdata->usb_data->data_overwritten = true;
+		dev_err_ratelimited(&tmcdrvdata->csdev->dev, "ETR data is overwritten.\n");
 	}
 
 	req_size = ((w_offset < drvdata->offset) ? etr_buf->size : 0) +
@@ -172,12 +190,13 @@ static int usb_transfer_small_packet(struct byte_cntr *drvdata, size_t *small_si
 					"Write data failed:%d\n", ret);
 				goto out;
 			}
-
+			drvdata->total_size += actual;
 			atomic_dec(&drvdata->usb_free_buf);
 		} else {
-			dev_dbg(&tmcdrvdata->csdev->dev,
-			"Drop data, offset = %ld, len = %ld\n",
+			dev_err_ratelimited(&tmcdrvdata->csdev->dev,
+			"Drop data, offset = %lu, len = %zu\n",
 				drvdata->offset, req_size);
+			tmcdrvdata->usb_data->drop_data_size += actual;
 			kfree(usb_req);
 			drvdata->usb_req = NULL;
 		}
@@ -221,6 +240,11 @@ static void usb_read_work_fn(struct work_struct *work)
 					return;
 				continue;
 			}
+		}
+
+		if (unlikely(atomic_read(&drvdata->irq_cnt) > USB_TOTAL_IRQ)) {
+			tmcdrvdata->usb_data->data_overwritten = true;
+			dev_err_ratelimited(&tmcdrvdata->csdev->dev, "ETR data is overwritten.\n");
 		}
 
 		req_size = USB_BLK_SIZE - small_size;
@@ -290,13 +314,15 @@ static void usb_read_work_fn(struct work_struct *work)
 						continue;
 					return;
 				}
+				drvdata->total_size += actual_total;
 				atomic_dec(&drvdata->usb_free_buf);
 
 			} else {
-				dev_dbg(&tmcdrvdata->csdev->dev,
-				"Drop data, offset = %ld, seq = %d, irq = %d\n",
+				dev_err_ratelimited(&tmcdrvdata->csdev->dev,
+				"Drop data, offset = %lu, seq = %d, irq = %d\n",
 					drvdata->offset, seq,
 					atomic_read(&drvdata->irq_cnt));
+				tmcdrvdata->usb_data->drop_data_size += actual_total;
 				kfree(usb_req->sg);
 				kfree(usb_req);
 				drvdata->usb_req = NULL;
@@ -446,7 +472,8 @@ int tmc_etr_usb_init(struct amba_device *adev,
 
 	if (tmc_etr_support_usb_bypass(dev)) {
 		usb_data->usb_mode = TMC_ETR_USB_SW;
-
+		usb_data->drop_data_size = 0;
+		usb_data->data_overwritten = false;
 		if (!byte_cntr_data)
 			return -EINVAL;
 

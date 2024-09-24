@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CORESIGHT_TMC_USB_H
@@ -21,6 +21,8 @@ struct tmc_usb_data {
 	struct usb_qdss_ch	*usbch;
 	enum tmc_etr_usb_mode	usb_mode;
 	struct tmc_drvdata	*tmcdrvdata;
+	bool			data_overwritten;
+	u64			drop_data_size;
 };
 
 extern int tmc_usb_enable(struct tmc_usb_data *usb_data);
