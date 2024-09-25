@@ -212,6 +212,7 @@ def define_sun():
         "drivers/usb/gadget/function/usb_f_cdev.ko",
         "drivers/usb/gadget/function/usb_f_gsi.ko",
         "drivers/usb/gadget/function/usb_f_qdss.ko",
+        "drivers/usb/host/xhci-sideband.ko",
         "drivers/usb/phy/phy-generic.ko",
         "drivers/usb/phy/phy-msm-m31-eusb2.ko",
         "drivers/usb/phy/phy-msm-ssusb-qmp.ko",
@@ -247,6 +248,7 @@ def define_sun():
         "net/qrtr/qrtr-smd.ko",
         "net/qrtr/qrtr-tun.ko",
         "net/wireless/cfg80211.ko",
+        "sound/usb/snd-usb-audio-qmi.ko",
     ]
 
     _sun_consolidate_in_tree_modules = _sun_in_tree_modules + [
