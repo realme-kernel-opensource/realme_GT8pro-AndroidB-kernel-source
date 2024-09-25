@@ -77,6 +77,7 @@ def define_canoe():
         "drivers/rpmsg/glink_pkt.ko",
         "drivers/rpmsg/qcom_glink.ko",
         "drivers/rpmsg/qcom_glink_smem.ko",
+        "drivers/rpmsg/qcom_glink_spss.ko",
         "drivers/rpmsg/qcom_smd.ko",
         "drivers/rtc/rtc-pm8xxx.ko",
         "drivers/scsi/sg.ko",
