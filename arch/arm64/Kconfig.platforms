@@ -278,6 +278,14 @@ config ARCH_CANOE
 	  chipset. If you do not wish to build a kernel that runs on this
 	  chipset or if you are unsure, say 'N' here.
 
+config ARCH_ALOR
+	bool "Enable support for Qualcomm Technologies, Inc. Alor"
+	depends on ARCH_QCOM
+	help
+	  This enables support for Qualcomm Technologies, Inc. Alor
+	  chipset. If you do not wish to build a kernel that runs on this
+	  chipset or if you are unsure, say 'N' here.
+
 config ARCH_QTI_VM
        bool "Enable Virtual Machines Support for Qualcomm Technologies, Inc."
        depends on ARCH_QCOM
