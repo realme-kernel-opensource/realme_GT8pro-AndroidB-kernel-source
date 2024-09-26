@@ -2082,6 +2082,26 @@ static const struct adsp_data canoe_cdsp_resource = {
 	.smem_host_id = 5,
 };
 
+static const struct adsp_data canoe_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.dtb_firmware_name = "modem_dtb.mdt",
+	.pas_id = 4,
+	.dtb_pas_id = 0x26,
+	.minidump_id = 3,
+	.decrypt_shutdown = true,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.region_assign_idx = 3,
+	.region_assign_count = 2,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+	.dma_phys_below_32b = true,
+	.both_dumps = true,
+};
+
 static const struct adsp_data pineapple_adsp_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
@@ -2204,6 +2224,7 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,sun-soccp-pas", .data = &sun_soccp_resource},
 	{ .compatible = "qcom,canoe-adsp-pas", .data = &canoe_adsp_resource},
 	{ .compatible = "qcom,canoe-cdsp-pas", .data = &canoe_cdsp_resource},
+	{ .compatible = "qcom,canoe-modem-pas", .data = &canoe_mpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);
