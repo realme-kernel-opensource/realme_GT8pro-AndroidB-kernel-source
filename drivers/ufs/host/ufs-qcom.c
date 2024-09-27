@@ -26,6 +26,7 @@
 #include <linux/thermal.h>
 #include <linux/cpufreq.h>
 #include <linux/debugfs.h>
+#include <linux/pm_domain.h>
 #include <trace/hooks/ufshcd.h>
 #include <linux/ipc_logging.h>
 #include <soc/qcom/minidump.h>
@@ -83,6 +84,11 @@
 				       ",%d,"fmt, raw_smp_processor_id(), \
 				       ##__VA_ARGS__);	\
 	} while (0)
+
+#define ufs_qcom_genpd_set_always_on(h) \
+	 ((h)->flags |= GENPD_FLAG_ALWAYS_ON)
+#define ufs_qcom_genpd_clear_always_on(h) \
+	 ((h)->flags &= ~GENPD_FLAG_ALWAYS_ON)
 
 enum {
 	UFS_QCOM_CMD_SEND,
@@ -1780,6 +1786,29 @@ static void ufs_qcom_device_reset_ctrl(struct ufs_hba *hba, bool asserted)
 	gpiod_set_value_cansleep(host->device_reset, asserted);
 }
 
+static void ufs_qcom_genpd_setup(struct ufs_hba *hba, bool always_on)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct phy *phy = host->generic_phy;
+	struct generic_pm_domain *core_genpd;
+	struct generic_pm_domain *phy_genpd;
+
+	if (IS_ERR_OR_NULL(hba->dev->pm_domain) ||
+		IS_ERR_OR_NULL(phy->dev.parent->pm_domain))
+		return;
+
+	core_genpd = pd_to_genpd(hba->dev->pm_domain);
+	phy_genpd = pd_to_genpd(phy->dev.parent->pm_domain);
+
+	if (always_on) {
+		ufs_qcom_genpd_set_always_on(core_genpd);
+		ufs_qcom_genpd_set_always_on(phy_genpd);
+	} else {
+		ufs_qcom_genpd_clear_always_on(core_genpd);
+		ufs_qcom_genpd_clear_always_on(phy_genpd);
+	}
+}
+
 static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 	enum ufs_notify_change_status status)
 {
@@ -1790,9 +1819,10 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 		return 0;
 
 	/*
-	 * If UniPro link is not active or OFF, PHY ref_clk, main PHY analog
-	 * power rail and low noise analog power rail for PLL can be
-	 * switched off.
+	 * If UniPro link is not active or OFF, PHY ref_clk, main PHY
+	 * analog power rail and low noise analog power rail for PLL
+	 * can be switched off. Otherwise, If UniPro link is active,
+	 * keep UFS_PHY_GDSC and UFS_PHY_MEM_GDSC always on.
 	 */
 	if (!ufs_qcom_is_link_active(hba)) {
 		ufs_qcom_disable_lane_clks(host);
@@ -1803,6 +1833,8 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 			ufs_qcom_disable_vreg(hba->dev, host->vccq_parent);
 		if (!err)
 			err = ufs_qcom_unvote_qos_all(hba);
+	} else {
+		ufs_qcom_genpd_setup(hba, true);
 	}
 
 	if (!err && ufs_qcom_is_link_off(hba) && host->device_reset)
@@ -1822,6 +1854,7 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 
 	cancel_dwork_unvote_cpufreq(hba);
 	ufs_qcom_ice_suspend(host);
+
 	return err;
 }
 
@@ -1858,12 +1891,15 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		spin_unlock_irqrestore(hba->host->host_lock, flags);
 	}
 
+	ufs_qcom_genpd_setup(hba, false);
+
 	ufs_qcom_log_str(host, "$,%d,%d,%d,%d,%d,%d\n",
 			pm_op, hba->rpm_lvl, hba->spm_lvl, hba->uic_link_state,
 			hba->curr_dev_pwr_mode, err);
 	if (host->dbg_en)
 		trace_ufs_qcom_resume(dev_name(hba->dev), pm_op, hba->rpm_lvl, hba->spm_lvl,
 				hba->uic_link_state, hba->curr_dev_pwr_mode, err);
+
 	return 0;
 }
 
