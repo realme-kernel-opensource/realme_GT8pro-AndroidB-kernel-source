@@ -624,7 +624,7 @@ static inline unsigned long capacity_curr_of(int cpu)
 
 static inline unsigned long task_util(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	return wts->demand_scaled;
 }
@@ -645,7 +645,7 @@ static inline unsigned long cpu_util_cum(int cpu)
 /* applying the task threshold for all types of low latency tasks. */
 static inline bool walt_low_latency_task(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	if (!wts->low_latency)
 		return false;
@@ -659,7 +659,7 @@ static inline bool walt_low_latency_task(struct task_struct *p)
 
 static inline bool walt_binder_low_latency_task(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	return (wts->low_latency & WALT_LOW_LATENCY_BINDER_BIT) &&
 		(task_util(p) < sysctl_walt_low_latency_task_threshold);
@@ -667,7 +667,7 @@ static inline bool walt_binder_low_latency_task(struct task_struct *p)
 
 static inline bool walt_procfs_low_latency_task(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	return (wts->low_latency & WALT_LOW_LATENCY_PROCFS_BIT) &&
 		(task_util(p) < sysctl_walt_low_latency_task_threshold);
@@ -675,7 +675,7 @@ static inline bool walt_procfs_low_latency_task(struct task_struct *p)
 
 static inline bool walt_pipeline_low_latency_task(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	return wts->low_latency & WALT_LOW_LATENCY_BIT_MASK;
 }
@@ -833,7 +833,7 @@ static inline int same_freq_domain(int src_cpu, int dst_cpu)
 
 static inline unsigned long task_util_est(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	return wts->demand_scaled;
 }
@@ -854,7 +854,7 @@ static inline unsigned long uclamp_task_util(struct task_struct *p)
 
 static inline int per_task_boost(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	if (wts->boost_period) {
 		if (walt_sched_clock() > wts->boost_expires) {
@@ -951,7 +951,7 @@ static inline bool is_suh_max(void)
 #define DEFAULT_CGROUP_COLOC_ID 1
 static inline bool walt_should_kick_upmigrate(struct task_struct *p, int cpu)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	struct walt_related_thread_group *rtg = wts->grp;
 
 	if (is_suh_max() && rtg && rtg->id == DEFAULT_CGROUP_COLOC_ID &&
@@ -973,7 +973,7 @@ static inline unsigned int walt_nr_rtg_high_prio(int cpu)
 
 static inline bool task_in_related_thread_group(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	return (rcu_access_pointer(wts->grp) != NULL);
 }
@@ -1103,7 +1103,7 @@ static inline unsigned int cpu_max_freq(int cpu)
 
 static inline unsigned int task_load(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	return wts->demand;
 }
@@ -1117,7 +1117,7 @@ static inline bool task_rtg_high_prio(struct task_struct *p)
 static inline struct walt_related_thread_group
 *task_related_thread_group(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	return rcu_dereference(wts->grp);
 }
@@ -1188,7 +1188,7 @@ extern int sched_long_running_rt_task_ms_handler(const struct ctl_table *table, 
 
 static inline void walt_flag_set(struct task_struct *p, unsigned int feature, bool set)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	if (set)
 		wts->flags |= feature;
@@ -1198,7 +1198,7 @@ static inline void walt_flag_set(struct task_struct *p, unsigned int feature, bo
 
 static inline bool walt_flag_test(struct task_struct *p, unsigned int feature)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	return wts->flags & feature;
 }

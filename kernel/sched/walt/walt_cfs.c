@@ -151,7 +151,7 @@ static unsigned long cpu_util_without(int cpu, struct task_struct *p)
 
 static inline bool walt_task_skip_min_cpu(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	return (sched_boost_type != CONSERVATIVE_BOOST) &&
 		walt_get_rtg_status(p) && (wts->unfilter ||
@@ -337,7 +337,7 @@ static void walt_find_best_target(struct sched_domain *sd,
 	unsigned int target_nr_rtg_high_prio = UINT_MAX;
 	bool rtg_high_prio_task = task_rtg_high_prio(p);
 	cpumask_t visit_cpus;
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	int packing_cpu, cpu;
 	unsigned int visited_cluster = 0;
 	unsigned int search_sibling_cluster = 0;
@@ -632,7 +632,7 @@ static inline u64
 cpu_util_next_walt_prs(int cpu, struct task_struct *p, int dst_cpu, bool prev_dst_same_cluster,
 											u64 *prs)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	long util = prs[cpu];
 
 	if (wts->prev_window) {
@@ -819,9 +819,9 @@ walt_compute_energy(struct task_struct *p, int dst_cpu, struct perf_domain *pd,
 
 static inline int wake_to_idle(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	struct walt_task_struct *cur_wts =
-		(struct walt_task_struct *) current->android_vendor_data1;
+		(struct walt_task_struct *)android_task_vendor_data(current);
 
 	return (cur_wts->wake_up_idle || wts->wake_up_idle);
 }
@@ -902,7 +902,7 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 	candidates = this_cpu_ptr(&energy_cpus);
 	cpumask_clear(candidates);
 
-	wts = (struct walt_task_struct *) p->android_vendor_data1;
+	wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	pipeline_cpu = wts->pipeline_cpu;
 
 	if (pipeline_in_progress() &&
@@ -1110,9 +1110,9 @@ walt_select_task_rq_fair(void *unused, struct task_struct *p, int prev_cpu,
 static void binder_set_priority_hook(void *data,
 				struct binder_transaction *bndrtrans, struct task_struct *task)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) task->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(task);
 	struct walt_task_struct *current_wts =
-			(struct walt_task_struct *) current->android_vendor_data1;
+			(struct walt_task_struct *)android_task_vendor_data(current);
 
 	if (unlikely(walt_disabled))
 		return;
@@ -1148,7 +1148,7 @@ static void binder_set_priority_hook(void *data,
 static void binder_restore_priority_hook(void *data,
 				struct binder_transaction *bndrtrans, struct task_struct *task)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) task->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(task);
 
 	if (unlikely(walt_disabled))
 		return;
@@ -1186,7 +1186,7 @@ int walt_get_mvp_task_prio(struct task_struct *p)
 
 static inline unsigned int walt_cfs_mvp_task_limit(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	/* Binder MVP tasks are high prio but have only single slice */
 	if (wts->mvp_prio == WALT_BINDER_MVP)
@@ -1220,7 +1220,7 @@ static void walt_cfs_insert_mvp_task(struct walt_rq *wrq, struct walt_task_struc
 void walt_cfs_deactivate_mvp_task(struct rq *rq, struct task_struct *p)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	list_del_init(&wts->mvp_list);
 	wts->mvp_prio = WALT_NOT_MVP;
@@ -1239,7 +1239,7 @@ void walt_cfs_deactivate_mvp_task(struct rq *rq, struct task_struct *p)
 static void walt_cfs_account_mvp_runtime(struct rq *rq, struct task_struct *curr)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts = (struct walt_task_struct *) curr->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(curr);
 	u64 slice;
 	unsigned int limit;
 
@@ -1312,7 +1312,7 @@ static void walt_cfs_account_mvp_runtime(struct rq *rq, struct task_struct *curr
 void walt_cfs_enqueue_task(struct rq *rq, struct task_struct *p)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	int mvp_prio = walt_get_mvp_task_prio(p);
 
 	if (mvp_prio == WALT_NOT_MVP)
@@ -1342,7 +1342,7 @@ void walt_cfs_enqueue_task(struct rq *rq, struct task_struct *p)
 
 void walt_cfs_dequeue_task(struct rq *rq, struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	if (!list_empty(&wts->mvp_list) && wts->mvp_list.next)
 		walt_cfs_deactivate_mvp_task(rq, p);
@@ -1360,7 +1360,7 @@ void walt_cfs_dequeue_task(struct rq *rq, struct task_struct *p)
 void walt_cfs_tick(struct rq *rq)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts = (struct walt_task_struct *) rq->curr->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(rq->curr);
 	bool skip_mvp;
 
 	if (unlikely(walt_disabled))
@@ -1395,9 +1395,9 @@ static void walt_cfs_check_preempt_wakeup_fair(void *unused, struct rq *rq, stru
 					  struct sched_entity *se, struct sched_entity *pse)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts_p = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts_p = (struct walt_task_struct *)android_task_vendor_data(p);
 	struct task_struct *c = rq->curr;
-	struct walt_task_struct *wts_c = (struct walt_task_struct *) rq->curr->android_vendor_data1;
+	struct walt_task_struct *wts_c = (struct walt_task_struct *)android_task_vendor_data(rq->curr);
 	bool resched = false, skip_mvp;
 	bool p_is_mvp, curr_is_mvp;
 
@@ -1507,7 +1507,7 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	if (wts->misfit)
 		wrq->walt_stats.nr_big_tasks++;
@@ -1523,7 +1523,7 @@ void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
 void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	if (wts->misfit)
 		wrq->walt_stats.nr_big_tasks--;

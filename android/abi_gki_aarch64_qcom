@@ -4215,6 +4215,7 @@
   vchan_init
   vchan_tx_desc_free
   vchan_tx_submit
+  vendor_data_pad
   verify_pkcs7_signature
   vfree
   vhost_add_used_and_signal

@@ -266,7 +266,7 @@ static void walt_select_task_rq_rt(void *unused, struct task_struct *task, int c
 
 	this_cpu = raw_smp_processor_id();
 	this_cpu_rq = cpu_rq(this_cpu);
-	wts = (struct walt_task_struct *) task->android_vendor_data1;
+	wts = (struct walt_task_struct *)android_task_vendor_data(task);
 
 	/*
 	 * Respect the sync flag as long as the task can run on this CPU.
@@ -386,7 +386,7 @@ static void walt_rt_find_lowest_rq(void *unused, struct task_struct *task,
 	if (unlikely(walt_disabled))
 		return;
 
-	wts = (struct walt_task_struct *) task->android_vendor_data1;
+	wts = (struct walt_task_struct *)android_task_vendor_data(task);
 
 	packing_cpu = walt_find_and_choose_cluster_packing_cpu(0, task);
 	if (packing_cpu >= 0) {

@@ -921,7 +921,7 @@ static void md_dump_runqueues(void)
 		seq_buf_printf(md_runq_seq_buf, "%5d", t->prio);
 		seq_buf_printf(md_runq_seq_buf, "%*s", 6, md_get_task_state(t));
 #if IS_ENABLED(CONFIG_SCHED_WALT)
-		wts = (struct walt_task_struct *) t->android_vendor_data1;
+		wts = (struct walt_task_struct *)android_task_vendor_data(t);
 		seq_buf_printf(md_runq_seq_buf, "%17llu", wts->last_enqueued_ts);
 		seq_buf_printf(md_runq_seq_buf, "%16llu", wts->last_sleep_ts);
 #endif

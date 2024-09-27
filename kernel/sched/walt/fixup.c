@@ -218,7 +218,7 @@ void account_yields(u64 wallclock)
 DEFINE_PER_CPU(unsigned int, walt_yield_to_sleep);
 static void walt_do_sched_yield_before(void *unused, long *skip)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *)current->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(current);
 	struct walt_sched_cluster *cluster = cpu_cluster(task_cpu(current));
 	struct smart_freq_cluster_info *smart_freq_info = cluster->smart_freq_info;
 	bool in_legacy_uncap;
