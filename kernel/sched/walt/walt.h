@@ -1489,6 +1489,8 @@ extern int sched_smart_freq_ipc_handler(const struct ctl_table *table, int write
 extern u8 smart_freq_legacy_reason_hyst_ms[LEGACY_SMART_FREQ][WALT_NR_CPUS];
 extern void update_smart_freq_legacy_reason_hyst_time(struct walt_sched_cluster *cluster);
 
+#define MIN_UTIL_FOR_STORAGE_BALANCING		700
+
 /* frequent yielder */
 #define MAX_YIELD_CNT_PER_TASK_THR		25
 #define	YIELD_INDUCED_SLEEP			BIT(7)
