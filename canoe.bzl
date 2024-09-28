@@ -97,6 +97,7 @@ def define_canoe():
         "drivers/soc/qcom/memshare/heap_mem_ext_v01.ko",
         "drivers/soc/qcom/memshare/msm_memshare.ko",
         "drivers/soc/qcom/pcie-pdc.ko",
+        "drivers/soc/qcom/pmic-pon-log.ko",
         "drivers/soc/qcom/qcom_aoss.ko",
         "drivers/soc/qcom/qcom_ice.ko",
         "drivers/soc/qcom/qcom_logbuf_boot_log.ko",
