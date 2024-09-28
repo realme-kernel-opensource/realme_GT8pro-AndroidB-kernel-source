@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright(C) 2016 Linaro Limited. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Author: Mathieu Poirier <mathieu.poirier@linaro.org>
  */
 
@@ -252,6 +253,9 @@ static int tmc_enable_etf_sink_perf(struct coresight_device *csdev, void *data)
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 	struct perf_output_handle *handle = data;
 	struct cs_buffers *buf = etm_perf_sink_config(handle);
+
+	if (buf == NULL)
+		return -EINVAL;
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 	do {

@@ -185,19 +185,25 @@ static ssize_t tmc_read(struct file *file, char __user *data, size_t len,
 	ssize_t actual;
 	struct tmc_drvdata *drvdata = container_of(file->private_data,
 						   struct tmc_drvdata, miscdev);
+
+	mutex_lock(&drvdata->mem_lock);
 	actual = tmc_get_sysfs_trace(drvdata, *ppos, len, &bufp);
-	if (actual <= 0)
+	if (actual <= 0) {
+		mutex_unlock(&drvdata->mem_lock);
 		return 0;
+	}
 
 	if (copy_to_user(data, bufp, actual)) {
 		dev_dbg(&drvdata->csdev->dev,
 			"%s: copy_to_user failed\n", __func__);
+		mutex_unlock(&drvdata->mem_lock);
 		return -EFAULT;
 	}
 
 	*ppos += actual;
 	dev_dbg(&drvdata->csdev->dev, "%zu bytes copied\n", actual);
 
+	mutex_unlock(&drvdata->mem_lock);
 	return actual;
 }
 
@@ -280,7 +286,7 @@ static ssize_t trigger_cntr_show(struct device *dev,
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
 	unsigned long val = drvdata->trigger_cntr;
 
-	return sprintf(buf, "%#lx\n", val);
+	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
 }
 
 static ssize_t trigger_cntr_store(struct device *dev,
@@ -305,7 +311,7 @@ static ssize_t buffer_size_show(struct device *dev,
 {
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
-	return sprintf(buf, "%#x\n", drvdata->size);
+	return scnprintf(buf, PAGE_SIZE, "%#x\n", drvdata->size);
 }
 
 static ssize_t buffer_size_store(struct device *dev,
@@ -511,6 +517,7 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 	desc.access = CSDEV_ACCESS_IOMEM(base);
 
 	spin_lock_init(&drvdata->spinlock);
+	mutex_init(&drvdata->mem_lock);
 
 	devid = readl_relaxed(drvdata->base + CORESIGHT_DEVID);
 	drvdata->config_type = BMVAL(devid, 6, 7);
@@ -520,6 +527,7 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 	drvdata->etr_mode = ETR_MODE_AUTO;
 
 	if (drvdata->config_type == TMC_CONFIG_TYPE_ETR) {
+		drvdata->out_mode = TMC_ETR_OUT_MODE_MEM;
 		drvdata->size = tmc_etr_get_default_buffer_size(dev);
 		drvdata->max_burst_size = tmc_etr_get_max_burst_size(dev);
 	} else {
@@ -559,6 +567,10 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 		dev_list = &etr_devs;
 
 		drvdata->byte_cntr = byte_cntr_init(adev, drvdata);
+
+		ret = tmc_etr_usb_init(adev, drvdata);
+		if (ret)
+			goto out;
 
 		break;
 	case TMC_CONFIG_TYPE_ETF:
@@ -617,7 +629,10 @@ static void tmc_shutdown(struct amba_device *adev)
 	if (coresight_get_mode(drvdata->csdev) == CS_MODE_DISABLED)
 		goto out;
 
-	if (drvdata->config_type == TMC_CONFIG_TYPE_ETR)
+	if (drvdata->config_type == TMC_CONFIG_TYPE_ETR &&
+		(drvdata->out_mode == TMC_ETR_OUT_MODE_MEM ||
+		 (drvdata->out_mode == TMC_ETR_OUT_MODE_USB &&
+		  drvdata->usb_data->usb_mode == TMC_ETR_USB_SW)))
 		tmc_etr_disable_hw(drvdata);
 
 	/*

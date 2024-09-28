@@ -201,7 +201,7 @@ int coresight_enable_sysfs(struct coresight_device *csdev)
 
 	path = coresight_build_path(csdev, sink);
 	if (IS_ERR(path)) {
-		pr_err("building path(s) failed\n");
+		pr_err("building path(s) failed %d\n", IS_ERR(path));
 		ret = PTR_ERR(path);
 		goto out;
 	}
@@ -244,6 +244,9 @@ void coresight_disable_sysfs(struct coresight_device *csdev)
 	ret = coresight_validate_source_sysfs(csdev, __func__);
 	if (ret)
 		goto out;
+
+	if (csdev->def_sink)
+		csdev->def_sink = NULL;
 
 	if (!coresight_disable_source_sysfs(csdev, NULL))
 		goto out;
@@ -359,6 +362,8 @@ static ssize_t sink_name_store(struct device *dev,
 	}
 
 	sink_name = kstrdup(buf, GFP_KERNEL);
+	if (!sink_name)
+		return -ENOMEM;
 	sink_name[size-1] = 0;
 
 	hash = hashlen_hash(hashlen_string(NULL, sink_name));
