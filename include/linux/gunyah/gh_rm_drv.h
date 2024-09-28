@@ -590,6 +590,11 @@ static inline int gh_rm_populate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 	return -EINVAL;
 }
 
+static inline int gh_rm_unpopulate_hyp_res(gh_vmid_t vmid, const char *vm_name)
+{
+	return -EINVAL;
+}
+
 /* Client APIs for VM Services */
 static inline struct gh_vm_status *gh_rm_vm_get_status(gh_vmid_t vmid)
 {
