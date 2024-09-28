@@ -39,7 +39,7 @@ struct qcom_dload {
 
 #define QCOM_DOWNLOAD_BOTHDUMP (QCOM_DOWNLOAD_FULLDUMP | QCOM_DOWNLOAD_MINIDUMP)
 
-static bool enable_dump =
+static int enable_dump =
 	IS_ENABLED(CONFIG_POWER_RESET_QCOM_DOWNLOAD_MODE_DEFAULT);
 static enum qcom_download_mode current_download_mode = QCOM_DOWNLOAD_NODUMP;
 static enum qcom_download_mode dump_mode = QCOM_DOWNLOAD_FULLDUMP;
@@ -74,12 +74,6 @@ static int set_dump_mode(enum qcom_download_mode mode)
 	return ret;
 }
 
-int get_dump_mode(void)
-{
-	return dump_mode;
-}
-EXPORT_SYMBOL_GPL(get_dump_mode);
-
 static void msm_enable_dump_mode(bool enable)
 {
 	if (enable)
@@ -108,7 +102,7 @@ static int param_set_download_mode(const char *val,
 	int ret;
 
 	/* update enable_dump according to user input */
-	ret = param_set_bool(val, kp);
+	ret = param_set_int(val, kp);
 	if (ret)
 		return ret;
 
