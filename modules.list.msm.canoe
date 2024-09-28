@@ -17,6 +17,7 @@ gcc-canoe.ko
 gdsc-regulator.ko
 gpucc-canoe.ko
 tcsrcc-canoe.ko
+videocc-canoe.ko
 smem.ko
 socinfo.ko
 icc-bcm-voter.ko
