@@ -16,3 +16,6 @@ msm_dma_iommu_mapping.ko
 secure_buffer.ko
 qcom_iommu_util.ko
 stub-regulator.ko
+clk-dummy.ko
+clk-qcom.ko
+gdsc-regulator.ko
