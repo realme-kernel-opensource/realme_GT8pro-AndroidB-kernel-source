@@ -914,11 +914,12 @@ static inline u64 sched_irqload(int cpu)
 		return 0;
 }
 
+extern cpumask_t walt_enforce_high_irq_cpu_mask;
 static inline int sched_cpu_high_irqload(int cpu)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
 
-	return wrq->high_irqload;
+	return wrq->high_irqload || cpumask_test_cpu(cpu, &walt_enforce_high_irq_cpu_mask);
 }
 
 static inline u64

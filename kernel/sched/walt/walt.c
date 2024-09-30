@@ -52,6 +52,10 @@ cpumask_t walt_cpus_taken_mask = { CPU_BITS_NONE };
 DEFINE_SPINLOCK(cpus_taken_lock);
 DEFINE_PER_CPU(int, cpus_taken_refcount);
 
+cpumask_t walt_enforce_high_irq_cpu_mask = { CPU_BITS_NONE };
+DEFINE_SPINLOCK(enforce_high_irq_cpu_lock);
+DEFINE_PER_CPU(int, enforce_high_irq_cpus_refcount);
+
 DEFINE_PER_CPU(struct walt_rq, walt_rq);
 unsigned int sysctl_sched_user_hint;
 static u64 sched_clock_last;
@@ -5353,6 +5357,50 @@ cpumask_t walt_get_cpus_taken(void)
 	return walt_cpus_taken_mask;
 }
 EXPORT_SYMBOL_GPL(walt_get_cpus_taken);
+
+int walt_set_enforce_high_irq_cpus(struct cpumask *set)
+{
+	unsigned long flags;
+	int cpu;
+
+	if (unlikely(walt_disabled))
+		return -EAGAIN;
+
+	spin_lock_irqsave(&enforce_high_irq_cpu_lock, flags);
+	for_each_cpu(cpu, set) {
+		per_cpu(enforce_high_irq_cpus_refcount, cpu)++;
+	}
+	cpumask_or(&walt_enforce_high_irq_cpu_mask, &walt_enforce_high_irq_cpu_mask, set);
+	spin_unlock_irqrestore(&enforce_high_irq_cpu_lock, flags);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(walt_set_enforce_high_irq_cpus);
+
+int walt_unset_enforce_high_irq_cpus(struct cpumask *unset)
+{
+	unsigned long flags;
+	int cpu;
+
+	if (unlikely(walt_disabled))
+		return -EAGAIN;
+
+	spin_lock_irqsave(&enforce_high_irq_cpu_lock, flags);
+	for_each_cpu(cpu, unset) {
+		if (per_cpu(enforce_high_irq_cpus_refcount, cpu) >= 1)
+			per_cpu(enforce_high_irq_cpus_refcount, cpu)--;
+		if (!per_cpu(enforce_high_irq_cpus_refcount, cpu))
+			cpumask_clear_cpu(cpu, &walt_enforce_high_irq_cpu_mask);
+	}
+	spin_unlock_irqrestore(&enforce_high_irq_cpu_lock, flags);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(walt_unset_enforce_high_irq_cpus);
+
+cpumask_t walt_get_enforce_high_irq_cpus(void)
+{
+	return walt_enforce_high_irq_cpu_mask;
+}
+EXPORT_SYMBOL_GPL(walt_get_enforce_high_irq_cpus);
 
 int walt_get_cpus_in_state1(struct cpumask *cpus)
 {
