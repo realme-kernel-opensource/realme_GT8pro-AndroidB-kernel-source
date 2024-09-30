@@ -103,7 +103,7 @@ int gh_resource_unregister_release_client(struct gh_resource_client *client)
 EXPORT_SYMBOL_GPL(gh_resource_unregister_release_client);
 
 static int send_request(const char *subsys_name,
-			struct gh_res_request *req_resource, int res_cnt,
+			struct gh_res_request *req_resource, uint8_t res_cnt,
 			bool is_req)
 {
 	struct gh_resource_payload *payload;
@@ -142,7 +142,7 @@ static int send_request(const char *subsys_name,
  * The function returns < 0 if failed to send the request.
  */
 int gh_resource_request(gh_vmid_t target_vmid, const char *subsys_name,
-			struct gh_res_request *req_resource, int res_cnt)
+			struct gh_res_request *req_resource, uint8_t res_cnt)
 {
 	int ret;
 
@@ -166,7 +166,7 @@ EXPORT_SYMBOL_GPL(gh_resource_request);
  * The function returns < 0 if failed to send the request.
  */
 int gh_resource_release(gh_vmid_t target_vmid, const char *subsys_name,
-			struct gh_res_request *release_resource, int res_cnt)
+			struct gh_res_request *release_resource, uint8_t res_cnt)
 {
 	int ret;
 

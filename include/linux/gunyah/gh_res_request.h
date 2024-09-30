@@ -56,7 +56,7 @@ struct gh_resource_payload {
 
 typedef int (*gh_resource_callback)(gh_vmid_t source_vmid, bool is_req,
 				    struct gh_res_request *resource,
-				    int resource_cnt);
+				    uint8_t resource_cnt);
 
 /**
  * struct gh_resource_client - Client driver who is interested in request
@@ -76,9 +76,10 @@ int gh_resource_unregister_req_client(struct gh_resource_client *client);
 int gh_resource_register_release_client(struct gh_resource_client *client);
 int gh_resource_unregister_release_client(struct gh_resource_client *client);
 int gh_resource_request(gh_vmid_t target_vmid, const char *subsys_name,
-			struct gh_res_request *req_resource, int res_cnt);
+			struct gh_res_request *req_resource, uint8_t res_cnt);
 int gh_resource_release(gh_vmid_t target_vmid, const char *subsys_name,
-			struct gh_res_request *release_resource, int res_cnt);
+			struct gh_res_request *release_resource,
+			uint8_t res_cnt);
 #else
 static inline int
 gh_resource_register_req_client(struct gh_resource_client *client)
@@ -103,14 +104,14 @@ gh_resource_unregister_release_client(struct gh_resource_client *client)
 static inline int gh_resource_request(gh_vmid_t target_vmid,
 				      const char *subsys_name,
 				      struct gh_res_request *req_resource,
-				      int res_cnt)
+				      uint8_t res_cnt)
 {
 	return -EINVAL;
 }
 static inline int gh_resource_release(gh_vmid_t target_vmid,
 				      const char *subsys_name,
 				      struct gh_res_request *release_resource,
-				      int res_cnt)
+				      uint8_t res_cnt)
 {
 	return -EINVAL;
 }
