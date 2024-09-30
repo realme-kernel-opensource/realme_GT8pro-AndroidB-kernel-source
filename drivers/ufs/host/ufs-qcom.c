@@ -2863,7 +2863,7 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 	struct device_node *group_node;
 	struct ufs_qcom_qos_req *qr;
 	struct qos_cpu_group *qcg;
-	int i, err, mask = 0;
+	int i, err, mask;
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	host->cpufreq_dis = true;
@@ -2880,6 +2880,11 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 		return;
 	}
 
+	if (!of_get_available_child_count(np)) {
+		dev_err(dev, "QoS groups undefined\n");
+		return;
+	}
+
 	qr = kzalloc(sizeof(*qr), GFP_KERNEL);
 	if (!qr)
 		return;
@@ -2887,12 +2892,7 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 	host->ufs_qos = qr;
 	qr->num_groups = of_get_available_child_count(np);
 	dev_dbg(hba->dev, "num-groups: %d\n", qr->num_groups);
-	if (!qr->num_groups) {
-		dev_err(dev, "QoS groups undefined\n");
-		kfree(qr);
-		host->ufs_qos = NULL;
-		return;
-	}
+
 	qcg = kzalloc(sizeof(*qcg) * qr->num_groups, GFP_KERNEL);
 	if (!qcg) {
 		kfree(qr);
@@ -2901,10 +2901,12 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 	}
 	qr->qcg = qcg;
 	for_each_available_child_of_node(np, group_node) {
+		mask = 0;
 		of_property_read_u32(group_node, "mask", &mask);
 		qcg->mask.bits[0] = mask;
-		if (!cpumask_subset(&qcg->mask, cpu_possible_mask)) {
-			dev_err(dev, "Invalid group mask\n");
+		if (!mask || !cpumask_subset(&qcg->mask, cpu_possible_mask)) {
+			dev_err(dev, "Invalid group mask 0x%x\n", mask);
+			host->cpufreq_dis = true;
 			goto out_err;
 		}
 
@@ -2967,30 +2969,30 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 	if (ufs_qcom_partial_cpu_found(host))
 		return;
 
-	if (np) {
-		of_property_read_u32(np, "qcom,prime-mask", &mask);
-		host->perf_mask.bits[0] = mask;
-		if (!cpumask_subset(&host->perf_mask, cpu_possible_mask)) {
-			dev_err(dev, "Invalid group prime mask\n");
-			host->perf_mask.bits[0] = UFS_QCOM_IRQ_PRIME_MASK;
-		}
-		mask = 0;
-		of_property_read_u32(np, "qcom,silver-mask", &mask);
-		host->def_mask.bits[0] = mask;
-		if (!cpumask_subset(&host->def_mask, cpu_possible_mask)) {
-			dev_err(dev, "Invalid group silver mask\n");
-			host->def_mask.bits[0] = UFS_QCOM_IRQ_SLVR_MASK;
-		}
-		mask = 0;
-		of_property_read_u32(np, "qcom,esi-affinity-mask", &mask);
-		host->esi_affinity_mask.bits[0] = mask;
-		if (!cpumask_subset(&host->esi_affinity_mask,
-				    cpu_possible_mask)) {
-			dev_err(dev, "Invalid group ESI affinity mask\n");
-			host->esi_affinity_mask.bits[0] =
-					UFS_QCOM_ESI_AFFINITY_MASK;
-		}
+	if (!np)
+		return;
+
+	of_property_read_u32(np, "qcom,prime-mask", &mask);
+	host->perf_mask.bits[0] = mask;
+	if (!cpumask_subset(&host->perf_mask, cpu_possible_mask)) {
+		dev_err(dev, "Invalid group prime mask 0x%x\n", mask);
+		host->perf_mask.bits[0] = UFS_QCOM_IRQ_PRIME_MASK;
 	}
+	mask = 0;
+	of_property_read_u32(np, "qcom,silver-mask", &mask);
+	host->def_mask.bits[0] = mask;
+	if (!cpumask_subset(&host->def_mask, cpu_possible_mask)) {
+		dev_err(dev, "Invalid group silver mask 0x%x\n", mask);
+		host->def_mask.bits[0] = UFS_QCOM_IRQ_SLVR_MASK;
+	}
+	mask = 0;
+	of_property_read_u32(np, "qcom,esi-affinity-mask", &mask);
+	host->esi_affinity_mask.bits[0] = mask;
+	if (!cpumask_subset(&host->esi_affinity_mask, cpu_possible_mask)) {
+		dev_err(dev, "Invalid group ESI affinity mask\n");
+		host->esi_affinity_mask.bits[0] = UFS_QCOM_ESI_AFFINITY_MASK;
+	}
+
 	/* If device includes perf mask, enable dynamic irq affinity feature */
 	if (host->perf_mask.bits[0])
 		host->irq_affinity_support = true;
