@@ -104,6 +104,7 @@ static struct clk_alpha_pll disp_cc_pll0 = {
 				.name = "bi_tcxo",
 			},
 			.num_parents = 1,
+			.flags = CLK_GET_RATE_NOCACHE,
 			.ops = &clk_alpha_pll_crm_taycan_elu_ops,
 		},
 		.vdd_data = {
