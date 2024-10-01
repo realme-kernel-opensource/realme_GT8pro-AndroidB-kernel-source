@@ -1444,24 +1444,26 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 		if (info->data_ep_pipe) {
 			ep = usb_pipe_endpoint(uadev[pcm_card_num].udev,
 						info->data_ep_pipe);
-			if (!ep)
+			if (!ep) {
 				uaudio_dbg("no data ep\n");
-			else
+			} else  {
 				xhci_sideband_stop_endpoint(uadev[pcm_card_num].sb,
 						ep);
-			xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb, ep);
+				xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb, ep);
+			}
 			info->data_ep_pipe = 0;
 		}
 
 		if (info->sync_ep_pipe) {
 			ep = usb_pipe_endpoint(uadev[pcm_card_num].udev,
 						info->sync_ep_pipe);
-			if (!ep)
+			if (!ep) {
 				uaudio_dbg("no sync ep\n");
-			else
+			} else {
 				xhci_sideband_stop_endpoint(uadev[pcm_card_num].sb,
 						ep);
-			xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb, ep);
+				xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb, ep);
+			}
 			info->sync_ep_pipe = 0;
 		}
 
