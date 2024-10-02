@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011-2015, 2017, 2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitfield.h>
@@ -16,7 +16,6 @@
 #include <linux/regmap.h>
 #include <linux/thermal.h>
 
-#include "../thermal_core.h"
 #include "../thermal_hwmon.h"
 
 #define QPNP_TM_REG_DIG_MINOR		0x00
@@ -474,7 +473,7 @@ static const struct thermal_zone_device_ops qpnp_tm_sensor_ops = {
 static int qpnp_tm_set_temp_dac_trip_temp(struct thermal_zone_device *tz,
 					  int trip, int temp)
 {
-	struct qpnp_tm_chip *chip = tz->devdata;
+	struct qpnp_tm_chip *chip = thermal_zone_device_priv(tz);
 	int ret;
 
 	mutex_lock(&chip->lock);
@@ -492,7 +491,7 @@ static const struct thermal_zone_device_ops qpnp_tm_sensor_temp_dac_ops = {
 static int qpnp_tm_set_temp_lite_trip_temp(struct thermal_zone_device *tz,
 					   int trip, int temp)
 {
-	struct qpnp_tm_chip *chip = tz->devdata;
+	struct qpnp_tm_chip *chip = thermal_zone_device_priv(tz);
 	int ret;
 
 	mutex_lock(&chip->lock);
