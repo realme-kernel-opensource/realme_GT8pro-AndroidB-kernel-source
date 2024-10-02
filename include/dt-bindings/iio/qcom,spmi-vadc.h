@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2012-2014,2018-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_QCOM_SPMI_VADC_H
@@ -382,6 +382,8 @@
 
 /* ADC channels for PMIC5 Gen4 */
 
+#define ADC5_GEN4_VIRTUAL_CHAN(bus_id, sid, chan)	(bus_id << 13 | sid << 8 | chan)
+
 #define ADC5_GEN4_OFFSET_REF			0x00
 #define ADC5_GEN4_1P25VREF			0x01
 #define ADC5_GEN4_VREF_VADC			0x02
@@ -407,9 +409,12 @@
 #define ADC5_GEN4_IIN				0x17
 #define ADC5_GEN4_TEMP_ALARM_LITE		0x18
 #define ADC5_GEN4_VREF_BAT2_THERM		0x1a
+#define ADC5_GEN4_EPM				0x1a
 #define ADC5_GEN4_ATEST1			0x1b
 #define ADC5_GEN4_ATEST2			0x1c
+#define ADC5_GEN4_ATEST3			0x1d
 #define ADC5_GEN4_VBAT_2S_MID_CHGR		0x1d
+#define ADC5_GEN4_ATEST4			0x1e
 
 /* 10k pull-up */
 #define ADC5_GEN4_AMUX1_THM_10K_PU		0x24
@@ -455,12 +460,16 @@
 
 /* 1/3 Divider */
 #define ADC5_GEN4_AMUX1_GPIO_DIV3		0x8a
+#define ADC5_GEN4_AMUX2_GPIO_DIV3		0x8b
+#define ADC5_GEN4_AMUX3_GPIO_DIV3		0x8c
+#define ADC5_GEN4_AMUX4_GPIO_DIV3		0X8d
 #define ADC5_GEN4_VPH_PWR			0x8e
 #define ADC5_GEN4_VBAT_SNS_QBG			0x8f
 #define ADC5_GEN4_VBAT_SNS_CHG			0x94
 #define ADC5_GEN4_VBAT_2S_MID_QBG		0x96
 #define ADC5_GEN4_VPH2_PWR			0x99
 #define ADC5_GEN4_VBAT_2S_MID_CHGR_DIV3		0x9d
+#define ADC5_GEN4_ATEST3_DIV3			0x9d
 #define ADC5_GEN4_VBAT_2S_MID2			0x9f
 #define ADC5_GEN4_ICHG_FB			0xa1
 
