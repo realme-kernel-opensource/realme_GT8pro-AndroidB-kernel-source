@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef WCD_USBSS_PRIV_H
 #define WCD_USBSS_PRIV_H
@@ -14,6 +14,7 @@
 #include <linux/i2c.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/usb/typec_mux.h>
 #include <linux/sched.h>
 #include <linux/soc/qcom/wcd939x-i2c.h>
 
@@ -23,7 +24,7 @@ struct wcd_usbss_ctxt {
 	struct regmap *regmap;
 	struct device *dev;
 	struct i2c_client *client;
-	struct notifier_block ucsi_nb;
+	struct typec_mux_dev *mux;
 	atomic_t usbc_mode;
 	struct work_struct usbc_analog_work;
 	struct blocking_notifier_head wcd_usbss_notifier;

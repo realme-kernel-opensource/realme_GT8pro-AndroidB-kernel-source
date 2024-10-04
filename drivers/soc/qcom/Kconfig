@@ -972,6 +972,7 @@ config QCOM_VM_ALIVE_LOG_ENCRYPT
 config QCOM_WCD_USBSS_I2C
 	tristate "WCD USBSS chip with I2C"
 	select REGMAP
+	depends on TYPEC
 	depends on I2C
 	help
 	 Support for the WCD939X USBSS IC switch chip controlled

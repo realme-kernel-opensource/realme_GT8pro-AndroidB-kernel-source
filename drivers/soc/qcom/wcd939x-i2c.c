@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/usb/typec.h>
-#include <linux/usb/ucsi_glink.h>
+#include <linux/usb/typec_altmode.h>
+#include <linux/usb/typec_mux.h>
 #include <linux/soc/qcom/wcd939x-i2c.h>
 #include <linux/qti-regmap-debugfs.h>
 #include <linux/pinctrl/consumer.h>
@@ -687,39 +688,37 @@ static int wcd_usbss_sysfs_init(struct wcd_usbss_ctxt *priv)
 	return 0;
 }
 
-static int wcd_usbss_usbc_event_changed(struct notifier_block *nb,
-				      unsigned long evt, void *ptr)
+static int wcd_usbss_mux_set(struct typec_mux_dev *mux,
+				 struct typec_mux_state *state)
 {
-	struct wcd_usbss_ctxt *priv =
-			container_of(nb, struct wcd_usbss_ctxt, ucsi_nb);
-	struct device *dev;
-	enum typec_accessory acc = ((struct ucsi_glink_constat_info *)ptr)->acc;
+	struct wcd_usbss_ctxt *priv = typec_mux_get_drvdata(mux);
+	enum typec_accessory acc;
 
 	if (!priv)
 		return -EINVAL;
 
-	dev = priv->dev;
-	if (!dev)
+	if (!priv->dev)
 		return -EINVAL;
 
-	dev_dbg(dev, "%s: USB change event received, supply mode %d, usbc mode %d, expected %d\n",
+	if (state->mode == TYPEC_MODE_AUDIO)
+		acc = TYPEC_ACCESSORY_AUDIO;
+	else if (state->mode == TYPEC_MODE_DEBUG)
+		acc = TYPEC_ACCESSORY_DEBUG;
+	else
+		acc = TYPEC_ACCESSORY_NONE;
+
+	dev_dbg(priv->dev, "%s: USB change event received, supply mode %d, usbc mode %d, expected %d\n",
 			__func__, acc, priv->usbc_mode.counter,
 			TYPEC_ACCESSORY_AUDIO);
 
-	switch (acc) {
-	case TYPEC_ACCESSORY_AUDIO:
-	case TYPEC_ACCESSORY_NONE:
-		if (atomic_read(&(priv->usbc_mode)) == acc)
-			break; /* filter notifications received before */
-		atomic_set(&(priv->usbc_mode), acc);
+	if (acc == TYPEC_ACCESSORY_DEBUG)
+		return 0;
 
-		dev_dbg(dev, "%s: queueing usbc_analog_work\n",
-			__func__);
+	if (atomic_read(&(priv->usbc_mode)) != acc) {
+		atomic_set(&(priv->usbc_mode), acc);
+		dev_dbg(priv->dev, "%s: queueing usbc_analog_work\n", __func__);
 		pm_stay_awake(priv->dev);
 		queue_work(system_freezable_wq, &priv->usbc_analog_work);
-		break;
-	default:
-		break;
 	}
 
 	return 0;
@@ -1641,6 +1640,7 @@ exit:
 
 static int wcd_usbss_probe(struct i2c_client *i2c)
 {
+	struct typec_mux_desc mux_desc = { };
 	struct wcd_usbss_ctxt *priv;
 	struct device *dev = &i2c->dev;
 	int rc = 0, i;
@@ -1734,12 +1734,13 @@ static int wcd_usbss_probe(struct i2c_client *i2c)
 	else
 		dev_info(priv->dev, "wcd standby feature not enabled\n");
 
-	priv->ucsi_nb.notifier_call = wcd_usbss_usbc_event_changed;
-	priv->ucsi_nb.priority = 0;
-	rc = register_ucsi_glink_notifier(&priv->ucsi_nb);
-	if (rc) {
-		dev_err(priv->dev, "%s: ucsi glink notifier registration failed: %d\n",
-			__func__, rc);
+	mux_desc.drvdata = priv;
+	mux_desc.fwnode = dev_fwnode(priv->dev);
+	mux_desc.set = wcd_usbss_mux_set;
+
+	priv->mux = typec_mux_register(priv->dev, &mux_desc);
+	if (IS_ERR(priv->mux)) {
+		rc = dev_err_probe(dev, PTR_ERR(priv->mux), "failed to register typec mux\n");
 		goto err_data;
 	}
 
@@ -1782,7 +1783,7 @@ static void wcd_usbss_remove(struct i2c_client *i2c)
 				__func__, error);
 
 	wcd_usbss_disable_surge_kthread();
-	unregister_ucsi_glink_notifier(&priv->ucsi_nb);
+	typec_mux_unregister(priv->mux);
 	cancel_work_sync(&priv->usbc_analog_work);
 	pm_relax(priv->dev);
 	mutex_destroy(&priv->notification_lock);
