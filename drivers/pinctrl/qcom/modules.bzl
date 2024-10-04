@@ -103,3 +103,23 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-alor",
+        out = "pinctrl-alor.ko",
+        config = "CONFIG_PINCTRL_ALOR",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-alor.c",
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
