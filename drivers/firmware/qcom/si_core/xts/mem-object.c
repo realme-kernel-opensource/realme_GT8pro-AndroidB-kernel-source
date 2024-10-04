@@ -25,6 +25,10 @@
 
 #define SMCINVOKE_ASYNC_VERSION 0x00010002U
 
+/* TZ defined values for cacheability */
+#define CACHE_NS_CACHED 0x10000000U
+#define CACHE_UNCACHED 0x20000000U
+
 static struct platform_device *mem_object_pdev;
 
 static struct si_object primordial_object;
@@ -76,6 +80,7 @@ struct mem_object {
 			struct mapping_info {
 				phys_addr_t p_addr;
 				size_t p_addr_len;
+				uint32_t perms;
 			} mapping_info;
 		};
 
@@ -155,9 +160,10 @@ static int make_shm_bridge_single(struct mem_object *mo)
 
 	mo->mapping_info.p_addr = sg_dma_address(mo->map.sgt->sgl);
 	mo->mapping_info.p_addr_len = sg_dma_len(mo->map.sgt->sgl);
+	mo->mapping_info.perms = PERM_READ | PERM_WRITE;
 
 	ret = qtee_shmbridge_register(mo->mapping_info.p_addr, mo->mapping_info.p_addr_len,
-		vmid_list, perms_list, nelems, PERM_READ | PERM_WRITE,
+		vmid_list, perms_list, nelems, mo->mapping_info.perms,
 		&mo->shm_bridge_handle);
 
 	kfree(perms_list);
@@ -289,7 +295,8 @@ static unsigned long mo_shm_bridge_prepare(struct si_object *object, struct si_a
 		mi = (typeof(mi)) (args[0].b.addr);
 		mi->p_addr = mo->mapping_info.p_addr;
 		mi->len = mo->mapping_info.p_addr_len;
-		mi->perms = 6; /* RW Permission. */
+		/* append cacheability info to upper nibble */
+		mi->perms = CACHE_NS_CACHED | mo->mapping_info.perms;
 		args[0].b.size = sizeof(*mi);
 
 		args[1].o = object;
@@ -374,7 +381,8 @@ static int shm_bridge__po_dispatch(unsigned int context_id,
 			mi = (typeof(mi)) (args[0].b.addr);
 			mi->p_addr = mo->mapping_info.p_addr;
 			mi->len = mo->mapping_info.p_addr_len;
-			mi->perms = 6; /* RW Permission. */
+			/* append cacheability info to upper nibble */
+			mi->perms = CACHE_NS_CACHED | mo->mapping_info.perms;
 
 			pr_info("%s mapped %llx %llx\n",
 				si_object_name(object), mi->p_addr, mi->len);
