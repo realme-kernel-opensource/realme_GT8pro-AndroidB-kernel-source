@@ -51,6 +51,7 @@ def define_canoe():
         "drivers/iommu/qcom_iommu_debug.ko",
         "drivers/iommu/qcom_iommu_util.ko",
         "drivers/irqchip/qcom-pdc.ko",
+        "drivers/leds/flash/leds-qcom-flash.ko",
         "drivers/leds/rgb/leds-qcom-lpg.ko",
         "drivers/mailbox/msm_qmp.ko",
         "drivers/mailbox/qcom-ipcc.ko",
