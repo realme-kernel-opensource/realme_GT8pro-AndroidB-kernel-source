@@ -3918,6 +3918,9 @@
   tty_vhangup
   tty_wakeup
   typec_get_drvdata
+  typec_mux_get_drvdata
+  typec_mux_register
+  typec_mux_unregister
   typec_register_partner
   typec_register_port
   typec_set_data_role
