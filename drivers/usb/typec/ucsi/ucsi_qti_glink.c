@@ -11,13 +11,10 @@
 #include <linux/device.h>
 #include <linux/ipc_logging.h>
 #include <linux/module.h>
-#include <linux/notifier.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/soc/qcom/qti_pmic_glink.h>
-#include <linux/usb/typec.h>
-#include <linux/usb/ucsi_glink.h>
 
 #include "ucsi.h"
 
@@ -71,11 +68,6 @@ struct ucsi_notify_ind_msg {
 	u32			reserved;
 };
 
-struct constat_info_entry {
-	struct list_head		node;
-	struct ucsi_glink_constat_info	constat_info;
-};
-
 struct ucsi_dev {
 	struct device			*dev;
 	struct ucsi			*ucsi;
@@ -86,14 +78,10 @@ struct ucsi_dev {
 	struct completion		sync_write_ack;
 	struct mutex			read_lock;
 	struct mutex			write_lock;
-	struct mutex			notify_lock;
 	struct mutex			state_lock;
 	struct ucsi_read_buf_resp_msg	rx_buf;
 	unsigned long			flags;
 	atomic_t			rx_valid;
-	unsigned long			cmd_requested_flags;
-	struct list_head		constat_info_list;
-	struct work_struct		notify_work;
 	struct work_struct		setup_work;
 	struct work_struct		unregister_work;
 	atomic_t			state;
@@ -108,19 +96,6 @@ struct remoteproc_ts {
 };
 
 static void *ucsi_ipc_log;
-static RAW_NOTIFIER_HEAD(ucsi_glink_notifier);
-
-int register_ucsi_glink_notifier(struct notifier_block *nb)
-{
-	return raw_notifier_chain_register(&ucsi_glink_notifier, nb);
-}
-EXPORT_SYMBOL(register_ucsi_glink_notifier);
-
-int unregister_ucsi_glink_notifier(struct notifier_block *nb)
-{
-	return raw_notifier_chain_unregister(&ucsi_glink_notifier, nb);
-}
-EXPORT_SYMBOL(unregister_ucsi_glink_notifier);
 
 static char *offset_to_name(unsigned int offset)
 {
@@ -320,7 +295,6 @@ static bool validate_ucsi_msg(unsigned int offset, size_t len)
 	return true;
 }
 
-#define CONN_STAT_REQD	1
 static int ucsi_qti_glink_write(struct ucsi_dev *udev, unsigned int offset,
 			       const void *val, size_t val_len, bool sync)
 {
@@ -379,12 +353,6 @@ static int ucsi_qti_glink_write(struct ucsi_dev *udev, unsigned int offset,
 		}
 	}
 
-	if (((u8 *)val)[0] == UCSI_GET_CONNECTOR_STATUS) {
-		mutex_lock(&udev->notify_lock);
-		set_bit(CONN_STAT_REQD, &udev->cmd_requested_flags);
-		mutex_unlock(&udev->notify_lock);
-	}
-
 out:
 	if (sync)
 		clear_bit(CMD_PENDING, &udev->flags);
@@ -408,85 +376,6 @@ static int ucsi_qti_sync_control(struct ucsi *ucsi, u64 command)
 
 	return ucsi_qti_glink_write(udev, UCSI_CONTROL, &command,
 				sizeof(command), true);
-}
-
-static void ucsi_qti_clean_notification(struct ucsi_dev *udev)
-{
-	struct constat_info_entry *entry, *tmp;
-
-	mutex_lock(&udev->notify_lock);
-	list_for_each_entry_safe(entry, tmp, &udev->constat_info_list, node) {
-		list_del(&entry->node);
-		kfree(entry);
-	}
-	INIT_LIST_HEAD(&udev->constat_info_list);
-	mutex_unlock(&udev->notify_lock);
-}
-
-static void ucsi_qti_notify_work(struct work_struct *work)
-{
-	struct ucsi_dev *udev = container_of(work, struct ucsi_dev,
-			notify_work);
-	struct constat_info_entry *entry;
-
-	mutex_lock(&udev->notify_lock);
-	while (!list_empty(&udev->constat_info_list)) {
-		entry = list_first_entry(&udev->constat_info_list,
-					struct constat_info_entry, node);
-		list_del(&entry->node);
-		mutex_unlock(&udev->notify_lock);
-		raw_notifier_call_chain(&ucsi_glink_notifier,
-					0, &entry->constat_info);
-		kfree(entry);
-		mutex_lock(&udev->notify_lock);
-	}
-	mutex_unlock(&udev->notify_lock);
-}
-
-static void ucsi_qti_notify(struct ucsi_dev *udev, unsigned int offset,
-			    struct ucsi_connector_status *status, size_t len)
-{
-	u8 conn_partner_type;
-	bool cmd_requested;
-	struct constat_info_entry *entry;
-
-	if (len != sizeof(*status)) {
-		/* For UCSI v1.x maximum length is 16 bytes */
-		if (udev->ucsi->version > UCSI_VERSION_1_2 || len != 16)
-			return;
-	}
-
-	mutex_lock(&udev->notify_lock);
-	cmd_requested = test_bit(CONN_STAT_REQD, &udev->cmd_requested_flags);
-	mutex_unlock(&udev->notify_lock);
-
-	if (cmd_requested && offset == UCSI_MESSAGE_IN) {
-		entry = kzalloc(sizeof(*entry), GFP_KERNEL);
-		if (!entry)
-			return;
-
-		INIT_LIST_HEAD(&entry->node);
-		conn_partner_type = UCSI_CONSTAT_PARTNER_TYPE(status->flags);
-
-		switch (conn_partner_type) {
-		case UCSI_CONSTAT_PARTNER_TYPE_AUDIO:
-			entry->constat_info.acc = TYPEC_ACCESSORY_AUDIO;
-			break;
-		case UCSI_CONSTAT_PARTNER_TYPE_DEBUG:
-			entry->constat_info.acc = TYPEC_ACCESSORY_DEBUG;
-			break;
-		default:
-			entry->constat_info.acc = TYPEC_ACCESSORY_NONE;
-			break;
-		}
-
-		mutex_lock(&udev->notify_lock);
-		list_add_tail(&entry->node, &udev->constat_info_list);
-		clear_bit(CONN_STAT_REQD, &udev->cmd_requested_flags);
-		mutex_unlock(&udev->notify_lock);
-
-		schedule_work(&udev->notify_work);
-	}
 }
 
 static int ucsi_qti_read(struct ucsi *ucsi, unsigned int offset,
@@ -535,7 +424,6 @@ static int ucsi_qti_read(struct ucsi *ucsi, unsigned int offset,
 	memcpy((u8 *)val, &udev->rx_buf.buf[offset], val_len);
 	atomic_set(&udev->rx_valid, 0);
 	ucsi_log(udev, "read:", offset, (u8 *)val, val_len);
-	ucsi_qti_notify(udev, offset, val, val_len);
 
 out:
 	mutex_unlock(&udev->read_lock);
@@ -620,7 +508,6 @@ static void ucsi_qti_unregister_work(struct work_struct *work)
 	}
 
 	mutex_lock(&udev->state_lock);
-	ucsi_qti_clean_notification(udev);
 	ucsi_unregister(udev->ucsi);
 	ucsi_destroy(udev->ucsi);
 	udev->ucsi = NULL;
@@ -662,13 +549,10 @@ static int ucsi_probe(struct platform_device *pdev)
 	if (!udev)
 		return -ENOMEM;
 
-	INIT_LIST_HEAD(&udev->constat_info_list);
-	INIT_WORK(&udev->notify_work, ucsi_qti_notify_work);
 	INIT_WORK(&udev->setup_work, ucsi_qti_setup_work);
 	INIT_WORK(&udev->unregister_work, ucsi_qti_unregister_work);
 	mutex_init(&udev->read_lock);
 	mutex_init(&udev->write_lock);
-	mutex_init(&udev->notify_lock);
 	mutex_init(&udev->state_lock);
 	init_completion(&udev->read_ack);
 	init_completion(&udev->write_ack);
@@ -727,10 +611,8 @@ static void ucsi_remove(struct platform_device *pdev)
 	int rc;
 
 	debugfs_remove_recursive(udev->debugfs_dir);
-	cancel_work_sync(&udev->notify_work);
 	cancel_work_sync(&udev->setup_work);
 	if (!cancel_work_sync(&udev->unregister_work)) {
-		ucsi_qti_clean_notification(udev);
 		ucsi_unregister(udev->ucsi);
 		ucsi_destroy(udev->ucsi);
 	}
