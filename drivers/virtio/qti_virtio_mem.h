@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef QTI_VIRTIO_MEM_PRIVATE_H
 #define QTI_VIRTIO_MEM_PRIVATE_H
@@ -82,6 +82,11 @@ struct virtio_mem {
 	uint64_t addr;
 	/* Maximum region size in bytes. */
 	uint64_t region_size;
+	/*
+	 * When memmap_on_memory is enabled, the maximum usable size is less
+	 * than the region_size.
+	 */
+	uint64_t max_pluggable_size;
 
 	/* The parent resource for all memory added via this device. */
 	struct resource *parent_resource;
@@ -104,6 +109,13 @@ struct virtio_mem {
 
 	/* If set, the driver is in SBM, otherwise in BBM. */
 	bool in_sbm;
+
+	/*
+	 * The first group of pages in a memory_block are used for memmap.
+	 * If sbm mode is used, sb_size must equal memmap size, and sb_id == 0
+	 * is located at offset sb_size in a memory_block.
+	 */
+	bool memmap_on_memory;
 
 	/*
 	 * Indicates the virtio_mem driver should enable memory encryption on
@@ -221,6 +233,8 @@ struct virtio_mem {
 };
 
 void virtio_mem_config_changed(struct platform_device *vdev);
+int qti_virtio_mem_init(struct platform_device *pdev);
+void qti_virtio_mem_exit(struct platform_device *pdev);
 
 /* For now, only allow one virtio-mem device */
 extern struct virtio_mem *virtio_mem_dev;
