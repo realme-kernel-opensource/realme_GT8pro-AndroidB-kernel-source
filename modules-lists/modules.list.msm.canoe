@@ -53,6 +53,7 @@ qcom-dload-mode.ko
 memory_dump_v2.ko
 minidump.ko
 pinctrl-msm.ko
+pinctrl-alor.ko
 pinctrl-canoe.ko
 qcom_tsens.ko
 qcom-ipcc.ko
