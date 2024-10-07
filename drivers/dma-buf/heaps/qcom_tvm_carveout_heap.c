@@ -43,6 +43,8 @@ struct tvm_heap {
 };
 #define CARVEOUT_ALLOCATE_FAIL -1
 
+static struct dmabuf_membuf_helper *membuf_helper;
+
 static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_data)
 {
 	struct tvm_pool *pool;
@@ -54,6 +56,11 @@ static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_da
 	struct mem_buf_dmabuf_obj *obj;
 	int ret;
 	void *kva;
+
+	if (!membuf_helper) {
+		pr_err("mem_buf API helper is NOT registered!\n");
+		return ERR_PTR(-EINVAL);
+	}
 
 	pool = kzalloc(sizeof(*pool), GFP_KERNEL);
 	if (!pool)
@@ -68,7 +75,7 @@ static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_da
 
 	/* check if its large dmabuf and would require alternate memory for memmap. */
 	dmabuf_size = alloc_data->size;
-	memmap_size = determine_memmap_size(dmabuf_size);
+	memmap_size = membuf_helper->dmabuf_membuf_determine_memmap_size(dmabuf_size);
 
 	/*
 	 * if dmabuf is large or default memmap allocation would likely fail,
@@ -76,7 +83,7 @@ static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_da
 	 * for this large dmabuf.
 	 */
 	if (dmabuf_size >= SZ_128M && dmabuf_mem_pool) {
-		ret = prepare_altmap(obj, &sgl_desc, dmabuf_size);
+		ret = membuf_helper->dmabuf_membuf_prepare_altmap(obj, &sgl_desc, dmabuf_size);
 		if (ret)
 			goto err_altmap;
 		memmap_base = PFN_PHYS(obj->pgmap.altmap.base_pfn);
@@ -84,7 +91,7 @@ static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_da
 
 	if (sgl_desc)
 		alloc_data->sgl_desc = sgl_desc;
-	pool->membuf = mem_buf_alloc(alloc_data);
+	pool->membuf = membuf_helper->dmabuf_membuf_alloc(alloc_data);
 	if (IS_ERR(pool->membuf)) {
 		ret = PTR_ERR(pool->membuf);
 		goto err_mem_buf_alloc;
@@ -94,7 +101,7 @@ static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_da
 	kfree(sgl_desc);
 	sgl_desc = NULL;
 
-	sgl_desc = mem_buf_get_sgl(pool->membuf);
+	sgl_desc = membuf_helper->dmabuf_membuf_get_sgl(pool->membuf);
 	if (sgl_desc->n_sgl_entries != 1) {
 		pr_err("Memory not contiguous!\n");
 		ret = EINVAL;
@@ -144,10 +151,10 @@ err_gen_pool_add:
 err_gen_pool_create:
 	memunmap_pages(pgmap);
 err_memremap:
-	mem_buf_free(pool->membuf);
+	membuf_helper->dmabuf_membuf_free(pool->membuf);
 err_mem_buf_alloc:
 	if (obj->memmap)
-		mem_buf_free(obj->memmap);
+		membuf_helper->dmabuf_membuf_free(obj->memmap);
 	if (obj->memmap_base)
 		gen_pool_free(dmabuf_mem_pool, obj->memmap_base, obj->memmap_size);
 	kfree(sgl_desc);
@@ -164,15 +171,20 @@ static void tvm_pool_release(struct kref *kref)
 	struct gh_sgl_desc *sgl_desc;
 	struct mem_buf_dmabuf_obj *obj;
 
+	if (!membuf_helper) {
+		pr_err("mem_buf API helper is NOT registered!\n");
+		return;
+	}
+
 	pool = container_of(kref, struct tvm_pool, kref);
 
 	gen_pool_destroy(pool->pool);
-	sgl_desc = mem_buf_get_sgl(pool->membuf);
+	sgl_desc = membuf_helper->dmabuf_membuf_get_sgl(pool->membuf);
 	memunmap_pages(&pool->pgmap);
-	mem_buf_free(pool->membuf);
+	membuf_helper->dmabuf_membuf_free(pool->membuf);
 	obj = pool->mem_buf_dmabuf_obj;
 	if (obj->memmap)
-		mem_buf_free(obj->memmap);
+		membuf_helper->dmabuf_membuf_free(obj->memmap);
 	if (obj->memmap_base)
 		gen_pool_free(dmabuf_mem_pool, obj->memmap_base, obj->memmap_size);
 	kfree(obj);
@@ -451,3 +463,9 @@ err_dma_heap_add:
 	kfree(heap);
 	return ret;
 }
+
+void register_helper(struct dmabuf_membuf_helper *helper_obj)
+{
+	membuf_helper = helper_obj;
+}
+EXPORT_SYMBOL_GPL(register_helper);
