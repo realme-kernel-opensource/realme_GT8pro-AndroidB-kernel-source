@@ -493,7 +493,7 @@ void smart_freq_init(const char *name)
 		i++;
 	}
 
-	if (!strcmp(name, "SUN")) {
+	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */
