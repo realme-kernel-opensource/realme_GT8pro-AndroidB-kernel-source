@@ -6312,7 +6312,7 @@ err:
 	return ret;
 }
 
-static int dwc3_msm_remove(struct platform_device *pdev)
+static void dwc3_msm_remove(struct platform_device *pdev)
 {
 	struct dwc3_msm	*mdwc = platform_get_drvdata(pdev);
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
@@ -6392,8 +6392,6 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 
 	kfree(mdwc->xhci_pm_ops);
 	kfree(mdwc->dwc3_pm_ops);
-
-	return 0;
 }
 
 static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)

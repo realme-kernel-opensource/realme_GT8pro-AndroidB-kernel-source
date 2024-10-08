@@ -692,7 +692,7 @@ static int net_id(char **str, int *start_out, int *end_out)
 	return n;
 }
 
-static int net_remove(int n, char **error_out)
+static void net_remove(int n, char **error_out)
 {
 	struct uml_net *device;
 	struct net_device *dev;
@@ -700,16 +700,14 @@ static int net_remove(int n, char **error_out)
 
 	device = find_device(n);
 	if (device == NULL)
-		return -ENODEV;
+		return;
 
 	dev = device->dev;
 	lp = netdev_priv(dev);
 	if (lp->fd > 0)
-		return -EBUSY;
+		return;
 	unregister_netdev(dev);
 	platform_device_unregister(&device->pdev);
-
-	return 0;
 }
 
 static struct mc_device net_mc = {

@@ -723,7 +723,7 @@ error_subsys:
 	return rc;
 }
 
-static int pmic_glink_remove(struct platform_device *pdev)
+static void pmic_glink_remove(struct platform_device *pdev)
 {
 	struct pmic_glink_dev *pgdev = dev_get_drvdata(&pdev->dev);
 
@@ -738,8 +738,6 @@ static int pmic_glink_remove(struct platform_device *pdev)
 	of_platform_depopulate(&pdev->dev);
 	pgdev->child_probed = false;
 	pmic_glink_dev_remove(pgdev);
-
-	return 0;
 }
 
 static const struct of_device_id pmic_glink_of_match[] = {

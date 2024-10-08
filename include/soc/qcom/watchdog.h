@@ -143,7 +143,7 @@ int qcom_wdt_register(struct platform_device *pdev,
 			char *wdog_dd_name);
 int qcom_wdt_pet_suspend(struct device *dev);
 int qcom_wdt_pet_resume(struct device *dev);
-int qcom_wdt_remove(struct platform_device *pdev);
+void qcom_wdt_remove(struct platform_device *pdev);
 #else
 static inline void qcom_wdt_trigger_bite(void) { }
 #endif

@@ -633,7 +633,7 @@ fail_create_debug_time:
 	return ret;
 }
 
-static int vx_remove(struct platform_device *pdev)
+static void vx_remove(struct platform_device *pdev)
 {
 	struct vx_platform_data *pd = platform_get_drvdata(pdev);
 
@@ -643,8 +643,6 @@ static int vx_remove(struct platform_device *pdev)
 	device_remove_file(&pdev->dev, &dev_attr_set_timer_ms);
 	qmp_put(pd->qmp);
 	subsystem_sleep_debug_enable(false);
-
-	return 0;
 }
 
 static int vx_suspend(struct device *dev)

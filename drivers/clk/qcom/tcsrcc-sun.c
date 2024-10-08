@@ -113,7 +113,7 @@ static int tcsr_cc_sun_probe(struct platform_device *pdev)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
-	ret = qcom_cc_really_probe(pdev, &tcsr_cc_sun_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &tcsr_cc_sun_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register TCSR CC clocks\n");
 		return ret;

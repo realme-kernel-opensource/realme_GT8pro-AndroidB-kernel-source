@@ -833,17 +833,16 @@ static int memshare_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int memshare_remove(struct platform_device *pdev)
+static void memshare_remove(struct platform_device *pdev)
 {
 	if (!memsh_drv)
-		return 0;
+		return ;
 
 	if (mem_share_svc_handle) {
 		qmi_handle_release(mem_share_svc_handle);
 		kfree(mem_share_svc_handle);
 		mem_share_svc_handle = NULL;
 	}
-	return 0;
 }
 
 static const struct of_device_id memshare_match_table[] = {

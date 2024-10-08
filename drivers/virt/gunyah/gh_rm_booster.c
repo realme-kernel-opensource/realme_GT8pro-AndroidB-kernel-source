@@ -314,7 +314,7 @@ out_free:
 	return ret;
 }
 
-static int gh_rm_booster_remove(struct platform_device *pdev)
+static void gh_rm_booster_remove(struct platform_device *pdev)
 {
 	gh_rm_unregister_notifier(&rm_status->gh_rm_boost_nb);
 	cancel_delayed_work_sync(&rm_status->booster_release_work);
@@ -326,8 +326,6 @@ static int gh_rm_booster_remove(struct platform_device *pdev)
 	kfree(rm_status);
 	rm_status = NULL;
 	mutex_unlock(&rm_booster_lock);
-
-	return 0;
 }
 
 static const struct of_device_id gh_rm_booster_match_table[] = {

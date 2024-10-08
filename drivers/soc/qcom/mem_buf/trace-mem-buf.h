@@ -81,8 +81,8 @@ TRACE_EVENT(mem_buf_alloc_info,
 
 	TP_fast_assign(
 		__entry->size = size;
-		__assign_str(src_type, mem_type_to_str(src_mem_type));
-		__assign_str(dst_type, mem_type_to_str(dst_mem_type));
+		__assign_str(src_type);
+		__assign_str(dst_type);
 		__entry->nr_acl_entries = acl_desc->n_acl_entries;
 		gh_acl_to_vmid_perms(acl_desc, __get_dynamic_array(vmids),
 				     __get_dynamic_array(perms));
@@ -116,9 +116,9 @@ DECLARE_EVENT_CLASS(alloc_req_msg_class,
 
 	TP_fast_assign(
 		__entry->txn_id = req->hdr.txn_id;
-		__assign_str(msg_type, msg_type_to_str(req->hdr.msg_type));
+		__assign_str(msg_type);
 		__entry->size = req->size;
-		__assign_str(src_type, mem_type_to_str(req->src_mem_type));
+		__assign_str(src_type);
 		__entry->nr_acl_entries = req->acl_desc.n_acl_entries;
 		gh_acl_to_vmid_perms(&req->acl_desc, __get_dynamic_array(vmids),
 				     __get_dynamic_array(perms));
@@ -161,7 +161,7 @@ DECLARE_EVENT_CLASS(relinquish_req_msg_class,
 	),
 
 	TP_fast_assign(
-		__assign_str(msg_type, msg_type_to_str(rel_req->hdr.msg_type));
+		__assign_str(msg_type);
 		__entry->hdl = rel_req->hdl;
 		__entry->txn_id = rel_req->hdr.txn_id;
 	),
@@ -200,7 +200,7 @@ DECLARE_EVENT_CLASS(alloc_resp_class,
 
 	TP_fast_assign(
 		__entry->txn_id = resp->hdr.txn_id;
-		__assign_str(msg_type, msg_type_to_str(resp->hdr.msg_type));
+		__assign_str(msg_type);
 		__entry->ret = resp->ret;
 		__entry->hdl = resp->hdl;
 	),
@@ -238,7 +238,7 @@ DECLARE_EVENT_CLASS(relinquish_resp_class,
 
 	TP_fast_assign(
 		__entry->txn_id = resp->hdr.txn_id;
-		__assign_str(msg_type, msg_type_to_str(resp->hdr.msg_type));
+		__assign_str(msg_type);
 	),
 
 	TP_printk("txn_id: %d msg_type: %s",

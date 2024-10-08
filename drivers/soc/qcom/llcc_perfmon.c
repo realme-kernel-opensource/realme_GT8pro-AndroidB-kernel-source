@@ -2411,7 +2411,7 @@ static int llcc_perfmon_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int llcc_perfmon_remove(struct platform_device *pdev)
+static void llcc_perfmon_remove(struct platform_device *pdev)
 {
 	struct llcc_perfmon_private *llcc_priv = platform_get_drvdata(pdev);
 
@@ -2421,7 +2421,6 @@ static int llcc_perfmon_remove(struct platform_device *pdev)
 	mutex_destroy(&llcc_priv->mutex);
 	sysfs_remove_group(&pdev->dev.kobj, &llcc_perfmon_group);
 	platform_set_drvdata(pdev, NULL);
-	return 0;
 }
 
 static const struct of_device_id of_match_llcc_perfmon[] = {

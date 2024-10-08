@@ -5438,7 +5438,7 @@ exit_geni_serial_probe:
 	return ret;
 }
 
-static int msm_geni_serial_remove(struct platform_device *pdev)
+static void msm_geni_serial_remove(struct platform_device *pdev)
 {
 	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
 	struct uart_driver *drv =
@@ -5448,7 +5448,7 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 	 * is disabled from cmdline simply return success.
 	 */
 	if (port->is_console && !con_enabled)
-		return 0;
+		return;
 	if (port->wakeup_irq > 0)
 		destroy_workqueue(port->wakeup_irq_wq);
 	if (!uart_console(&port->uport)) {
@@ -5476,7 +5476,6 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 	debugfs_remove(port->dbg);
 
 	dev_info(&pdev->dev, "%s driver removed %d\n", __func__, true);
-	return 0;
 }
 
 /*

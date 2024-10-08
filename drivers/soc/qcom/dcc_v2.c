@@ -2111,15 +2111,13 @@ err:
 	return ret;
 }
 
-static int dcc_remove(struct platform_device *pdev)
+static void dcc_remove(struct platform_device *pdev)
 {
 	struct dcc_drvdata *drvdata = platform_get_drvdata(pdev);
 
 	dcc_sram_dev_exit(drvdata);
 
 	dcc_config_reset(drvdata);
-
-	return 0;
 }
 
 static const struct of_device_id msm_dcc_match[] = {

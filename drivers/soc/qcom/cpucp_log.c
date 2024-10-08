@@ -428,7 +428,7 @@ exit:
 	return ret;
 }
 
-static int cpucp_log_remove(struct platform_device *pdev)
+static void cpucp_log_remove(struct platform_device *pdev)
 {
 	struct cpucp_log_info *info;
 
@@ -438,8 +438,6 @@ static int cpucp_log_remove(struct platform_device *pdev)
 	info->rmem = NULL;
 
 	mbox_free_channel(info->ch);
-
-	return 0;
 }
 
 static const struct of_device_id cpucp_log[] = {

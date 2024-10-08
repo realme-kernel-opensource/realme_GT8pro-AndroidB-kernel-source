@@ -3019,7 +3019,7 @@ static int cam_cc_sun_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x1137c, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x11398, BIT(0), BIT(0));
 
-	ret = qcom_cc_really_probe(pdev, &cam_cc_sun_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &cam_cc_sun_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register CAM CC clocks\n");
 		return ret;

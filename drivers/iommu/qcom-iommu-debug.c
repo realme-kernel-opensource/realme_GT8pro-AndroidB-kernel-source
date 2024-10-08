@@ -316,7 +316,7 @@ out:
 	return ret;
 }
 
-static int iommu_debug_remove(struct platform_device *pdev)
+static void iommu_debug_remove(struct platform_device *pdev)
 {
 	struct iommu_debug_device *ddev = platform_get_drvdata(pdev);
 
@@ -325,7 +325,6 @@ static int iommu_debug_remove(struct platform_device *pdev)
 		of_platform_device_destroy(ddev->test_dev, NULL);
 
 	mutex_destroy(&ddev->state_lock);
-	return 0;
 }
 
 static const struct of_device_id iommu_debug_of_match[] = {

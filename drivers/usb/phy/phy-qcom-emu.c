@@ -157,13 +157,11 @@ static int qcusb_emu_phy_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int qcusb_emu_phy_remove(struct platform_device *pdev)
+static void qcusb_emu_phy_remove(struct platform_device *pdev)
 {
 	struct qcusb_emu_phy *qcphy = platform_get_drvdata(pdev);
 
 	usb_remove_phy(&qcphy->phy);
-
-	return 0;
 }
 
 static const struct of_device_id emu_phy_dt_ids[] = {

@@ -84,7 +84,7 @@ TRACE_EVENT(qcom_haptics_status,
 	),
 
 	TP_fast_assign(
-		__assign_str(id_name, name);
+		__assign_str(id_name);
 		__entry->msb = msb;
 		__entry->lsb = lsb;
 	),

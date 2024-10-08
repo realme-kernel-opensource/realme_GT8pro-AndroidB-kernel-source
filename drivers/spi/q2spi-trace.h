@@ -19,7 +19,7 @@ TRACE_EVENT(q2spi_log_info,
 	    TP_ARGS(name, vaf),
 	    TP_STRUCT__entry(__string(name, name)
 	    __dynamic_array(char, msg, MAX_MSG_LEN)),
-	    TP_fast_assign(__assign_str(name, name);
+	    TP_fast_assign(__assign_str(name);
 			   WARN_ON_ONCE(vsnprintf(__get_dynamic_array(msg), MAX_MSG_LEN,
 						  vaf->fmt, *vaf->va) >= MAX_MSG_LEN);),
 	    TP_printk("%s: %s", __get_str(name), __get_str(msg))

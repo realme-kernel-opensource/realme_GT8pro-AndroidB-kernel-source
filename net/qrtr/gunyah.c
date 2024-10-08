@@ -814,7 +814,7 @@ register_fail:
 	return ret;
 }
 
-static int qrtr_gunyah_remove(struct platform_device *pdev)
+static void qrtr_gunyah_remove(struct platform_device *pdev)
 {
 	struct qrtr_gunyah_dev *qdev = dev_get_drvdata(&pdev->dev);
 	struct device_node *np;
@@ -826,25 +826,24 @@ static int qrtr_gunyah_remove(struct platform_device *pdev)
 	gh_dbl_rx_unregister(qdev->rx_dbl);
 
 	if (!qdev->master)
-		return 0;
+		return;
 	gh_unregister_vm_notifier(&qdev->vm_nb);
 
 	if (ghd_rm_get_vmid(qdev->peer_name, &peer_vmid))
-		return 0;
+		return;
 	if (ghd_rm_get_vmid(GH_PRIMARY_VM, &self_vmid))
-		return 0;
+		return;
 	qrtr_gunyah_unshare_mem(qdev, self_vmid, peer_vmid);
 
 	np = of_parse_phandle(qdev->dev->of_node, "shared-buffer", 0);
 	if (np) {
 		of_node_put(np);
-		return 0;
+		return;
 	}
 
 	dma_free_attrs(qdev->dev, qdev->size, qdev->base, qdev->res.start,
 		       DMA_ATTR_FORCE_CONTIGUOUS);
 
-	return 0;
 }
 
 static const struct of_device_id qrtr_gunyah_match_table[] = {

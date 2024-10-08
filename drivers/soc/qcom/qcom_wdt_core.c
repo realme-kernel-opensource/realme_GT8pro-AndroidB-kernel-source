@@ -628,7 +628,7 @@ static int qcom_wdt_cpu_pm_notify(struct notifier_block *this,
  *  will be cleaned up and the watchdog device will be removed from memory.
  *
  */
-int qcom_wdt_remove(struct platform_device *pdev)
+void qcom_wdt_remove(struct platform_device *pdev)
 {
 	struct msm_watchdog_data *wdog_dd = platform_get_drvdata(pdev);
 
@@ -651,7 +651,6 @@ int qcom_wdt_remove(struct platform_device *pdev)
 	wdog_dd->timer_expired = true;
 	wdog_dd->user_pet_complete = true;
 	kthread_stop(wdog_dd->watchdog_task);
-	return 0;
 }
 EXPORT_SYMBOL(qcom_wdt_remove);
 

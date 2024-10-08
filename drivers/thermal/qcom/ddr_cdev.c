@@ -196,7 +196,7 @@ err_exit:
 	return ret;
 }
 
-static int ddr_cdev_remove(struct platform_device *pdev)
+static void ddr_cdev_remove(struct platform_device *pdev)
 {
 	struct ddr_cdev *ddr_cdev =
 		(struct ddr_cdev *)dev_get_drvdata(&pdev->dev);
@@ -206,8 +206,6 @@ static int ddr_cdev_remove(struct platform_device *pdev)
 		icc_put(ddr_cdev->icc_path);
 		ddr_cdev->icc_path = NULL;
 	}
-
-	return 0;
 }
 
 static const struct of_device_id ddr_cdev_match[] = {

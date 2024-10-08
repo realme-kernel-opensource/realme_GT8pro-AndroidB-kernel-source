@@ -789,7 +789,7 @@ out:
 	return rc;
 }
 
-static int battery_dbg_remove(struct platform_device *pdev)
+static void battery_dbg_remove(struct platform_device *pdev)
 {
 	struct battery_dbg_dev *bd = platform_get_drvdata(pdev);
 	int rc;
@@ -797,12 +797,8 @@ static int battery_dbg_remove(struct platform_device *pdev)
 	sysfs_remove_group(&bd->dev->kobj, &battery_dbg_group);
 	debugfs_remove_recursive(bd->debugfs_dir);
 	rc = pmic_glink_unregister_client(bd->client);
-	if (rc < 0) {
+	if (rc < 0)
 		pr_err("Error unregistering from pmic_glink, rc=%d\n", rc);
-		return rc;
-	}
-
-	return 0;
 }
 
 static const struct of_device_id battery_dbg_match_table[] = {

@@ -538,7 +538,7 @@ static int qcom_ddump_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int qcom_ddump_remove(struct platform_device *pdev)
+static void qcom_ddump_remove(struct platform_device *pdev)
 {
 	gh_vmid_t peer_vmid;
 	gh_vmid_t self_vmid;
@@ -561,15 +561,15 @@ static int qcom_ddump_remove(struct platform_device *pdev)
 		gh_unregister_vm_notifier(&qdd->vm_nb);
 		ret = ghd_rm_get_vmid(qdd->peer_name, &peer_vmid);
 		if (ret)
-			return ret;
+			return;
 
 		ret = ghd_rm_get_vmid(GH_PRIMARY_VM, &self_vmid);
 		if (ret)
-			return ret;
+			return;
 
 		ret = qcom_ddump_unshare_mem(qdd, self_vmid, peer_vmid);
 		if (ret)
-			return ret;
+			return;
 
 		if (!qdd->is_static)
 			dma_free_coherent(qdd->dev, qdd->size, qdd->base,
@@ -577,10 +577,8 @@ static int qcom_ddump_remove(struct platform_device *pdev)
 	} else {
 		ret = kmsg_dump_unregister(&qdd->dump);
 		if (ret)
-			return ret;
+			return;
 	}
-
-	return 0;
 }
 
 #if IS_ENABLED(CONFIG_PM_SLEEP) && IS_ENABLED(CONFIG_ARCH_QTI_VM) && \

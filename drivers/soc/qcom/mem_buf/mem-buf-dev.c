@@ -142,10 +142,9 @@ static int mem_buf_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int mem_buf_remove(struct platform_device *pdev)
+static void mem_buf_remove(struct platform_device *pdev)
 {
 	mem_buf_dev = NULL;
-	return 0;
 }
 
 static const struct of_device_id mem_buf_match_tbl[] = {

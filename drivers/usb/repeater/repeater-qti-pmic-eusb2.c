@@ -553,17 +553,16 @@ err_probe:
 	return ret;
 }
 
-static int eusb2_repeater_remove(struct platform_device *pdev)
+static void eusb2_repeater_remove(struct platform_device *pdev)
 {
 	struct eusb2_repeater *er = platform_get_drvdata(pdev);
 
 	if (!er)
-		return 0;
+		return;
 
 	debugfs_remove_recursive(er->root);
 	usb_remove_repeater_dev(&er->ur);
 	eusb2_repeater_power(er, false);
-	return 0;
 }
 
 static const struct of_device_id eusb2_repeater_id_table[] = {

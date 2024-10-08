@@ -1888,7 +1888,7 @@ static int qti_flash_led_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int qti_flash_led_remove(struct platform_device *pdev)
+static void qti_flash_led_remove(struct platform_device *pdev)
 {
 	struct qti_flash_led *led = dev_get_drvdata(&pdev->dev);
 	int i, j;
@@ -1901,8 +1901,6 @@ static int qti_flash_led_remove(struct platform_device *pdev)
 			sysfs_remove_file(&led->snode[i].cdev.dev->kobj,
 				&qti_flash_led_attrs[j].attr);
 	}
-
-	return 0;
 }
 
 static const struct of_device_id qti_flash_led_match_table[] = {
