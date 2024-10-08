@@ -135,6 +135,8 @@ def define_canoe():
         "drivers/usb/phy/phy-msm-m31-eusb2.ko",
         "drivers/usb/phy/phy-msm-ssusb-qmp.ko",
         "drivers/usb/phy/phy-qcom-emu.ko",
+        "drivers/usb/repeater/repeater.ko",
+        "drivers/usb/repeater/repeater-qti-pmic-eusb2.ko",
         "drivers/virt/gunyah/gh_ctrl.ko",
         "drivers/virt/gunyah/gh_dbl.ko",
         "drivers/virt/gunyah/gh_irq_lend.ko",
