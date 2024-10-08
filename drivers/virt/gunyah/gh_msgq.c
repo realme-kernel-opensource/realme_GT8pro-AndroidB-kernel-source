@@ -131,9 +131,6 @@ static int __gh_msgq_recv(struct gh_msgq_cap_table *cap_table_entry,
 	int gh_ret;
 	int ret = 0;
 
-	/* Discard the driver specific flags, and keep only HVC specifics */
-	rx_flags &= GH_MSGQ_HVC_FLAGS_MASK;
-
 	spin_lock_irqsave(&cap_table_entry->rx_lock, flags);
 	gh_ret = gh_hcall_msgq_recv(cap_table_entry->rx_cap_id, buff,
 					buff_size, &resp);

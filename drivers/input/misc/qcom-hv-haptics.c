@@ -27,6 +27,7 @@
 #include <linux/suspend.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
+#include <linux/vmalloc.h>
 #include <linux/workqueue.h>
 #include <linux/qpnp/qpnp-pbs.h>
 

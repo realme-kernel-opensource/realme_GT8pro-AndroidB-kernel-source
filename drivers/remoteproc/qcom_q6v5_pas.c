@@ -58,7 +58,6 @@
 struct adsp_data {
 	int crash_reason_smem;
 	int crash_reason_stack;
-	unsigned int smem_host_id;
 	const char *firmware_name;
 	const char *dtb_firmware_name;
 	int pas_id;

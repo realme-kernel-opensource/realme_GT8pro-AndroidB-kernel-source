@@ -208,10 +208,6 @@ struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
 #define QCOM_SCM_SVC_OEM_POWER			0x09
 #define QCOM_SCM_OEM_POWER_REBOOT		0x22
 
-/* GPU Service IDs */
-#define QCOM_SCM_SVC_GPU		0x28
-#define QCOM_SCM_SVC_GPU_INIT_REGS		0x1
-
 /* TOS Services and Function IDs */
 #define QCOM_SCM_SVC_QSEELOG			0x01
 #define QCOM_SCM_QSEELOG_REGISTER		0x06
@@ -230,6 +226,7 @@ struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
 #define QCOM_SCM_WAITQ_RESUME			0x02
 #define QCOM_SCM_WAITQ_GET_WQ_CTX		0x03
 
+/* GPU Service IDs */
 #define QCOM_SCM_SVC_GPU			0x28
 #define QCOM_SCM_SVC_GPU_INIT_REGS		0x01
 

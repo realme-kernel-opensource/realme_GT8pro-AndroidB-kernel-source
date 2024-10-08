@@ -868,8 +868,6 @@ static int msm_gpio_init_valid_mask(struct gpio_chip *gc,
 	int ret;
 	unsigned int len, i;
 	const int *reserved = pctrl->soc->reserved_gpios;
-	struct property *prop;
-	const __be32 *p;
 	u16 *tmp;
 
 	/* Remove driver-provided reserved GPIOs from valid_mask */
@@ -887,7 +885,7 @@ static int msm_gpio_init_valid_mask(struct gpio_chip *gc,
 
 	if (of_property_count_u32_elems(pctrl->dev->of_node, "qcom,gpios-reserved") > 0) {
 		bitmap_fill(valid_mask, ngpios);
-		of_property_for_each_u32(pctrl->dev->of_node, "qcom,gpios-reserved", prop, p, i) {
+		of_property_for_each_u32(pctrl->dev->of_node, "qcom,gpios-reserved", i) {
 			if (i >= ngpios) {
 				dev_err(pctrl->dev, "invalid list of reserved GPIOs\n");
 				return -EINVAL;

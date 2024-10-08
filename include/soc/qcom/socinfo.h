@@ -10,18 +10,6 @@
 #include <linux/types.h>
 
 enum feature_code {
-	/* External feature code */
-	SOCINFO_FC_UNKNOWN = 0x0,
-	SOCINFO_FC_AA,
-	SOCINFO_FC_AB,
-	SOCINFO_FC_AC,
-	SOCINFO_FC_AD,
-	SOCINFO_FC_AE,
-	SOCINFO_FC_AF,
-	SOCINFO_FC_AG,
-	SOCINFO_FC_AH,
-	SOCINFO_FC_EXT_RESERVE,
-
 	/* SubPart feature code */
 	SOCINFO_FC_W0 = 0xd1,
 	SOCINFO_FC_W1,
