@@ -1874,8 +1874,13 @@ static int qcom_glink_announce_create(struct rpmsg_device *rpdev)
 		CH_ERR(channel, "channel thread failed to run\n");
 		rc = PTR_ERR(channel->rx_task);
 		channel->rx_task = NULL;
+		goto exit;
 	}
 
+	if (of_property_read_bool(np, "qcom,ch-sched-rt"))
+		sched_set_fifo_low(channel->rx_task);
+
+exit:
 	CH_INFO(channel, "Exit\n");
 	return rc;
 }
