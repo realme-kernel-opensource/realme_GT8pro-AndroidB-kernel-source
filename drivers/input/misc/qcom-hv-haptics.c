@@ -440,9 +440,6 @@
 #define AUTO_BRAKE_CAL_DONE			0x80
 
 #define PBS_ARG_REG				0x42
-#define HAP_VREG_ON_VAL				0x1
-#define HAP_VREG_OFF_VAL			0x2
-#define HAP_AUTO_BRAKE_CAL_VAL			0x3
 #define PBS_TRIG_SET_REG			0xE5
 #define PBS_TRIG_CLR_REG			0xE6
 #define PBS_TRIG_SET_VAL			0x1
@@ -502,6 +499,13 @@ enum hap_status_sel {
 	CLAMPED_DUTY_CYCLE_STS = 0x8003,
 	FIFO_REAL_TIME_STS = 0x8005,
 	AUTO_BRAKE_CAL_STS = 0x8006,
+};
+
+enum hap_pbs_type {
+	HAP_VREG_ON_PBS = 0x1,
+	HAP_VREG_OFF_PBS = 0x2,
+	HAP_AUTO_BRAKE_CAL_PBS = 0x3,
+	HAP_HBST_OVP_TRIM_PBS = 0x10,
 };
 
 enum drv_sig_shape {
@@ -738,6 +742,7 @@ struct haptics_hw_config {
 	bool			is_erm;
 	bool			measure_lra_impedance;
 	bool			sw_cmd_freq_det;
+	bool			hbst_ovp_trim;
 };
 
 struct custom_fifo_data {
@@ -1650,6 +1655,36 @@ static int haptics_set_direct_play(struct haptics_chip *chip, u8 amplitude)
 	return rc;
 }
 
+static int haptics_trigger_pbs(struct haptics_chip *chip, enum hap_pbs_type type)
+{
+	int rc;
+	u8 val;
+
+	val = (u8)type;
+	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_ARG_REG, 1, &val);
+	if (rc < 0) {
+		dev_err(chip->dev, "set PBS_ARG for auto brake cal failed, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	val = PBS_TRIG_CLR_VAL;
+	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_TRIG_CLR_REG, 1, &val);
+	if (rc < 0) {
+		dev_err(chip->dev, "clear PBS_TRIG for auto brake cal failed, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	val = PBS_TRIG_SET_VAL;
+	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_TRIG_SET_REG, 1, &val);
+	if (rc < 0)
+		dev_err(chip->dev, "set PBS_TRIG for auto brake cal failed, rc=%d\n",
+			rc);
+
+	return rc;
+}
+
 static bool is_boost_vreg_enabled_in_open_loop(struct haptics_chip *chip)
 {
 	int rc;
@@ -1678,7 +1713,7 @@ static bool is_boost_vreg_enabled_in_open_loop(struct haptics_chip *chip)
 static int haptics_boost_vreg_enable(struct haptics_chip *chip, bool en)
 {
 	int rc;
-	u8 val;
+	enum hap_pbs_type type;
 
 	if (is_haptics_external_powered(chip))
 		return 0;
@@ -1700,21 +1735,10 @@ static int haptics_boost_vreg_enable(struct haptics_chip *chip, bool en)
 	if (chip->hboost_enabled == en)
 		return 0;
 
-	val = en ? HAP_VREG_ON_VAL : HAP_VREG_OFF_VAL;
-	rc = nvmem_device_write(chip->hap_cfg_nvmem,
-			PBS_ARG_REG, 1, &val);
+	type = en ? HAP_VREG_ON_PBS : HAP_VREG_OFF_PBS;
+	rc = haptics_trigger_pbs(chip, type);
 	if (rc < 0) {
-		dev_err(chip->dev, "write SDAM %#x failed, rc=%d\n",
-				PBS_ARG_REG, rc);
-		return rc;
-	}
-
-	val = PBS_TRIG_SET_VAL;
-	rc = nvmem_device_write(chip->hap_cfg_nvmem,
-			PBS_TRIG_SET_REG, 1, &val);
-	if (rc < 0) {
-		dev_err(chip->dev, "Write SDAM %#x failed, rc=%d\n",
-				PBS_TRIG_SET_REG, rc);
+		dev_err(chip->dev, "trigger HAP_VREG_ON/OFF PBS failed, rc=%d\n", rc);
 		return rc;
 	}
 
@@ -3940,6 +3964,11 @@ static int haptics_init_fifo_config(struct haptics_chip *chip)
 
 static int haptics_auto_brake_manual_config(struct haptics_chip *chip);
 
+static int haptics_hbst_ovp_trim_pbs_trigger(struct haptics_chip *chip)
+{
+	return haptics_trigger_pbs(chip, HAP_HBST_OVP_TRIM_PBS);
+}
+
 static int haptics_hw_init(struct haptics_chip *chip)
 {
 	int rc;
@@ -3963,6 +3992,12 @@ static int haptics_hw_init(struct haptics_chip *chip)
 	rc = haptics_init_hpwr_config(chip);
 	if (rc < 0)
 		return rc;
+
+	if (chip->config.hbst_ovp_trim) {
+		rc = haptics_hbst_ovp_trim_pbs_trigger(chip);
+		if (rc < 0)
+			return rc;
+	}
 
 	if (chip->config.is_erm)
 		return 0;
@@ -4760,6 +4795,9 @@ static int haptics_parse_dt(struct haptics_chip *chip)
 			goto free_pbs;
 		}
 	}
+
+	if (chip->hw_type >= HAP525_HV)
+		config->hbst_ovp_trim = of_property_read_bool(node, "qcom,hbst-ovp-trim");
 
 	config->preload_effect = -EINVAL;
 	rc = haptics_parse_effects_dt(chip);
@@ -5647,27 +5685,9 @@ static int haptics_auto_brake_pbs_trigger(struct haptics_chip *chip)
 	if (rc < 0)
 		return rc;
 
-	val = HAP_AUTO_BRAKE_CAL_VAL;
-	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_ARG_REG, 1, &val);
+	rc = haptics_trigger_pbs(chip, HAP_AUTO_BRAKE_CAL_PBS);
 	if (rc < 0) {
-		dev_err(chip->dev, "set PBS_ARG for auto brake cal failed, rc=%d\n",
-			rc);
-		return rc;
-	}
-
-	val = PBS_TRIG_CLR_VAL;
-	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_TRIG_CLR_REG, 1, &val);
-	if (rc < 0) {
-		dev_err(chip->dev, "clear PBS_TRIG for auto brake cal failed, rc=%d\n",
-			rc);
-		return rc;
-	}
-
-	val = PBS_TRIG_SET_VAL;
-	rc = nvmem_device_write(chip->hap_cfg_nvmem, PBS_TRIG_SET_REG, 1, &val);
-	if (rc < 0) {
-		dev_err(chip->dev, "set PBS_TRIG for auto brake cal failed, rc=%d\n",
-			rc);
+		dev_err(chip->dev, "trigger AUTO_BRAKE_CAL PBS failed, rc=%d\n", rc);
 		return rc;
 	}
 
