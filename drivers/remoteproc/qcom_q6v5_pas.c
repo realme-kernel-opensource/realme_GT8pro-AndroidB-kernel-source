@@ -2102,6 +2102,16 @@ static const struct adsp_data canoe_mpss_resource = {
 	.both_dumps = true,
 };
 
+static const struct adsp_data canoe_soccp_resource = {
+	.crash_reason_smem = 656,
+	.firmware_name = "soccp.mbn",
+	.dtb_firmware_name = "soccp_dtb.mbn",
+	.pas_id = 51,
+	.dtb_pas_id = 0x41,
+	.ssr_name = "soccp",
+	.sysmon_name = "soccp",
+};
+
 static const struct adsp_data pineapple_adsp_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
@@ -2225,6 +2235,7 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,canoe-adsp-pas", .data = &canoe_adsp_resource},
 	{ .compatible = "qcom,canoe-cdsp-pas", .data = &canoe_cdsp_resource},
 	{ .compatible = "qcom,canoe-modem-pas", .data = &canoe_mpss_resource},
+	{ .compatible = "qcom,canoe-soccp-pas", .data = &canoe_soccp_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);
