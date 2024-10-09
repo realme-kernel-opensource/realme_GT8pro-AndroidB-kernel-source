@@ -2198,7 +2198,7 @@ static int etm4_probe_amba(struct amba_device *adev, const struct amba_id *id)
 	dev_set_drvdata(dev, drvdata);
 	ret = etm4_probe(dev);
 	if (!ret)
-		pm_runtime_put(&adev->dev);
+		pm_runtime_put_sync(&adev->dev);
 
 	return ret;
 }
@@ -2232,7 +2232,7 @@ static int etm4_probe_platform_dev(struct platform_device *pdev)
 
 	ret = etm4_probe(&pdev->dev);
 
-	pm_runtime_put(&pdev->dev);
+	pm_runtime_put_sync(&pdev->dev);
 	return ret;
 }
 
@@ -2261,7 +2261,7 @@ static int etm4_probe_cpu(unsigned int cpu)
 
 	etm4_add_coresight_dev(&init_arg);
 
-	pm_runtime_put(init_arg.dev);
+	pm_runtime_put_sync(init_arg.dev);
 	return 0;
 }
 

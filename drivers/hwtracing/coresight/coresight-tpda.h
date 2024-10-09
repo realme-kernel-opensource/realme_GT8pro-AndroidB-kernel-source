@@ -38,6 +38,7 @@ struct tpda_drvdata {
 	u8			atid;
 	u32			dsb_esize;
 	u32			cmb_esize;
+	struct clk		*dclk;
 };
 
 #endif  /* _CORESIGHT_CORESIGHT_TPDA_H */

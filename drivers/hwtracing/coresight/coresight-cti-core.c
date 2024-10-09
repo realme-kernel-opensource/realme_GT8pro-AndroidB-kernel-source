@@ -1056,6 +1056,15 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 	if (!drvdata)
 		return -ENOMEM;
 
+
+	drvdata->dclk = devm_clk_get(dev, "dynamic_clk");
+	if (!IS_ERR(drvdata->dclk)) {
+		ret = clk_prepare_enable(drvdata->dclk);
+		if (ret)
+			return ret;
+	} else
+		drvdata->dclk = NULL;
+
 	/* Validity for the resource is already checked by the AMBA core */
 	base = devm_ioremap_resource(dev, res);
 	if (IS_ERR(base))
@@ -1137,6 +1146,8 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 	drvdata->csdev->dev.release = cti_device_release;
 
 	drvdata->extended_cti = is_extended_cti(dev);
+	if (drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
 	/* all done - dec pm refcount */
 	pm_runtime_put_sync(&adev->dev);
 	dev_info(&drvdata->csdev->dev, "CTI initialized\n");

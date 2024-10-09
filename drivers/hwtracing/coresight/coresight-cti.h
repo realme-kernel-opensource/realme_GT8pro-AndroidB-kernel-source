@@ -200,6 +200,7 @@ struct cti_pctrl {
  * @config:	Configuration data for this CTI device.
  * @node:	List entry of this device in the list of CTI devices.
  * @csdev_release: release function for underlying coresight_device.
+ * @dclk:	optional clock to be dynamically enabled when CTI device is enabled.
  */
 struct cti_drvdata {
 	void __iomem *base;
@@ -212,6 +213,7 @@ struct cti_drvdata {
 	bool	extended_cti;
 	struct cti_pctrl		*gpio_trigin;
 	struct cti_pctrl		*gpio_trigout;
+	struct clk			*dclk;
 };
 
 /*

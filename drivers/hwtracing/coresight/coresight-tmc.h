@@ -203,6 +203,13 @@ struct etr_buf {
  * @idr_mutex:	Access serialisation for idr.
  * @sysfs_buf:	SYSFS buffer for ETR.
  * @perf_buf:	PERF buffer for ETR.
+ * @csr_name:	name for CSR.
+ * @atid_offset: atid register offset for CSR.
+ * @out_mode:	out mode for ETR.
+ * @usb_data:	usb data for ETR.
+ * @stop_on_flush: flag of stop_on_flush for ETR.
+ * @delayed:	parameter for delayed probe.
+ * @dclk:	optional clock to be dynamically enabled when this device is enabled.
  */
 struct tmc_drvdata {
 	void __iomem		*base;
@@ -236,6 +243,10 @@ struct tmc_drvdata {
 	enum tmc_etr_out_mode	out_mode;
 	struct tmc_usb_data	*usb_data;
 	bool			stop_on_flush;
+	struct delay_probe_arg	*delayed;
+	struct clk		*dclk;
+	struct pm_config	pm_config;
+	struct list_head	link;
 };
 
 struct etr_buf_operations {

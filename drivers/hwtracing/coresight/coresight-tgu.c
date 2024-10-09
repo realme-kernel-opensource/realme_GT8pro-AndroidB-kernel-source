@@ -117,11 +117,9 @@ static ssize_t enable_tgu_store(struct device *dev,
 		return -EINVAL;
 
 	/* Enable clock */
-	ret = pm_runtime_get_sync(drvdata->dev);
-	if (ret < 0) {
-		pm_runtime_put(drvdata->dev);
+	ret = pm_runtime_resume_and_get(drvdata->dev);
+	if (ret < 0)
 		return ret;
-	}
 
 	spin_lock(&drvdata->spinlock);
 	/* Unlock the TGU LAR */
@@ -173,7 +171,7 @@ static ssize_t enable_tgu_store(struct device *dev,
 		/* Disable TGU to program the triggers */
 		tgu_writel(drvdata, 0, TGU_CONTROL);
 
-		pm_runtime_put(drvdata->dev);
+		pm_runtime_put_sync(drvdata->dev);
 		dev_dbg(dev, "Coresight-TGU disabled\n");
 	}
 
@@ -196,11 +194,9 @@ static ssize_t reset_tgu_store(struct device *dev,
 
 	if (!drvdata->enable) {
 		/* Enable clock */
-		ret = pm_runtime_get_sync(drvdata->dev);
-		if (ret < 0) {
-			pm_runtime_put(drvdata->dev);
+		ret = pm_runtime_resume_and_get(drvdata->dev);
+		if (ret < 0)
 			return ret;
-		}
 	}
 
 	spin_lock(&drvdata->spinlock);
@@ -224,7 +220,7 @@ static ssize_t reset_tgu_store(struct device *dev,
 
 	TGU_LOCK(drvdata);
 	spin_unlock(&drvdata->spinlock);
-	pm_runtime_put(drvdata->dev);
+	pm_runtime_put_sync(drvdata->dev);
 	return size;
 }
 static DEVICE_ATTR_WO(reset_tgu);
@@ -496,11 +492,11 @@ static int tgu_probe(struct amba_device *adev, const struct amba_id *id)
 		goto err;
 	}
 
-	pm_runtime_put(&adev->dev);
+	pm_runtime_put_sync(&adev->dev);
 	dev_dbg(dev, "TGU initialized\n");
 	return 0;
 err:
-	pm_runtime_put(&adev->dev);
+	pm_runtime_put_sync(&adev->dev);
 	return ret;
 }
 

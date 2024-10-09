@@ -2,6 +2,7 @@
 /*
  * Copyright(C) 2022 Linaro Limited. All rights reserved.
  * Author: Mike Leach <mike.leach@linaro.org>
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CORESIGHT_TRACE_ID_H
@@ -152,5 +153,8 @@ void coresight_trace_id_perf_start(void);
  * release, will be released.
  */
 void coresight_trace_id_perf_stop(void);
+
+int coresight_trace_id_reserve_id(int id);
+void coresight_trace_id_free_reserved_id(int id);
 
 #endif /* _CORESIGHT_TRACE_ID_H */
