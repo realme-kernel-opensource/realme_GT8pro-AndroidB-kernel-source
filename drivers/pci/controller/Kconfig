@@ -222,7 +222,6 @@ config PCI_MSM
 	select PCI_DOMAINS_GENERIC
 	select PCI_MSI
 	select CRC8
-	select PCI_ECAM
 	help
 	  Enables the PCIe functionality by configuring PCIe core on
 	  MSM chipset and by enabling the ARM PCI framework extension.
