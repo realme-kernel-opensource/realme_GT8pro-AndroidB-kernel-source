@@ -68,6 +68,11 @@ void tmc_flush_and_stop(struct tmc_drvdata *drvdata)
 	tmc_wait_for_tmcready(drvdata);
 }
 
+void tmc_disable_stop_on_flush(struct tmc_drvdata *drvdata)
+{
+	drvdata->stop_on_flush = false;
+}
+
 void tmc_enable_hw(struct tmc_drvdata *drvdata)
 {
 	writel_relaxed(TMC_CTL_CAPT_EN, drvdata->base + TMC_CTL);
@@ -379,10 +384,44 @@ static ssize_t block_size_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(block_size);
 
+static ssize_t stop_on_flush_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	u32 val;
+	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	if (drvdata->stop_on_flush)
+		val = 1;
+	else
+		val = 0;
+
+	return scnprintf(buf, PAGE_SIZE, "%x\n", val);
+}
+
+static ssize_t stop_on_flush_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t size)
+{
+	unsigned long val;
+	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	if ((kstrtoul(buf, 0, &val)) || (val & ~1UL))
+		return -EINVAL;
+
+	if (val)
+		drvdata->stop_on_flush = true;
+	else
+		drvdata->stop_on_flush = false;
+
+	return size;
+}
+static DEVICE_ATTR_RW(stop_on_flush);
+
 static struct attribute *coresight_tmc_attrs[] = {
 	&dev_attr_trigger_cntr.attr,
 	&dev_attr_buffer_size.attr,
 	&dev_attr_block_size.attr,
+	&dev_attr_stop_on_flush.attr,
 	NULL,
 };
 
