@@ -70,7 +70,6 @@ gunyah-msgq.ko
 gunyah_hypercall.ko
 gunyah_loader.ko
 gunyah_platform_hooks.ko
-gunyah_qcom.ko
 mdt_loader.ko
 qcom_ipc_logging.ko
 qrtr.ko
