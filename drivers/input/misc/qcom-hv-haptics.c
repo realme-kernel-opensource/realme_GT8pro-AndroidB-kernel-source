@@ -397,6 +397,7 @@
 #define HAP_PTN_SPMI_PATX_MEM_START_ADDR_REG	0xA4
 #define HAP_PTN_SPMI_PATX_MEM_LEN_LSB_REG	0xA6
 #define HAP_PTN_PATX_MEM_LEN_HI_MASK		GENMASK(2, 0)
+#define HAP530_V2_PTN_PATX_MEM_LEN_HI_MASK	GENMASK(4, 0)
 #define HAP_PTN_PATX_MEM_LEN_LO_MASK		GENMASK(7, 0)
 #define HAP_PTN_PATX_MEM_LEN_HI_SHIFT		8
 
@@ -678,6 +679,7 @@ struct mmap_hw_info {
 	u32	memory_size;
 	u32	pat_mem_step;
 	u32	pat_mem_play_step;
+	u8	pat_mem_play_len_msb;
 	u32	fifo_mem_step;
 	u8	fifo_mem_mask;
 };
@@ -2656,7 +2658,7 @@ static int haptics_load_predefined_effect(struct haptics_chip *chip,
 					& HAP_PTN_PATX_MEM_LEN_HI_MASK;
 			val[2] = length & HAP_PTN_PATX_MEM_LEN_LO_MASK;
 			val[3] = (length >> HAP_PTN_PATX_MEM_LEN_HI_SHIFT)
-					& HAP_PTN_PATX_MEM_LEN_HI_MASK;
+					& chip->mmap.hw_info.pat_mem_play_len_msb;
 
 			rc = haptics_write(chip, chip->ptn_addr_base,
 					HAP_PTN_SPMI_PATX_MEM_START_ADDR_REG, val, 4);
@@ -3659,6 +3661,7 @@ static int haptics_init_fifo_memory(struct haptics_chip *chip)
 		chip->mmap.hw_info.memory_size = HAP530_MMAP_NUM_BYTES;
 		chip->mmap.hw_info.pat_mem_step = HAP530_MMAP_PAT_LEN_PER_LSB;
 		chip->mmap.hw_info.pat_mem_play_step = HAP530_MMAP_PAT_LEN_PER_LSB;
+		chip->mmap.hw_info.pat_mem_play_len_msb = HAP_PTN_PATX_MEM_LEN_HI_MASK;
 		chip->mmap.hw_info.fifo_mem_step = HAP530_MMAP_FIFO_LEN_PER_LSB;
 		chip->mmap.hw_info.fifo_mem_mask = HAP530_MMAP_FIFO_LEN_MASK;
 
@@ -3670,6 +3673,8 @@ static int haptics_init_fifo_memory(struct haptics_chip *chip)
 				return rc;
 			chip->mmap.hw_info.pat_mem_play_step =
 					HAP530_V2_MMAP_PAT_LEN_PER_LSB;
+			chip->mmap.hw_info.pat_mem_play_len_msb =
+					HAP530_V2_PTN_PATX_MEM_LEN_HI_MASK;
 		}
 	}
 
