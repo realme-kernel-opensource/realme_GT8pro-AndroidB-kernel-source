@@ -38,6 +38,7 @@ qcom-pdc.ko
 qcom-dload-mode.ko
 pinctrl-msm.ko
 pinctrl-canoe.ko
+qcom_tsens.ko
 qcom-ipcc.ko
 qcom-reboot-reason.ko
 qcom-scm.ko
