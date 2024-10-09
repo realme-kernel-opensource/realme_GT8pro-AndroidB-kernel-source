@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -133,7 +133,7 @@ static const char * const drv_names_sun[][MAX_DRV_NAMES] = {
 			"CAM_IFE1", "CAM_IFE2", "PCI0 CESTA", "MM CESTA",
 			"DDR AUX", "ARC CPRF", ""},
 	[AOSS_DRV_NAME] = {"APPS", "SP", "AUDIO", "AOP", "DEBUG", "GPU", "DISPLAY", "COMPUTE",
-			"TME", "MODEM", "WLAN BB", "CAM", "PCIE", "MM", ""},
+			"TME", "MODEM", "WLAN RF", "WLAN BB", "CAM", "PCIE", "MM", ""},
 };
 
 static ssize_t debug_time_ms_show(struct device *dev,
