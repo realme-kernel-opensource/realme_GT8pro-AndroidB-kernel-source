@@ -2012,6 +2012,16 @@ static int haptics_wait_brake_complete(struct haptics_chip *chip)
 	} while (--timeout);
 
 	if (timeout == 0) {
+		/*
+		 * If there is a SWR play in the background, HPWR_DISABLED
+		 * bit won't be set and toggling HAPTICS_EN will re-initiate
+		 * the voltage requested from hBoost, it would cause potential
+		 * glitches on hBoost output which is unexpected, hence ignore
+		 * doing that in such case.
+		 */
+		if (is_swr_play_enabled(chip))
+			return 0;
+
 		dev_warn(chip->dev, "poll HPWR_DISABLED failed after stopped play\n");
 		return haptics_toggle_module_enable(chip);
 	}
