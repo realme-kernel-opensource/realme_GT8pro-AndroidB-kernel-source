@@ -272,7 +272,7 @@ int coresight_qmi_assign_atid(struct coresight_device *csdev,
 
 	if (!drvdata->service_connected) {
 		dev_err(drvdata->dev, "QMI service not connected!\n");
-		ret = EINVAL;
+		ret = -EINVAL;
 		goto err;
 	}
 

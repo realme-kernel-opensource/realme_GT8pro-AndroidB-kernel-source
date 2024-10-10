@@ -119,16 +119,30 @@ static int remote_etm_enable(struct coresight_device *csdev,
 
 	mutex_lock(&drvdata->mutex);
 
-	for (i = 0; i < drvdata->num_trcid; i++)
-		coresight_csr_set_etr_atid(csdev, drvdata->traceids[i], true);
-
 	if (!drvdata->static_atid) {
 		ret = qmi_assign_remote_etm_atid(drvdata);
 		if (ret) {
 			dev_err(drvdata->dev, "Assign remote etm atid fail\n");
-			goto error;
+			goto unlock_mutex;
+		}
+	} else {
+		for (i = 0; i < drvdata->num_trcid; i++) {
+			ret = coresight_trace_id_reserve_id(drvdata->traceids[i]);
+			if (ret) {
+				dev_err(drvdata->dev, "reserve atid: %d fail\n",
+						drvdata->traceids[i]);
+				break;
+			}
+		}
+		if (i < drvdata->num_trcid) {
+			for (; i > 0; i--)
+				coresight_trace_id_free_reserved_id(drvdata->traceids[i - 1]);
+			goto unlock_mutex;
 		}
 	}
+
+	for (i = 0; i < drvdata->num_trcid; i++)
+		coresight_csr_set_etr_atid(csdev, drvdata->traceids[i], true);
 
 	ret = qmi_enable_remote_etm(drvdata);
 	if (ret) {
@@ -139,10 +153,15 @@ static int remote_etm_enable(struct coresight_device *csdev,
 	dev_info(drvdata->dev, "Enable remote etm success\n");
 	mutex_unlock(&drvdata->mutex);
 	return 0;
-error:
-	for (i = 0; i < drvdata->num_trcid; i++)
-		coresight_csr_set_etr_atid(csdev, drvdata->traceids[i], false);
 
+error:
+	for (i = 0; i < drvdata->num_trcid; i++) {
+		coresight_csr_set_etr_atid(csdev, drvdata->traceids[i], false);
+		if (drvdata->static_atid)
+			coresight_trace_id_free_reserved_id(drvdata->traceids[i]);
+	}
+
+unlock_mutex:
 	mutex_unlock(&drvdata->mutex);
 	return ret;
 }
@@ -161,6 +180,12 @@ static void remote_etm_disable(struct coresight_device *csdev,
 	for (i = 0; i < drvdata->num_trcid; i++)
 		coresight_csr_set_etr_atid(csdev, drvdata->traceids[i], false);
 
+	for (i = 0; i < drvdata->num_trcid; i++) {
+		if (drvdata->static_atid)
+			coresight_trace_id_free_reserved_id(drvdata->traceids[i]);
+		else
+			coresight_trace_id_put_system_id(drvdata->traceids[i]);
+	}
 	mutex_unlock(&drvdata->mutex);
 }
 
