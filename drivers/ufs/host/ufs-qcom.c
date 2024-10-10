@@ -1070,8 +1070,7 @@ out:
  * Internal hardware sub-modules within the UTP controller control the CGCs.
  * Hardware CGCs disable the clock to inactivate UTP sub-modules not involved
  * in a specific operation, UTP controller CGCs are by default disabled and
- * this function enables them (after every UFS link startup) to save some power
- * leakage.
+ * this function enables them to save some power leakage.
  *
  * UFS host controller v3.0.0 onwards has internal clock gating mechanism
  * in Qunipro, enable them to save additional power.
@@ -1452,10 +1451,6 @@ static int ufs_qcom_link_startup_notify(struct ufs_hba *hba,
 
 		err = ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(
 			hba);
-		if (err)
-			goto out;
-
-		err = ufs_qcom_enable_hw_clk_gating(hba);
 		if (err)
 			goto out;
 
