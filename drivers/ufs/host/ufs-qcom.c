@@ -2368,25 +2368,6 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 			hba->caps |= UFSHCD_CAP_WB_EN;
 	}
 
-	if (host->hw_ver.major >= 0x2)
-		host->caps = UFS_QCOM_CAP_QUNIPRO |
-			     UFS_QCOM_CAP_RETAIN_SEC_CFG_AFTER_PWR_COLLAPSE;
-
-	if (host->hw_ver.major >= 0x3) {
-		host->caps |= UFS_QCOM_CAP_QUNIPRO_CLK_GATING;
-		/*
-		 * The UFS PHY attached to v3.0.0 controller supports entering
-		 * deeper low power state of SVS2. This lets the controller
-		 * run at much lower clock frequencies for saving power.
-		 * Assuming this and any future revisions of the controller
-		 * support this capability. Need to revist this assumption if
-		 * any future platform with this core doesn't support the
-		 * capability, as there will be no benefit running at lower
-		 * frequencies then.
-		 */
-		host->caps |= UFS_QCOM_CAP_SVS2;
-	}
-
 	if (host->hw_ver.major >= 0x5)
 		host->caps |= UFS_QCOM_CAP_SHARED_ICE;
 }

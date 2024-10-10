@@ -497,31 +497,6 @@ struct ufs_qcom_dev_params {
 
 struct ufs_qcom_host {
 	/*
-	 * Set this capability if host controller supports the QUniPro mode
-	 * and if driver wants the Host controller to operate in QUniPro mode.
-	 * Note: By default this capability will be kept enabled if host
-	 * controller supports the QUniPro mode.
-	 */
-	#define UFS_QCOM_CAP_QUNIPRO	0x1
-
-	/*
-	 * Set this capability if host controller can retain the secure
-	 * configuration even after UFS controller core power collapse.
-	 */
-	#define UFS_QCOM_CAP_RETAIN_SEC_CFG_AFTER_PWR_COLLAPSE	0x2
-
-	/*
-	 * Set this capability if host controller supports Qunipro internal
-	 * clock gating.
-	 */
-	#define UFS_QCOM_CAP_QUNIPRO_CLK_GATING		0x4
-
-	/*
-	 * Set this capability if host controller supports SVS2 frequencies.
-	 */
-	#define UFS_QCOM_CAP_SVS2	0x8
-
-	/*
 	 * Set this capability if host controller supports shared ICE.
 	 */
 	#define UFS_QCOM_CAP_SHARED_ICE BIT(4)
@@ -639,21 +614,6 @@ int ufs_qcom_testbus_config(struct ufs_qcom_host *host);
 void ufs_qcom_print_hw_debug_reg_all(struct ufs_hba *hba, void *priv,
 		void (*print_fn)(struct ufs_hba *hba, int offset, int num_regs,
 				const char *str, void *priv));
-
-static inline bool ufs_qcom_cap_qunipro(struct ufs_qcom_host *host)
-{
-	return host->caps & UFS_QCOM_CAP_QUNIPRO;
-}
-
-static inline bool ufs_qcom_cap_qunipro_clk_gating(struct ufs_qcom_host *host)
-{
-	return !!(host->caps & UFS_QCOM_CAP_QUNIPRO_CLK_GATING);
-}
-
-static inline bool ufs_qcom_cap_svs2(struct ufs_qcom_host *host)
-{
-	return !!(host->caps & UFS_QCOM_CAP_SVS2);
-}
 
 static inline bool is_shared_ice_supported(struct ufs_qcom_host *host)
 {
