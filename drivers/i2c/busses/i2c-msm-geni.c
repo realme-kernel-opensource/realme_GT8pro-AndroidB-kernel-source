@@ -270,7 +270,7 @@ struct geni_i2c_clk_fld {
 
 static struct geni_i2c_clk_fld geni_i2c_clk_map[] = {
 	{KHz(100), 7, 10, 11, 26},
-	{KHz(400), 2,  3, 11, 22},
+	{KHz(400), 2,  5, 11, 22},
 	{KHz(1000), 1, 2,  8, 18},
 };
 
