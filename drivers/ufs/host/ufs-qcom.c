@@ -819,12 +819,6 @@ static int ufs_qcom_link_startup_post_change(struct ufs_hba *hba)
 		goto out;
 
 	ufs_qcom_phy_set_tx_lane_enable(phy, tx_lanes);
-	/*
-	 * Some UFS devices send incorrect LineCfg data as part of power mode
-	 * change sequence which may cause host PHY to go into bad state.
-	 * Disabling Rx LineCfg of host PHY should help avoid this.
-	 */
-	ufs_qcom_phy_ctrl_rx_linecfg(phy, false);
 
 	/*
 	 * UFS controller has *clk_req output to GCC, for each of the clocks
@@ -3900,10 +3894,8 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 			cancel_dwork_unvote_cpufreq(hba);
 		}
 
-		if (err) {
+		if (err)
 			ufshcd_uic_hibern8_exit(hba);
-			return err;
-		}
 	} else {
 		if (scale_up)
 			err = ufs_qcom_clk_scale_up_post_change(hba);
