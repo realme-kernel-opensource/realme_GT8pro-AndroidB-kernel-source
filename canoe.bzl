@@ -182,6 +182,7 @@ def define_canoe():
                 "console=ttyMSM0,115200n8",
                 "qcom_geni_serial.con_enabled=1",
                 "earlycon",
+                "ufshcd_core.uic_cmd_timeout=2000",
             ]
             kernel_vendor_cmdline_extras += [
                 # do not sort
