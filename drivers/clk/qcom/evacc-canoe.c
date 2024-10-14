@@ -429,7 +429,7 @@ static int eva_cc_canoe_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x80d8, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x80d4, BIT(0), BIT(0));
 
-	ret = qcom_cc_really_probe(pdev, &eva_cc_canoe_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &eva_cc_canoe_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register EVA CC clocks ret=%d\n", ret);
 		return ret;

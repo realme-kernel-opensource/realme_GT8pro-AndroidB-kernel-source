@@ -913,7 +913,7 @@ static int video_cc_canoe_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x812c, 0x1e00000, 0x1e00000);
 	regmap_update_bits(regmap, 0x8158, 0x1e00000, 0x1e00000);
 
-	ret = qcom_cc_really_probe(pdev, &video_cc_canoe_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &video_cc_canoe_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register VIDEO CC clocks ret=%d\n", ret);
 		return ret;

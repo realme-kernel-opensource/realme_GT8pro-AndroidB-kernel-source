@@ -2205,7 +2205,7 @@ static int disp_cc_canoe_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0xc00c, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0xe008, BIT(0), BIT(0));
 
-	ret = qcom_cc_really_probe(pdev, &disp_cc_canoe_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &disp_cc_canoe_desc, regmap);
 	if (ret) {
 		if (ret != -EPROBE_DEFER)
 			dev_err(&pdev->dev, "Failed to register DISP CC clocks ret=%d\n", ret);
