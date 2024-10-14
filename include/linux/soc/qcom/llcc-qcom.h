@@ -92,7 +92,9 @@
 #define LLCC_CPU_MTE          35
 #define LLCC_VIDEO_APV        83
 #define LLCC_CPUSS_OPP        88
-#define LLCC_CAMSTRIPEOVERLAP 92
+#define LLCC_CAM_IPE_STROV    92
+#define LLCC_CAM_OFE_STROV    93
+#define LLCC_CPUSS_HEU        94
 
 #define LLCC_VERSION_2_0_0_0          0x02000000
 #define LLCC_VERSION_2_1_0_0          0x02010000
