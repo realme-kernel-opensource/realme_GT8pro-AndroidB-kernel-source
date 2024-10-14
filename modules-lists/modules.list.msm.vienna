@@ -38,3 +38,5 @@ gunyah_vcpu.ko
 gunyah_platform_hooks.ko
 gunyah_rsc_mgr.ko
 qcom_edac.ko
+qcom_aoss.ko
+msm_qmp.ko
