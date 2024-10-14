@@ -40,3 +40,4 @@ gunyah_rsc_mgr.ko
 qcom_edac.ko
 qcom_aoss.ko
 msm_qmp.ko
+qrtr.ko
