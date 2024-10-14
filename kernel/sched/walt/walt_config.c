@@ -11,6 +11,7 @@ unsigned long __read_mostly soc_flags;
 unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 cpumask_t asym_cap_sibling_cpus;
 cpumask_t pipeline_sync_cpus;
+cpumask_t storage_boost_cpus;
 int oscillate_period_ns;
 int soc_sched_lib_name_capacity;
 #define PIPELINE_BUSY_THRESH_8MS_WINDOW 7
@@ -49,6 +50,7 @@ void walt_config(void)
 	sysctl_max_freq_partial_halt = FREQ_QOS_MAX_DEFAULT_VALUE;
 	asym_cap_sibling_cpus = CPU_MASK_NONE;
 	pipeline_sync_cpus = CPU_MASK_NONE;
+	storage_boost_cpus = CPU_MASK_NONE;
 	for_each_possible_cpu(cpu) {
 		for (i = 0; i < LEGACY_SMART_FREQ; i++) {
 			if (i)
@@ -125,6 +127,7 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_EXPERIMENT3);
 		/*G + P*/
 		cpumask_copy(&pipeline_sync_cpus, cpu_possible_mask);
+		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
 		soc_sched_lib_name_capacity = 2;
 		soc_feat_unset(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
 
@@ -175,6 +178,9 @@ void walt_config(void)
 			&asym_cap_sibling_cpus, &cpu_array[0][1]);
 		cpumask_or(&asym_cap_sibling_cpus,
 			&asym_cap_sibling_cpus, &cpu_array[0][2]);
+
+		/* T + G + P */
+		cpumask_andnot(&storage_boost_cpus, cpu_possible_mask, &cpu_array[0][0]);
 
 		/*
 		 * Treat Golds and Primes as candidates for load sync under pipeline usecase.

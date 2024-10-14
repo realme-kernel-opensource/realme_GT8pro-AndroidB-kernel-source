@@ -301,6 +301,7 @@ extern unsigned int sched_capacity_margin_up[WALT_NR_CPUS];
 extern unsigned int sched_capacity_margin_down[WALT_NR_CPUS];
 extern cpumask_t asym_cap_sibling_cpus;
 extern cpumask_t pipeline_sync_cpus;
+extern cpumask_t storage_boost_cpus;
 extern cpumask_t __read_mostly **cpu_array;
 extern int cpu_l2_sibling[WALT_NR_CPUS];
 extern void sched_update_nr_prod(int cpu, int enq);
@@ -1467,6 +1468,12 @@ extern unsigned int sysctl_sched_pipeline_special;
 extern struct task_struct *pipeline_special_task;
 extern void remove_special_task(void);
 extern void set_special_task(struct task_struct *pipeline_special_local);
+extern inline unsigned long walt_lb_cpu_util(int cpu);
+extern int stop_walt_lb_active_migration(void *data);
+
+extern void walt_detach_task(struct task_struct *p, struct rq *src_rq, struct rq *dst_rq);
+extern void walt_attach_task(struct task_struct *p, struct rq *rq);
+
 #define MAX_NR_PIPELINE 3
 /* smart freq */
 #define SMART_FREQ_LEGACY_TUPLE_SIZE		3
@@ -1488,8 +1495,9 @@ extern int sched_smart_freq_ipc_handler(const struct ctl_table *table, int write
 
 extern u8 smart_freq_legacy_reason_hyst_ms[LEGACY_SMART_FREQ][WALT_NR_CPUS];
 extern void update_smart_freq_legacy_reason_hyst_time(struct walt_sched_cluster *cluster);
+extern bool move_storage_load(struct rq *rq);
 
-#define MIN_UTIL_FOR_STORAGE_BALANCING		700
+#define MIN_UTIL_FOR_STORAGE_BALANCING		650
 
 /* frequent yielder */
 #define MAX_YIELD_CNT_PER_TASK_THR		25
