@@ -62,6 +62,7 @@ vienna_perf_config = {
     "CONFIG_QCOM_WATCHDOG_PET_TIME": "9360",
     "CONFIG_QCOM_WATCHDOG_WAKEUP_ENABLE": "y",
     "CONFIG_QCOM_WDT_CORE": "m",
+    "CONFIG_QRTR": "m",
     "CONFIG_QTEE_SHM_BRIDGE": "y",
     "CONFIG_QTI_IOMMU_SUPPORT": "m",
     "CONFIG_REGULATOR_STUB": "m",
