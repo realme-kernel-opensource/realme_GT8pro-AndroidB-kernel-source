@@ -32,6 +32,7 @@ def define_canoe():
         "drivers/dma/qcom/bam_dma.ko",
         "drivers/dma/qcom/msm_gpi.ko",
         "drivers/firmware/qcom/qcom-scm.ko",
+        "drivers/firmware/qcom/qcom_tzmem.ko",
         "drivers/firmware/qcom/si_core/mem_object.ko",
         "drivers/firmware/qcom/si_core/si_core_module.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
@@ -57,6 +58,7 @@ def define_canoe():
         "drivers/iio/adc/qcom-spmi-adc5-gen3.ko",
         "drivers/iio/adc/qcom-vadc-common.ko",
         "drivers/input/misc/pm8941-pwrkey.ko",
+        "drivers/interconnect/icc-clk.ko",
         "drivers/interconnect/qcom/icc-bcm-voter.ko",
         "drivers/interconnect/qcom/icc-debug.ko",
         "drivers/interconnect/qcom/icc-rpmh.ko",
@@ -130,6 +132,8 @@ def define_canoe():
         "drivers/soc/qcom/qcom_aoss.ko",
         "drivers/soc/qcom/qcom_ice.ko",
         "drivers/soc/qcom/qcom_logbuf_boot_log.ko",
+        "drivers/soc/qcom/qcom_pd_mapper.ko",
+        "drivers/soc/qcom/qcom_pdr_msg.ko",
         "drivers/soc/qcom/qcom_ramdump.ko",
         "drivers/soc/qcom/qcom_rpmh.ko",
         "drivers/soc/qcom/qcom_wdt_core.ko",
@@ -192,7 +196,6 @@ def define_canoe():
         "kernel/rcu/rcutorture.ko",
         "kernel/torture.ko",
         "lib/atomic64_test.ko",
-        "lib/test_user_copy.ko",
     ]
 
     kernel_vendor_cmdline_extras = ["bootconfig"]

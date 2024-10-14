@@ -15,7 +15,9 @@ iommu-logger.ko
 msm_dma_iommu_mapping.ko
 secure_buffer.ko
 qcom_iommu_util.ko
+qcom_tzmem.ko
 stub-regulator.ko
 clk-dummy.ko
+icc-clk.ko
 clk-qcom.ko
 gdsc-regulator.ko

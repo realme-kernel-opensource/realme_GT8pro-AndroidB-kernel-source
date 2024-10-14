@@ -37,10 +37,10 @@ def define_sun():
         "drivers/edac/qcom_edac.ko",
         "drivers/firmware/arm_scmi/qcom_scmi_vendor.ko",
         "drivers/firmware/qcom/qcom-scm.ko",
+        "drivers/firmware/qcom/qcom_tzmem.ko",
         "drivers/firmware/qcom/si_core/mem_object.ko",
         "drivers/firmware/qcom/si_core/si_core_module.ko",
         "drivers/gpu/drm/display/drm_display_helper.ko",
-        "drivers/gpu/drm/display/drm_dp_aux_bus.ko",
         "drivers/hwmon/hwmon.ko",
         "drivers/hwmon/qti_amoled_ecm.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
@@ -71,6 +71,7 @@ def define_sun():
         "drivers/iio/adc/qti-glink-adc.ko",
         "drivers/input/misc/pm8941-pwrkey.ko",
         "drivers/input/misc/qcom-hv-haptics.ko",
+        "drivers/interconnect/icc-clk.ko",
         "drivers/interconnect/qcom/icc-bcm-voter.ko",
         "drivers/interconnect/qcom/icc-debug.ko",
         "drivers/interconnect/qcom/icc-rpmh.ko",
@@ -173,6 +174,8 @@ def define_sun():
         "drivers/soc/qcom/qcom_dynamic_ramoops.ko",
         "drivers/soc/qcom/qcom_ice.ko",
         "drivers/soc/qcom/qcom_logbuf_boot_log.ko",
+        "drivers/soc/qcom/qcom_pd_mapper.ko",
+        "drivers/soc/qcom/qcom_pdr_msg.ko",
         "drivers/soc/qcom/qcom_ramdump.ko",
         "drivers/soc/qcom/qcom_rpmh.ko",
         "drivers/soc/qcom/qcom_stats.ko",
@@ -266,7 +269,6 @@ def define_sun():
         "kernel/sched/walt/sched-walt-debug.ko",
         "kernel/torture.ko",
         "lib/atomic64_test.ko",
-        "lib/test_user_copy.ko",
     ]
 
     kernel_vendor_cmdline_extras = ["bootconfig"]
