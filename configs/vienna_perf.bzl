@@ -65,6 +65,8 @@ vienna_perf_config = {
     "CONFIG_QTEE_SHM_BRIDGE": "y",
     "CONFIG_QTI_IOMMU_SUPPORT": "m",
     "CONFIG_REGULATOR_STUB": "m",
+    "CONFIG_RPMSG_QCOM_GLINK": "m",
+    "CONFIG_RPMSG_QCOM_GLINK_SMEM": "m",
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_VIRT_DRIVERS": "y",
 }
