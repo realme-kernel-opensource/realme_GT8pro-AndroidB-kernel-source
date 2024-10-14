@@ -65,6 +65,7 @@ vienna_perf_config = {
     "CONFIG_QCOM_WATCHDOG_WAKEUP_ENABLE": "y",
     "CONFIG_QCOM_WDT_CORE": "m",
     "CONFIG_QRTR": "m",
+    "CONFIG_QRTR_SMD": "m",
     "CONFIG_QTEE_SHM_BRIDGE": "y",
     "CONFIG_QTI_IOMMU_SUPPORT": "m",
     "CONFIG_REGULATOR_STUB": "m",
