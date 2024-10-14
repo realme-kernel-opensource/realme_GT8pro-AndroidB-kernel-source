@@ -54,6 +54,8 @@ vienna_perf_config = {
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_SECURE_BUFFER": "m",
     "CONFIG_QCOM_SMEM": "m",
+    "CONFIG_QCOM_SMP2P": "m",
+    "CONFIG_QCOM_SMP2P_SLEEPSTATE": "m",
     "CONFIG_QCOM_SOCINFO": "m",
     "CONFIG_QCOM_WATCHDOG_BARK_TIME": "11000",
     "CONFIG_QCOM_WATCHDOG_IPI_PING": "y",
