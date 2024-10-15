@@ -10,10 +10,76 @@
 #include <linux/interrupt.h>
 #include <linux/mm.h>
 #include <linux/delay.h>
+#include <linux/interconnect.h>
 
 #include "qpace-constants.h"
 #include "qpace-reg-accessors.h"
 #include "qpace.h"
+
+#define QPACE_REG_PAGE_SIZE (1 << 12)
+
+/*
+ * General config, statistic and debug registers for QPaCE
+ */
+static void __iomem *qpace_gen_regs;
+#define QPACE_READ_GEN_REG(offset) readl(qpace_gen_regs + offset)
+#define QPACE_WRITE_GEN_REG(offset, val) writel(val, qpace_gen_regs + offset)
+
+/*
+ * Register interface for controlling behavior of QPaCE's decomp, comp and copy
+ * cores
+ */
+static void __iomem *qpace_gen_core_regs;
+#define QPACE_READ_GEN_CORE_REG(offset) readl(qpace_gen_core_regs + offset)
+#define QPACE_WRITE_GEN_CORE_REG(offset, val) writel(val, qpace_gen_core_regs + offset)
+
+static void __iomem *qpace_comp_core_regs;
+static void __iomem *qpace_decomp_core_regs;
+static void __iomem *qpace_copy_core_regs;
+
+/*
+ * Register interface for submitting requests to QPaCE and for getting the
+ * output of the commands
+ */
+static void __iomem *qpace_urg_regs;
+#define QPACE_READ_URG_CMD_REG(idx, offset)				\
+({									\
+	readl(qpace_urg_regs + (idx * QPACE_REG_PAGE_SIZE) + offset);	\
+})									\
+
+#define QPACE_WRITE_URG_CMD_REG(idx, offset, val)				\
+{										\
+	writel(val, qpace_urg_regs + (idx * QPACE_REG_PAGE_SIZE) + offset);	\
+}										\
+
+#define QPACE_WRITE_URG_CMD_CTX_REG(offset, urg_reg_num, ctx_num, val)		\
+{										\
+	writel(val, qpace_urg_regs + (urg_reg_num * QPACE_REG_PAGE_SIZE) +	\
+	       offset + (ctx_num * URG_CMD_CONTEXT_SPACING));			\
+}										\
+
+static void __iomem *qpace_tr_regs;
+#define QPACE_READ_TR_REG(idx, offset) readl(qpace_tr_regs + (idx * QPACE_REG_PAGE_SIZE) + offset)
+
+#define QPACE_WRITE_TR_REG(idx, offset, val)					\
+{										\
+	writel(val, qpace_tr_regs + (idx * QPACE_REG_PAGE_SIZE) + offset);	\
+}										\
+
+static void __iomem *qpace_er_regs;
+#define QPACE_READ_ER_REG(idx, offset) readl(qpace_er_regs + (idx * QPACE_REG_PAGE_SIZE) + offset)
+
+#define QPACE_WRITE_ER_REG(idx, offset, val)					\
+{										\
+	writel(val, qpace_er_regs + (idx * QPACE_REG_PAGE_SIZE) + offset);	\
+}										\
+
+static void __iomem *qpace_gen_cmd_regs;
+#define QPACE_READ_GEN_CMD_REG(offset) readl(qpace_gen_cmd_regs + offset)
+#define QPACE_WRITE_GEN_CMD_REG(offset, val) writel(val, qpace_gen_cmd_regs + offset)
+
+static struct icc_path *qpace_interconnect;
+static struct device *qpace_dev;
 
 /*
  * =============================================================================
@@ -539,6 +605,8 @@ bool qpace_trigger_tr(int tr_num)
 
 	last_processed_td->bei = 0;
 
+	pm_stay_awake(qpace_dev);
+
 	write_ptr_addr = virt_to_phys(ring->hw_write_ptr);
 
 	QPACE_WRITE_TR_REG(tr_num, QPACE_DMA_TR_MGR_0_WR_PTR_H_OFFSET,
@@ -567,6 +635,8 @@ void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep)
 			udelay(100);
 	else
 		wait_for_completion(&ev_rings[tr_num].ring_has_events);
+
+	pm_relax(qpace_dev);
 
 	qpace_free_tr_entries(tr_num);
 }
@@ -663,4 +733,305 @@ void qpace_consume_er(int er_num,
 	qpace_free_er_entries(er_num);
 }
 EXPORT_SYMBOL_GPL(qpace_consume_er);
+
+/*
+ * =============================================================================
+ * Interrupt handlers
+ * =============================================================================
+ */
+
+static irqreturn_t urgent_interrupt_handler(int irq, void *unused)
+{
+	pr_debug("Urgent interrupt handled\n");
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t event_or_word_error_interrupt_handler(int irq, void *unused)
+{
+	u32 status_reg = QPACE_READ_GEN_CMD_REG(QPACE_COMMON_EE_DMA_ER_COMPL_STAT_OFFSET);
+
+	for (int er_num = 0; er_num < NUM_RINGS; er_num++)
+		if (status_reg & (1 << er_num)) {
+			QPACE_WRITE_GEN_CMD_REG(QPACE_COMMON_EE_DMA_ER_COMPL_STAT_CLR_OFFSET,
+						1 << er_num);
+
+			complete(&ev_rings[er_num].ring_has_events);
+		}
+
+	return IRQ_HANDLED;
+}
+
+/*
+ * =============================================================================
+ * Power management
+ * =============================================================================
+ */
+
+static inline bool _qpace_power_on(void)
+{
+	unsigned long ready_status;
+	int remaining_attempts = 5;
+
+	QPACE_WRITE_GEN_CORE_REG(QPACE_CORE_OPER_CORE_RUN_STOP_OFFSET,
+				 QPACE_RUN);
+	ready_status = QPACE_READ_GEN_CORE_REG(QPACE_CORE_OPER_CORE_READY_OFFSET);
+	while (!ready_status) {
+
+		remaining_attempts--;
+		if (!remaining_attempts) {
+			pr_err("Timeout in waiting for QPaCE to turn off\n");
+			return false;
+		}
+
+		udelay(QPACE_STATE_CHANGE_TIMEOUT_US);
+
+		ready_status = QPACE_READ_GEN_CORE_REG(QPACE_CORE_OPER_CORE_READY_OFFSET);
+	}
+
+	return true;
+}
+
+static int qpace_power_on(struct device *dev)
+{
+	int ret;
+
+	qpace_interconnect = devm_of_icc_get(dev, NULL);
+	if (IS_ERR_OR_NULL(qpace_interconnect)) {
+		ret = PTR_ERR(qpace_interconnect);
+
+		pr_err("%s: devm_of_icc_get() failed with %d\n", __func__, ret);
+		return qpace_interconnect ? ret : -EINVAL;
+	}
+
+	ret = icc_set_bw(qpace_interconnect, 0, 1);
+	if (ret) {
+		pr_err("Failed to turn on QPaCE VCD: %d\n", ret);
+		return ret;
+	}
+
+	if (!_qpace_power_on()) {
+		pr_err("Failed to start QPaCE\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static inline bool _qpace_power_off(void)
+{
+	unsigned long ready_status;
+	int remaining_attempts = 5;
+
+	QPACE_WRITE_GEN_CORE_REG(QPACE_CORE_OPER_CORE_RUN_STOP_OFFSET,
+				 QPACE_STOP);
+	ready_status = QPACE_READ_GEN_CORE_REG(QPACE_CORE_OPER_CORE_READY_OFFSET);
+	while (ready_status) {
+
+		remaining_attempts--;
+		if (!remaining_attempts) {
+			pr_err("Timeout in waiting for QPaCE to turn off\n");
+			return false;
+		}
+
+		udelay(QPACE_STATE_CHANGE_TIMEOUT_US);
+
+		ready_status = QPACE_READ_GEN_CORE_REG(QPACE_CORE_OPER_CORE_READY_OFFSET);
+	}
+
+	return true;
+}
+
+static void qpace_power_off(void)
+{
+	int ret;
+
+	/* If this fails we can still remove our vote for the VCD to turn QPaCE off */
+	if (!_qpace_power_off())
+		pr_err("Failed to stop QPaCE\n");
+
+	ret = icc_set_bw(qpace_interconnect, 0, 0);
+	if (ret) {
+		pr_err("Failed to turn off QPaCE VCD: %d\n", ret);
+		return;
+	}
+}
+
+/*
+ * =============================================================================
+ * Init code
+ * =============================================================================
+ */
+
+static inline int qpace_register_ioremap(struct device *dev)
+{
+	qpace_gen_regs = devm_ioremap(dev, QPACE_GEN_REGS_BASE_ADDR,
+				      PAGE_SIZE);
+	if (!qpace_gen_regs)
+		return -EINVAL;
+
+	qpace_gen_core_regs = devm_ioremap(dev, QPACE_GEN_CORE_REGS_BASE_ADDR,
+					   PAGE_SIZE);
+	if (!qpace_gen_core_regs)
+		return -EINVAL;
+
+	qpace_comp_core_regs = devm_ioremap(dev, QPACE_COMP_CORE_REGS_BASE_ADDR,
+					    PAGE_SIZE);
+	if (!qpace_comp_core_regs)
+		return -EINVAL;
+
+	qpace_decomp_core_regs = devm_ioremap(dev, QPACE_DECOMP_CORE_REGS_BASE_ADDR,
+					      PAGE_SIZE);
+	if (!qpace_decomp_core_regs)
+		return -EINVAL;
+
+	qpace_copy_core_regs = devm_ioremap(dev, QPACE_COPY_CORE_REGS_BASE_ADDR,
+					    PAGE_SIZE);
+	if (!qpace_copy_core_regs)
+		return -EINVAL;
+
+	qpace_urg_regs = devm_ioremap(dev, QPACE_URG_REGS_BASE_ADDR,
+				      PAGE_SIZE * NUM_TRS_ERS_URG_CMD_REGS);
+	if (!qpace_urg_regs)
+		return -EINVAL;
+
+	qpace_tr_regs = devm_ioremap(dev, QPACE_TR_REGS_BASE_ADDR,
+				     PAGE_SIZE * NUM_TRS_ERS_URG_CMD_REGS);
+	if (!qpace_tr_regs)
+		return -EINVAL;
+
+	qpace_er_regs = devm_ioremap(dev, QPACE_ER_REGS_BASE_ADDR,
+				     PAGE_SIZE * NUM_TRS_ERS_URG_CMD_REGS);
+	if (!qpace_er_regs)
+		return -EINVAL;
+
+	qpace_gen_cmd_regs = devm_ioremap(dev, QPACE_EE_REGS_BASE_ADDR,
+					  PAGE_SIZE);
+	if (!qpace_gen_cmd_regs)
+		return -EINVAL;
+
+	return 0;
+}
+
+static int qpace_init(void)
+{
+	int ret;
+	u32 reg_val;
+
+	/* Select CPU SCID for our system cache slice */
+	reg_val = QPACE_READ_GEN_REG(QPACE_CORE_QNS4_CFG_OFFSET);
+	reg_val |= FIELD_PREP(CORE_QNS4_CFG_TRTYPE, 0x1);
+	QPACE_WRITE_GEN_REG(QPACE_CORE_QNS4_CFG_OFFSET, reg_val);
+
+	program_urg_command_contexts();
+
+	ret = init_transfer_rings();
+	if (ret)
+		return ret;
+
+	ret = init_event_rings();
+	if (ret)
+		goto deinit_transfer_rings;
+
+	return 0;
+
+deinit_transfer_rings:
+	deinit_transfer_rings(NUM_RINGS);
+
+	return ret;
+}
+
+enum QPACE_INTERRUPTS {
+	QPACE_IRQ_RING_AND_BUS_ERR,
+	QPACE_IRQ_URGENT
+};
+
+static int qpace_register_interrupts(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	int irq, ret;
+
+	/* Ring and bus error interrupt */
+	irq = platform_get_irq(pdev, QPACE_IRQ_RING_AND_BUS_ERR);
+	if (irq < 0) {
+		dev_err(dev, "Failed to find urgent interrupt\n");
+		return irq;
+	}
+
+	ret = devm_request_irq(dev, irq, event_or_word_error_interrupt_handler,
+			       0, "qpace-event-or-word-err-irq", NULL);
+	if (ret) {
+		dev_err(dev, "failed to request urgent interrupt\n");
+		return ret;
+	}
+
+	/* Urgent interrupt */
+	irq = platform_get_irq(pdev, QPACE_IRQ_URGENT);
+	if (irq < 0) {
+		dev_err(dev, "Failed to find urgent interrupt\n");
+		return irq;
+	}
+
+	ret = devm_request_irq(dev, irq, urgent_interrupt_handler,
+			       0, "qpace-urgent-irq", NULL);
+	if (ret) {
+		dev_err(dev, "failed to request urgent interrupt\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int qpace_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	int ret;
+
+	ret = qpace_register_interrupts(pdev);
+	if (ret)
+		return ret;
+
+	ret = qpace_register_ioremap(dev);
+	if (ret)
+		return ret;
+
+	ret = qpace_power_on(dev);
+	if (ret)
+		return ret;
+
+	ret = qpace_init();
+	if (ret)
+		goto power_off;
+
+
+	qpace_dev = dev;
+
+	return ret;
+
+power_off:
+	qpace_power_off();
+
+	return ret;
+}
+
+static const struct of_device_id qpace_match_table[] = {
+	{.compatible = "qcom,qpace"},
+	{},
+};
+
+static struct platform_driver qpace_driver = {
+	.probe = qpace_probe,
+	.driver = {
+		.name = "qcom-qpace",
+		.of_match_table = qpace_match_table,
+	},
+};
+
+static int __init qpace_module_init(void)
+{
+	return platform_driver_register(&qpace_driver);
+}
+
+module_init(qpace_module_init);
+
+MODULE_LICENSE("GPL");
 
