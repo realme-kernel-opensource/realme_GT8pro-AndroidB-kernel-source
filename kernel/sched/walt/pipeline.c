@@ -512,6 +512,7 @@ void rearrange_heavy(u64 window_start, bool force)
 	 * task to start bouncing around on the golds, and ultimately lead to suboptimal behavior.
 	 */
 	if (have_heavy_list <= 2) {
+		raw_spin_lock_irqsave(&heavy_lock, flags);
 		find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
 
 		if (prime_wts && !is_prime_worthy(prime_wts)) {
@@ -532,6 +533,7 @@ void rearrange_heavy(u64 window_start, bool force)
 			swap_pipeline_with_prime_locked(NULL, other_wts);
 		}
 
+		raw_spin_unlock_irqrestore(&heavy_lock, flags);
 		return;
 	}
 
