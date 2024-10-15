@@ -12,6 +12,7 @@
 #include <linux/random.h>
 #include <linux/scatterlist.h>
 #include <linux/sizes.h>
+#include <linux/vmalloc.h>
 
 #include "dmesg_dumper_private.h"
 

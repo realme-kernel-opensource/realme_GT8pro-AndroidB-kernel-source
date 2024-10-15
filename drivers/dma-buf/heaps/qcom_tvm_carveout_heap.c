@@ -278,8 +278,8 @@ static void tvm_heap_obj_release(struct qcom_sg_buffer *buffer)
 
 static struct dma_buf *tvm_heap_allocate(struct dma_heap *dma_heap,
 						unsigned long len,
-						unsigned long fd_flags,
-						unsigned long heap_flags)
+						u32 fd_flags,
+						u64 heap_flags)
 {
 	struct tvm_heap *heap = dma_heap_get_drvdata(dma_heap);
 	struct tvm_pool *pool;

@@ -803,7 +803,7 @@ static void virtio_unmap_page(struct device *dev, dma_addr_t dev_addr,
 			size_t size, enum dma_data_direction dir,
 			unsigned long attrs)
 {
-	BUG_ON(!is_swiotlb_buffer(dev, dev_addr));
+	BUG_ON(!swiotlb_find_pool(dev, dev_addr));
 
 	swiotlb_tbl_unmap_single(dev, dev_addr, size, dir, attrs);
 }

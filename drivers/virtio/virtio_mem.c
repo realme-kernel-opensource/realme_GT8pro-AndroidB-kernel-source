@@ -2923,7 +2923,7 @@ static void virtio_mem_deinit_kdump(struct virtio_mem *vm)
 #endif /* CONFIG_PROC_VMCORE */
 }
 
-static int virtio_mem_remove(struct platform_device *vdev)
+static void virtio_mem_remove(struct platform_device *vdev)
 {
 	struct virtio_mem *vm = platform_get_drvdata(vdev);
 
@@ -2936,8 +2936,6 @@ static int virtio_mem_remove(struct platform_device *vdev)
 
 	kfree(vm);
 	platform_set_drvdata(vdev, NULL);
-
-	return 0;
 }
 
 void virtio_mem_config_changed(struct platform_device *vdev)

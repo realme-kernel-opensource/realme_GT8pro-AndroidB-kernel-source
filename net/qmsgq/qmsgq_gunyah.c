@@ -461,7 +461,7 @@ static int qmsgq_gh_probe(struct platform_device *pdev)
 	return rc;
 }
 
-static int qmsgq_gh_remove(struct platform_device *pdev)
+static void qmsgq_gh_remove(struct platform_device *pdev)
 {
 	struct qmsgq_gh_device *qdev = dev_get_drvdata(&pdev->dev);
 
@@ -472,8 +472,6 @@ static int qmsgq_gh_remove(struct platform_device *pdev)
 		kthread_stop(qdev->rx_thread);
 
 	qmsgq_endpoint_unregister(&qdev->ep);
-
-	return 0;
 }
 
 static const struct of_device_id qmsgq_gh_of_match[] = {

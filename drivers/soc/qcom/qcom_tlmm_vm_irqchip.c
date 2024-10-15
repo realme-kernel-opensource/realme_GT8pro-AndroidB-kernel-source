@@ -52,11 +52,9 @@ static int qcom_tlmm_vm_irqchip_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int qcom_tlmm_vm_irqchip_remove(struct platform_device *pdev)
+static void qcom_tlmm_vm_irqchip_remove(struct platform_device *pdev)
 {
 	irq_domain_remove(qcom_tlmm_vm_irqchip_data.domain);
-
-	return 0;
 }
 
 static const struct of_device_id qcom_tlmm_vm_irqchip_of_match[] = {
