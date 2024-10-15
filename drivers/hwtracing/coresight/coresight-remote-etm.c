@@ -119,6 +119,11 @@ static int remote_etm_enable(struct coresight_device *csdev,
 
 	mutex_lock(&drvdata->mutex);
 
+	if (!coresight_take_mode(csdev, mode)) {
+		 /* Someone is already using the tracer */
+		ret = -EBUSY;
+		goto unlock_mutex;
+	}
 	if (!drvdata->static_atid) {
 		ret = qmi_assign_remote_etm_atid(drvdata);
 		if (ret) {
@@ -162,6 +167,7 @@ error:
 	}
 
 unlock_mutex:
+	coresight_set_mode(csdev, CS_MODE_DISABLED);
 	mutex_unlock(&drvdata->mutex);
 	return ret;
 }
@@ -175,16 +181,19 @@ static void remote_etm_disable(struct coresight_device *csdev,
 
 	mutex_lock(&drvdata->mutex);
 
-	qmi_disable_remote_etm(drvdata);
+	if (coresight_get_mode(csdev) == CS_MODE_SYSFS) {
+		qmi_disable_remote_etm(drvdata);
 
-	for (i = 0; i < drvdata->num_trcid; i++)
-		coresight_csr_set_etr_atid(csdev, drvdata->traceids[i], false);
+		for (i = 0; i < drvdata->num_trcid; i++)
+			coresight_csr_set_etr_atid(csdev, drvdata->traceids[i], false);
 
-	for (i = 0; i < drvdata->num_trcid; i++) {
-		if (drvdata->static_atid)
-			coresight_trace_id_free_reserved_id(drvdata->traceids[i]);
-		else
-			coresight_trace_id_put_system_id(drvdata->traceids[i]);
+		for (i = 0; i < drvdata->num_trcid; i++) {
+			if (drvdata->static_atid)
+				coresight_trace_id_free_reserved_id(drvdata->traceids[i]);
+			else
+				coresight_trace_id_put_system_id(drvdata->traceids[i]);
+		}
+		coresight_set_mode(csdev, CS_MODE_DISABLED);
 	}
 	mutex_unlock(&drvdata->mutex);
 }
