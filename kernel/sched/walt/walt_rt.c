@@ -66,16 +66,17 @@ static void long_running_rt_task_notifier(void *unused, struct rq *rq)
 	}
 }
 
-int sched_long_running_rt_task_ms_handler(struct ctl_table *table, int write,
+int sched_long_running_rt_task_ms_handler(const struct ctl_table *table, int write,
 				       void __user *buffer, size_t *lenp,
 				       loff_t *ppos)
 {
 	int ret;
 	static DEFINE_MUTEX(mutex);
+	struct ctl_table local_table = *table;
 
 	mutex_lock(&mutex);
 
-	ret = proc_douintvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_douintvec_minmax(&local_table, write, buffer, lenp, ppos);
 
 	if (sysctl_sched_long_running_rt_task_ms > 0 &&
 			sysctl_sched_long_running_rt_task_ms < 800)

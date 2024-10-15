@@ -137,17 +137,18 @@ static void walt_unregister_dynamic_tp_events(void)
 	unregister_sched_switch_ctrs();
 }
 
-int sched_dynamic_tp_handler(struct ctl_table *table, int write,
+int sched_dynamic_tp_handler(const struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	static DEFINE_MUTEX(mutex);
 	int ret = 0, *val = (unsigned int *)table->data;
 	unsigned int old_val;
+	struct ctl_table local_table = *table;
 
 	mutex_lock(&mutex);
 	old_val = sysctl_sched_dynamic_tp_enable;
 
-	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_dointvec_minmax(&local_table, write, buffer, lenp, ppos);
 	if (ret || !write || (old_val == sysctl_sched_dynamic_tp_enable))
 		goto done;
 

@@ -311,7 +311,7 @@ int sched_set_boost(int type)
 }
 EXPORT_SYMBOL_GPL(sched_set_boost);
 
-int sched_boost_handler(struct ctl_table *table, int write,
+int sched_boost_handler(const struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp,
 		loff_t *ppos)
 {
