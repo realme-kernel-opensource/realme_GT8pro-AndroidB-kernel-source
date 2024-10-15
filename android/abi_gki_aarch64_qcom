@@ -2669,9 +2669,11 @@
   pm_clk_suspend
   pm_generic_resume
   pm_generic_suspend
+  pm_genpd_add_device
   pm_genpd_add_subdomain
   pm_genpd_init
   pm_genpd_remove
+  pm_genpd_remove_device
   pm_genpd_remove_subdomain
   pm_power_off
   __pm_relax
