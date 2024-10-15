@@ -328,11 +328,10 @@ exit_unreg_chrdev_region:
 	return ret;
 }
 
-struct byte_cntr *byte_cntr_init(struct amba_device *adev,
+struct byte_cntr *byte_cntr_init(struct device *dev,
 				 struct tmc_drvdata *drvdata)
 {
-	struct device *dev = &adev->dev;
-	struct device_node *np = adev->dev.of_node;
+	struct device_node *np = dev->of_node;
 	int byte_cntr_irq;
 	int ret;
 	struct byte_cntr *byte_cntr_data;

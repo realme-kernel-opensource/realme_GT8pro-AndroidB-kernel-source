@@ -336,7 +336,7 @@ err:
 	return ret;
 }
 
-static int remote_etm_remove(struct platform_device *pdev)
+static void remote_etm_remove(struct platform_device *pdev)
 {
 	struct remote_etm_drvdata *drvdata = platform_get_drvdata(pdev);
 	int i;
@@ -346,7 +346,6 @@ static int remote_etm_remove(struct platform_device *pdev)
 			coresight_trace_id_put_system_id(drvdata->traceids[i]);
 
 	coresight_unregister(drvdata->csdev);
-	return 0;
 }
 
 static const struct of_device_id remote_etm_match[] = {

@@ -773,7 +773,7 @@ static int __init replicator_init(void)
 	if (ret)
 		return ret;
 
-	ret = platform_driver_register(&static_replicator_driver);
+	ret = platform_driver_register(&replicator_driver);
 	if (ret) {
 		pr_info("Error registering platform driver\n");
 		goto clear_pm;
@@ -782,7 +782,7 @@ static int __init replicator_init(void)
 	ret = amba_driver_register(&dynamic_replicator_driver);
 	if (ret) {
 		pr_info("Error registering amba driver\n");
-		platform_driver_unregister(&static_replicator_driver);
+		platform_driver_unregister(&replicator_driver);
 		goto clear_pm;
 	}
 	return ret;
@@ -794,7 +794,7 @@ clear_pm:
 
 static void __exit replicator_exit(void)
 {
-	platform_driver_unregister(&static_replicator_driver);
+	platform_driver_unregister(&replicator_driver);
 	amba_driver_unregister(&dynamic_replicator_driver);
 	replicator_pm_clear();
 }

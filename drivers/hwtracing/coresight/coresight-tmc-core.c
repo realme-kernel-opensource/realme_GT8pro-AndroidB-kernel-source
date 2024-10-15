@@ -660,15 +660,13 @@ static u32 tmc_etr_get_max_burst_size(struct device *dev)
 	return burst_size;
 }
 
-static int tmc_add_coresight_dev(struct amba_device *adev, const struct amba_id *id)
+static int tmc_add_coresight_dev(struct device *dev, struct resource *res)
 {
 	int ret = 0;
 	u32 devid;
 	void __iomem *base;
-	struct device *dev = &adev->dev;
 	struct coresight_platform_data *pdata = NULL;
 	struct tmc_drvdata *drvdata;
-	struct resource *res = &adev->res;
 	struct coresight_desc desc = { 0 };
 	struct coresight_dev_list *dev_list = NULL;
 
@@ -713,7 +711,7 @@ static int tmc_add_coresight_dev(struct amba_device *adev, const struct amba_id 
 		drvdata->size = readl_relaxed(drvdata->base + TMC_RSZ) * 4;
 	}
 
-	ret = of_get_coresight_csr_name(adev->dev.of_node, &drvdata->csr_name);
+	ret = of_get_coresight_csr_name(dev->of_node, &drvdata->csr_name);
 	if (ret) {
 		dev_dbg(dev, "No csr data\n");
 	} else {
@@ -745,9 +743,9 @@ static int tmc_add_coresight_dev(struct amba_device *adev, const struct amba_id 
 		mutex_init(&drvdata->idr_mutex);
 		dev_list = &etr_devs;
 
-		drvdata->byte_cntr = byte_cntr_init(adev, drvdata);
+		drvdata->byte_cntr = byte_cntr_init(dev, drvdata);
 
-		ret = tmc_etr_usb_init(adev, drvdata);
+		ret = tmc_etr_usb_init(dev, drvdata);
 		if (ret)
 			goto out;
 
@@ -777,7 +775,7 @@ static int tmc_add_coresight_dev(struct amba_device *adev, const struct amba_id 
 		ret = PTR_ERR(pdata);
 		goto out;
 	}
-	adev->dev.platform_data = pdata;
+	dev->platform_data = pdata;
 	desc.pdata = pdata;
 
 	drvdata->csdev = coresight_register(&desc);
@@ -794,13 +792,18 @@ static int tmc_add_coresight_dev(struct amba_device *adev, const struct amba_id 
 		coresight_unregister(drvdata->csdev);
 	else {
 		drvdata->pm_config.hw_powered = true;
-		pm_runtime_put_sync(&adev->dev);
+		pm_runtime_put_sync(dev);
 	}
 
 	if (drvdata->dclk)
 		clk_disable_unprepare(drvdata->dclk);
 out:
 	return ret;
+}
+
+static int __tmc_probe(struct device *dev, struct resource *res)
+{
+	return tmc_add_coresight_dev(dev, res);
 }
 
 static int tmc_cpu_pm_notify(struct notifier_block *nb, unsigned long cmd,
@@ -908,7 +911,7 @@ static int tmc_online_cpu(unsigned int cpu)
 			ret = pm_runtime_resume_and_get(&init_arg->adev->dev);
 			if (ret < 0)
 				return ret;
-			ret = tmc_add_coresight_dev(init_arg->adev, init_arg->id);
+			ret = tmc_add_coresight_dev(&init_arg->adev->dev, &init_arg->adev->res);
 			if (ret)
 				pm_runtime_put_sync(&init_arg->adev->dev);
 			else {
@@ -939,7 +942,7 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 	if (!drvdata)
 		return -ENOMEM;
 
-	dev_set_drvdata(dev, drvdata);
+	amba_set_drvdata(adev, drvdata);
 	pm_config = &drvdata->pm_config;
 
 	if (dev->pm_domain) {
@@ -947,12 +950,12 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 		cpumask = pd->cpus;
 
 		if (cpumask_empty(cpumask))
-			return tmc_add_coresight_dev(adev, id);
+			return tmc_add_coresight_dev(dev, &adev->res);
 
 		cpus_read_lock();
 		for_each_online_cpu(cpu) {
 			if (cpumask_test_cpu(cpu, cpumask)) {
-				ret = tmc_add_coresight_dev(adev, id);
+				ret = tmc_add_coresight_dev(dev, &adev->res);
 				if (ret)
 					dev_dbg(dev, "add coresight_dev fail:%d\n", ret);
 				else {
@@ -983,11 +986,15 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 		drvdata->delayed = init_arg;
 		spin_unlock(&delay_lock);
 		cpus_read_unlock();
-		pm_runtime_put_sync(&adev->dev);
+		pm_runtime_put_sync(dev);
 		return 0;
 	}
 
-	return tmc_add_coresight_dev(adev, id);
+	ret = __tmc_probe(dev, &adev->res);
+	if (!ret)
+		pm_runtime_put_sync(dev);
+
+	return ret;
 }
 
 static void tmc_shutdown(struct amba_device *adev)
@@ -1191,12 +1198,19 @@ static struct platform_driver tmc_platform_driver = {
 
 static int __init tmc_init(void)
 {
+	int ret;
+
+	ret = tmc_pm_setup();
+	if (ret)
+		return ret;
+
 	return coresight_init_driver("tmc", &tmc_driver, &tmc_platform_driver);
 }
 
 static void __exit tmc_exit(void)
 {
 	coresight_remove_driver(&tmc_driver, &tmc_platform_driver);
+	tmc_pm_clear();
 }
 module_init(tmc_init);
 module_exit(tmc_exit);
