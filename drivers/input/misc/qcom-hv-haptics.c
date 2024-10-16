@@ -592,6 +592,7 @@ enum wa_flags {
 	RECOVER_SWR_SLAVE = BIT(4),
 	EN_RUNTIME_PM = BIT(5),
 	VISENSE_RECOVERY_EN = BIT(6),
+	IGNORE_SWR_IN_SPMI_PLAY = BIT(7),
 };
 
 static const char * const src_str[] = {
@@ -1556,6 +1557,19 @@ static int __haptics_set_vmax_mv(struct haptics_chip *chip, u32 vmax_mv)
 	return rc;
 }
 
+static int haptics_ignore_swr_play(struct haptics_chip *chip, bool enable)
+{
+	int rc;
+	u8 val = enable ? SWR_IGNORE_BIT : 0;
+
+	rc = haptics_masked_write(chip, chip->cfg_addr_base,
+			HAP_CFG_TRIG_PRIORITY_REG, SWR_IGNORE_BIT, val);
+	if (rc < 0)
+		dev_err(chip->dev, "update SWR_IGNORE_BIT failed, rc=%d\n", rc);
+
+	return rc;
+}
+
 static int haptics_set_vmax_mv(struct haptics_chip *chip, u32 vmax_mv)
 {
 	int rc = 0;
@@ -2054,12 +2068,12 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 	if (en) {
 		rc = haptics_clear_fault(chip);
 		if (rc < 0)
-			return rc;
+			goto restore;
 	}
 
 	rc = haptics_open_loop_drive_config(chip, en);
 	if (rc < 0)
-		return rc;
+		goto restore;
 
 	val = play->pattern_src;
 	if (chip->hw_type == HAP525_HV && play->pattern_src == PATTERN_MEM)
@@ -2075,7 +2089,7 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 			HAP_CFG_SPMI_PLAY_REG, &val, 1);
 	if (rc < 0) {
 		dev_err(chip->dev, "Write SPMI_PLAY failed, rc=%d\n", rc);
-		return rc;
+		goto restore;
 	}
 
 	if (!en)
@@ -2087,7 +2101,7 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 			if (rc < 0) {
 				dev_err(chip->dev, "Keep boost vreg on failed, rc=%d\n",
 						rc);
-				return rc;
+				goto restore;
 			}
 		} else {
 			hrtimer_start(&chip->hbst_off_timer,
@@ -2097,6 +2111,11 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 	}
 
 	trace_qcom_haptics_play(en);
+restore:
+	/* Restore SWR play mode after SPMI play mode is done or any faults */
+	if ((!en || rc) && (chip->wa_flags & IGNORE_SWR_IN_SPMI_PLAY))
+		haptics_ignore_swr_play(chip, false);
+
 	return rc;
 }
 
@@ -3142,6 +3161,22 @@ static int haptics_upload_effect(struct input_dev *dev,
 	if (rc < 0)
 		return rc;
 
+	/*
+	 * When switching between SWR and SPMI play, the haptics module doesn't
+	 * set HPWR_DISABLED status especially if triggering a SPMI play before
+	 * SWR play is not de-asserted. This triggers haptics enable toggling
+	 * workaround trying to recover the HW in multiple places and it is
+	 * unexpected.
+	 *
+	 * To avoid this, set SWR_IGNORE before triggering a SPMI play, and
+	 * unset SWR_IGNORE after the SPMI play is stopped.
+	 */
+	if (chip->wa_flags & IGNORE_SWR_IN_SPMI_PLAY) {
+		rc = haptics_ignore_swr_play(chip, true);
+		if (rc < 0)
+			goto auto_suspend;
+	}
+
 	switch (effect->type) {
 	case FF_CONSTANT:
 		length_ms = effect->replay.length;
@@ -3156,7 +3191,7 @@ static int haptics_upload_effect(struct input_dev *dev,
 		if (rc < 0) {
 			dev_err(chip->dev, "set direct play failed, rc=%d\n",
 					rc);
-			goto auto_suspend;
+			goto restore;
 		}
 
 		break;
@@ -3164,7 +3199,7 @@ static int haptics_upload_effect(struct input_dev *dev,
 		if (effect->u.periodic.waveform != FF_CUSTOM) {
 			dev_err(chip->dev, "Only support custom waveforms\n");
 			rc = -EINVAL;
-			goto auto_suspend;
+			goto restore;
 		}
 
 		if (effect->u.periodic.custom_len ==
@@ -3176,7 +3211,7 @@ static int haptics_upload_effect(struct input_dev *dev,
 			if (rc < 0) {
 				dev_err(chip->dev, "Upload custom FIFO data failed rc=%d\n",
 						rc);
-				goto auto_suspend;
+				goto restore;
 			}
 		} else if (effect->u.periodic.custom_len ==
 				sizeof(s16) * CUSTOM_DATA_LEN) {
@@ -3187,7 +3222,7 @@ static int haptics_upload_effect(struct input_dev *dev,
 			if (rc < 0) {
 				dev_err(chip->dev, "Upload periodic effect failed rc=%d\n",
 						rc);
-				goto auto_suspend;
+				goto restore;
 			}
 		}
 
@@ -3196,13 +3231,13 @@ static int haptics_upload_effect(struct input_dev *dev,
 		dev_err(chip->dev, "%d effect is not supported\n",
 				effect->type);
 		rc = -EINVAL;
-		goto auto_suspend;
+		goto restore;
 	}
 
 	rc = haptics_enable_hpwr_vreg(chip, true);
 	if (rc < 0) {
 		dev_err(chip->dev, "enable hpwr_vreg failed, rc=%d\n", rc);
-		goto auto_suspend;
+		goto restore;
 	}
 
 	rc = haptics_wait_hboost_ready(chip);
@@ -3217,11 +3252,14 @@ static int haptics_upload_effect(struct input_dev *dev,
 		mutex_lock(&chip->play.lock);
 		haptics_stop_fifo_play(chip);
 		mutex_unlock(&chip->play.lock);
-		goto auto_suspend;
+		goto restore;
 	}
 
 	return 0;
 
+restore:
+	if (chip->wa_flags & IGNORE_SWR_IN_SPMI_PLAY)
+		haptics_ignore_swr_play(chip, false);
 auto_suspend:
 	haptics_runtime_autosuspend_put(chip);
 	return rc;
@@ -3338,14 +3376,14 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 			dev_err(chip->dev, "stop FIFO playing failed, rc=%d\n",
 					rc);
 			mutex_unlock(&play->lock);
-			return rc;
+			goto restore;
 		}
 	} else {
 		rc = haptics_enable_play(chip, false);
 		if (rc < 0) {
 			dev_err(chip->dev, "stop play failed, rc=%d\n", rc);
 			mutex_unlock(&play->lock);
-			return rc;
+			goto restore;
 		}
 	}
 	mutex_unlock(&play->lock);
@@ -3359,6 +3397,11 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 		if (rc < 0)
 			dev_err(chip->dev, "visense lra impedance measurement failed, rc=%d\n", rc);
 	}
+
+restore:
+	/* Restore SWR play mode after SPMI play is done or any faults */
+	if (chip->wa_flags & IGNORE_SWR_IN_SPMI_PLAY)
+		haptics_ignore_swr_play(chip, false);
 
 	haptics_runtime_autosuspend_put(chip);
 	return rc;
@@ -3912,7 +3955,8 @@ static int haptics_config_wa(struct haptics_chip *chip)
 			chip->wa_flags |= SW_CTRL_HBST;
 		break;
 	case HAP530_HV:
-		chip->wa_flags |= EN_RUNTIME_PM | VISENSE_RECOVERY_EN;
+		chip->wa_flags |= EN_RUNTIME_PM | VISENSE_RECOVERY_EN |
+			IGNORE_SWR_IN_SPMI_PLAY;
 		break;
 	default:
 		dev_err(chip->dev, "HW type %d does not match\n",
@@ -4886,25 +4930,17 @@ static int swr_slave_reg_enable(struct regulator_dev *rdev)
 	 * ignore SWR mode until next SWR slave enable request is coming.
 	 */
 	if (is_swr_play_enabled(chip)) {
-		rc = haptics_masked_write(chip, chip->cfg_addr_base,
-				HAP_CFG_TRIG_PRIORITY_REG,
-				SWR_IGNORE_BIT, SWR_IGNORE_BIT);
-		if (rc < 0) {
-			dev_err(chip->dev, "Failed to enable SWR_IGNORE, rc=%d\n", rc);
+		rc = haptics_ignore_swr_play(chip, true);
+		if (rc < 0)
 			goto auto_suspend;
-		}
 
 		rc = haptics_toggle_module_enable(chip);
 		if (rc < 0)
 			goto auto_suspend;
 	} else {
-		rc = haptics_masked_write(chip, chip->cfg_addr_base,
-				HAP_CFG_TRIG_PRIORITY_REG,
-				SWR_IGNORE_BIT, 0);
-		if (rc < 0) {
-			dev_err(chip->dev, "Failed to disable SWR_IGNORE, rc=%d\n", rc);
+		rc = haptics_ignore_swr_play(chip, false);
+		if (rc < 0)
 			goto auto_suspend;
-		}
 	}
 done:
 	chip->swr_slave_enabled = true;
