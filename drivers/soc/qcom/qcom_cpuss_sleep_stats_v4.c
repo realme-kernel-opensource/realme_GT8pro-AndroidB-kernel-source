@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -82,7 +82,7 @@ static void qcom_create_resindency_file(struct qcom_stats_prvdata *pdata)
 	}
 }
 
-static int qcom_cpuss_sleep_stats_probe(struct platform_device *pdev)
+static int qcom_cpuss_sleep_stats_v4_probe(struct platform_device *pdev)
 {
 	struct qcom_stats_prvdata *pdata;
 
@@ -151,21 +151,21 @@ struct stats_config qcom_cpuss_cntr_offsets = {
 	},
 };
 
-static const struct of_device_id qcom_cpuss_stats_table[] = {
+static const struct of_device_id qcom_cpuss_stats_v4_table[] = {
 	{ .compatible = "qcom,cpuss-sleep-stats-v4", .data = &qcom_cpuss_cntr_offsets },
 	{ },
 };
 
-static struct platform_driver qcom_cpuss_sleep_stats = {
-	.probe = qcom_cpuss_sleep_stats_probe,
+static struct platform_driver qcom_cpuss_sleep_stats_v4 = {
+	.probe = qcom_cpuss_sleep_stats_v4_probe,
 	.remove = qcom_cpuss_sleep_stats_remove,
 	.driver	= {
-		.name = "qcom_cpuss_sleep_stats",
-		.of_match_table	= qcom_cpuss_stats_table,
+		.name = "qcom_cpuss_sleep_stats_v4",
+		.of_match_table	= qcom_cpuss_stats_v4_table,
 	},
 };
 
-module_platform_driver(qcom_cpuss_sleep_stats);
+module_platform_driver(qcom_cpuss_sleep_stats_v4);
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. (QTI) CPUSS sleep stats v4 driver");
 MODULE_LICENSE("GPL");
