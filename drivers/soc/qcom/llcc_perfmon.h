@@ -122,6 +122,7 @@
 
 #define TRP_PROF_EVENT_n_CFG(v, n)	((VER_CHK6(v) ? 0x48030 : 0x024020) + 4 * (n))
 #define TRP_SCID_n_STATUS(n)		(0x000004 + (0x1000 * (n)))
+#define TRP_CAP_COUNTERS_DUMP_CFG	(0x48100)
 
 /* DRP */
 #define DRP_PROF_FLTR_CFG_BASE(v)	(VER_CHK6(v) ? 0x81000 : (VER_CHK(v) ? 0x51000 : 0x044000))
