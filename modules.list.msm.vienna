@@ -21,3 +21,5 @@ clk-dummy.ko
 icc-clk.ko
 clk-qcom.ko
 gdsc-regulator.ko
+smem.ko
+socinfo.ko
