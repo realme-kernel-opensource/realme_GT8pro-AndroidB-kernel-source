@@ -173,6 +173,7 @@ def define_canoe():
         "drivers/virt/gunyah/gunyah_qcom.ko",
         "drivers/virt/gunyah/gunyah_rsc_mgr.ko",
         "drivers/virt/gunyah/gunyah_vcpu.ko",
+        "kernel/msm_sysstats.ko",
         "kernel/trace/qcom_ipc_logging.ko",
         "net/mac80211/mac80211.ko",
         "net/qrtr/qrtr.ko",
