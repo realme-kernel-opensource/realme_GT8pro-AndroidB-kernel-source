@@ -309,12 +309,15 @@ static bool coresight_is_helper(struct coresight_device *csdev)
 static int coresight_enable_helper(struct coresight_device *csdev,
 				   enum cs_mode mode, void *data)
 {
+	if (!helper_ops(csdev)->enable)
+		return 0;
 	return helper_ops(csdev)->enable(csdev, mode, data);
 }
 
 static void coresight_disable_helper(struct coresight_device *csdev)
 {
-	helper_ops(csdev)->disable(csdev, NULL);
+	if (helper_ops(csdev)->disable)
+		helper_ops(csdev)->disable(csdev, NULL);
 }
 
 static void coresight_disable_helpers(struct coresight_device *csdev)

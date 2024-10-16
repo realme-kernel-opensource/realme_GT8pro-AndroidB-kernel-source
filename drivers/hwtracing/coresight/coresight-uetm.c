@@ -86,7 +86,6 @@ struct uetm_drvdata {
 	uint8_t                 cluster_id;
 	uint8_t                 state_idx;
 	uint8_t                 lane_idx;
-	bool                    enable;
 	bool                    uncore_uetm;
 	struct uetm_reg_config  *config;
 };
@@ -758,7 +757,7 @@ static int uetm_enable(struct coresight_device *csdev,
 	struct uetm_reg_config *config = drvdata->config;
 	int ret, trace_id;
 
-	if (drvdata->enable) {
+	if (!coresight_take_mode(csdev, mode)) {
 		dev_err(&csdev->dev,
 		"uetm %d already enabled,Skipping enable\n",
 		drvdata->uetm_id);
@@ -766,8 +765,10 @@ static int uetm_enable(struct coresight_device *csdev,
 	}
 
 	trace_id = coresight_trace_id_get_system_id();
-	if (trace_id < 0)
+	if (trace_id < 0) {
+		coresight_set_mode(csdev, CS_MODE_DISABLED);
 		return trace_id;
+	}
 
 	drvdata->traceid = (u8)trace_id;
 	config->atb_cfg &= ~UETM_ATB_CFG_ATID_MASK;
@@ -788,12 +789,12 @@ static int uetm_enable(struct coresight_device *csdev,
 	if (ret)
 		goto release_atid;
 
-	drvdata->enable = true;
 	return 0;
 
 release_atid:
 	coresight_trace_id_put_system_id(drvdata->traceid);
 	coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+	coresight_set_mode(csdev, CS_MODE_DISABLED);
 	return ret;
 };
 
@@ -802,10 +803,12 @@ static void uetm_disable(struct coresight_device *csdev,
 {
 	struct uetm_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
-	uetm_scmi_stop_uetm_trace(drvdata->uetm_id);
-	coresight_trace_id_put_system_id(drvdata->traceid);
-	coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
-	drvdata->enable = false;
+	if (coresight_get_mode(csdev == CS_MODE_SYSFS)) {
+		uetm_scmi_stop_uetm_trace(drvdata->uetm_id);
+		coresight_trace_id_put_system_id(drvdata->traceid);
+		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+		coresight_set_mode(csdev, CS_MODE_DISABLED);
+	}
 };
 
 static const struct coresight_ops_source uetm_source_ops = {
