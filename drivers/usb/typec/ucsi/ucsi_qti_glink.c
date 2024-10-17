@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"UCSI: %s: " fmt, __func__
@@ -450,8 +450,11 @@ static void ucsi_qti_notify(struct ucsi_dev *udev, unsigned int offset,
 	bool cmd_requested;
 	struct constat_info_entry *entry;
 
-	if (len != sizeof(*status))
-		return;
+	if (len != sizeof(*status)) {
+		/* For UCSI v1.x maximum length is 16 bytes */
+		if (udev->ucsi->version > UCSI_VERSION_1_2 || len != 16)
+			return;
+	}
 
 	mutex_lock(&udev->notify_lock);
 	cmd_requested = test_bit(CONN_STAT_REQD, &udev->cmd_requested_flags);
