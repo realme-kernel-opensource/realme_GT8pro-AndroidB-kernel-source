@@ -90,6 +90,8 @@ TRACE_EVENT(sched_update_history,
 		__field(int,			cpu)
 		__field(u16,			trailblazer_demand)
 		__field(u8,			high_util_history)
+		__field(u64,			uclamp_min)
+		__field(u64,			uclamp_max)
 	),
 
 	TP_fast_assign(
@@ -109,9 +111,11 @@ TRACE_EVENT(sched_update_history,
 		__entry->cpu		= rq->cpu;
 		__entry->trailblazer_demand = trailblazer_demand;
 		__entry->high_util_history = wts->high_util_history;
+		__entry->uclamp_min	= uclamp_eff_value(p, UCLAMP_MIN);
+		__entry->uclamp_max	= uclamp_eff_value(p, UCLAMP_MAX);
 	),
 
-	TP_printk("pid=%d comm=%s runtime=%u samples=%d event=%s demand=%u (hist: %u %u %u %u %u) (hist_util: %u %u %u %u %u) coloc_demand=%u pred_demand_scaled=%u cpu=%d nr_big=%u trailblazer_demand=%u high_util_history=%u",
+	TP_printk("pid=%d comm=%s runtime=%u samples=%d event=%s demand=%u (hist: %u %u %u %u %u) (hist_util: %u %u %u %u %u) coloc_demand=%u pred_demand_scaled=%u cpu=%d nr_big=%u trailblazer_demand=%u high_util_history=%u uclamp_min=%llu uclamp_max=%llu",
 		__entry->pid, __entry->comm,
 		__entry->runtime, __entry->samples,
 		task_event_names[__entry->evt],
@@ -124,7 +128,7 @@ TRACE_EVENT(sched_update_history,
 		__entry->hist_util[4],
 		__entry->coloc_demand, __entry->pred_demand_scaled,
 		__entry->cpu, __entry->nr_big_tasks, __entry->trailblazer_demand,
-		__entry->high_util_history)
+		__entry->high_util_history, __entry->uclamp_min, __entry->uclamp_max)
 );
 
 TRACE_EVENT(sched_get_task_cpu_cycles,
