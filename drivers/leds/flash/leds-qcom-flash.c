@@ -169,7 +169,7 @@ struct qcom_flash_data {
 	struct v4l2_flash	**v4l2_flash;
 	struct regmap_field     *r_fields[REG_MAX_COUNT];
 	struct power_supply	*batt_psy;
-	struct mutex		lock;
+	spinlock_t              lock;
 	enum hw_type		hw_type;
 	u32			total_ma;
 	u8			leds_count;
@@ -203,7 +203,7 @@ static int set_flash_module_en(struct qcom_flash_led *led, bool en)
 	for (i = 0; i < led->chan_count; i++)
 		led_mask |= BIT(led->chan_id[i]);
 
-	mutex_lock(&flash_data->lock);
+	spin_lock(&flash_data->lock);
 	if (en)
 		flash_data->chan_en_bits |= led_mask;
 	else
@@ -213,7 +213,7 @@ static int set_flash_module_en(struct qcom_flash_led *led, bool en)
 	rc = regmap_field_write(flash_data->r_fields[REG_MODULE_EN], enable);
 	if (rc)
 		dev_err(led->flash.led_cdev.dev, "write module_en failed, rc=%d\n", rc);
-	mutex_unlock(&flash_data->lock);
+	spin_unlock(&flash_data->lock);
 
 	return rc;
 }
@@ -244,7 +244,7 @@ static int update_allowed_flash_current(struct qcom_flash_led *led, u32 *current
 	u32 therm_ma, avail_ma, thrsh[3], min_thrsh, sts;
 	int rc = 0;
 
-	mutex_lock(&flash_data->lock);
+	spin_lock(&flash_data->lock);
 	/*
 	 * Put previously allocated current into allowed budget in either of these two cases:
 	 * 1) LED is disabled;
@@ -350,7 +350,7 @@ static int update_allowed_flash_current(struct qcom_flash_led *led, u32 *current
 			goto unlock;
 
 		/* Wait for LMH mitigation to take effect */
-		usleep_range(500, 600);
+		udelay(500);
 	}
 
 	dev_dbg(led->flash.led_cdev.dev, "allowed flash current: %dmA, total current: %dmA\n",
@@ -370,7 +370,7 @@ restore:
 		rc = regmap_field_write(flash_data->r_fields[REG_THERM_THRSH3], thrsh[2]);
 
 unlock:
-	mutex_unlock(&flash_data->lock);
+	spin_unlock(&flash_data->lock);
 	return rc;
 }
 
@@ -675,9 +675,9 @@ static int qcom_flash_led_voltage_headroom_get(struct qcom_flash_data *flash_dat
 	if (flash_data->hw_type == QCOM_MVFLASH_3CH)
 		return voltage_hdrm_mv;
 
-	mutex_lock(&flash_data->lock);
+	spin_lock(&flash_data->lock);
 	current_ma = flash_data->total_ma;
-	mutex_unlock(&flash_data->lock);
+	spin_unlock(&flash_data->lock);
 
 	for (i = 0; i < ARRAY_SIZE(mvflash_4ch_map); i++) {
 		if (current_ma <= mvflash_4ch_map[i].current_ma)
@@ -1062,7 +1062,7 @@ static int qcom_flash_led_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, flash_data);
-	mutex_init(&flash_data->lock);
+	spin_lock_init(&flash_data->lock);
 
 	count = device_get_child_node_count(dev);
 	if (count == 0 || count > flash_data->max_channels) {
@@ -1105,8 +1105,6 @@ static void qcom_flash_led_remove(struct platform_device *pdev)
 
 	while (flash_data->v4l2_flash[flash_data->leds_count] && flash_data->leds_count)
 		v4l2_flash_release(flash_data->v4l2_flash[flash_data->leds_count--]);
-
-	mutex_destroy(&flash_data->lock);
 }
 
 static const struct of_device_id qcom_flash_led_match_table[] = {
