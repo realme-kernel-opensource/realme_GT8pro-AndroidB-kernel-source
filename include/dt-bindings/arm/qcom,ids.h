@@ -278,6 +278,8 @@
 #define QCOM_ID_IPQ5300			624
 #define QCOM_ID_CANOE			660
 #define QCOM_ID_CANOEP			661
+#define QCOM_ID_VIENNA			669
+#define QCOM_ID_VIENNAP			670
 
 /*
  * The board type and revision information, used by Qualcomm bootloaders and
