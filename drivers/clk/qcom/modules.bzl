@@ -566,6 +566,7 @@ def register_modules(registry):
             "drivers/clk/qcom/reset.h",
             "drivers/clk/qcom/vdd-class.h",
             "drivers/clk/qcom/vdd-level.h",
+            "drivers/clk/qcom/gdsc.h",
         ],
         deps = [
             # do not sort
