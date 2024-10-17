@@ -346,6 +346,9 @@ static const struct pinctrl_pin_desc canoe_pins[] = {
 	PINCTRL_PIN(215, "GPIO_215"),
 	PINCTRL_PIN(216, "GPIO_216"),
 	PINCTRL_PIN(217, "UFS_RESET"),
+	PINCTRL_PIN(218, "SDC2_CLK"),
+	PINCTRL_PIN(219, "SDC2_CMD"),
+	PINCTRL_PIN(220, "SDC2_DATA"),
 };
 
 #define DECLARE_MSM_GPIO_PINS(pin) \
@@ -569,6 +572,9 @@ DECLARE_MSM_GPIO_PINS(215);
 DECLARE_MSM_GPIO_PINS(216);
 
 static const unsigned int ufs_reset_pins[] = { 217 };
+static const unsigned int sdc2_clk_pins[] = { 218 };
+static const unsigned int sdc2_cmd_pins[] = { 219 };
+static const unsigned int sdc2_data_pins[] = { 220 };
 
 enum canoe_functions {
 	msm_mux_gpio,
@@ -2621,6 +2627,9 @@ static const struct msm_pingroup canoe_groups[] = {
 	[216] = PINGROUP(216, phase_flag21, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 			 NA, 0, -1),
 	[217] = UFS_RESET(ufs_reset, 0x1E8004),
+	[218] = SDC_QDSD_PINGROUP(sdc2_clk, 0x1DD000, 14, 6),
+	[219] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x1DD000, 11, 3),
+	[220] = SDC_QDSD_PINGROUP(sdc2_data, 0x1DD000, 9, 0),
 };
 
 static struct pinctrl_qup canoe_qup_regs[] = {
