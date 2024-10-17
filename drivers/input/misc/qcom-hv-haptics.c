@@ -593,6 +593,7 @@ enum wa_flags {
 	EN_RUNTIME_PM = BIT(5),
 	VISENSE_RECOVERY_EN = BIT(6),
 	IGNORE_SWR_IN_SPMI_PLAY = BIT(7),
+	DISCHARGE_VNDRV_LDO = BIT(8),
 };
 
 static const char * const src_str[] = {
@@ -1443,8 +1444,20 @@ static int haptics_check_hpwr_status(struct haptics_chip *chip)
 			break;
 
 		val &= HPWR_INTF_STATUS_MASK;
-		if ((val == HPWR_DISABLED) || (val == HPWR_READY))
-			break;
+
+		if (chip->wa_flags & DISCHARGE_VNDRV_LDO) {
+			/*
+			 * Haptics VNDRV LDO has already been disabled when HPWR_DISABLED
+			 * status is set, delay 500us here to discharge the VNDRV voltage.
+			 */
+			if (val == HPWR_DISABLED) {
+				usleep_range(500, 501);
+				break;
+			}
+		} else {
+			if ((val == HPWR_DISABLED) || (val == HPWR_READY))
+				break;
+		}
 
 		usleep_range(1000, 1001);
 	}
@@ -2032,6 +2045,10 @@ static int haptics_wait_brake_complete(struct haptics_chip *chip)
 		}
 
 		if ((val & HPWR_INTF_STATUS_MASK) == HPWR_DISABLED) {
+			/* Delay 500us to discharge the VNDRV voltage after play is stopped */
+			if (chip->wa_flags & DISCHARGE_VNDRV_LDO)
+				usleep_range(500, 501);
+
 			dev_dbg(chip->dev, "stopped play completely");
 			break;
 		}
@@ -3956,7 +3973,7 @@ static int haptics_config_wa(struct haptics_chip *chip)
 		break;
 	case HAP530_HV:
 		chip->wa_flags |= EN_RUNTIME_PM | VISENSE_RECOVERY_EN |
-			IGNORE_SWR_IN_SPMI_PLAY;
+			IGNORE_SWR_IN_SPMI_PLAY | DISCHARGE_VNDRV_LDO;
 		break;
 	default:
 		dev_err(chip->dev, "HW type %d does not match\n",
