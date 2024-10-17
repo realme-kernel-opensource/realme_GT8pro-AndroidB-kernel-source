@@ -71,7 +71,6 @@ gunyah.ko
 gunyah_hypercall.ko
 gunyah_loader.ko
 gunyah_platform_hooks.ko
-gunyah_qcom.ko
 gunyah_rsc_mgr.ko
 mdt_loader.ko
 qcom_wdt_core.ko

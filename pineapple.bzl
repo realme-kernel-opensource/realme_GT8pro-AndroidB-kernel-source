@@ -163,7 +163,6 @@ def define_pineapple():
         "drivers/virt/gunyah/gunyah_irqfd.ko",
         "drivers/virt/gunyah/gunyah_loader.ko",
         "drivers/virt/gunyah/gunyah_platform_hooks.ko",
-        "drivers/virt/gunyah/gunyah_qcom.ko",
         "drivers/virt/gunyah/gunyah_vcpu.ko",
         "kernel/sched/walt/sched-walt.ko",
         "kernel/trace/qcom_ipc_logging.ko",
