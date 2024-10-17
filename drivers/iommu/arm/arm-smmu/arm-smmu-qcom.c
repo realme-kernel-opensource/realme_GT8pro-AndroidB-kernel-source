@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -1871,7 +1871,7 @@ static int qsmmuv500_tbu_register(struct device *dev, void *cookie)
 	struct qsmmuv500_tbu_device *tbu;
 	struct qsmmuv500_archdata *data = cookie;
 
-	if (!dev->driver) {
+	if (!dev->driver_data) {
 		dev_err(dev, "TBU failed probe, QSMMUV500 cannot continue!\n");
 		return -EINVAL;
 	}
