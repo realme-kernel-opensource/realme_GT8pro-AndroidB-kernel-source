@@ -92,21 +92,29 @@ static int dummy_source_enable(struct coresight_device *csdev,
 	struct dummy_drvdata *drvdata =
 		 dev_get_drvdata(csdev->dev.parent);
 
+	if (!coresight_take_mode(csdev, mode)) {
+		 /* Someone is already using the tracer */
+		return -EBUSY;
+	}
 	if (!drvdata->static_atid) {
 		trace_id = coresight_trace_id_get_system_id();
-		if (trace_id < 0)
+		if (trace_id < 0) {
+			coresight_set_mode(csdev, CS_MODE_DISABLED);
 			return trace_id;
+		}
 
 		drvdata->traceid = (u8)trace_id;
 		ret = qmi_assign_dummy_source_atid(drvdata);
 		if (ret) {
 			coresight_trace_id_put_system_id(trace_id);
+			coresight_set_mode(csdev, CS_MODE_DISABLED);
 			dev_err(drvdata->dev, "Assign dummy source atid fail\n");
 			return ret;
 		}
 	} else {
 		ret = coresight_trace_id_reserve_id(drvdata->traceid);
 		if (ret) {
+			coresight_set_mode(csdev, CS_MODE_DISABLED);
 			dev_err(drvdata->dev, "Reserve atid: %d fail\n", drvdata->traceid);
 			return ret;
 		}
@@ -123,12 +131,15 @@ static void dummy_source_disable(struct coresight_device *csdev,
 {
 	struct dummy_drvdata *drvdata =
 		 dev_get_drvdata(csdev->dev.parent);
-	coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
-	if (drvdata->static_atid)
-		coresight_trace_id_free_reserved_id(drvdata->traceid);
-	else
-		coresight_trace_id_put_system_id(drvdata->traceid);
-	dev_dbg(csdev->dev.parent, "Dummy source disabled\n");
+	if (coresight_get_mode(csdev) == CS_MODE_SYSFS) {
+		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+		if (drvdata->static_atid)
+			coresight_trace_id_free_reserved_id(drvdata->traceid);
+		else
+			coresight_trace_id_put_system_id(drvdata->traceid);
+		coresight_set_mode(csdev, CS_MODE_DISABLED);
+		dev_dbg(csdev->dev.parent, "Dummy source disabled\n");
+	}
 }
 
 static int dummy_sink_enable(struct coresight_device *csdev, enum cs_mode mode,
