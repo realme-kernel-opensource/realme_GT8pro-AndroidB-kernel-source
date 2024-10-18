@@ -393,21 +393,21 @@ out:
 	return rc;
 }
 
-static int ucsi_qti_async_write(struct ucsi *ucsi, unsigned int offset,
-			       const void *val, size_t val_len)
+static int ucsi_qti_async_control(struct ucsi *ucsi, u64 command)
 {
 	struct ucsi_dev *udev = ucsi_get_drvdata(ucsi);
 
-	return ucsi_qti_glink_write(udev, offset, val, val_len, false);
+	return ucsi_qti_glink_write(udev, UCSI_CONTROL, &command,
+				sizeof(command), false);
 }
 
 
-static int ucsi_qti_sync_write(struct ucsi *ucsi, unsigned int offset,
-			       const void *val, size_t val_len)
+static int ucsi_qti_sync_control(struct ucsi *ucsi, u64 command)
 {
 	struct ucsi_dev *udev = ucsi_get_drvdata(ucsi);
 
-	return ucsi_qti_glink_write(udev, offset, val, val_len, true);
+	return ucsi_qti_glink_write(udev, UCSI_CONTROL, &command,
+				sizeof(command), true);
 }
 
 static void ucsi_qti_clean_notification(struct ucsi_dev *udev)
@@ -543,10 +543,28 @@ out:
 	return rc;
 }
 
+static int ucsi_qti_read_version(struct ucsi *ucsi, u16 *version)
+{
+	return ucsi_qti_read(ucsi, UCSI_VERSION, version, sizeof(*version));
+}
+
+static int ucsi_qti_read_cci(struct ucsi *ucsi, u32 *cci)
+{
+	return ucsi_qti_read(ucsi, UCSI_CCI, cci, sizeof(*cci));
+}
+
+static int ucsi_qti_read_message_in(struct ucsi *ucsi, void *val,
+					size_t val_len)
+{
+	return ucsi_qti_read(ucsi, UCSI_MESSAGE_IN, val, val_len);
+}
+
 static const struct ucsi_operations ucsi_qti_ops = {
-	.read = ucsi_qti_read,
-	.sync_write = ucsi_qti_sync_write,
-	.async_write = ucsi_qti_async_write
+	.read_version = ucsi_qti_read_version,
+	.read_cci = ucsi_qti_read_cci,
+	.read_message_in = ucsi_qti_read_message_in,
+	.sync_control = ucsi_qti_sync_control,
+	.async_control = ucsi_qti_async_control,
 };
 
 static int ucsi_setup(struct ucsi_dev *udev)
