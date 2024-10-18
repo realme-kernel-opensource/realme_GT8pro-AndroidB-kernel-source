@@ -114,26 +114,13 @@ static ssize_t enable_store(struct device *dev,
 		if (ret)
 			return ret;
 
-		if (drvdata->dclk) {
-			ret = clk_prepare_enable(drvdata->dclk);
-			if (ret) {
-				pm_runtime_put_sync(dev->parent);
-				return ret;
-			}
-		}
 		ret = cti_enable(drvdata->csdev, CS_MODE_SYSFS, NULL);
-		if (ret) {
+		if (ret)
 			pm_runtime_put_sync(dev->parent);
-			if (drvdata->dclk)
-				clk_disable_unprepare(drvdata->dclk);
-		}
 	} else {
 		ret = cti_disable(drvdata->csdev, NULL);
-		if (!ret) {
+		if (!ret)
 			pm_runtime_put_sync(dev->parent);
-			if (drvdata->dclk)
-				clk_disable_unprepare(drvdata->dclk);
-		}
 	}
 
 	if (ret)
@@ -199,20 +186,11 @@ static ssize_t coresight_cti_reg_show(struct device *dev,
 	ret = pm_runtime_resume_and_get(dev->parent);
 	if (ret < 0)
 		return ret;
-	if (drvdata->dclk) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret) {
-			pm_runtime_put_sync(dev->parent);
-			return ret;
-		}
-	}
 	spin_lock(&drvdata->spinlock);
 	if (drvdata->config.hw_powered)
 		val = readl_relaxed(drvdata->base + cti_attr->off);
 	spin_unlock(&drvdata->spinlock);
 	pm_runtime_put_sync(dev->parent);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 	return sysfs_emit(buf, "0x%x\n", val);
 }
 
@@ -233,20 +211,10 @@ static __maybe_unused ssize_t coresight_cti_reg_store(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	if (drvdata->dclk) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret) {
-			pm_runtime_put_sync(dev->parent);
-			return ret;
-		}
-	}
-
 	spin_lock(&drvdata->spinlock);
 	if (drvdata->config.hw_powered)
 		cti_write_single_reg(drvdata, cti_attr->off, val);
 	spin_unlock(&drvdata->spinlock);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 	pm_runtime_put_sync(dev->parent);
 	return size;
 }
@@ -650,14 +618,6 @@ static ssize_t triginstatus_show(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	if (drvdata->dclk) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret) {
-			pm_runtime_put_sync(dev->parent);
-			return ret;
-		}
-	}
-
 	spin_lock(&drvdata->spinlock);
 	if (drvdata->config.hw_powered) {
 		if (drvdata->extended_cti) {
@@ -672,8 +632,6 @@ static ssize_t triginstatus_show(struct device *dev,
 	}
 	spin_unlock(&drvdata->spinlock);
 	pm_runtime_put_sync(dev->parent);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 
 	if (drvdata->extended_cti)
 		return len;
@@ -696,14 +654,6 @@ static ssize_t trigoutstatus_show(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	if (drvdata->dclk) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret) {
-			pm_runtime_put_sync(dev->parent);
-			return ret;
-		}
-	}
-
 	spin_lock(&drvdata->spinlock);
 	if (drvdata->config.hw_powered) {
 		if (drvdata->extended_cti) {
@@ -718,8 +668,6 @@ static ssize_t trigoutstatus_show(struct device *dev,
 	}
 	spin_unlock(&drvdata->spinlock);
 	pm_runtime_put_sync(dev->parent);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 
 	if (drvdata->extended_cti)
 		return len;
@@ -739,14 +687,6 @@ static ssize_t chinstatus_show(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	if (drvdata->dclk) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret) {
-			pm_runtime_put_sync(dev->parent);
-			return ret;
-		}
-	}
-
 	spin_lock(&drvdata->spinlock);
 	if (drvdata->config.hw_powered) {
 		if (drvdata->extended_cti)
@@ -756,8 +696,6 @@ static ssize_t chinstatus_show(struct device *dev,
 	}
 	spin_unlock(&drvdata->spinlock);
 	pm_runtime_put_sync(dev->parent);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 	return scnprintf(buf, PAGE_SIZE, "0x%x\n", val);
 }
 static DEVICE_ATTR_RO(chinstatus);
@@ -773,14 +711,6 @@ static ssize_t choutstatus_show(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	if (drvdata->dclk) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret) {
-			pm_runtime_put_sync(dev->parent);
-			return ret;
-		}
-	}
-
 	spin_lock(&drvdata->spinlock);
 	if (drvdata->config.hw_powered) {
 		if (drvdata->extended_cti)
@@ -790,8 +720,6 @@ static ssize_t choutstatus_show(struct device *dev,
 	}
 	spin_unlock(&drvdata->spinlock);
 	pm_runtime_put_sync(dev->parent);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 	return scnprintf(buf, PAGE_SIZE, "0x%x\n", val);
 }
 static DEVICE_ATTR_RO(choutstatus);

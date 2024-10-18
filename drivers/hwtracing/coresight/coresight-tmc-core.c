@@ -288,14 +288,6 @@ static ssize_t coresight_tmc_reg32_show(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	if (drvdata->dclk) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret) {
-			pm_runtime_put_sync(dev->parent);
-			return ret;
-		}
-	}
-
 	spin_lock(&drvdata->spinlock);
 	if (!drvdata->pm_config.hw_powered) {
 		ret = -EINVAL;
@@ -305,8 +297,6 @@ static ssize_t coresight_tmc_reg32_show(struct device *dev,
 	val = readl_relaxed(drvdata->base + cs_attr->off);
 out:
 	spin_unlock(&drvdata->spinlock);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 	pm_runtime_put_sync(dev->parent);
 	if (ret)
 		return ret;
@@ -326,14 +316,6 @@ static ssize_t coresight_tmc_reg64_show(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	if (drvdata->dclk) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret) {
-			pm_runtime_put_sync(dev->parent);
-			return ret;
-		}
-	}
-
 	spin_lock(&drvdata->spinlock);
 	if (!drvdata->pm_config.hw_powered) {
 		ret = -EINVAL;
@@ -344,8 +326,6 @@ static ssize_t coresight_tmc_reg64_show(struct device *dev,
 			((u64)readl_relaxed(drvdata->base + cs_attr->hi_off) << 32);
 out:
 	spin_unlock(&drvdata->spinlock);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 	pm_runtime_put_sync(dev->parent);
 
 	if (ret)
@@ -682,13 +662,12 @@ static int tmc_add_coresight_dev(struct device *dev, struct resource *res)
 		goto out;
 	}
 
-	drvdata->dclk = devm_clk_get(dev, "dynamic_clk");
-	if (!IS_ERR(drvdata->dclk)) {
-		ret = clk_prepare_enable(drvdata->dclk);
+	drvdata->atclk = devm_clk_get(dev, "atclk"); /* optional */
+	if (!IS_ERR(drvdata->atclk)) {
+		ret = clk_prepare_enable(drvdata->atclk);
 		if (ret)
-			goto out;
-	} else
-		drvdata->dclk = NULL;
+			return ret;
+	}
 
 	drvdata->base = base;
 	desc.access = CSDEV_ACCESS_IOMEM(base);
@@ -716,8 +695,11 @@ static int tmc_add_coresight_dev(struct device *dev, struct resource *res)
 		dev_dbg(dev, "No csr data\n");
 	} else {
 		drvdata->csr = coresight_csr_get(drvdata->csr_name);
-		if (IS_ERR(drvdata->csr))
-			return dev_err_probe(dev, -EPROBE_DEFER, "failed to get csr\n");
+		if (IS_ERR(drvdata->csr)) {
+			dev_dbg(dev, "failed to get csr, defer probe\n");
+			ret = -EPROBE_DEFER;
+			goto out_disable_clk;
+		}
 	}
 
 	desc.dev = dev;
@@ -738,7 +720,8 @@ static int tmc_add_coresight_dev(struct device *dev, struct resource *res)
 		desc.ops = &tmc_etr_cs_ops;
 		ret = tmc_etr_setup_caps(dev, devid, &desc.access);
 		if (ret)
-			goto out;
+			goto out_disable_clk;
+
 		idr_init(&drvdata->idr);
 		mutex_init(&drvdata->idr_mutex);
 		dev_list = &etr_devs;
@@ -747,7 +730,7 @@ static int tmc_add_coresight_dev(struct device *dev, struct resource *res)
 
 		ret = tmc_etr_usb_init(dev, drvdata);
 		if (ret)
-			goto out;
+			goto out_disable_clk;
 
 		break;
 	case TMC_CONFIG_TYPE_ETF:
@@ -761,19 +744,19 @@ static int tmc_add_coresight_dev(struct device *dev, struct resource *res)
 	default:
 		pr_err("%s: Unsupported TMC config\n", desc.name);
 		ret = -EINVAL;
-		goto out;
+		goto out_disable_clk;
 	}
 
 	desc.name = coresight_alloc_device_name(dev_list, dev);
 	if (!desc.name) {
 		ret = -ENOMEM;
-		goto out;
+		goto out_disable_clk;
 	}
 
 	pdata = coresight_get_platform_data(dev);
 	if (IS_ERR(pdata)) {
 		ret = PTR_ERR(pdata);
-		goto out;
+		goto out_disable_clk;
 	}
 	dev->platform_data = pdata;
 	desc.pdata = pdata;
@@ -781,7 +764,7 @@ static int tmc_add_coresight_dev(struct device *dev, struct resource *res)
 	drvdata->csdev = coresight_register(&desc);
 	if (IS_ERR(drvdata->csdev)) {
 		ret = PTR_ERR(drvdata->csdev);
-		goto out;
+		goto out_disable_clk;
 	}
 
 	drvdata->miscdev.name = desc.name;
@@ -795,8 +778,9 @@ static int tmc_add_coresight_dev(struct device *dev, struct resource *res)
 		pm_runtime_put_sync(dev);
 	}
 
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
+out_disable_clk:
+	if (ret && !IS_ERR_OR_NULL(drvdata->atclk))
+		clk_disable_unprepare(drvdata->atclk);
 out:
 	return ret;
 }
@@ -1157,8 +1141,12 @@ static int tmc_runtime_suspend(struct device *dev)
 {
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev);
 
-	if (drvdata && !IS_ERR_OR_NULL(drvdata->pclk))
-		clk_disable_unprepare(drvdata->pclk);
+	if (drvdata) {
+		if (!IS_ERR_OR_NULL(drvdata->pclk))
+			clk_disable_unprepare(drvdata->pclk);
+		if (!IS_ERR(drvdata->atclk))
+			clk_disable_unprepare(drvdata->atclk);
+	}
 	return 0;
 }
 
@@ -1166,8 +1154,12 @@ static int tmc_runtime_resume(struct device *dev)
 {
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev);
 
-	if (drvdata && !IS_ERR_OR_NULL(drvdata->pclk))
-		clk_prepare_enable(drvdata->pclk);
+	if (drvdata) {
+		if (!IS_ERR_OR_NULL(drvdata->pclk))
+			clk_prepare_enable(drvdata->pclk);
+		if (!IS_ERR(drvdata->atclk))
+			clk_prepare_enable(drvdata->atclk);
+	}
 	return 0;
 }
 #endif

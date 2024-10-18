@@ -484,18 +484,10 @@ static int tpdm_enable(struct coresight_device *csdev, struct perf_event *event,
 		return -EBUSY;
 	}
 
-	if (drvdata->dclk) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret)
-			return ret;
-	}
-
 	spin_lock(&drvdata->spinlock);
 	ret = coresight_get_aggre_atid(csdev);
 	if (ret < 0) {
 		spin_unlock(&drvdata->spinlock);
-		if (drvdata->dclk)
-			clk_disable_unprepare(drvdata->dclk);
 		return ret;
 	}
 	drvdata->traceid = ret;
@@ -555,8 +547,6 @@ static void tpdm_disable(struct coresight_device *csdev,
 		__tpdm_disable(drvdata);
 		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
 		drvdata->traceid = 0;
-		if (drvdata->dclk)
-			clk_disable_unprepare(drvdata->dclk);
 		spin_unlock(&drvdata->spinlock);
 
 		coresight_set_mode(csdev, CS_MODE_DISABLED);
@@ -1446,13 +1436,9 @@ static int tpdm_probe(struct amba_device *adev, const struct amba_id *id)
 	drvdata->dev = &adev->dev;
 	dev_set_drvdata(dev, drvdata);
 
-	drvdata->dclk = devm_clk_get(dev, "dynamic_clk");
-	if (!IS_ERR(drvdata->dclk)) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret)
-			return ret;
-	} else
-		drvdata->dclk = NULL;
+	drvdata->atclk = devm_clk_get_optional_enabled(dev, "atclk"); /* optional */
+	if (IS_ERR(drvdata->atclk))
+		return  PTR_ERR(drvdata->atclk);
 
 	base = devm_ioremap_resource(dev, &adev->res);
 	if (IS_ERR(base))
@@ -1491,8 +1477,6 @@ static int tpdm_probe(struct amba_device *adev, const struct amba_id *id)
 
 	/* Decrease pm refcount when probe is done.*/
 	pm_runtime_put_sync(&adev->dev);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 	return 0;
 }
 
@@ -1502,6 +1486,33 @@ static void tpdm_remove(struct amba_device *adev)
 
 	coresight_unregister(drvdata->csdev);
 }
+
+#ifdef CONFIG_PM
+static int tpdm_runtime_suspend(struct device *dev)
+{
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (drvdata && !IS_ERR(drvdata->atclk))
+		clk_disable_unprepare(drvdata->atclk);
+
+	return 0;
+}
+
+static int tpdm_runtime_resume(struct device *dev)
+{
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (drvdata && !IS_ERR(drvdata->atclk))
+		clk_prepare_enable(drvdata->atclk);
+
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops tpdm_dev_pm_ops = {
+	SET_RUNTIME_PM_OPS(tpdm_runtime_suspend, tpdm_runtime_resume, NULL)
+
+};
 
 /*
  * Different TPDM has different periph id.
@@ -1518,6 +1529,7 @@ static struct amba_id tpdm_ids[] = {
 static struct amba_driver tpdm_driver = {
 	.drv = {
 		.name   = "coresight-tpdm",
+		.pm = &tpdm_dev_pm_ops,
 		.suppress_bind_attrs = true,
 	},
 	.probe          = tpdm_probe,
