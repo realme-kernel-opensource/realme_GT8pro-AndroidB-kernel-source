@@ -535,6 +535,40 @@ static ssize_t timestamp_show(struct device *dev,
 
 static DEVICE_ATTR_RO(timestamp);
 
+static ssize_t timestamp_ctrl_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf,
+				 size_t size)
+{
+	uint32_t val;
+	int ret;
+	unsigned long flags;
+	struct csr_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	if (IS_ERR_OR_NULL(drvdata) || !drvdata->timestamp_support) {
+		dev_err(dev, "Invalid param\n");
+		return 0;
+	}
+
+	ret = sscanf(buf, "%x", &val);
+	if (ret != 1)
+		return -EINVAL;
+
+	ret = clk_prepare_enable(drvdata->clk);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&drvdata->spin_lock, flags);
+	CSR_UNLOCK(drvdata);
+	csr_writel(drvdata, val, CSR_TIMESTAMPCTRL);
+	CSR_LOCK(drvdata);
+	spin_unlock_irqrestore(&drvdata->spin_lock, flags);
+	clk_disable_unprepare(drvdata->clk);
+	return size;
+}
+
+static DEVICE_ATTR_WO(timestamp_ctrl);
+
 static ssize_t msr_show(struct device *dev,
 				struct device_attribute *attr,
 				char *buf)
@@ -875,6 +909,7 @@ static struct attribute *swao_csr_attrs[] = {
 	&dev_attr_hbeat_val1.attr,
 	&dev_attr_hbeat_mask0.attr,
 	&dev_attr_hbeat_mask1.attr,
+	&dev_attr_timestamp_ctrl.attr,
 	NULL,
 };
 
