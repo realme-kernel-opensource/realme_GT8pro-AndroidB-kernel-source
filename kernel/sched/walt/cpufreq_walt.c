@@ -431,14 +431,9 @@ out:
 
 static unsigned long waltgov_get_util(struct waltgov_cpu *wg_cpu)
 {
-	struct rq *rq = cpu_rq(wg_cpu->cpu);
-	unsigned long max = arch_scale_cpu_capacity(wg_cpu->cpu);
-	unsigned long util;
-
-	wg_cpu->max = max;
+	wg_cpu->max = arch_scale_cpu_capacity(wg_cpu->cpu);
 	wg_cpu->reasons = 0;
-	util = cpu_util_freq_walt(wg_cpu->cpu, &wg_cpu->walt_load, &wg_cpu->reasons);
-	return uclamp_rq_util_with(rq, util, NULL);
+	return cpu_util_freq_walt(wg_cpu->cpu, &wg_cpu->walt_load, &wg_cpu->reasons);
 }
 
 #define NL_RATIO 75
@@ -468,6 +463,7 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	bool is_hiload;
 	bool employ_ed_boost = wg_cpu->walt_load.ed_active && sysctl_ed_boost_pct;
 	unsigned long pl = wg_cpu->walt_load.pl;
+	unsigned long min_util = *util;
 
 	if (is_rtg_boost && (!cpumask_test_cpu(wg_cpu->cpu, cpu_partial_halt_mask) ||
 				!is_state1()))
@@ -499,6 +495,9 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 
 	if (employ_ed_boost)
 		wg_cpu->reasons |= CPUFREQ_REASON_EARLY_DET_BIT;
+
+	*util = uclamp_rq_util_with(cpu_rq(wg_cpu->cpu), *util, NULL);
+	*util = max(min_util, *util);
 }
 
 static inline unsigned long target_util(struct waltgov_policy *wg_policy,
