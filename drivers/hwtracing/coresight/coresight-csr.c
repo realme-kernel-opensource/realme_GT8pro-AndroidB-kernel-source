@@ -581,6 +581,8 @@ static ssize_t msr_store(struct device *dev,
 
 	spin_lock_irqsave(&drvdata->spin_lock, flags);
 	CSR_UNLOCK(drvdata);
+	rval = csr_readl(drvdata, drvdata->msr_start + offset * 4);
+	val |= rval;
 	csr_writel(drvdata, val, drvdata->msr_start + offset * 4);
 	rval = csr_readl(drvdata, drvdata->msr_start + offset * 4);
 	drvdata->msr[offset] = rval;
