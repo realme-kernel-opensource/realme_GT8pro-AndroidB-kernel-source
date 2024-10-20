@@ -2069,6 +2069,11 @@
   led_classdev_flash_unregister
   led_classdev_unregister
   led_mc_calc_color_components
+  led_set_brightness
+  led_set_brightness_sync
+  led_set_flash_brightness
+  led_set_flash_strobe
+  led_set_flash_timeout
   led_trigger_event
   led_trigger_register
   led_trigger_register_simple
