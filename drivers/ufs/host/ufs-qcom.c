@@ -3414,11 +3414,16 @@ static void ufs_qcom_parse_broken_ahit_workaround_flag(struct ufs_qcom_host *hos
 	host->broken_ahit_wa = of_property_read_bool(np, str);
 }
 
-static void ufs_qcom_set_rate_a(struct ufs_qcom_host *host)
+/*
+ * Read sdam register for ufs device identification using
+ * nvmem interface and accordingly set phy submode.
+ */
+static void ufs_qcom_read_nvmem_cell(struct ufs_qcom_host *host)
 {
 	size_t len;
 	u8 *data;
 	struct nvmem_cell *nvmem_cell;
+	struct device_node *np = host->hba->dev->of_node;
 
 	nvmem_cell = nvmem_cell_get(host->hba->dev, "ufs_dev");
 	if (IS_ERR(nvmem_cell)) {
@@ -3434,12 +3439,38 @@ static void ufs_qcom_set_rate_a(struct ufs_qcom_host *host)
 
 	/*
 	 * data equal to zero shows that ufs 2.x card is connected while
-	 * non-zero value shows that ufs 3.x card is connected
+	 * non-zero value shows that ufs 3.x card is connected. Below are
+	 * the default values
+	 * sdam Value = 0 : UFS 2.x, phy_submode = 0.
+	 * sdam Value = 1 : UFS 3.x, phy_submode = 1.
+	 *
+	 * But also bit value to identify ufs device is not consistent
+	 * across the targets it could be bit[0] = 0/1 for UFS2.x/3x
+	 * and vice versa. If the bit[x] value is not same as default
+	 * value used in driver and if its reverted then use flag
+	 * qcom,ufs-dev-revert to identify ufs device.
+	 * Then revert values to get as below
+	 * data = 0 : UFS 2.x
+	 * data = 1 : UFS 3.x
 	 */
-	if (*data) {
-		host->host_pwr_cap.hs_rate = PA_HS_MODE_A;
-		dev_dbg(host->hba->dev, "UFS 3.x device is detected, Mode is set to RATE A\n");
+	if (of_property_read_bool(np, "qcom,ufs-dev-revert"))
+		host->host_pwr_cap.phy_submode = !(*data);
+	else
+		host->host_pwr_cap.phy_submode = *data;
+
+	if (host->host_pwr_cap.phy_submode) {
+		dev_info(host->hba->dev, "(%s) UFS device is 3.x, phy_submode = %d\n",
+				__func__, host->host_pwr_cap.phy_submode);
+
+		if (of_property_read_bool(np, "limit-rate-ufs3")) {
+			host->host_pwr_cap.hs_rate = PA_HS_MODE_A;
+			dev_dbg(host->hba->dev, "UFS 3.x device Mode is set to RATE A\n");
+		}
 	}
+
+	else
+		dev_info(host->hba->dev, "(%s) UFS device is 2.x, phy_submode = %d\n",
+				__func__, host->host_pwr_cap.phy_submode);
 
 	kfree(data);
 
@@ -4553,6 +4584,7 @@ static void ufs_qcom_parse_limits(struct ufs_qcom_host *host)
 	struct device_node *np = host->hba->dev->of_node;
 	u32 dev_major = 0, dev_minor = 0;
 	u32 val;
+	u32 ufs_dev_types = 0;
 
 	ufs_qcom_setup_max_hs_gear(host);
 
@@ -4606,8 +4638,19 @@ static void ufs_qcom_parse_limits(struct ufs_qcom_host *host)
 	of_property_read_u32(np, "limit-rate", &host_pwr_cap->hs_rate);
 	of_property_read_u32(np, "limit-phy-submode", &host_pwr_cap->phy_submode);
 
-	if (of_property_read_bool(np, "limit-rate-ufs3"))
-		ufs_qcom_set_rate_a(host);
+	/*
+	 * ufs-dev-types and ufs_dev nvmem enties are for ufs device
+	 * identification using nvmem interface. Use number of
+	 * ufs devices supported in SoC for ufs-dev-types, and nvmem
+	 * handle added by pmic for sdam register access.
+	 *
+	 * Default value taken by driver is bit[x] = 1 for UFS 3.x and
+	 * bit[x] = 0 for UFS 2.x driver code takes this as default case.
+	 */
+	of_property_read_u32(np, "ufs-dev-types", &ufs_dev_types);
+
+	if (of_property_read_bool(np, "limit-rate-ufs3") || ufs_dev_types)
+		ufs_qcom_read_nvmem_cell(host);
 }
 
 /*
