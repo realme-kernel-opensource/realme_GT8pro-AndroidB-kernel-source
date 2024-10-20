@@ -831,7 +831,13 @@ static int uetm_probe(struct platform_device *pdev)
 	struct coresight_desc desc = { 0 };
 
 	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
+	if (!drvdata)
+		return -ENOMEM;
+
 	config = devm_kzalloc(dev, sizeof(*config), GFP_KERNEL);
+	if (!config)
+		return -ENOMEM;
+
 	drvdata->config = config;
 
 	dev_set_drvdata(dev, drvdata);
