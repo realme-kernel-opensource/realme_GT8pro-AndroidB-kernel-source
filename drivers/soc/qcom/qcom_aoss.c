@@ -278,6 +278,9 @@ int __printf(2, 3) qmp_send(struct qmp *qmp, const char *fmt, ...)
 		AOSS_INFO("timed out clearing msg: %.*s\n", min_t(int, len, QMP_MSG_LEN),
 			  (char *)fmt);
 		writel(0, qmp->msgram + qmp->offset);
+	} else if (time_left < 0) {
+		dev_err(qmp->dev, "wait error %ld\n", time_left);
+		ret = time_left;
 	} else {
 		ret = 0;
 		AOSS_INFO("ack: %.*s\n", min_t(int, len, QMP_MSG_LEN), (char *)fmt);
