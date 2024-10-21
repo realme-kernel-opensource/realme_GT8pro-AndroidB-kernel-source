@@ -24,3 +24,4 @@ gdsc-regulator.ko
 smem.ko
 socinfo.ko
 qcom_hwspinlock.ko
+qcom-ipcc.ko
