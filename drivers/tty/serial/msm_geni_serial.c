@@ -188,6 +188,9 @@ static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENAB
 /* Required for polling for 100 msecs */
 #define POLL_WAIT_TIMEOUT_MSEC	100
 
+/* Required for polling for 25 msecs */
+#define CMD_DONE_TIMEOUT_MSEC	25
+
 /*
  * Number of iterrations required while polling
  * where each iterration has a delay of 100 usecs
@@ -939,15 +942,15 @@ static bool geni_wait_for_cmd_done(struct uart_port *uport, bool is_irq_masked)
 			}
 		}
 	} else {
-		/* Waiting for 10 milli second for interrupt to be fired */
+		/* Waiting for 25 milli second for interrupt to be fired */
 		if (msm_port->m_cmd)
 			timeout = wait_for_completion_timeout
 					(&msm_port->m_cmd_timeout,
-				msecs_to_jiffies(POLL_WAIT_TIMEOUT_MSEC));
+				msecs_to_jiffies(CMD_DONE_TIMEOUT_MSEC));
 		else if (msm_port->s_cmd)
 			timeout = wait_for_completion_timeout
 					(&msm_port->s_cmd_timeout,
-				msecs_to_jiffies(POLL_WAIT_TIMEOUT_MSEC));
+				msecs_to_jiffies(CMD_DONE_TIMEOUT_MSEC));
 	}
 	return timeout ? 0 : 1;
 }
