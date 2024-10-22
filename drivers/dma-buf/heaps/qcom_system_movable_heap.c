@@ -59,8 +59,8 @@ struct page *qcom_movable_heap_alloc_pages(struct dynamic_page_pool *pool)
 
 static struct dma_buf *movable_heap_allocate(struct dma_heap *heap,
 						unsigned long len,
-						unsigned long fd_flags,
-						unsigned long heap_flags)
+						u32 fd_flags,
+						u64 heap_flags)
 {
 	struct qcom_sg_buffer *buffer;
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
