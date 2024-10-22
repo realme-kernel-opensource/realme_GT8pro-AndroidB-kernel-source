@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _QCOM_BWMON_H
@@ -17,6 +17,8 @@
 #define MBPS_TO_KHZ(mbps, w)	(mult_frac(mbps, MBYTE, w * 1000ULL))
 #define KHZ_TO_MBPS(khz, w)	(mult_frac(w * 1000ULL, khz, MBYTE))
 #define to_bwmon(ptr)		container_of(ptr, struct bwmon, hw)
+#define MAX_NAME_SIZE		64
+#define MAX_LOW_POWER_CLUSTERS	8
 
 enum mon_reg_type {
 	MON1,
@@ -31,6 +33,11 @@ struct bwmon_spec {
 	bool hw_sampling;
 	bool has_global_base;
 	enum mon_reg_type reg_type;
+};
+
+struct bwmon_second_map {
+	u32 src_freq;
+	u32 dst_freq;
 };
 
 /**
@@ -70,6 +77,13 @@ struct bw_hwmon {
 	enum dcvs_hw_type	dcvs_hw;
 	enum dcvs_path_type	dcvs_path;
 	u32			dcvs_width;
+	enum dcvs_hw_type	second_dcvs_hw;
+	u32			second_dcvs_width;
+	bool			second_vote_supported;
+	u32			second_vote_limit;
+	char			second_dev_name[MAX_NAME_SIZE + 1];
+	struct bwmon_second_map	*second_map;
+	cpumask_t		low_power_cluster_cpus;
 	struct hwmon_node	*node;
 	ktime_t			last_update_ts;
 	struct work_struct	work;
@@ -102,11 +116,18 @@ struct hwmon_node {
 	u32			hw_max_freq;
 	u32			min_freq;
 	u32			max_freq;
-	struct dcvs_freq	cur_freq;
+	struct dcvs_freq	cur_freqs[2];
 	u32			window_ms;
 	unsigned int		guard_band_mbps;
 	unsigned int		decay_rate;
 	unsigned int		io_percent;
+	unsigned int		use_sched_boost;
+	bool			cur_sched_boost;
+	u32			sched_boost_freq;
+	bool			low_power_io_percent_enabled;
+	bool			use_low_power_io_percent;
+	unsigned int		low_power_io_percent;
+	u32			max_low_power_cluster_freqs[MAX_LOW_POWER_CLUSTERS];
 	unsigned int		bw_step;
 	unsigned int		sample_ms;
 	unsigned int		up_scale;
@@ -119,6 +140,7 @@ struct hwmon_node {
 	unsigned int		idle_length;
 	unsigned int		idle_mbps;
 	unsigned int		ab_scale;
+	unsigned int		second_ab_scale;
 	unsigned int		mbps_zones[NUM_MBPS_ZONES];
 	unsigned long		prev_ab;
 	unsigned long		bytes;

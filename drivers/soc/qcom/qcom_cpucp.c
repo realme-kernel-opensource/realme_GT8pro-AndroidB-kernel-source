@@ -247,12 +247,6 @@ static int qcom_cpucp_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	cpucp_ipc->irq = platform_get_irq(pdev, 0);
-	if (cpucp_ipc->irq < 0) {
-		dev_err(&pdev->dev, "Failed to get the IRQ\n");
-		return cpucp_ipc->irq;
-	}
-
 	cpucp_ipc->chans = devm_kzalloc(&pdev->dev, desc->num_chans *
 					sizeof(struct mbox_chan), GFP_KERNEL);
 	if (!cpucp_ipc->chans)
@@ -264,10 +258,10 @@ static int qcom_cpucp_probe(struct platform_device *pdev)
 		writeq(0, cpucp_ipc->rx_irq_base + desc->map_reg);
 	}
 
-	ret = qcom_cpucp_ipc_setup_mbox(cpucp_ipc);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to create mailbox\n");
-		return ret;
+	cpucp_ipc->irq = platform_get_irq(pdev, 0);
+	if (cpucp_ipc->irq < 0) {
+		dev_err(&pdev->dev, "Failed to get the IRQ\n");
+		return cpucp_ipc->irq;
 	}
 
 	ret = of_property_read_u32(cpucp_ipc->dev->of_node, "qcom,rx-chans",
@@ -280,21 +274,19 @@ static int qcom_cpucp_probe(struct platform_device *pdev)
 			desc->v2_mbox ? qcom_cpucp_v2_mbox_rx_interrupt : qcom_cpucp_rx_interrupt,
 			flags, "qcom_cpucp", cpucp_ipc);
 
-	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to register the irq: %d\n", ret);
-		goto err_mbox;
-	}
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret, "Failed to register the irq\n");
 
 	if (desc->v2_mbox)
 		writeq(APSS_CPUCP_RX_MBOX_CMD_MASK, cpucp_ipc->rx_irq_base + desc->map_reg);
 
+	ret = qcom_cpucp_ipc_setup_mbox(cpucp_ipc);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Failed to create mailbox\n");
+
 	platform_set_drvdata(pdev, cpucp_ipc);
 
 	return 0;
-
-err_mbox:
-	mbox_controller_unregister(&cpucp_ipc->mbox);
-	return ret;
 }
 
 static void qcom_cpucp_remove(struct platform_device *pdev)

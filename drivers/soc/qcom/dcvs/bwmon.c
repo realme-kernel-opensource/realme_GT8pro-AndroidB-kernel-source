@@ -21,6 +21,9 @@
 #include <linux/spinlock.h>
 #include <linux/log2.h>
 #include <linux/sizes.h>
+#include <linux/arch_topology.h>
+#include <linux/cpufreq.h>
+#include <linux/sched/walt.h>
 #include <soc/qcom/dcvs.h>
 #include <trace/hooks/sched.h>
 #include "bwmon.h"
@@ -32,6 +35,7 @@ static DEFINE_SPINLOCK(sample_irq_lock);
 static DEFINE_SPINLOCK(mon_irq_lock);
 static DEFINE_MUTEX(bwmon_lock);
 static struct workqueue_struct *bwmon_wq;
+static u32 get_dst_from_map(struct bw_hwmon *hw, u32 src_vote);
 
 struct qcom_bwmon_attr {
 	struct attribute	attr;
@@ -88,7 +92,7 @@ static ssize_t show_##name(struct kobject *kobj,			\
 	struct hwmon_node *node = to_hwmon_node(kobj);			\
 	unsigned int i, cnt = 0;					\
 									\
-	for (i = 0; i < n && node->name[i]; i++)			\
+	for (i = 0; i < n && (i == 0 || node->name[i]); i++)		\
 		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%u ",	\
 							node->name[i]);	\
 	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "\n");		\
@@ -228,7 +232,86 @@ static ssize_t show_cur_freq(struct kobject *kobj,
 {
 	struct hwmon_node *node = to_hwmon_node(kobj);
 
-	return scnprintf(buf, PAGE_SIZE, "%u\n", node->cur_freq.ib);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", node->cur_freqs[0].ib);
+}
+
+static ssize_t store_second_vote_limit(struct kobject *kobj,
+			struct attribute *attr, const char *buf,
+			size_t count)
+{
+	struct hwmon_node *node = to_hwmon_node(kobj);
+	struct bw_hwmon *hw = node->hw;
+	int ret;
+	unsigned int val;
+
+	if (!hw->second_vote_supported)
+		return -ENODEV;
+
+	ret = kstrtouint(buf, 10, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val == hw->second_vote_limit)
+		return count;
+
+	mutex_lock(&node->update_lock);
+	if (val >= node->cur_freqs[1].ib)
+		goto unlock_out;
+	node->cur_freqs[1].ib = val;
+	ret = qcom_dcvs_update_votes(dev_name(hw->dev), node->cur_freqs, 0x3,
+							hw->dcvs_path);
+	if (ret < 0)
+		dev_err(hw->dev, "second vote update failed: %d\n", ret);
+unlock_out:
+	hw->second_vote_limit = val;
+	mutex_unlock(&node->update_lock);
+
+	return count;
+}
+
+static ssize_t show_second_vote_limit(struct kobject *kobj,
+			struct attribute *attr, char *buf)
+{
+	struct hwmon_node *node = to_hwmon_node(kobj);
+	struct bw_hwmon *hw = node->hw;
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", hw->second_vote_limit);
+}
+
+static ssize_t store_max_low_power_cluster_freqs(struct kobject *kobj,
+			struct attribute *attr, const char *buf,
+			size_t count)
+{
+	struct hwmon_node *node = to_hwmon_node(kobj);
+	int ret, numvals;
+	unsigned int i = 0, val;
+	char **strlist;
+
+	strlist = argv_split(GFP_KERNEL, buf, &numvals);
+	if (!strlist)
+		return -ENOMEM;
+	if (numvals != cpumask_weight(&node->hw->low_power_cluster_cpus)) {
+		dev_err(node->hw->dev, "invalid num of low power cpufreqs\n");
+		ret = -EINVAL;
+		goto out;
+	}
+	node->low_power_io_percent_enabled = true;
+	for (i = 0; i < numvals; i++) {
+		ret = kstrtouint(strlist[i], 10, &val);
+		if (ret < 0)
+			goto out;
+		node->max_low_power_cluster_freqs[i] = val;
+		/* if any value is 0, disable the feature */
+		if (!val) {
+			node->low_power_io_percent_enabled = false;
+			break;
+		}
+	}
+	ret = count;
+
+out:
+	argv_free(strlist);
+	return ret;
 }
 
 show_attr(min_freq);
@@ -239,6 +322,7 @@ static BWMON_ATTR_RW(throttle_adj);
 show_attr(sample_ms);
 static BWMON_ATTR_RW(sample_ms);
 static BWMON_ATTR_RO(cur_freq);
+static BWMON_ATTR_RW(second_vote_limit);
 
 show_attr(window_ms);
 store_attr(window_ms, 8U, 1000U);
@@ -252,6 +336,11 @@ static BWMON_ATTR_RW(decay_rate);
 show_attr(io_percent);
 store_attr(io_percent, 1U, 400U);
 static BWMON_ATTR_RW(io_percent);
+show_attr(low_power_io_percent);
+store_attr(low_power_io_percent, 1U, 400U);
+static BWMON_ATTR_RW(low_power_io_percent);
+show_list_attr(max_low_power_cluster_freqs, MAX_LOW_POWER_CLUSTERS);
+static BWMON_ATTR_RW(max_low_power_cluster_freqs);
 show_attr(bw_step);
 store_attr(bw_step, 50U, 1000U);
 static BWMON_ATTR_RW(bw_step);
@@ -283,8 +372,17 @@ show_attr(idle_mbps);
 store_attr(idle_mbps, 0U, 2000U);
 static BWMON_ATTR_RW(idle_mbps);
 show_attr(ab_scale);
-store_attr(ab_scale, 0U, 100U);
+store_attr(ab_scale, 0U, 200U);
 static BWMON_ATTR_RW(ab_scale);
+show_attr(second_ab_scale);
+store_attr(second_ab_scale, 0U, 200U);
+static BWMON_ATTR_RW(second_ab_scale);
+show_attr(use_sched_boost);
+store_attr(use_sched_boost, 0U, 1U);
+static BWMON_ATTR_RW(use_sched_boost);
+show_attr(sched_boost_freq);
+store_attr(sched_boost_freq, 0U, 8192000U);
+static BWMON_ATTR_RW(sched_boost_freq);
 show_list_attr(mbps_zones, NUM_MBPS_ZONES);
 store_list_attr(mbps_zones, NUM_MBPS_ZONES, 0U, UINT_MAX);
 static BWMON_ATTR_RW(mbps_zones);
@@ -297,6 +395,8 @@ static struct attribute *bwmon_attrs[] = {
 	&guard_band_mbps.attr,
 	&decay_rate.attr,
 	&io_percent.attr,
+	&low_power_io_percent.attr,
+	&max_low_power_cluster_freqs.attr,
 	&bw_step.attr,
 	&sample_ms.attr,
 	&up_scale.attr,
@@ -309,8 +409,12 @@ static struct attribute *bwmon_attrs[] = {
 	&idle_length.attr,
 	&idle_mbps.attr,
 	&ab_scale.attr,
+	&second_ab_scale.attr,
 	&mbps_zones.attr,
 	&throttle_adj.attr,
+	&second_vote_limit.attr,
+	&use_sched_boost.attr,
+	&sched_boost_freq.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(bwmon);
@@ -490,6 +594,9 @@ static unsigned long get_bw_and_set_irq(struct hwmon_node *node,
 
 	spin_lock_irqsave(&sample_irq_lock, flags);
 
+	if (node->use_low_power_io_percent)
+		io_percent = node->low_power_io_percent;
+
 	if (!hw->set_hw_events) {
 		ts = ktime_get();
 		ms = ktime_to_ms(ktime_sub(ts, node->prev_ts));
@@ -660,6 +767,24 @@ static unsigned long get_bw_and_set_irq(struct hwmon_node *node,
 	return req_mbps;
 }
 
+static u32 get_dst_from_map(struct bw_hwmon *hw, u32 src_vote)
+{
+	struct bwmon_second_map *map = hw->second_map;
+	u32 dst_vote = 0;
+
+	if (!map)
+		goto out;
+
+	while (map->src_freq && map->src_freq < src_vote)
+		map++;
+	if (!map->src_freq)
+		map--;
+	dst_vote = map->dst_freq;
+
+out:
+	return dst_vote;
+}
+
 /*
  * Governor function that computes new target frequency
  * based on bw measurement (mbps) and updates cur_freq (khz).
@@ -670,23 +795,85 @@ static bool bwmon_update_cur_freq(struct hwmon_node *node)
 {
 	struct bw_hwmon *hw = node->hw;
 	struct dcvs_freq new_freq;
+	u32 primary_ib_mbps, primary_ab_mbps;
+	bool ret = false;
 
 	get_bw_and_set_irq(node, &new_freq);
 
 	/* first convert freq from mbps to khz */
+	primary_ab_mbps = new_freq.ab;
 	new_freq.ab = MBPS_TO_KHZ(new_freq.ab, hw->dcvs_width);
 	new_freq.ib = MBPS_TO_KHZ(new_freq.ib, hw->dcvs_width);
 	new_freq.ib = max(new_freq.ib, node->min_freq);
 	new_freq.ib = min(new_freq.ib, node->max_freq);
+	/* sched_boost_freq is intentionally not limited by max_freq */
+	if (node->cur_sched_boost)
+		new_freq.ib = max(new_freq.ib, node->sched_boost_freq);
+	primary_ib_mbps = KHZ_TO_MBPS(new_freq.ib, hw->dcvs_width);
 
-	if (new_freq.ib != node->cur_freq.ib ||
-			new_freq.ab != node->cur_freq.ab) {
-		node->cur_freq.ib = new_freq.ib;
-		node->cur_freq.ab = new_freq.ab;
-		return true;
+	if (new_freq.ib != node->cur_freqs[0].ib ||
+			new_freq.ab != node->cur_freqs[0].ab) {
+		node->cur_freqs[0].ib = new_freq.ib;
+		node->cur_freqs[0].ab = new_freq.ab;
+		if (hw->second_vote_supported) {
+			if (hw->second_map)
+				node->cur_freqs[1].ib = get_dst_from_map(hw,
+								new_freq.ib);
+			else if (hw->second_dcvs_width)
+				node->cur_freqs[1].ib = MBPS_TO_KHZ(primary_ib_mbps,
+							hw->second_dcvs_width);
+			else
+				node->cur_freqs[1].ib = 0;
+			if (!node->cur_sched_boost)
+				node->cur_freqs[1].ib = min(node->cur_freqs[1].ib,
+							hw->second_vote_limit);
+			if (hw->second_dcvs_width)
+				node->cur_freqs[1].ab = MBPS_TO_KHZ(primary_ab_mbps,
+							hw->second_dcvs_width);
+			else
+				node->cur_freqs[1].ab = 0;
+			node->cur_freqs[1].ab = mult_frac(node->cur_freqs[1].ab,
+							node->second_ab_scale, 100);
+		}
+		ret = true;
 	}
 
-	return false;
+	if (hw->second_vote_supported)
+		trace_bw_hwmon_update(hw->second_dev_name,
+				KHZ_TO_MBPS(node->cur_freqs[1].ab, hw->second_dcvs_width),
+				KHZ_TO_MBPS(node->cur_freqs[1].ib, hw->second_dcvs_width),
+				0, 0);
+
+	return ret;
+}
+
+static bool should_trigger_low_power_update(struct hwmon_node *node)
+{
+	struct bw_hwmon *hw = node->hw;
+	struct cpufreq_policy *policy;
+	u32 cur_cpufreq;
+	bool ret = false, next_use_low_power_io_percent = true;
+	int cpu, i = 0;
+
+	for_each_cpu(cpu, &hw->low_power_cluster_cpus) {
+		policy = cpufreq_cpu_get_raw(cpu);
+		if (!policy) {
+			next_use_low_power_io_percent = false;
+			break;
+		}
+		cur_cpufreq = policy->cur;
+		/* if any cpufreq > max then don't use low power io percent */
+		if (cur_cpufreq > node->max_low_power_cluster_freqs[i]) {
+			next_use_low_power_io_percent = false;
+			break;
+		}
+		i++;
+	}
+	if (next_use_low_power_io_percent != node->use_low_power_io_percent)
+		ret = true;
+	node->use_low_power_io_percent = next_use_low_power_io_percent;
+
+	return ret;
 }
 
 static const u64 HALF_TICK_NS = (NSEC_PER_SEC / HZ) >> 1;
@@ -697,14 +884,30 @@ static void bwmon_jiffies_update_cb(void *unused, void *extra)
 	unsigned long flags;
 	ktime_t now = ktime_get();
 	s64 delta_ns;
+	bool sched_update = false, low_power_update = false;
+	int new_boost_state = -1;
 
 	spin_lock_irqsave(&list_lock, flags);
 	list_for_each_entry(node, &hwmon_list, list) {
 		hw = node->hw;
 		if (!hw->is_active)
 			continue;
+		if (node->use_sched_boost) {
+			if (new_boost_state == -1)
+				new_boost_state = should_boost_bus_dcvs();
+			if (new_boost_state != node->cur_sched_boost)
+				sched_update = true;
+			node->cur_sched_boost = new_boost_state;
+		} else {
+			node->cur_sched_boost = false;
+		}
+		if (node->low_power_io_percent_enabled)
+			low_power_update = should_trigger_low_power_update(node);
+		else
+			node->use_low_power_io_percent = false;
 		delta_ns = now - hw->last_update_ts + HALF_TICK_NS;
-		if (delta_ns > ms_to_ktime(hw->node->window_ms)) {
+		if (delta_ns > ms_to_ktime(hw->node->window_ms)
+				|| sched_update || low_power_update) {
 			queue_work(bwmon_wq, &hw->work);
 			hw->last_update_ts = now;
 		}
@@ -722,7 +925,9 @@ static void bwmon_monitor_work(struct work_struct *work)
 	mutex_lock(&node->update_lock);
 	if (bwmon_update_cur_freq(node))
 		err = qcom_dcvs_update_votes(dev_name(hw->dev),
-					&node->cur_freq, 1, hw->dcvs_path);
+					node->cur_freqs,
+					1 + (hw->second_vote_supported << 1),
+					hw->dcvs_path);
 	if (err < 0)
 		dev_err(hw->dev, "bwmon monitor update failed: %d\n", err);
 	mutex_unlock(&node->update_lock);
@@ -740,9 +945,9 @@ static inline void bwmon_monitor_stop(struct bw_hwmon *hw)
 	cancel_work_sync(&hw->work);
 }
 
-static int update_bw_hwmon(struct bw_hwmon *hwmon)
+static int update_bw_hwmon(struct bw_hwmon *hw)
 {
-	struct hwmon_node *node = hwmon->node;
+	struct hwmon_node *node = hw->node;
 	int ret = 0;
 
 	mutex_lock(&node->mon_lock);
@@ -750,19 +955,21 @@ static int update_bw_hwmon(struct bw_hwmon *hwmon)
 		mutex_unlock(&node->mon_lock);
 		return -EBUSY;
 	}
-	dev_dbg(hwmon->dev, "Got update request\n");
-	bwmon_monitor_stop(hwmon);
+	dev_dbg(hw->dev, "Got update request\n");
+	bwmon_monitor_stop(hw);
 
 	/* governor update and commit */
 	mutex_lock(&node->update_lock);
 	if (bwmon_update_cur_freq(node))
-		ret = qcom_dcvs_update_votes(dev_name(hwmon->dev),
-					&node->cur_freq, 1, hwmon->dcvs_path);
+		ret = qcom_dcvs_update_votes(dev_name(hw->dev),
+					node->cur_freqs,
+					1 + (hw->second_vote_supported << 1),
+					hw->dcvs_path);
 	if (ret < 0)
-		dev_err(hwmon->dev, "bwmon irq update failed: %d\n", ret);
+		dev_err(hw->dev, "bwmon irq update failed: %d\n", ret);
 	mutex_unlock(&node->update_lock);
 
-	bwmon_monitor_start(hwmon);
+	bwmon_monitor_start(hw);
 	mutex_unlock(&node->mon_lock);
 
 	return 0;
@@ -776,7 +983,7 @@ static int start_monitor(struct bw_hwmon *hwmon)
 
 	node->prev_ts = ktime_get();
 	node->prev_ab = 0;
-	mbps = KHZ_TO_MBPS(node->cur_freq.ib, hwmon->dcvs_width) *
+	mbps = KHZ_TO_MBPS(node->cur_freqs[0].ib, hwmon->dcvs_width) *
 					node->io_percent / 100;
 	hwmon->up_wake_mbps = mbps;
 	hwmon->down_wake_mbps = MIN_MBPS;
@@ -829,6 +1036,7 @@ static int configure_hwmon_node(struct bw_hwmon *hwmon)
 	node->idle_length = 0;
 	node->idle_mbps = 400;
 	node->ab_scale = 100;
+	node->second_ab_scale = 0;
 	node->mbps_zones[0] = 0;
 	node->hw = hwmon;
 
@@ -839,6 +1047,50 @@ static int configure_hwmon_node(struct bw_hwmon *hwmon)
 	spin_unlock_irqrestore(&list_lock, flags);
 
 	return 0;
+}
+
+#define SECOND_MAP_TBL	"qcom,secondary-map"
+#define NUM_COLS	2
+static struct bwmon_second_map *init_second_map(struct device *dev,
+						struct device_node *of_node)
+{
+	int len, nf, i, j;
+	u32 data;
+	struct bwmon_second_map *tbl;
+	int ret;
+
+	if (!of_find_property(of_node, SECOND_MAP_TBL, &len))
+		return NULL;
+	len /= sizeof(data);
+
+	if (len % NUM_COLS || len == 0)
+		return NULL;
+	nf = len / NUM_COLS;
+
+	tbl = devm_kzalloc(dev, (nf + 1) * sizeof(struct bwmon_second_map),
+			GFP_KERNEL);
+	if (!tbl)
+		return NULL;
+
+	for (i = 0, j = 0; i < nf; i++, j += 2) {
+		ret = of_property_read_u32_index(of_node, SECOND_MAP_TBL,
+							j, &data);
+		if (ret < 0)
+			return NULL;
+		tbl[i].src_freq = data;
+
+		ret = of_property_read_u32_index(of_node, SECOND_MAP_TBL,
+							j + 1, &data);
+		if (ret < 0)
+			return NULL;
+		tbl[i].dst_freq = data;
+		pr_debug("Entry%d src:%u, dst:%u\n", i, tbl[i].src_freq,
+				tbl[i].dst_freq);
+	}
+	tbl[i].src_freq = 0;
+
+	return tbl;
+
 }
 
 #define ENABLE_MASK BIT(0)
@@ -1653,23 +1905,13 @@ static const struct of_device_id qcom_bwmon_match_table[] = {
 	{}
 };
 
-static int qcom_bwmon_driver_probe(struct platform_device *pdev)
+static int configure_bwmon_resources(struct platform_device *pdev, struct bwmon *m)
 {
 	struct device *dev = &pdev->dev;
 	struct resource *res;
-	struct bwmon *m;
-	struct hwmon_node *node;
+	bool map_ne = false;
+	u32 data;
 	int ret;
-	u32 data, count_unit;
-	u32 dcvs_hw = NUM_DCVS_PATHS;
-	struct kobject *dcvs_kobj;
-	struct device_node *of_node;
-
-	m = devm_kzalloc(dev, sizeof(*m), GFP_KERNEL);
-	if (!m)
-		return -ENOMEM;
-	m->dev = dev;
-	m->hw.dev = dev;
 
 	m->spec = of_device_get_match_data(dev);
 	if (!m->spec) {
@@ -1677,12 +1919,18 @@ static int qcom_bwmon_driver_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	if (of_find_property(dev->of_node, "qcom,map-ne", NULL))
+		map_ne = true;
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "base");
 	if (!res) {
 		dev_err(dev, "base not found!\n");
 		return -EINVAL;
 	}
-	m->base = devm_ioremap(dev, res->start, resource_size(res));
+	if (map_ne)
+		m->base = ioremap_np(res->start, resource_size(res));
+	else
+		m->base = ioremap(res->start, resource_size(res));
 	if (!m->base) {
 		dev_err(dev, "Unable map base!\n");
 		return -ENOMEM;
@@ -1695,8 +1943,10 @@ static int qcom_bwmon_driver_probe(struct platform_device *pdev)
 			dev_err(dev, "global_base not found!\n");
 			return -EINVAL;
 		}
-		m->global_base = devm_ioremap(dev, res->start,
-					      resource_size(res));
+		if (map_ne)
+			m->global_base = ioremap_np(res->start, resource_size(res));
+		else
+			m->global_base = ioremap(res->start, resource_size(res));
 		if (!m->global_base) {
 			dev_err(dev, "Unable map global_base!\n");
 			return -ENOMEM;
@@ -1715,6 +1965,16 @@ static int qcom_bwmon_driver_probe(struct platform_device *pdev)
 		dev_err(dev, "Unable to get IRQ number\n");
 		return m->irq;
 	}
+
+	return 0;
+}
+
+static int configure_bwmon_hw(struct platform_device *pdev, struct bwmon *m)
+{
+	struct device *dev = &pdev->dev;
+	struct cpu_topology *cpu_topo;
+	int ret, cpu, cluster = -1;
+	u32 count_unit;
 
 	if (m->spec->hw_sampling) {
 		ret = of_property_read_u32(dev->of_node, "qcom,hw-timer-hz",
@@ -1761,6 +2021,28 @@ static int qcom_bwmon_driver_probe(struct platform_device *pdev)
 		m->hw.get_throttle_adj = mon_get_throttle_adj;
 	}
 
+	/* set cpus to track for low power io percent */
+	for_each_possible_cpu(cpu) {
+		cpu_topo = &cpu_topology[cpu];
+		if (cpu_topo->cluster_id == cluster)
+			continue;
+		cpumask_set_cpu(cpu, &m->hw.low_power_cluster_cpus);
+		cluster = cpu_topo->cluster_id;
+	}
+
+	m->hw.is_active = false;
+
+	return 0;
+}
+
+static int bwmon_dcvs_register(struct platform_device *pdev, struct bwmon *m)
+{
+	u32 dcvs_hw = NUM_DCVS_PATHS, second_hw = NUM_DCVS_PATHS;
+	struct device_node *of_node, *tmp_of_node;
+	struct device *dev = &pdev->dev;
+	struct hwmon_node *node;
+	int ret;
+
 	of_node = of_parse_phandle(dev->of_node, "qcom,target-dev", 0);
 	if (!of_node) {
 		dev_err(dev, "Unable to find target-dev for bwmon device\n");
@@ -1785,11 +2067,56 @@ static int qcom_bwmon_driver_probe(struct platform_device *pdev)
 	m->hw.dcvs_path = DCVS_SLOW_PATH;
 	of_node_put(of_node);
 
+	of_node = of_parse_phandle(dev->of_node, "qcom,second-vote", 0);
+	if (of_node) {
+		tmp_of_node = of_parse_phandle(of_node, "qcom,target-dev", 0);
+		if (!tmp_of_node) {
+			dev_err(dev, "Unable to find target-dev for second vote\n");
+			return -EINVAL;
+		}
+		ret = of_property_read_u32(tmp_of_node, "qcom,dcvs-hw-type",
+						&second_hw);
+		if (ret < 0 || second_hw >= NUM_DCVS_HW_TYPES) {
+			dev_err(dev, "invalid sec dcvs_hw=%d, ret=%d\n",
+							second_hw, ret);
+			return -EINVAL;
+		}
+		m->hw.second_dcvs_hw = second_hw;
+		if (of_find_property(of_node, "qcom,secondary-map", &ret)) {
+			m->hw.second_map = init_second_map(dev, of_node);
+			if (!m->hw.second_map) {
+				dev_err(dev, "error importing second map!\n");
+				return -EINVAL;
+			}
+		}
+		ret = of_property_read_u32(tmp_of_node, "qcom,bus-width",
+					&m->hw.second_dcvs_width);
+		if (ret < 0 || !m->hw.second_dcvs_width) {
+			if (!m->hw.second_map) {
+				dev_err(dev, "invalid sec hw width=%d, ret=%d\n",
+					m->hw.second_dcvs_width, ret);
+				return -EINVAL;
+			}
+		}
+		snprintf(m->hw.second_dev_name, MAX_NAME_SIZE + 1, "%s_hw-%d",
+						dev_name(dev), second_hw);
+		m->hw.second_vote_supported = true;
+	}
+
 	ret = qcom_dcvs_register_voter(dev_name(dev), dcvs_hw, m->hw.dcvs_path);
 	if (ret < 0) {
 		if (ret != -EPROBE_DEFER)
 			dev_err(dev, "qcom dcvs registration error: %d\n", ret);
 		return ret;
+	}
+
+	if (m->hw.second_vote_supported) {
+		ret = qcom_dcvs_register_voter(dev_name(dev), second_hw,
+							DCVS_SLOW_PATH);
+		if (ret < 0) {
+			dev_err(dev, "second hw qcom dcvs reg err: %d\n", ret);
+			return ret;
+		}
 	}
 
 	ret = configure_hwmon_node(&m->hw);
@@ -1807,11 +2134,23 @@ static int qcom_bwmon_driver_probe(struct platform_device *pdev)
 	}
 	node->min_freq = node->hw_min_freq;
 	node->max_freq = node->hw_max_freq;
-	node->cur_freq.ib = node->min_freq;
-	node->cur_freq.ab = 0;
-	node->cur_freq.hw_type = dcvs_hw;
+	node->cur_freqs[0].ib = node->min_freq;
+	node->cur_freqs[0].ab = 0;
+	node->cur_freqs[0].hw_type = dcvs_hw;
+	node->cur_freqs[1].hw_type = second_hw;
+	/* second vote only enabled by default if secondary map is present */
+	if (m->hw.second_map)
+		m->hw.second_vote_limit = get_dst_from_map(&m->hw, U32_MAX);
 
-	m->hw.is_active = false;
+
+	return 0;
+}
+
+static int init_and_start_bwmon(struct platform_device *pdev, struct bwmon *m)
+{
+	struct device *dev = &pdev->dev;
+	int ret;
+
 	mutex_lock(&bwmon_lock);
 	if (!bwmon_wq) {
 		bwmon_wq = create_freezable_workqueue("bwmon_wq");
@@ -1830,7 +2169,42 @@ static int qcom_bwmon_driver_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	dcvs_kobj = qcom_dcvs_kobject_get(dcvs_hw);
+	return 0;
+}
+
+static int qcom_bwmon_driver_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct kobject *dcvs_kobj;
+	struct hwmon_node *node;
+	unsigned long flags;
+	struct bwmon *m;
+	int ret;
+
+	m = devm_kzalloc(dev, sizeof(*m), GFP_KERNEL);
+	if (!m)
+		return -ENOMEM;
+	m->dev = dev;
+	m->hw.dev = dev;
+
+	ret = configure_bwmon_resources(pdev, m);
+	if (ret < 0)
+		goto err;
+
+	ret = configure_bwmon_hw(pdev, m);
+	if (ret < 0)
+		goto err;
+
+	ret = bwmon_dcvs_register(pdev, m);
+	if (ret < 0)
+		goto err;
+
+	node = m->hw.node;
+	ret = init_and_start_bwmon(pdev, m);
+	if (ret < 0)
+		goto err_sysfs;
+
+	dcvs_kobj = qcom_dcvs_kobject_get(m->hw.dcvs_hw);
 	if (IS_ERR(dcvs_kobj)) {
 		ret = PTR_ERR(dcvs_kobj);
 		dev_err(dev, "error getting kobj from qcom_dcvs: %d\n", ret);
@@ -1848,6 +2222,12 @@ static int qcom_bwmon_driver_probe(struct platform_device *pdev)
 
 err_sysfs:
 	stop_monitor(&m->hw);
+	spin_lock_irqsave(&list_lock, flags);
+	list_del(&node->list);
+	spin_unlock_irqrestore(&list_lock, flags);
+err:
+	iounmap(m->base);
+	iounmap(m->global_base);
 	return ret;
 }
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "qcom-memlat: " fmt
@@ -34,6 +34,7 @@
 #include <linux/scmi_protocol.h>
 #include <linux/sched/clock.h>
 #include <linux/qcom_scmi_vendor.h>
+#include <linux/cpu_phys_log_map.h>
 #include "trace-dcvs.h"
 
 #define MAX_MEMLAT_GRPS	NUM_DCVS_HW_TYPES
@@ -71,6 +72,8 @@ enum scmi_memlat_protocol_cmd {
 	MEMLAT_START_TIMER,
 	MEMLAT_STOP_TIMER,
 	MEMLAT_GET_TIMESTAMP,
+	MEMLAT_SET_EFFECTIVE_FREQ_METHOD,
+	MEMLAT_ADAPTIVE_LEVEL_1,
 	MEMLAT_MAX_MSG
 };
 
@@ -187,8 +190,6 @@ struct memlat_mon {
 	u32				wb_filter_ipm;
 	u32				min_freq;
 	u32				max_freq;
-	u32				mon_min_freq;
-	u32				mon_max_freq;
 	u32				cur_freq;
 	struct kobject			kobj;
 	bool				is_compute;
@@ -206,10 +207,13 @@ struct memlat_group {
 	u32				adaptive_cur_freq;
 	u32				adaptive_high_freq;
 	u32				adaptive_low_freq;
+	u32				adaptive_level_1;
 	bool				fp_voting_enabled;
 	u32				fp_freq;
 	u32				*fp_votes;
 	u32				grp_ev_ids[NUM_GRP_EVS];
+	u32				hw_min_freq;
+	u32				hw_max_freq;
 	struct memlat_mon		*mons;
 	u32				num_mons;
 	u32				num_inited_mons;
@@ -358,7 +362,7 @@ static ssize_t store_min_freq(struct kobject *kobj,
 	ret = kstrtouint(buf, 10, &freq);
 	if (ret < 0)
 		return ret;
-	freq = max(freq, mon->mon_min_freq);
+	freq = max(freq, grp->hw_min_freq);
 	freq = min(freq, mon->max_freq);
 	mon->min_freq = freq;
 
@@ -392,7 +396,7 @@ static ssize_t store_max_freq(struct kobject *kobj,
 	if (ret < 0)
 		return ret;
 	freq = max(freq, mon->min_freq);
-	freq = min(freq, mon->mon_max_freq);
+	freq = min(freq, grp->hw_max_freq);
 	mon->max_freq = freq;
 	if ((mon->type & CPUCP_MON) && ops) {
 		msg.hw_type = grp->hw_type;
@@ -660,6 +664,8 @@ show_grp_attr(adaptive_high_freq);
 store_grp_attr(adaptive_high_freq, 0U, 8000000U, MEMLAT_ADAPTIVE_HIGH_FREQ);
 show_grp_attr(adaptive_low_freq);
 store_grp_attr(adaptive_low_freq, 0U, 8000000U, MEMLAT_ADAPTIVE_LOW_FREQ);
+show_grp_attr(adaptive_level_1);
+store_grp_attr(adaptive_level_1, 0U, 8000000U, MEMLAT_ADAPTIVE_LEVEL_1);
 
 show_attr(min_freq);
 show_attr(max_freq);
@@ -690,6 +696,7 @@ MEMLAT_ATTR_RO(sampling_cur_freq);
 MEMLAT_ATTR_RO(adaptive_cur_freq);
 MEMLAT_ATTR_RW(adaptive_low_freq);
 MEMLAT_ATTR_RW(adaptive_high_freq);
+MEMLAT_ATTR_RW(adaptive_level_1);
 
 MEMLAT_ATTR_RW(min_freq);
 MEMLAT_ATTR_RW(max_freq);
@@ -719,6 +726,7 @@ static struct attribute *memlat_grp_attrs[] = {
 	&adaptive_cur_freq.attr,
 	&adaptive_high_freq.attr,
 	&adaptive_low_freq.attr,
+	&adaptive_level_1.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(memlat_grp);
@@ -941,7 +949,10 @@ static inline void apply_adaptive_freq(struct memlat_group *memlat_grp,
 {
 	u32 prev_freq = memlat_grp->adaptive_cur_freq;
 
-	if (*max_freq < memlat_grp->adaptive_low_freq) {
+	if (*max_freq < memlat_grp->adaptive_level_1) {
+		*max_freq = memlat_grp->adaptive_level_1;
+		memlat_grp->adaptive_cur_freq = memlat_grp->adaptive_level_1;
+	} else if (*max_freq < memlat_grp->adaptive_low_freq) {
 		*max_freq = memlat_grp->adaptive_low_freq;
 		memlat_grp->adaptive_cur_freq = memlat_grp->adaptive_low_freq;
 	} else if (*max_freq < memlat_grp->adaptive_high_freq) {
@@ -1089,6 +1100,7 @@ static void memlat_update_work(struct work_struct *work)
 		}
 		if (memlat_grp->adaptive_high_freq ||
 				memlat_grp->adaptive_low_freq ||
+				memlat_grp->adaptive_level_1 ||
 				memlat_grp->adaptive_cur_freq)
 			apply_adaptive_freq(memlat_grp, &max_freqs[grp]);
 	}
@@ -1228,35 +1240,23 @@ out:
 	spin_unlock_irqrestore(&stats->ctrs_lock, flags);
 }
 
-static void get_mpidr_cpu(void *cpu)
-{
-	u64 mpidr = read_cpuid_mpidr() & MPIDR_HWID_BITMASK;
-
-	*((uint32_t *)cpu) = MPIDR_AFFINITY_LEVEL(mpidr, 1);
-}
-
 static int get_mask_and_mpidr_from_pdev(struct platform_device *pdev,
 					cpumask_t *mask, u32 *cpus_mpidr)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *dev_phandle;
-	struct device *cpu_dev;
 	int cpu, i = 0;
 	uint32_t physical_cpu;
 	int ret = -ENODEV;
 
 	dev_phandle = of_parse_phandle(dev->of_node, "qcom,cpulist", i++);
 	while (dev_phandle) {
-		for_each_possible_cpu(cpu) {
-			cpu_dev = get_cpu_device(cpu);
-			if (cpu_dev && cpu_dev->of_node == dev_phandle) {
-				cpumask_set_cpu(cpu, mask);
-				smp_call_function_single(cpu, get_mpidr_cpu,
-							 &physical_cpu, true);
-				*cpus_mpidr |= BIT(physical_cpu);
-				ret = 0;
-				break;
-			}
+		cpu = of_cpu_node_to_id(dev_phandle);
+		if (cpu >= 0) {
+			cpumask_set_cpu(cpu, mask);
+			physical_cpu = cpu_logical_to_phys(cpu);
+			*cpus_mpidr |= BIT(physical_cpu);
+			ret = 0;
 		}
 		of_node_put(dev_phandle);
 		dev_phandle = of_parse_phandle(dev->of_node, "qcom,cpulist", i++);
@@ -1409,7 +1409,6 @@ static int configure_cpucp_grp(struct memlat_group *grp)
 {
 	struct node_msg msg;
 	struct ev_map_msg ev_msg;
-	struct scalar_param_msg scaler_msg;
 	const struct qcom_scmi_vendor_ops *ops = memlat_data->ops;
 	int ret = 0, i, j = 0;
 	struct device_node *of_node = grp->dev->of_node;
@@ -1446,24 +1445,6 @@ static int configure_cpucp_grp(struct memlat_group *grp)
 							of_node->name);
 		return ret;
 	}
-	scaler_msg.hw_type = grp->hw_type;
-	scaler_msg.mon_idx = 0;
-	scaler_msg.val = grp->adaptive_low_freq;
-	ret = ops->set_param(memlat_data->ph, &scaler_msg,
-			MEMLAT_ALGO_STR, MEMLAT_ADAPTIVE_LOW_FREQ, sizeof(scaler_msg));
-	if (ret < 0) {
-		pr_err("Failed to configure grp adaptive low freq for mem grp %s\n",
-								of_node->name);
-		return ret;
-	}
-	scaler_msg.hw_type = grp->hw_type;
-	scaler_msg.mon_idx = 0;
-	scaler_msg.val = grp->adaptive_high_freq;
-	ret = ops->set_param(memlat_data->ph, &scaler_msg,
-			MEMLAT_ALGO_STR, MEMLAT_ADAPTIVE_HIGH_FREQ, sizeof(scaler_msg));
-	if (ret < 0)
-		pr_err("Failed to configure grp adaptive high freq for mem grp %s\n",
-									of_node->name);
 	return ret;
 }
 
@@ -1484,7 +1465,7 @@ static int configure_cpucp_mon(struct memlat_mon *mon)
 	msg.mon_type = mon->is_compute;
 	msg.mon_idx = mon->index;
 	if ((strrchr(dev_name(mon->dev), c) + 1))
-		snprintf(msg.mon_name, MAX_NAME_LEN, (strrchr(dev_name(mon->dev), c) + 1));
+		scnprintf(msg.mon_name, MAX_NAME_LEN, "%s", (strrchr(dev_name(mon->dev), c) + 1));
 	ret = ops->set_param(memlat_data->ph, &msg,
 			MEMLAT_ALGO_STR, MEMLAT_SET_MONITOR, sizeof(msg));
 	if (ret < 0) {
@@ -1799,6 +1780,7 @@ static int memlat_grp_probe(struct platform_device *pdev)
 		of_node_put(of_node);
 		return -EINVAL;
 	}
+	of_node_put(of_node);
 
 	memlat_grp = devm_kzalloc(dev, sizeof(*memlat_grp), GFP_KERNEL);
 	if (!memlat_grp)
@@ -1808,14 +1790,15 @@ static int memlat_grp_probe(struct platform_device *pdev)
 	memlat_grp->dev = dev;
 
 	memlat_grp->dcvs_kobj = qcom_dcvs_kobject_get(hw_type);
-	if (IS_ERR(memlat_grp->dcvs_kobj)) {
-		ret = PTR_ERR(memlat_grp->dcvs_kobj);
-		dev_err(dev, "error getting kobj from qcom_dcvs: %d\n", ret);
-		of_node_put(of_node);
-		return ret;
-	}
+	if (IS_ERR(memlat_grp->dcvs_kobj))
+		return dev_err_probe(dev, PTR_ERR(memlat_grp->dcvs_kobj),
+					"error getting kobj from qcom_dcvs\n");
 
-	of_node_put(of_node);
+	ret = qcom_dcvs_hw_minmax_get(hw_type, &memlat_grp->hw_min_freq,
+						&memlat_grp->hw_max_freq);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "error getting minmax from qcom_dcvs\n");
+
 	of_node = of_parse_phandle(dev->of_node, "qcom,sampling-path", 0);
 	if (of_node) {
 		ret = of_property_read_u32(of_node, "qcom,dcvs-path-type",
@@ -1950,6 +1933,9 @@ static int memlat_mon_probe(struct platform_device *pdev)
 	struct scmi_device *scmi_dev;
 #endif
 
+	ret = cpu_logical_to_phys(0);
+	if (ret == -EPROBE_DEFER)
+		return ret;
 	memlat_grp = dev_get_drvdata(dev->parent);
 	if (!memlat_grp) {
 		dev_err(dev, "Mon probe called without memlat_grp inited.\n");
@@ -2028,8 +2014,8 @@ static int memlat_mon_probe(struct platform_device *pdev)
 		goto unlock_out;
 	}
 
-	mon->mon_min_freq = mon->min_freq = cpufreq_to_memfreq(mon, 0);
-	mon->mon_max_freq = mon->max_freq = cpufreq_to_memfreq(mon, U32_MAX);
+	mon->min_freq = memlat_grp->hw_min_freq;
+	mon->max_freq = memlat_grp->hw_max_freq;
 	mon->cur_freq = mon->min_freq;
 
 	if (mon->is_compute)
