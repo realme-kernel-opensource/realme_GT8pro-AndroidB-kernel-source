@@ -15,6 +15,8 @@
 
 #include <linux/of_device.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 
@@ -123,7 +125,7 @@ static phys_addr_t __qsmmuv2_iova_to_phys_hard(
 
 	reg = arm_smmu_page(smmu, ARM_SMMU_CB(smmu, idx));
 	if (readl_poll_timeout_atomic(reg + ARM_SMMU_CB_ATSR, tmp,
-				      !(tmp & ARM_SMMU_ATSR_ACTIVE), 5, 50)) {
+				      !(tmp & ARM_SMMU_CB_ATSR_ACTIVE), 5, 50)) {
 		dev_err(dev, "iova to phys timed out on %pad.\n", &iova);
 		phys = 0;
 		return phys;
@@ -164,7 +166,7 @@ static phys_addr_t qsmmuv2_iova_to_phys_hard(
 
 	/* clear FSR to allow ATOS to log any faults */
 	fsr = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_FSR);
-	if (fsr & ARM_SMMU_FSR_FAULT) {
+	if (fsr & ARM_SMMU_CB_FSR_FAULT) {
 		/* Clear pending interrupts */
 		arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_FSR, fsr);
 		/*
@@ -177,7 +179,7 @@ static phys_addr_t qsmmuv2_iova_to_phys_hard(
 		 *  TBU halt takes care of resuming any stalled transcation.
 		 *  Kept it here for completeness sake.
 		 */
-		if (fsr & ARM_SMMU_FSR_SS)
+		if (fsr & ARM_SMMU_CB_FSR_SS)
 			arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_RESUME,
 				ARM_SMMU_RESUME_TERMINATE);
 	}
@@ -640,6 +642,14 @@ static int qcom_smmu_cfg_probe(struct arm_smmu_device *smmu)
 	return 0;
 }
 
+static int qcom_adreno_smmuv2_cfg_probe(struct arm_smmu_device *smmu)
+{
+	/* Support for 16K pages is advertised on some SoCs, but it doesn't seem to work */
+	smmu->features &= ~ARM_SMMU_FEAT_FMT_AARCH64_16K;
+
+	return 0;
+}
+
 static void qcom_smmu_write_s2cr(struct arm_smmu_device *smmu, int idx)
 {
 	struct arm_smmu_s2cr *s2cr = smmu->s2crs + idx;
@@ -717,6 +727,10 @@ static const struct arm_smmu_impl qcom_smmu_500_impl = {
 	.reset = arm_mmu500_reset,
 	.write_s2cr = qcom_smmu_write_s2cr,
 	.tlb_sync = qcom_smmu_tlb_sync,
+#ifdef CONFIG_ARM_SMMU_QCOM_DEBUG
+	.context_fault = qcom_smmu_context_fault,
+	.context_fault_needs_threaded_irq = true,
+#endif
 };
 
 static const struct arm_smmu_impl sdm845_smmu_500_impl = {
@@ -726,10 +740,15 @@ static const struct arm_smmu_impl sdm845_smmu_500_impl = {
 	.reset = qcom_sdm845_smmu500_reset,
 	.write_s2cr = qcom_smmu_write_s2cr,
 	.tlb_sync = qcom_smmu_tlb_sync,
+#ifdef CONFIG_ARM_SMMU_QCOM_DEBUG
+	.context_fault = qcom_smmu_context_fault,
+	.context_fault_needs_threaded_irq = true,
+#endif
 };
 
 static const struct arm_smmu_impl qcom_adreno_smmu_v2_impl = {
 	.init_context = qcom_adreno_smmu_init_context,
+	.cfg_probe = qcom_adreno_smmuv2_cfg_probe,
 	.def_domain_type = qcom_smmu_def_domain_type,
 	.alloc_context_bank = qcom_adreno_smmu_alloc_context_bank,
 	.write_sctlr = qcom_adreno_smmu_write_sctlr,
@@ -1376,7 +1395,7 @@ static int qsmmuv500_tbu_halt(struct qsmmuv500_tbu_device *tbu,
 		goto out;
 
 	fsr = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_FSR);
-	if ((fsr & ARM_SMMU_FSR_FAULT) && (fsr & ARM_SMMU_FSR_SS)) {
+	if ((fsr & ARM_SMMU_CB_FSR_FAULT) && (fsr & ARM_SMMU_CB_FSR_SS)) {
 		u32 sctlr_orig, sctlr;
 		/*
 		 * We are in a fault; Our request to halt the bus will not
@@ -1720,7 +1739,7 @@ static phys_addr_t qsmmuv500_iova_to_phys(struct arm_smmu_domain *smmu_domain, d
 	arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_SCTLR, sctlr);
 
 	fsr = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_FSR);
-	if (fsr & ARM_SMMU_FSR_FAULT) {
+	if (fsr & ARM_SMMU_CB_FSR_FAULT) {
 		/* Clear pending interrupts */
 		arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_FSR, fsr);
 		/*
@@ -1733,7 +1752,7 @@ static phys_addr_t qsmmuv500_iova_to_phys(struct arm_smmu_domain *smmu_domain, d
 		 * TBU halt takes care of resuming any stalled transcation.
 		 * Kept it here for completeness sake.
 		 */
-		if (fsr & ARM_SMMU_FSR_SS)
+		if (fsr & ARM_SMMU_CB_FSR_SS)
 			arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_RESUME,
 					  ARM_SMMU_RESUME_TERMINATE);
 	}
@@ -1749,7 +1768,7 @@ static phys_addr_t qsmmuv500_iova_to_phys(struct arm_smmu_domain *smmu_domain, d
 		phys = tbu->impl->trigger_atos(tbu, iova, sid, trans_flags);
 
 		fsr = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_FSR);
-		if (fsr & ARM_SMMU_FSR_FAULT) {
+		if (fsr & ARM_SMMU_CB_FSR_FAULT) {
 			/* Clear pending interrupts */
 			arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_FSR, fsr);
 			/*
@@ -1758,7 +1777,7 @@ static phys_addr_t qsmmuv500_iova_to_phys(struct arm_smmu_domain *smmu_domain, d
 			 */
 			wmb();
 
-			if (fsr & ARM_SMMU_FSR_SS)
+			if (fsr & ARM_SMMU_CB_FSR_SS)
 				arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_RESUME,
 						  ARM_SMMU_RESUME_TERMINATE);
 		}
@@ -2130,7 +2149,8 @@ static struct arm_smmu_device *qcom_smmu_create(struct arm_smmu_device *smmu,
 
 	/* Check to make sure qcom_scm has finished probing */
 	if (!qcom_scm_is_available())
-		return ERR_PTR(-EPROBE_DEFER);
+		return ERR_PTR(dev_err_probe(smmu->dev, -EPROBE_DEFER,
+			"qcom_scm not ready\n"));
 
 	qsmmu = devm_krealloc(smmu->dev, smmu, sizeof(*qsmmu), GFP_KERNEL);
 	if (!qsmmu)
@@ -2222,10 +2242,47 @@ static struct acpi_platform_list qcom_acpi_platlist[] = {
 };
 #endif
 
+static int qcom_smmu_tbu_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	int ret;
+
+	if (IS_ENABLED(CONFIG_ARM_SMMU_QCOM_DEBUG)) {
+		ret = qcom_tbu_probe(pdev);
+		if (ret)
+			return ret;
+	}
+
+	if (dev->pm_domain) {
+		pm_runtime_set_active(dev);
+		pm_runtime_enable(dev);
+	}
+
+	return 0;
+}
+
+static const struct of_device_id qcom_smmu_tbu_of_match[] = {
+	{ .compatible = "qcom,sc7280-tbu" },
+	{ .compatible = "qcom,sdm845-tbu" },
+	{ }
+};
+
+static struct platform_driver qcom_smmu_tbu_driver = {
+	.driver = {
+		.name           = "qcom_tbu",
+		.of_match_table = qcom_smmu_tbu_of_match,
+	},
+	.probe = qcom_smmu_tbu_probe,
+};
+
 struct arm_smmu_device *qcom_smmu_impl_init(struct arm_smmu_device *smmu)
 {
 	const struct device_node *np = smmu->dev->of_node;
 	const struct of_device_id *match;
+	static u8 tbu_registered;
+
+	if (!tbu_registered++)
+		platform_driver_register(&qcom_smmu_tbu_driver);
 
 #ifdef CONFIG_ACPI
 	if (np == NULL) {

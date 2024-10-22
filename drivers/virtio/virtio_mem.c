@@ -29,6 +29,8 @@
 #include <linux/log2.h>
 #include <linux/sched/mm.h>
 #include "qti_virtio_mem.h"
+#include <linux/vmalloc.h>
+#include <linux/suspend.h>
 
 #include <acpi/acpi_numa.h>
 
@@ -1013,6 +1015,25 @@ static int virtio_mem_memory_notifier_cb(struct notifier_block *nb,
 	return rc;
 }
 
+static int virtio_mem_pm_notifier_cb(struct notifier_block *nb,
+				     unsigned long action, void *arg)
+{
+	struct virtio_mem *vm = container_of(nb, struct virtio_mem,
+					     pm_notifier);
+	switch (action) {
+	case PM_HIBERNATION_PREPARE:
+	case PM_RESTORE_PREPARE:
+		/*
+		 * When restarting the VM, all memory is unplugged. Don't
+		 * allow to hibernate and restore from an image.
+		 */
+		dev_err(&vm->vdev->dev, "hibernation is not supported.\n");
+		return NOTIFY_BAD;
+	default:
+		return NOTIFY_OK;
+	}
+}
+
 /*
  * Set a range of pages PG_offline. Remember pages that were never onlined
  * (via generic_online_page()) using PageDirty().
@@ -1024,12 +1045,16 @@ static void virtio_mem_set_fake_offline(unsigned long pfn,
 	for (; nr_pages--; pfn++) {
 		struct page *page = pfn_to_page(pfn);
 
-		__SetPageOffline(page);
-		if (!onlined) {
+		if (!onlined)
+			/*
+			 * Pages that have not been onlined yet were initialized
+			 * to PageOffline(). Remember that we have to route them
+			 * through generic_online_page().
+			 */
 			SetPageDirty(page);
-			/* FIXME: remove after cleanups */
-			ClearPageReserved(page);
-		}
+		else
+			__SetPageOffline(page);
+		VM_WARN_ON_ONCE(!PageOffline(page));
 	}
 	page_offline_end();
 }
@@ -1044,9 +1069,11 @@ static void virtio_mem_clear_fake_offline(unsigned long pfn,
 	for (; nr_pages--; pfn++) {
 		struct page *page = pfn_to_page(pfn);
 
-		__ClearPageOffline(page);
 		if (!onlined)
+			/* generic_online_page() will clear PageOffline(). */
 			ClearPageDirty(page);
+		else
+			__ClearPageOffline(page);
 	}
 }
 
@@ -1141,12 +1168,6 @@ static void virtio_mem_fake_offline_going_offline(unsigned long pfn,
 	struct page *page;
 	unsigned long i;
 
-	/*
-	 * Drop our reference to the pages so the memory can get offlined
-	 * and add the unplugged pages to the managed page counters (so
-	 * offlining code can correctly subtract them again).
-	 */
-	adjust_managed_page_count(pfn_to_page(pfn), nr_pages);
 	/* Drop our reference to the pages so the memory can get offlined. */
 	for (i = 0; i < nr_pages; i++) {
 		page = pfn_to_page(pfn + i);
@@ -1165,10 +1186,9 @@ static void virtio_mem_fake_offline_cancel_offline(unsigned long pfn,
 	unsigned long i;
 
 	/*
-	 * Get the reference we dropped when going offline and subtract the
-	 * unplugged pages from the managed page counters.
+	 * Get the reference again that we dropped via page_ref_dec_and_test()
+	 * when going offline.
 	 */
-	adjust_managed_page_count(pfn_to_page(pfn), -nr_pages);
 	for (i = 0; i < nr_pages; i++)
 		page_ref_inc(pfn_to_page(pfn + i));
 }
@@ -2514,11 +2534,19 @@ static int virtio_mem_init_hotplug(struct virtio_mem *vm)
 	rc = register_memory_notifier(&vm->memory_notifier);
 	if (rc)
 		goto out_unreg_group;
-	rc = register_virtio_mem_device(vm);
+	/* Block hibernation as early as possible. */
+	vm->pm_notifier.priority = INT_MAX;
+	vm->pm_notifier.notifier_call = virtio_mem_pm_notifier_cb;
+	rc = register_pm_notifier(&vm->pm_notifier);
 	if (rc)
 		goto out_unreg_mem;
+	rc = register_virtio_mem_device(vm);
+	if (rc)
+		goto out_unreg_pm;
 
 	return 0;
+out_unreg_pm:
+	unregister_pm_notifier(&vm->pm_notifier);
 out_unreg_mem:
 	unregister_memory_notifier(&vm->memory_notifier);
 out_unreg_group:
@@ -2862,6 +2890,7 @@ static void virtio_mem_deinit_hotplug(struct virtio_mem *vm)
 
 	/* unregister callbacks */
 	unregister_virtio_mem_device(vm);
+	unregister_pm_notifier(&vm->pm_notifier);
 	unregister_memory_notifier(&vm->memory_notifier);
 
 	/*

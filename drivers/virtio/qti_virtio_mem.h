@@ -221,6 +221,9 @@ struct virtio_mem {
 	/* Memory notifier (online/offline events). */
 	struct notifier_block memory_notifier;
 
+	/* Notifier to block hibernation image storing/reloading. */
+	struct notifier_block pm_notifier;
+
 #ifdef CONFIG_PROC_VMCORE
 	/* vmcore callback for /proc/vmcore handling in kdump mode */
 	struct vmcore_cb vmcore_cb;

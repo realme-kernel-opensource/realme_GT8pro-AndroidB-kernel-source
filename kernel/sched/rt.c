@@ -28,9 +28,9 @@ int sysctl_sched_rt_runtime = 950000;
 
 #ifdef CONFIG_SYSCTL
 static int sysctl_sched_rr_timeslice = (MSEC_PER_SEC * RR_TIMESLICE) / HZ;
-static int sched_rt_handler(struct ctl_table *table, int write, void *buffer,
+static int sched_rt_handler(const struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos);
-static int sched_rr_handler(struct ctl_table *table, int write, void *buffer,
+static int sched_rr_handler(const struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos);
 static struct ctl_table sched_rt_sysctls[] = {
 	{
@@ -58,7 +58,6 @@ static struct ctl_table sched_rt_sysctls[] = {
 		.mode           = 0644,
 		.proc_handler   = sched_rr_handler,
 	},
-	{}
 };
 
 static int __init sched_rt_sysctl_init(void)
@@ -143,7 +142,7 @@ void init_rt_rq(struct rt_rq *rt_rq)
 		INIT_LIST_HEAD(array->queue + i);
 		__clear_bit(i, array->bitmap);
 	}
-	/* delimiter for bitsearch: */
+	/* delimiter for bit-search: */
 	__set_bit(MAX_RT_PRIO, array->bitmap);
 
 #if defined CONFIG_SMP
@@ -1145,7 +1144,7 @@ dec_rt_prio(struct rt_rq *rt_rq, int prio)
 
 		/*
 		 * This may have been our highest task, and therefore
-		 * we may have some recomputation to do
+		 * we may have some re-computation to do
 		 */
 		if (prio == prev_prio) {
 			struct rt_prio_array *array = &rt_rq->active;
@@ -1572,6 +1571,28 @@ static void yield_task_rt(struct rq *rq)
 #ifdef CONFIG_SMP
 static int find_lowest_rq(struct task_struct *task);
 
+#ifdef CONFIG_RT_SOFTIRQ_AWARE_SCHED
+/*
+ * Return whether the given cpu is currently non-preemptible
+ * while handling a potentially long softirq, or if the current
+ * task is likely to block preemptions soon because it is a
+ * ksoftirq thread that is handling softirqs.
+ */
+bool cpu_busy_with_softirqs(int cpu)
+{
+	u32 softirqs = per_cpu(active_softirqs, cpu) |
+		       __cpu_softirq_pending(cpu);
+
+	return softirqs & LONG_SOFTIRQ_MASK;
+}
+EXPORT_SYMBOL_GPL(cpu_busy_with_softirqs);
+#endif /* CONFIG_RT_SOFTIRQ_AWARE_SCHED */
+
+static bool rt_task_fits_cpu(struct task_struct *p, int cpu)
+{
+	return rt_task_fits_capacity(p, cpu) && !cpu_busy_with_softirqs(cpu);
+}
+
 static int
 select_task_rq_rt(struct task_struct *p, int cpu, int flags)
 {
@@ -1615,15 +1636,17 @@ select_task_rq_rt(struct task_struct *p, int cpu, int flags)
 	 *
 	 * For equal prio tasks, we just let the scheduler sort it out.
 	 *
-	 * Otherwise, just let it ride on the affined RQ and the
+	 * Otherwise, just let it ride on the affine RQ and the
 	 * post-schedule router will push the preempted task away
 	 *
 	 * This test is optimistic, if we get it wrong the load-balancer
 	 * will have to sort it out.
 	 *
-	 * We take into account the capacity of the CPU to ensure it fits the
-	 * requirement of the task - which is only important on heterogeneous
-	 * systems like big.LITTLE.
+	 * We use rt_task_fits_cpu() to evaluate if the CPU is busy with
+	 * potentially long-running softirq work, as well as take into
+	 * account the capacity of the CPU to ensure it fits the
+	 * requirement of the task - which is only important on
+	 * heterogeneous systems like big.LITTLE.
 	 */
 	test = curr &&
 	       unlikely(rt_task(curr)) &&
@@ -1638,14 +1661,14 @@ select_task_rq_rt(struct task_struct *p, int cpu, int flags)
 		goto out_unlock;
 	}
 
-	if (test || !rt_task_fits_capacity(p, cpu)) {
+	if (test || !rt_task_fits_cpu(p, cpu)) {
 		int target = find_lowest_rq(p);
 
 		/*
 		 * Bail out if we were forcing a migration to find a better
 		 * fitting CPU but our search failed.
 		 */
-		if (!test && target != -1 && !rt_task_fits_capacity(p, target))
+		if (!test && target != -1 && !rt_task_fits_cpu(p, target))
 			goto out_unlock;
 
 		/*
@@ -1895,14 +1918,17 @@ static int find_lowest_rq(struct task_struct *task)
 		return -1; /* No other targets possible */
 
 	/*
-	 * If we're on asym system ensure we consider the different capacities
-	 * of the CPUs when searching for the lowest_mask.
+	 * If we're using the softirq optimization or if we are
+	 * on asym system, ensure we consider the softirq processing
+	 * or different capacities of the CPUs when searching for the
+	 * lowest_mask.
 	 */
-	if (sched_asym_cpucap_active()) {
+	if (IS_ENABLED(CONFIG_RT_SOFTIRQ_AWARE_SCHED) ||
+	    sched_asym_cpucap_active()) {
 
 		ret = cpupri_find_fitness(&task_rq(task)->rd->cpupri,
 					  task, lowest_mask,
-					  rt_task_fits_capacity);
+					  rt_task_fits_cpu);
 	} else {
 
 		ret = cpupri_find(&task_rq(task)->rd->cpupri,
@@ -2211,14 +2237,14 @@ static void push_rt_tasks(struct rq *rq)
  * if its the only CPU with multiple RT tasks queued, and a large number
  * of CPUs scheduling a lower priority task at the same time.
  *
- * Each root domain has its own irq work function that can iterate over
+ * Each root domain has its own IRQ work function that can iterate over
  * all CPUs with RT overloaded tasks. Since all CPUs with overloaded RT
  * task must be checked if there's one or many CPUs that are lowering
- * their priority, there's a single irq work iterator that will try to
+ * their priority, there's a single IRQ work iterator that will try to
  * push off RT tasks that are waiting to run.
  *
  * When a CPU schedules a lower priority task, it will kick off the
- * irq work iterator that will jump to each CPU with overloaded RT tasks.
+ * IRQ work iterator that will jump to each CPU with overloaded RT tasks.
  * As it only takes the first CPU that schedules a lower priority task
  * to start the process, the rto_start variable is incremented and if
  * the atomic result is one, then that CPU will try to take the rto_lock.
@@ -2226,7 +2252,7 @@ static void push_rt_tasks(struct rq *rq)
  * CPUs scheduling lower priority tasks.
  *
  * All CPUs that are scheduling a lower priority task will increment the
- * rt_loop_next variable. This will make sure that the irq work iterator
+ * rt_loop_next variable. This will make sure that the IRQ work iterator
  * checks all RT overloaded CPUs whenever a CPU schedules a new lower
  * priority task, even if the iterator is in the middle of a scan. Incrementing
  * the rt_loop_next will cause the iterator to perform another scan.
@@ -2309,7 +2335,7 @@ static void tell_cpu_to_push(struct rq *rq)
 	 * The rto_cpu is updated under the lock, if it has a valid CPU
 	 * then the IPI is still running and will continue due to the
 	 * update to loop_next, and nothing needs to be done here.
-	 * Otherwise it is finishing up and an ipi needs to be sent.
+	 * Otherwise it is finishing up and an IPI needs to be sent.
 	 */
 	if (rq->rd->rto_cpu < 0)
 		cpu = rto_next_cpu(rq->rd);
@@ -2661,7 +2687,7 @@ static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 	watchdog(rq, p);
 
 	/*
-	 * RR tasks need a special form of timeslice management.
+	 * RR tasks need a special form of time-slice management.
 	 * FIFO tasks have no timeslices.
 	 */
 	if (p->policy != SCHED_RR)
@@ -2967,7 +2993,7 @@ static int sched_rt_global_constraints(void)
 
 int sched_rt_can_attach(struct task_group *tg, struct task_struct *tsk)
 {
-	/* Don't accept realtime tasks when there is no way for them to run */
+	/* Don't accept real-time tasks when there is no way for them to run */
 	if (rt_task(tsk) && tg->rt_bandwidth.rt_runtime == 0)
 		return 0;
 
@@ -3019,7 +3045,7 @@ static void sched_rt_do_global(void)
 	raw_spin_unlock_irqrestore(&def_rt_bandwidth.rt_runtime_lock, flags);
 }
 
-static int sched_rt_handler(struct ctl_table *table, int write, void *buffer,
+static int sched_rt_handler(const struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos)
 {
 	int old_period, old_runtime;
@@ -3058,7 +3084,7 @@ undo:
 	return ret;
 }
 
-static int sched_rr_handler(struct ctl_table *table, int write, void *buffer,
+static int sched_rr_handler(const struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos)
 {
 	int ret;
@@ -3068,7 +3094,7 @@ static int sched_rr_handler(struct ctl_table *table, int write, void *buffer,
 	ret = proc_dointvec(table, write, buffer, lenp, ppos);
 	/*
 	 * Make sure that internally we keep jiffies.
-	 * Also, writing zero resets the timeslice to default:
+	 * Also, writing zero resets the time-slice to default:
 	 */
 	if (!ret && write) {
 		sched_rr_timeslice =

@@ -33,6 +33,7 @@
 int netfs_folio_written_back(struct folio *folio)
 {
 	enum netfs_folio_trace why = netfs_folio_trace_clear;
+	struct netfs_inode *ictx = netfs_inode(folio->mapping->host);
 	struct netfs_folio *finfo;
 	struct netfs_group *group = NULL;
 	int gcount = 0;
@@ -41,6 +42,12 @@ int netfs_folio_written_back(struct folio *folio)
 		/* Streaming writes cannot be redirtied whilst under writeback,
 		 * so discard the streaming record.
 		 */
+		unsigned long long fend;
+
+		fend = folio_pos(folio) + finfo->dirty_offset + finfo->dirty_len;
+		if (fend > ictx->zero_point)
+			ictx->zero_point = fend;
+
 		folio_detach_private(folio);
 		group = finfo->netfs_group;
 		gcount++;
@@ -510,7 +517,7 @@ reassess_streams:
 	 * stream has a gap that can be jumped.
 	 */
 	if (notes & SOME_EMPTY) {
-		unsigned long long jump_to = wreq->start + wreq->len;
+		unsigned long long jump_to = wreq->start + READ_ONCE(wreq->submitted);
 
 		for (s = 0; s < NR_IO_STREAMS; s++) {
 			stream = &wreq->io_streams[s];
@@ -690,10 +697,11 @@ void netfs_write_collection_worker(struct work_struct *work)
 	wake_up_bit(&wreq->flags, NETFS_RREQ_IN_PROGRESS);
 
 	if (wreq->iocb) {
-		wreq->iocb->ki_pos += wreq->transferred;
+		size_t written = min(wreq->transferred, wreq->len);
+		wreq->iocb->ki_pos += written;
 		if (wreq->iocb->ki_complete)
 			wreq->iocb->ki_complete(
-				wreq->iocb, wreq->error ? wreq->error : wreq->transferred);
+				wreq->iocb, wreq->error ? wreq->error : written);
 		wreq->iocb = VFS_PTR_POISON;
 	}
 

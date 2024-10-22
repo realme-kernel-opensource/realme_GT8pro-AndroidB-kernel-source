@@ -332,7 +332,13 @@ int __meminit vmemmap_populate_hugepages(unsigned long start, unsigned long end,
 			return -ENOMEM;
 
 		pmd = pmd_offset(pud, addr);
+
+		/* avoid pmd size alloc if no altmap */
+#ifdef CONFIG_ARCH_QTI_VM
+		if (pmd_none(READ_ONCE(*pmd)) && altmap) {
+#else
 		if (pmd_none(READ_ONCE(*pmd))) {
+#endif
 			void *p;
 
 			p = vmemmap_alloc_block_buf(PMD_SIZE, node, altmap);
@@ -468,6 +474,11 @@ struct page * __meminit __populate_section_memmap(unsigned long pfn,
 
 	if (r < 0)
 		return NULL;
+
+	if (system_state == SYSTEM_BOOTING)
+		memmap_boot_pages_add(DIV_ROUND_UP(end - start, PAGE_SIZE));
+	else
+		memmap_pages_add(DIV_ROUND_UP(end - start, PAGE_SIZE));
 
 	return pfn_to_page(pfn);
 }

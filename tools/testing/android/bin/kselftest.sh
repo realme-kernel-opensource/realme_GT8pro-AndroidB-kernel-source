@@ -5,20 +5,26 @@ BAZEL=tools/bazel
 BIN_DIR=common/tools/testing/android/bin
 ACLOUD=$BIN_DIR/acloudb.sh
 TRADEFED=prebuilts/tradefed/filegroups/tradefed/tradefed.sh
-TESTSDIR=bazel-bin/common/
-LOG_DIR=${TMPDIR:-/tmp}/kselftest_$USER/$(date +%Y%m%d_%H%M%S)
+DEFAULT_DIST_DIR=out/virtual_device_x86_64/dist
+TESTSDIR=/tmp/kselftests
+LOG_DIR=$PWD/out/test_logs/$(date +%Y%m%d_%H%M%S)
+JDK_PATH=prebuilts/jdk/jdk11/linux-x86
 
 print_help() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "This script builds kernel, launches cvd and runs selftests on it."
+    echo "This script runs Selftests on an Android device."
+    echo "Please run the script with full path common/tools/testing/android/bin/."
+    echo "Building kernel and launching virtual device are enabled by default;"
+    echo "use options to skip the workflow."
+    echo ""
     echo "Available options:"
     echo "  --skip-kernel-build   Skip the kernel building step"
     echo "  --skip-cvd-launch     Skip the CVD launch step"
     echo "  --skip-cvd-kill       Do not kill CVD launched by running this script"
-    echo "  -d, --dist-dir=DIR    The kernel dist dir (default is /tmp/kernel_dist)"
+    echo "  -d, --dist-dir=DIR    The kernel dist dir (default is $DEFAULT_DIST_DIR)"
     echo "  -s, --serial=SERIAL   The device serial number."
-    echo "                        If serial is specified, cuttlefish device launch will be skipped"
+    echo "                        If serial is specified, virtual device launch will be skipped"
     echo "  -t, --test=TEST_NAME  The test target name. Can be repeated"
     echo "                        If test is not specified, all kselftests will be run"
     echo "  --gcov                Collect coverage data from the test result"
@@ -35,12 +41,13 @@ print_help() {
 BUILD_KERNEL=true
 LAUNCH_CVD=true
 KILL_CVD=true
-DIST_DIR=/tmp/kernel_dist
+DIST_DIR=$DEFAULT_DIST_DIR
 SERIAL_NUMBER=
 MODULE_NAME="selftests"
 TEST_FILTERS=
 SELECTED_TESTS=
 GCOV=false
+GCOV_DIST_DIR=
 
 while test $# -gt 0; do
     case "$1" in
@@ -63,6 +70,7 @@ while test $# -gt 0; do
             shift
             if test $# -gt 0; then
                 DIST_DIR=$1
+                GCOV_DIST_DIR=$DIST_DIR
             else
                 echo "kernel distribution directory is not specified"
                 exit 1
@@ -71,6 +79,7 @@ while test $# -gt 0; do
             ;;
         --dist-dir*)
             DIST_DIR=$(echo $1 | sed -e "s/^[^=]*=//g")
+            GCOV_DIST_DIR=$DIST_DIR
             shift
             ;;
         -s)
@@ -116,6 +125,8 @@ while test $# -gt 0; do
             shift
             ;;
         *)
+            echo "unknown argument: $1"
+            exit 1
             ;;
     esac
 done
@@ -128,7 +139,14 @@ if $BUILD_KERNEL; then
     echo "Building kernel..."
     # TODO: add support to build kernel for physical device
     $BAZEL run $BUILD_FLAGS //common-modules/virtual-device:virtual_device_x86_64_dist -- \
-     --dist_dir=$DIST_DIR
+    --dist_dir=$DIST_DIR
+    exit_code=$?
+    if [ $exit_code -eq 0 ]; then
+        echo "Build kernel succeeded"
+    else
+        echo "Build kernel failed with exit code $exit_code"
+        exit 1
+    fi
 fi
 
 if $LAUNCH_CVD; then
@@ -153,16 +171,23 @@ ABI=$(adb -s $SERIAL_NUMBER shell getprop ro.product.cpu.abi)
 echo "Building kselftests according to device $SERIAL_NUMBER ro.product.cpu.abi $ABI ..."
 case $ABI in
 	arm64*)
-		$BAZEL build //common:kselftest_tests_arm64
+		$BAZEL run //common:kselftest_tests_arm64_install -- --destdir $TESTSDIR
 		;;
 	x86_64*)
-		$BAZEL build //common:kselftest_tests_x86_64
+		$BAZEL run //common:kselftest_tests_x86_64_install -- --destdir $TESTSDIR
 		;;
 	*)
 		echo "$ABI not supported"
 		exit 1
 		;;
 esac
+exit_code=$?
+if [ $exit_code -eq 0 ]; then
+    echo "Build kselftest succeeded"
+else
+    echo "Build kselftest failed with exit code $exit_code"
+    exit 1
+fi
 
 if [ -z "$SELECTED_TESTS" ]; then
     echo "Running all kselftests with device $SERIAL_NUMBER..."
@@ -171,8 +196,8 @@ else
     echo "Running $SELECTED_TESTS with device $SERIAL_NUMBER ..."
 fi
 
-tf_cli="$TRADEFED run commandAndExit template/local_min \
---template:map test=suite/test_mapping_suite \
+tf_cli="JAVA_HOME=$JDK_PATH PATH=$JDK_PATH/bin:$PATH $TRADEFED run commandAndExit \
+template/local_min --template:map test=suite/test_mapping_suite \
 $TEST_FILTERS --tests-dir=$TESTSDIR --log-file-path=$LOG_DIR \
 --primary-abi-only -s $SERIAL_NUMBER"
 
@@ -192,7 +217,11 @@ if $LAUNCH_CVD && $KILL_CVD; then
 fi
 
 if $GCOV; then
+    CREATE_TRACEFILE_CLI="common/tools/testing/android/bin/create-tracefile.py \
+    -t $LOG_DIR -o $LOG_DIR/cov.info"
+    if [ -n "$GCOV_DIST_DIR" ]; then
+        CREATE_TRACEFILE_CLI+=" --dist-dir $GCOV_DIST_DIR"
+    fi
     echo "Creating tracefile ..."
-    common/tools/testing/android/bin/create-tracefile.py -t $LOG_DIR -o $LOG_DIR/cov.info && \
-    echo "Created tracefile at $LOG_DIR/cov.info"
+    $CREATE_TRACEFILE_CLI && echo "Created tracefile at $LOG_DIR/cov.info"
 fi

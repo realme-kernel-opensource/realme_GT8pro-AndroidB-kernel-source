@@ -60,9 +60,9 @@ config GENERIC_ENTRY
 
 config KPROBES
 	bool "Kprobes"
-	depends on MODULES
 	depends on HAVE_KPROBES
 	select KALLSYMS
+	select EXECMEM
 	select NEED_TASKS_RCU
 	help
 	  Kprobes allows you to trap at almost any kernel address and
@@ -826,6 +826,22 @@ config CFI_CLANG
 
 	    https://clang.llvm.org/docs/ControlFlowIntegrity.html
 
+config CFI_ICALL_NORMALIZE_INTEGERS
+	bool "Normalize CFI tags for integers"
+	depends on CFI_CLANG
+	depends on $(cc-option,-fsanitize=kcfi -fsanitize-cfi-icall-experimental-normalize-integers)
+	help
+	  This option normalizes the CFI tags for integer types so that all
+	  integer types of the same size and signedness receive the same CFI
+	  tag.
+
+	  The option is separate from CONFIG_RUST because it affects the ABI.
+	  When working with build systems that care about the ABI, it is
+	  convenient to be able to turn on this flag first, before Rust is
+	  turned on.
+
+	  This option is necessary for using CFI with Rust. If unsure, say N.
+
 config CFI_PERMISSIVE
 	bool "Use CFI in permissive mode"
 	depends on CFI_CLANG
@@ -976,6 +992,14 @@ config ARCH_WANTS_MODULES_DATA_IN_VMALLOC
 	help
 	  For architectures like powerpc/32 which have constraints on module
 	  allocation and need to allocate module data outside of module area.
+
+config ARCH_WANTS_EXECMEM_LATE
+	bool
+	help
+	  For architectures that do not allocate executable memory early on
+	  boot, but rather require its initialization late when there is
+	  enough entropy for module space randomization, for instance
+	  arm64.
 
 config HAVE_IRQ_EXIT_ON_IRQ_STACK
 	bool
@@ -1585,6 +1609,12 @@ config ARCH_HAS_NONLEAF_PMD_YOUNG
 	  accessed bit in non-leaf PMD entries when using them as part of linear
 	  address translations. Page table walkers that clear the accessed bit
 	  may use this capability to reduce their search space.
+
+config ARCH_HAS_KERNEL_FPU_SUPPORT
+	bool
+	help
+	  Architectures that select this option can run floating-point code in
+	  the kernel, as described in Documentation/core-api/floating-point.rst.
 
 source "kernel/gcov/Kconfig"
 

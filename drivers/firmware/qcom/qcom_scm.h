@@ -8,6 +8,7 @@
 #include <linux/semaphore.h>
 
 struct device;
+struct qcom_tzmem_pool;
 
 enum qcom_scm_convention {
 	SMC_CONVENTION_UNKNOWN,
@@ -97,6 +98,8 @@ int scm_legacy_call_atomic(struct device *dev, const struct qcom_scm_desc *desc,
 int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 		    struct qcom_scm_res *res);
 
+struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
+
 #define QCOM_SCM_SVC_BOOT		0x01
 #define QCOM_SCM_BOOT_SET_ADDR		0x01
 #define QCOM_SCM_BOOT_TERMINATE_PC	0x02
@@ -147,9 +150,10 @@ int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 #define QCOM_SCM_MP_ASSIGN			0x16
 #define QCOM_SCM_MP_CMD_SD_CTRL				0x18
 #define QCOM_SCM_MP_CP_SMMU_APERTURE_ID			0x1b
-#define QCOM_SCM_MEMP_SHM_BRIDGE_ENABLE			0x1c
-#define QCOM_SCM_MEMP_SHM_BRIDGE_DELETE			0x1d
-#define QCOM_SCM_MEMP_SHM_BRDIGE_CREATE			0x1e
+#define QCOM_SCM_MP_SHM_BRIDGE_ENABLE		0x1c
+#define QCOM_SCM_MP_SHM_BRIDGE_DELETE		0x1d
+#define QCOM_SCM_MP_SHM_BRIDGE_CREATE		0x1e
+
 #define QCOM_SCM_CP_APERTURE_REG	0x0
 #define QCOM_SCM_CP_LPAC_APERTURE_REG	0x1
 
@@ -225,6 +229,9 @@ int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 #define QCOM_SCM_SVC_WAITQ			0x24
 #define QCOM_SCM_WAITQ_RESUME			0x02
 #define QCOM_SCM_WAITQ_GET_WQ_CTX		0x03
+
+#define QCOM_SCM_SVC_GPU			0x28
+#define QCOM_SCM_SVC_GPU_INIT_REGS		0x01
 
 /* common error codes */
 #define QCOM_SCM_V2_EBUSY	-12

@@ -8,6 +8,7 @@
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/elf.h>
 #include <linux/firmware.h>
@@ -38,13 +39,12 @@ static ssize_t mdt_load_split_segment(void *ptr, const struct elf32_phdr *phdrs,
 {
 	const struct elf32_phdr *phdr = &phdrs[segment];
 	const struct firmware *seg_fw;
-	char *seg_name;
 	ssize_t ret;
 
 	if (strlen(fw_name) < 4)
 		return -EINVAL;
 
-	seg_name = kstrdup(fw_name, GFP_KERNEL);
+	char *seg_name __free(kfree) = kstrdup(fw_name, GFP_KERNEL);
 	if (!seg_name)
 		return -ENOMEM;
 
@@ -53,7 +53,6 @@ static ssize_t mdt_load_split_segment(void *ptr, const struct elf32_phdr *phdrs,
 					ptr, phdr->p_filesz);
 	if (ret) {
 		dev_err(dev, "error %zd loading %s\n", ret, seg_name);
-		kfree(seg_name);
 		return ret;
 	}
 
@@ -65,7 +64,6 @@ static ssize_t mdt_load_split_segment(void *ptr, const struct elf32_phdr *phdrs,
 	}
 
 	release_firmware(seg_fw);
-	kfree(seg_name);
 
 	return ret;
 }
