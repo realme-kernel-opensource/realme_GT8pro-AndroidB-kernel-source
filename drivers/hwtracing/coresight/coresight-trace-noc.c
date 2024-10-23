@@ -465,7 +465,7 @@ static int trace_noc_probe(struct amba_device *adev, const struct amba_id *id)
 	return 0;
 }
 
-static void __exit trace_noc_remove(struct amba_device *adev)
+static void trace_noc_remove(struct amba_device *adev)
 {
 	struct trace_noc_drvdata *drvdata = dev_get_drvdata(&adev->dev);
 
