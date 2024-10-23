@@ -1530,9 +1530,10 @@ TRACE_EVENT(halt_cpus_start,
 );
 
 TRACE_EVENT(halt_cpus,
-	    TP_PROTO(struct cpumask *cpus, u64 start_time, unsigned char halt, int err),
+	    TP_PROTO(struct cpumask *cpus, u64 start_time, unsigned char halt,
+		    int err, enum pause_client client),
 
-	    TP_ARGS(cpus, start_time, halt, err),
+	    TP_ARGS(cpus, start_time, halt, err, client),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,   cpus)
@@ -1541,6 +1542,7 @@ TRACE_EVENT(halt_cpus,
 		    __field(unsigned int,   time)
 		    __field(unsigned char,  halt)
 		    __field(unsigned char,  success)
+		    __field(enum pause_client,        client)
 		    ),
 
 	    TP_fast_assign(
@@ -1550,11 +1552,12 @@ TRACE_EVENT(halt_cpus,
 		    __entry->time        = div64_u64(sched_clock() - start_time, 1000);
 		    __entry->halt        = halt;
 		    __entry->success     = ((err >= 0)?1:0);
+		    __entry->client	 = client;
 		    ),
 
-	    TP_printk("req_cpus=0x%x halt_cpus=0x%x partial_halt_cpus=0x%x time=%u us halt=%d success=%d",
+	    TP_printk("req_cpus=0x%x halt_cpus=0x%x partial_halt_cpus=0x%x time=%u us halt=%d success=%d client=0x%x",
 		      __entry->cpus, __entry->halted_cpus, __entry->partial_halted_cpus,
-		      __entry->time, __entry->halt, __entry->success)
+		      __entry->time, __entry->halt, __entry->success, __entry->client)
 );
 
 TRACE_EVENT(sched_task_handler,
