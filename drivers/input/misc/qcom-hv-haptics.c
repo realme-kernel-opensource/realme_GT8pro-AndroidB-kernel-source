@@ -3113,30 +3113,16 @@ static inline bool is_haptics_runtime_pm_enabled(struct haptics_chip *chip)
 
 #define HAPTICS_AUTO_SUSPEND_MS			1000
 
-static void haptics_runtime_disable_action(void *data)
-{
-	pm_runtime_dont_use_autosuspend(data);
-	pm_runtime_disable(data);
-}
-
 static int haptics_runtime_pm_init(struct haptics_chip *chip)
 {
-	int rc;
-
 	if (!is_haptics_runtime_pm_enabled(chip))
 		return 0;
 
 	pm_runtime_use_autosuspend(chip->dev);
 	pm_runtime_set_autosuspend_delay(chip->dev, HAPTICS_AUTO_SUSPEND_MS);
 	pm_runtime_set_active(chip->dev);
-	pm_runtime_enable(chip->dev);
 
-	rc = __devm_add_action(chip->dev, haptics_runtime_disable_action,
-			chip->dev, "haptics_runtime_disable_action");
-	if (rc < 0)
-		haptics_runtime_disable_action(chip->dev);
-
-	return rc;
+	return devm_pm_runtime_enable(chip->dev);
 }
 
 static int haptics_runtime_resume_get(struct haptics_chip *chip)
