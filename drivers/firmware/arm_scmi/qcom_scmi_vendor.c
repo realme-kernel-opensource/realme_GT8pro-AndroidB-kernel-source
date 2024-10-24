@@ -138,7 +138,7 @@ static int qcom_scmi_vendor_protocol_init(const struct scmi_protocol_handle *ph)
 
 static const struct scmi_protocol qcom_scmi_vendor = {
 	.id = QCOM_SCMI_VENDOR_PROTOCOL,
-	.vendor_id = "qcom",
+	.vendor_id = "Qualcomm",
 	.owner = THIS_MODULE,
 	.instance_init = &qcom_scmi_vendor_protocol_init,
 	.ops = &qcom_proto_ops,

@@ -154,7 +154,7 @@ static int scmi_c1dcvs_protocol_init(const struct scmi_protocol_handle *ph)
 
 static const struct scmi_protocol scmi_c1dcvs = {
 	.id = SCMI_C1DCVS_PROTOCOL,
-	.vendor_id = "qcom",
+	.vendor_id = "Qualcomm",
 	.owner = THIS_MODULE,
 	.instance_init = &scmi_c1dcvs_protocol_init,
 	.ops = &c1dcvs_config_ops,
