@@ -59,12 +59,14 @@ static int qcom_scmi_get_param(const struct scmi_protocol_handle *ph, void *buf,
 	*msg++ = cpu_to_le32(param_id);
 	memcpy(msg, buf, tx_size);
 	ret = ph->xops->do_xfer(ph, t);
-	if (t->rx.len > rx_size) {
-		pr_err("SCMI received buffer size %lu is more than expected size %lu\n",
-			t->rx.len, rx_size);
-		return -EMSGSIZE;
+	if (!ret) {
+		if (t->rx.len > rx_size) {
+			pr_err("SCMI received buffer size %lu is more than expected size %lu\n",
+				t->rx.len, rx_size);
+			return -EMSGSIZE;
+		}
+		memcpy(buf, t->rx.buf, t->rx.len);
 	}
-	memcpy(buf, t->rx.buf, t->rx.len);
 	ph->xops->xfer_put(ph, t);
 
 	return ret;
@@ -128,8 +130,13 @@ static struct qcom_scmi_vendor_ops qcom_proto_ops = {
 static int qcom_scmi_vendor_protocol_init(const struct scmi_protocol_handle *ph)
 {
 	u32 version;
+	int ret;
 
-	ph->xops->version_get(ph, &version);
+	ret = ph->xops->version_get(ph, &version);
+	if (ret == -ETIMEDOUT)
+		ret = -EPROBE_DEFER;
+	if (ret)
+		return dev_err_probe(ph->dev, ret, "Unable to get version\n");
 
 	dev_dbg(ph->dev, "qcom scmi version %d.%d\n",
 		PROTOCOL_REV_MAJOR(version), PROTOCOL_REV_MINOR(version));
@@ -145,5 +152,6 @@ static const struct scmi_protocol qcom_scmi_vendor = {
 };
 module_scmi_protocol(qcom_scmi_vendor);
 
+MODULE_SOFTDEP("pre: qcom_cpucp");
 MODULE_DESCRIPTION("qcom scmi vendor Protocol");
 MODULE_LICENSE("GPL");
