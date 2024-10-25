@@ -3,6 +3,75 @@
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+struct qpace_transfer_descriptor {
+	uint64_t dst_addr;
+	uint64_t src_addr;
+	uint64_t size:20;
+
+	uint64_t ed_reserved:44;
+
+	uint32_t crc;
+	uint32_t crc_enable:1;
+	uint32_t crc_mode:1;
+	uint32_t crc_keep:1;
+
+	uint32_t pcm:1;
+
+	uint32_t operation:3;
+
+	uint32_t unused_1:1;
+
+	uint32_t page_count:6;
+
+	uint32_t sctx:2;
+	uint32_t dctx:2;
+
+	uint32_t beosc:1;
+	uint32_t bei:1;
+
+	uint32_t rf:1;
+	uint32_t wa:1;
+
+	uint32_t event_ring_id:4;
+
+	uint32_t unused_2:4;
+
+	uint32_t pcd:1;
+
+	uint32_t noop:1;
+};
+
+struct qpace_event_descriptor {
+	uint64_t td_addr;
+	uint64_t out_addr;
+	uint64_t size:20;
+
+	uint64_t completion_code:4;
+	uint64_t tr_ring_id:4;
+	uint64_t cycle_bit:1;
+	uint64_t replication_found:1;
+
+	uint64_t rep_word:32;
+
+	uint32_t crc;
+
+	uint32_t reserved;
+};
+
+enum ring_vals {
+	COMPRESS_RING,
+	COPY_RING,
+	NUM_RINGS,
+};
+
+#define RING_SIZE_ORDER 0
+#define DESCRIPTOR_SIZE 32
+#define DESCRIPTORS_PER_RING ((PAGE_SIZE << RING_SIZE_ORDER) / DESCRIPTOR_SIZE)
+
+typedef void (*process_ed_fn)(struct qpace_event_descriptor *ed, int ed_index);
+
+#if IS_ENABLED(CONFIG_QTI_PAGE_COMPRESSION_ENGINE)
+
 /*
  * qpace_urgent_compress() - compress a page
  * @input_addr: Input address of the page to be compressed
@@ -81,73 +150,60 @@ bool qpace_trigger_tr(int tr_num);
  */
 void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep);
 
-struct qpace_transfer_descriptor {
-	uint64_t dst_addr;
-	uint64_t src_addr;
-	uint64_t size:20;
-
-	uint64_t ed_reserved:44;
-
-	uint32_t crc;
-	uint32_t crc_enable:1;
-	uint32_t crc_mode:1;
-	uint32_t crc_keep:1;
-
-	uint32_t pcm:1;
-
-	uint32_t operation:3;
-
-	uint32_t unused_1:1;
-
-	uint32_t page_count:6;
-
-	uint32_t sctx:2;
-	uint32_t dctx:2;
-
-	uint32_t beosc:1;
-	uint32_t bei:1;
-
-	uint32_t rf:1;
-	uint32_t wa:1;
-
-	uint32_t event_ring_id:4;
-
-	uint32_t unused_2:4;
-
-	uint32_t pcd:1;
-
-	uint32_t noop:1;
-};
-
-struct qpace_event_descriptor {
-	uint64_t td_addr;
-	uint64_t out_addr;
-	uint64_t size:20;
-
-	uint64_t completion_code:4;
-	uint64_t tr_ring_id:4;
-	uint64_t cycle_bit:1;
-	uint64_t replication_found:1;
-
-	uint64_t rep_word:32;
-
-	uint32_t crc;
-
-	uint32_t reserved;
-};
-
-typedef void (*process_ed_fn)(struct qpace_event_descriptor *ed, int ed_index);
+/*
+ * qpace_consume_er() - process completed event descriptors in the event ring @er_num
+ * @er_num: Event ring for which we want process completed event descriptors
+ * @success_handler: Callback for processing a successful event
+ * @fail_handler: Callback for processing a failed event
+ *
+ * Process the completed events in the event ring corresponding to @er_num
+ */
 void qpace_consume_er(int er_num,
 		      process_ed_fn success_handler,
 		      process_ed_fn fail_handler);
 
-enum ring_vals {
-	COMPRESS_RING,
-	COPY_RING,
-	NUM_RINGS,
-};
+#else /* CONFIG_QTI_PAGE_COMPRESSION_ENGINE */
 
-#define RING_SIZE_ORDER 0
-#define DESCRIPTOR_SIZE 32
-#define DESCRIPTORS_PER_RING ((PAGE_SIZE << RING_SIZE_ORDER) / DESCRIPTOR_SIZE)
+static inline int qpace_urgent_compress(phys_addr_t input_addr,
+					phys_addr_t output_addr)
+{
+	return -EINVAL;
+}
 
+static inline int qpace_urgent_decompress(phys_addr_t input_addr,
+					  phys_addr_t output_addr,
+					  int input_size)
+{
+	return -EINVAL;
+}
+
+static inline void qpace_queue_copy(int tr_num, phys_addr_t src_addr,
+				    phys_addr_t dst_addr, size_t copy_size)
+{
+
+}
+
+static inline void qpace_queue_compress(int tr_num, phys_addr_t src_addr,
+					phys_addr_t dst_addr)
+{
+
+}
+
+static inline bool qpace_trigger_tr(int tr_num)
+{
+	return false;
+}
+
+static inline void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep)
+{
+
+}
+
+static inline void qpace_consume_er(int er_num,
+				    process_ed_fn success_handler,
+				    process_ed_fn fail_handler)
+{
+
+}
+
+#endif
