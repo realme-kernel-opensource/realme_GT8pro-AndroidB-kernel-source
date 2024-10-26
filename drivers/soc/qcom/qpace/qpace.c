@@ -249,7 +249,7 @@ EXPORT_SYMBOL_GPL(qpace_urgent_compress);
  */
 int qpace_urgent_decompress(phys_addr_t input_addr,
 			    phys_addr_t output_addr,
-			    int input_size)
+			    size_t input_size)
 {
 	/* We have 8 cores and 8 urgent command registers */
 	int urg_reg_num;
