@@ -700,10 +700,14 @@ void walt_lb_tick(struct rq *rq)
 		clear_reserved(prev_cpu);
 	raw_spin_unlock(&rq->__lock);
 
-	if (rq->cpu == 0 && is_storage_boost()) {
-		raw_spin_lock_irqsave(&walt_lb_migration_lock, flags);
-		storage_balance = move_storage_load(rq);
-		raw_spin_unlock_irqrestore(&walt_lb_migration_lock, flags);
+	if (is_storage_boost()) {
+		if (rq->cpu == 0) {
+			raw_spin_lock_irqsave(&walt_lb_migration_lock, flags);
+			storage_balance = move_storage_load(rq);
+			raw_spin_unlock_irqrestore(&walt_lb_migration_lock, flags);
+		} else if (cpumask_test_cpu(rq->cpu, &walt_enforce_high_irq_cpu_mask)) {
+			return;
+		}
 	}
 
 	if (!walt_fair_task(p))
