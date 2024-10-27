@@ -262,6 +262,7 @@ int qcom_tvm_heap_add_pool_fd(struct mem_buf_allocation_data *alloc_data)
 	fd_install(fd, pool->filp);
 	return fd;
 }
+EXPORT_SYMBOL_GPL(qcom_tvm_heap_add_pool_fd);
 
 static void tvm_heap_obj_release(struct qcom_sg_buffer *buffer)
 {
