@@ -2562,7 +2562,6 @@ void qcom_glink_native_remove(struct qcom_glink *glink)
 	int cid;
 	int ret;
 
-	qcom_glink_early_ssr_notify(glink);
 	qcom_glink_cancel_rx_work(glink);
 
 	/* Fail all attempts at sending messages */
