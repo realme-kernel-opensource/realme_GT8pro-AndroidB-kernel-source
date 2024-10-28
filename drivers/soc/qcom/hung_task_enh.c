@@ -2,7 +2,7 @@
 
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -86,7 +86,7 @@ void qcom_check_tasks_done(void *ignore, void *extra)
 }
 
 static DEFINE_MUTEX(readpid_mutex);
-static int read_pid_handler(struct ctl_table *table, int write,
+static int read_pid_handler(const struct ctl_table *table, int write,
 				void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	int ret;
@@ -98,7 +98,7 @@ static int read_pid_handler(struct ctl_table *table, int write,
 	return ret;
 }
 
-static int hung_task_handler(struct ctl_table *table, int write,
+static int hung_task_handler(const struct ctl_table *table, int write,
 				void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	int ret;
@@ -205,7 +205,6 @@ struct ctl_table hung_task_table[] = {
 		.extra1		= SYSCTL_ONE,
 		.extra2		= SYSCTL_INT_MAX,
 	},
-	{ }
 };
 
 static int __init hung_task_enh_init(void)
