@@ -1208,9 +1208,7 @@ static int ufs_qcom_hce_enable_notify(struct ufs_hba *hba,
 /*
  * Return: zero for success and non-zero in case of a failure.
  */
-static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
-			       u32 hs, u32 rate, bool update_link_startup_timer,
-			       bool is_pre_scale_up)
+static int ufs_qcom_cfg_timers(struct ufs_hba *hba, bool is_pre_scale_up)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufs_clk_info *clki;
@@ -1230,11 +1228,6 @@ static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 	    !ufshcd_is_intr_aggr_allowed(hba) &&
 		!ufshcd_is_auto_hibern8_supported(hba))
 		return 0;
-
-	if (gear == 0) {
-		dev_err(hba->dev, "%s: invalid gear = %d\n", __func__, gear);
-		return -EINVAL;
-	}
 
 	list_for_each_entry(clki, &hba->clk_list_head, list) {
 		if (!strcmp(clki->name, "core_clk")) {
@@ -1261,13 +1254,6 @@ static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 	}
 
 	return 0;
-}
-
-static int ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
-			       u32 hs, u32 rate, bool update_link_startup_timer)
-{
-	return  __ufs_qcom_cfg_timers(hba, gear, hs, rate,
-				      update_link_startup_timer, false);
 }
 
 static int ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(struct ufs_hba *hba)
@@ -1441,8 +1427,7 @@ static int ufs_qcom_link_startup_notify(struct ufs_hba *hba,
 				strcmp(android_boot_dev, dev_name(dev)))
 			return -ENODEV;
 
-		if (ufs_qcom_cfg_timers(hba, UFS_PWM_G1, SLOWAUTO_MODE,
-					0, true)) {
+		if (ufs_qcom_cfg_timers(hba, false)) {
 			dev_err(hba->dev, "%s: ufs_qcom_cfg_timers() failed\n",
 				__func__);
 			err = -EINVAL;
@@ -2079,9 +2064,7 @@ static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 
 		break;
 	case POST_CHANGE:
-		if (ufs_qcom_cfg_timers(hba, dev_req_params->gear_rx,
-					dev_req_params->pwr_rx,
-					dev_req_params->hs_rate, false)) {
+		if (ufs_qcom_cfg_timers(hba, false)) {
 			dev_err(hba->dev, "%s: ufs_qcom_cfg_timers() failed\n",
 				__func__);
 			/*
@@ -3777,12 +3760,9 @@ static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
 
 static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba)
 {
-	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	struct ufs_pa_layer_attr *attr = &host->dev_req_params;
-	int err = 0;
+	int err;
 
-	err = __ufs_qcom_cfg_timers(hba, attr->gear_rx, attr->pwr_rx,
-				  attr->hs_rate, false, true);
+	err = ufs_qcom_cfg_timers(hba, true);
 	if (err) {
 		dev_err(hba->dev, "%s ufs cfg timer failed\n", __func__);
 		return err;
@@ -3839,8 +3819,7 @@ static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
 	if (attr)
-		ufs_qcom_cfg_timers(hba, attr->gear_rx, attr->pwr_rx,
-				    attr->hs_rate, false);
+		ufs_qcom_cfg_timers(hba, false);
 
 	list_for_each_entry(clki, head, list) {
 		if (!IS_ERR_OR_NULL(clki->clk) &&
@@ -3916,11 +3895,7 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 			goto out;
 		}
 
-		ufs_qcom_cfg_timers(hba,
-				    dev_req_params->gear_rx,
-				    dev_req_params->pwr_rx,
-				    dev_req_params->hs_rate,
-				    false);
+		ufs_qcom_cfg_timers(hba, false);
 		ufs_qcom_icc_update_bw(host);
 		ufshcd_uic_hibern8_exit(hba);
 	}
