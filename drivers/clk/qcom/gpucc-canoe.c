@@ -631,17 +631,28 @@ static int gx_clkctl_canoe_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
+	pm_runtime_enable(&pdev->dev);
+
+	ret = pm_runtime_resume_and_get(&pdev->dev);
+	if (ret)
+		return ret;
+
 	regmap = qcom_cc_map(pdev, &gx_clkctl_canoe_desc);
-	if (IS_ERR(regmap))
-		return PTR_ERR(regmap);
+	if (IS_ERR(regmap)) {
+		ret = PTR_ERR(regmap);
+		goto err;
+	}
 
 	ret = qcom_cc_really_probe(pdev, &gx_clkctl_canoe_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register GX CLKCTL ret=%d\n", ret);
-		return ret;
+		goto err;
 	}
 
 	dev_info(&pdev->dev, "Registered GX CLKCTL clocks\n");
+
+err:
+	pm_runtime_put(&pdev->dev);
 
 	return ret;
 }
