@@ -169,6 +169,8 @@ static int make_shm_bridge_single(struct mem_object *mo)
 
 		mo->mapping_info.p_addr = 0;
 		mo->mapping_info.p_addr_len = 0;
+		// SCM driver touch this value even an failure so set to 0
+		mo->shm_bridge_handle = 0;
 	}
 
 	return ret;
@@ -178,6 +180,7 @@ static void rm_shm_bridge(struct mem_object *mo)
 {
 	if (mo->shm_bridge_handle)
 		qtee_shmbridge_deregister(mo->shm_bridge_handle);
+	mo->shm_bridge_handle = 0;
 }
 
 static void detach_dma_buf(struct mem_object *mo)
@@ -189,6 +192,9 @@ static void detach_dma_buf(struct mem_object *mo)
 
 	if (mo->map.buf_attach)
 		dma_buf_detach(mo->dma_buf, mo->map.buf_attach);
+
+	mo->map.buf_attach = NULL;
+	mo->map.sgt = NULL;
 }
 
 /* 'init_tz_shared_memory' is called while holding the 'map.lock' mutex. */
@@ -201,6 +207,7 @@ static int init_tz_shared_memory(struct mem_object *mo)
 
 	mo->map.buf_attach = NULL;
 	mo->map.sgt = NULL;
+	mo->shm_bridge_handle = 0;
 
 	buf_attach = dma_buf_attach(mo->dma_buf, &mem_object_pdev->dev);
 	if (IS_ERR(buf_attach))
