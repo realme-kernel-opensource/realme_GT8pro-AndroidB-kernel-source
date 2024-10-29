@@ -262,7 +262,7 @@ static void arm_smmu_interrupt_selftest(struct arm_smmu_device *smmu)
 		/* Make sure ARM_SMMU_CB_SCTLR is configured */
 		wmb();
 		arm_smmu_cb_write(smmu, cb, ARM_SMMU_CB_FSRRESTORE,
-				ARM_SMMU_FSR_TF);
+				ARM_SMMU_CB_FSR_TF);
 
 		if (!wait_event_timeout(wait_int, (irq_count > irq_cnt),
 					msecs_to_jiffies(1000))) {
@@ -373,8 +373,7 @@ static int arm_smmu_register_legacy_master(struct device *dev,
 		it.cur_count = 1;
 	}
 
-	err = iommu_fwspec_init(dev, &smmu_dev->of_node->fwnode,
-				&arm_smmu_ops.iommu_ops);
+	err = iommu_fwspec_init(dev, NULL);
 	if (err)
 		return err;
 
@@ -667,18 +666,18 @@ static void print_fault_regs(struct arm_smmu_domain *smmu_domain,
 	dev_err(smmu->dev,
 		"FSR    = 0x%08x [%s%s%s%s%s%s%s%s%s%s]\n",
 		fsr,
-		(fsr & ARM_SMMU_FSR_TF) ?  (fsynr0 & ARM_SMMU_FSYNR0_WNR ?
+		(fsr & ARM_SMMU_CB_FSR_TF) ?  (fsynr0 & ARM_SMMU_CB_FSYNR0_WNR ?
 				 "TF W " : "TF R ") : "",
-		(fsr & ARM_SMMU_FSR_AFF) ? "AFF " : "",
-		(fsr & ARM_SMMU_FSR_PF) ? (fsynr0 & ARM_SMMU_FSYNR0_WNR ?
+		(fsr & ARM_SMMU_CB_FSR_AFF) ? "AFF " : "",
+		(fsr & ARM_SMMU_CB_FSR_PF) ? (fsynr0 & ARM_SMMU_CB_FSYNR0_WNR ?
 				"PF W " : "PF R ") : "",
-		(fsr & ARM_SMMU_FSR_EF) ? "EF " : "",
-		(fsr & ARM_SMMU_FSR_TLBMCF) ? "TLBMCF " : "",
-		(fsr & ARM_SMMU_FSR_TLBLKF) ? "TLBLKF " : "",
-		(fsr & ARM_SMMU_FSR_ASF) ? "ASF " : "",
-		(fsr & ARM_SMMU_FSR_UUT) ? "UUT " : "",
-		(fsr & ARM_SMMU_FSR_SS) ? "SS " : "",
-		(fsr & ARM_SMMU_FSR_MULTI) ? "MULTI " : "");
+		(fsr & ARM_SMMU_CB_FSR_EF) ? "EF " : "",
+		(fsr & ARM_SMMU_CB_FSR_TLBMCF) ? "TLBMCF " : "",
+		(fsr & ARM_SMMU_CB_FSR_TLBLKF) ? "TLBLKF " : "",
+		(fsr & ARM_SMMU_CB_FSR_ASF) ? "ASF " : "",
+		(fsr & ARM_SMMU_CB_FSR_UUT) ? "UUT " : "",
+		(fsr & ARM_SMMU_CB_FSR_SS) ? "SS " : "",
+		(fsr & ARM_SMMU_CB_FSR_MULTI) ? "MULTI " : "");
 
 	dev_err(smmu->dev, "FSYNR0    = 0x%x\n", fsynr0);
 	dev_err(smmu->dev, "FSYNR1    = 0x%x\n", fsynr1);
@@ -748,11 +747,11 @@ static void arm_smmu_verify_fault(struct arm_smmu_domain *smmu_domain,
 	dev_err(smmu->dev, "soft iova-to-phys=%pa\n", &phys_soft);
 
 	/* Get the transaction type */
-	if (fsynr & ARM_SMMU_FSYNR0_WNR)
+	if (fsynr & ARM_SMMU_CB_FSYNR0_WNR)
 		flags |= IOMMU_TRANS_WRITE;
-	if (fsynr & ARM_SMMU_FSYNR0_PNU)
+	if (fsynr & ARM_SMMU_CB_FSYNR0_PNU)
 		flags |= IOMMU_TRANS_PRIV;
-	if (fsynr & ARM_SMMU_FSYNR0_IND)
+	if (fsynr & ARM_SMMU_CB_FSYNR0_IND)
 		flags |= IOMMU_TRANS_INST;
 
 	txn.addr = iova;
@@ -797,6 +796,49 @@ static void arm_smmu_verify_fault(struct arm_smmu_domain *smmu_domain,
 		phys_stimu ? &phys_stimu : &phys_stimu_post_tlbiall);
 }
 
+void arm_smmu_read_context_fault_info(struct arm_smmu_device *smmu, int idx,
+				      struct arm_smmu_context_fault_info *cfi)
+{
+	cfi->iova = arm_smmu_cb_readq(smmu, idx, ARM_SMMU_CB_FAR);
+	cfi->fsr = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_FSR);
+	cfi->fsynr = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_FSYNR0);
+	cfi->cbfrsynra = arm_smmu_gr1_read(smmu, ARM_SMMU_GR1_CBFRSYNRA(idx));
+}
+
+void arm_smmu_print_context_fault_info(struct arm_smmu_device *smmu, int idx,
+				       const struct arm_smmu_context_fault_info *cfi)
+{
+	dev_dbg(smmu->dev,
+		"Unhandled context fault: fsr=0x%x, iova=0x%08lx, fsynr=0x%x, cbfrsynra=0x%x, cb=%d\n",
+		cfi->fsr, cfi->iova, cfi->fsynr, cfi->cbfrsynra, idx);
+
+	dev_err(smmu->dev, "FSR    = %08x [%s%sFormat=%u%s%s%s%s%s%s%s%s], SID=0x%x\n",
+		cfi->fsr,
+		(cfi->fsr & ARM_SMMU_CB_FSR_MULTI)  ? "MULTI " : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_SS)     ? "SS " : "",
+		(u32)FIELD_GET(ARM_SMMU_CB_FSR_FORMAT, cfi->fsr),
+		(cfi->fsr & ARM_SMMU_CB_FSR_UUT)    ? " UUT" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_ASF)    ? " ASF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_TLBLKF) ? " TLBLKF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_TLBMCF) ? " TLBMCF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_EF)     ? " EF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_PF)     ? " PF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_AFF)    ? " AFF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_TF)     ? " TF" : "",
+		cfi->cbfrsynra);
+
+	dev_err(smmu->dev, "FSYNR0 = %08x [S1CBNDX=%u%s%s%s%s%s%s PLVL=%u]\n",
+		cfi->fsynr,
+		(u32)FIELD_GET(ARM_SMMU_CB_FSYNR0_S1CBNDX, cfi->fsynr),
+		(cfi->fsynr & ARM_SMMU_CB_FSYNR0_AFR) ? " AFR" : "",
+		(cfi->fsynr & ARM_SMMU_CB_FSYNR0_PTWF) ? " PTWF" : "",
+		(cfi->fsynr & ARM_SMMU_CB_FSYNR0_NSATTR) ? " NSATTR" : "",
+		(cfi->fsynr & ARM_SMMU_CB_FSYNR0_IND) ? " IND" : "",
+		(cfi->fsynr & ARM_SMMU_CB_FSYNR0_PNU) ? " PNU" : "",
+		(cfi->fsynr & ARM_SMMU_CB_FSYNR0_WNR) ? " WNR" : "",
+		(u32)FIELD_GET(ARM_SMMU_CB_FSYNR0_PLVL, cfi->fsynr));
+}
+
 static int report_iommu_fault_helper(struct arm_smmu_domain *smmu_domain,
 	struct arm_smmu_device *smmu, int idx)
 {
@@ -808,15 +850,15 @@ static int report_iommu_fault_helper(struct arm_smmu_domain *smmu_domain,
 	fsynr = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_FSYNR0);
 	iova = arm_smmu_cb_readq(smmu, idx, ARM_SMMU_CB_FAR);
 
-	flags = fsynr & ARM_SMMU_FSYNR0_WNR ?
+	flags = fsynr & ARM_SMMU_CB_FSYNR0_WNR ?
 		IOMMU_FAULT_WRITE : IOMMU_FAULT_READ;
-	if (fsr & ARM_SMMU_FSR_TF)
+	if (fsr & ARM_SMMU_CB_FSR_TF)
 		flags |= IOMMU_FAULT_TRANSLATION;
-	if (fsr & ARM_SMMU_FSR_PF)
+	if (fsr & ARM_SMMU_CB_FSR_PF)
 		flags |= IOMMU_FAULT_PERMISSION;
-	if (fsr & ARM_SMMU_FSR_EF)
+	if (fsr & ARM_SMMU_CB_FSR_EF)
 		flags |= IOMMU_FAULT_EXTERNAL;
-	if (fsr & ARM_SMMU_FSR_SS)
+	if (fsr & ARM_SMMU_CB_FSR_SS)
 		flags |= IOMMU_FAULT_TRANSACTION_STALLED;
 
 
@@ -845,7 +887,7 @@ static int arm_smmu_get_fault_ids(struct iommu_domain *domain,
 
 	fsr = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_FSR);
 
-	if (!(fsr & ARM_SMMU_FSR_FAULT)) {
+	if (!(fsr & ARM_SMMU_CB_FSR_FAULT)) {
 		arm_smmu_rpm_put(smmu);
 		return -EINVAL;
 	}
@@ -920,13 +962,13 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 		return IRQ_NONE;
 
 	fsr = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_FSR);
-	if (!(fsr & ARM_SMMU_FSR_FAULT)) {
+	if (!(fsr & ARM_SMMU_CB_FSR_FAULT)) {
 		ret = IRQ_NONE;
 		goto out_power_off;
 	}
 
 	if ((smmu->options & ARM_SMMU_OPT_FATAL_ASF) &&
-			(fsr & ARM_SMMU_FSR_ASF)) {
+			(fsr & ARM_SMMU_CB_FSR_ASF)) {
 		dev_err(smmu->dev,
 			"Took an address size fault.  Refusing to recover.\n");
 		BUG();
@@ -970,7 +1012,7 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 		 */
 		wmb();
 
-		if (fsr & ARM_SMMU_FSR_SS)
+		if (fsr & ARM_SMMU_CB_FSR_SS)
 			arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_RESUME,
 				  ARM_SMMU_RESUME_TERMINATE);
 	}
@@ -1524,9 +1566,17 @@ static int arm_smmu_init_domain_context(struct arm_smmu_domain *smmu_domain,
 	else
 		context_fault = arm_smmu_context_fault;
 
-	ret = devm_request_threaded_irq(smmu->dev, irq, arm_smmu_context_fault_irq,
-			context_fault, IRQF_ONESHOT | IRQF_SHARED,
-			"arm-smmu-context-fault", smmu_domain);
+	if (smmu->impl && smmu->impl->context_fault_needs_threaded_irq)
+		ret = devm_request_threaded_irq(smmu->dev, irq,
+						arm_smmu_context_fault_irq,
+						context_fault,
+						IRQF_ONESHOT | IRQF_SHARED,
+						"arm-smmu-context-fault",
+						smmu_domain);
+	else
+		ret = devm_request_irq(smmu->dev, irq, context_fault, IRQF_SHARED,
+				       "arm-smmu-context-fault", smmu_domain);
+
 	if (ret < 0) {
 		dev_err(smmu->dev, "failed to request context IRQ %d (%u)\n",
 			cfg->irptndx, irq);
@@ -1596,14 +1646,10 @@ static void arm_smmu_destroy_domain_context(struct arm_smmu_domain *smmu_domain)
 	arm_smmu_rpm_put(smmu);
 }
 
-static struct iommu_domain *arm_smmu_domain_alloc(unsigned type)
+static struct iommu_domain *arm_smmu_domain_alloc_paging(struct device *dev)
 {
 	struct arm_smmu_domain *smmu_domain;
 
-	if (type != IOMMU_DOMAIN_UNMANAGED) {
-		if (using_legacy_binding || type != IOMMU_DOMAIN_DMA)
-			return NULL;
-	}
 	/*
 	 * Allocate the domain and initialise some of its data structures.
 	 * We can't really do anything meaningful until we've added a
@@ -2273,7 +2319,7 @@ static phys_addr_t __arm_smmu_iova_to_phys_hard(struct iommu_domain *domain,
 		arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_ATS1PR, va);
 
 	reg = arm_smmu_page(smmu, ARM_SMMU_CB(smmu, idx)) + ARM_SMMU_CB_ATSR;
-	if (readl_poll_timeout_atomic(reg, tmp, !(tmp & ARM_SMMU_ATSR_ACTIVE),
+	if (readl_poll_timeout_atomic(reg, tmp, !(tmp & ARM_SMMU_CB_ATSR_ACTIVE),
 				      5, 50)) {
 		spin_unlock_irqrestore(&smmu_domain->cb_lock, flags);
 		dev_err(dev,
@@ -2885,7 +2931,7 @@ static struct qcom_iommu_ops arm_smmu_ops = {
 		.identity_domain	= &arm_smmu_identity_domain,
 		.blocked_domain		= &arm_smmu_blocked_domain,
 		.capable		= arm_smmu_capable,
-		.domain_alloc		= arm_smmu_domain_alloc,
+		.domain_alloc_paging		= arm_smmu_domain_alloc_paging,
 		.probe_device		= arm_smmu_probe_device,
 		.release_device		= arm_smmu_release_device,
 		.probe_finalize		= arm_smmu_probe_finalize,
@@ -2920,7 +2966,7 @@ static void arm_smmu_device_reset(struct arm_smmu_device *smmu)
 	/* Make sure all context banks are disabled and clear CB_FSR  */
 	for (i = 0; i < smmu->num_context_banks; ++i) {
 		arm_smmu_write_context_bank(smmu, i);
-		arm_smmu_cb_write(smmu, i, ARM_SMMU_CB_FSR, ARM_SMMU_FSR_FAULT);
+		arm_smmu_cb_write(smmu, i, ARM_SMMU_CB_FSR, ARM_SMMU_CB_FSR_FAULT);
 	}
 
 	/* Invalidate the TLB, just in case */

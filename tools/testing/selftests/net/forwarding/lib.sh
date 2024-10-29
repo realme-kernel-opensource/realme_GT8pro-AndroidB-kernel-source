@@ -84,6 +84,43 @@ declare -A NETIFS=(
 # e.g. a low-power board.
 : "${KSFT_MACHINE_SLOW:=no}"
 
+##############################################################################
+# Find netifs by test-specified driver name
+
+driver_name_get()
+{
+	local dev=$1; shift
+	local driver_path="/sys/class/net/$dev/device/driver"
+
+	if [[ -L $driver_path ]]; then
+		basename `realpath $driver_path`
+	fi
+}
+
+netif_find_driver()
+{
+	local ifnames=`ip -j link show | jq -r ".[].ifname"`
+	local count=0
+
+	for ifname in $ifnames
+	do
+		local driver_name=`driver_name_get $ifname`
+		if [[ ! -z $driver_name && $driver_name == $NETIF_FIND_DRIVER ]]; then
+			count=$((count + 1))
+			NETIFS[p$count]="$ifname"
+		fi
+	done
+}
+
+# Whether to find netdevice according to the driver speficied by the importer
+: "${NETIF_FIND_DRIVER:=}"
+
+if [[ $NETIF_FIND_DRIVER ]]; then
+	unset NETIFS
+	declare -A NETIFS
+	netif_find_driver
+fi
+
 net_forwarding_dir=$(dirname "$(readlink -e "${BASH_SOURCE[0]}")")
 
 if [[ -f $net_forwarding_dir/forwarding.config ]]; then
@@ -91,32 +128,6 @@ if [[ -f $net_forwarding_dir/forwarding.config ]]; then
 fi
 
 source "$net_forwarding_dir/../lib.sh"
-
-# timeout in seconds
-slowwait()
-{
-	local timeout=$1; shift
-
-	local start_time="$(date -u +%s)"
-	while true
-	do
-		local out
-		out=$("$@")
-		local ret=$?
-		if ((!ret)); then
-			echo -n "$out"
-			return 0
-		fi
-
-		local current_time="$(date -u +%s)"
-		if ((current_time - start_time > timeout)); then
-			echo -n "$out"
-			return 1
-		fi
-
-		sleep 0.1
-	done
-}
 
 ##############################################################################
 # Sanity checks
@@ -264,6 +275,18 @@ if [[ "$(id -u)" -ne 0 ]]; then
 	exit $ksft_skip
 fi
 
+check_driver()
+{
+	local dev=$1; shift
+	local expected=$1; shift
+	local driver_name=`driver_name_get $dev`
+
+	if [[ $driver_name != $expected ]]; then
+		echo "SKIP: expected driver $expected for $dev, got $driver_name instead"
+		exit $ksft_skip
+	fi
+}
+
 if [[ "$CHECK_TC" = "yes" ]]; then
 	check_tc_version
 fi
@@ -278,6 +301,21 @@ require_command()
 	fi
 }
 
+# IPv6 support was added in v3.0
+check_mtools_version()
+{
+	local version="$(msend -v)"
+	local major
+
+	version=${version##msend version }
+	major=$(echo $version | cut -d. -f1)
+
+	if [ $major -lt 3 ]; then
+		echo "SKIP: expected mtools version 3.0, got $version"
+		exit $ksft_skip
+	fi
+}
+
 if [[ "$REQUIRE_JQ" = "yes" ]]; then
 	require_command jq
 fi
@@ -285,15 +323,10 @@ if [[ "$REQUIRE_MZ" = "yes" ]]; then
 	require_command $MZ
 fi
 if [[ "$REQUIRE_MTOOLS" = "yes" ]]; then
-	# https://github.com/vladimiroltean/mtools/
-	# patched for IPv6 support
+	# https://github.com/troglobit/mtools
 	require_command msend
 	require_command mreceive
-fi
-
-if [[ ! -v NUM_NETIFS ]]; then
-	echo "SKIP: importer does not define \"NUM_NETIFS\""
-	exit $ksft_skip
+	check_mtools_version
 fi
 
 ##############################################################################
@@ -313,6 +346,23 @@ done
 
 ##############################################################################
 # Network interfaces configuration
+
+if [[ ! -v NUM_NETIFS ]]; then
+	echo "SKIP: importer does not define \"NUM_NETIFS\""
+	exit $ksft_skip
+fi
+
+if (( NUM_NETIFS > ${#NETIFS[@]} )); then
+	echo "SKIP: Importer requires $NUM_NETIFS NETIFS, but only ${#NETIFS[@]} are defined (${NETIFS[@]})"
+	exit $ksft_skip
+fi
+
+for i in $(seq ${#NETIFS[@]}); do
+	if [[ ! ${NETIFS[p$i]} ]]; then
+		echo "SKIP: NETIFS[p$i] not given"
+		exit $ksft_skip
+	fi
+done
 
 create_netif_veth()
 {
@@ -450,11 +500,23 @@ check_err_fail()
 	fi
 }
 
+xfail()
+{
+	FAIL_TO_XFAIL=yes "$@"
+}
+
 xfail_on_slow()
 {
 	if [[ $KSFT_MACHINE_SLOW = yes ]]; then
 		FAIL_TO_XFAIL=yes "$@"
 	else
+		"$@"
+	fi
+}
+
+omit_on_slow()
+{
+	if [[ $KSFT_MACHINE_SLOW != yes ]]; then
 		"$@"
 	fi
 }
@@ -620,33 +682,6 @@ wait_for_trap()
 	"$@" | grep -q trap
 }
 
-until_counter_is()
-{
-	local expr=$1; shift
-	local current=$("$@")
-
-	echo $((current))
-	((current $expr))
-}
-
-busywait_for_counter()
-{
-	local timeout=$1; shift
-	local delta=$1; shift
-
-	local base=$("$@")
-	busywait "$timeout" until_counter_is ">= $((base + delta))" "$@"
-}
-
-slowwait_for_counter()
-{
-	local timeout=$1; shift
-	local delta=$1; shift
-
-	local base=$("$@")
-	slowwait "$timeout" until_counter_is ">= $((base + delta))" "$@"
-}
-
 setup_wait_dev()
 {
 	local dev=$1; shift
@@ -693,6 +728,19 @@ setup_wait()
 
 	# Make sure links are ready.
 	sleep $WAIT_TIME
+}
+
+wait_for_dev()
+{
+        local dev=$1; shift
+        local timeout=${1:-$WAIT_TIMEOUT}; shift
+
+        slowwait $timeout ip link show dev $dev &> /dev/null
+        if (( $? )); then
+                check_err 1
+                log_test wait_for_dev "Interface $dev did not appear."
+                exit $EXIT_STATUS
+        fi
 }
 
 cmd_jq()
@@ -952,29 +1000,6 @@ link_stats_rx_errors_get()
 	link_stats_get $1 rx errors
 }
 
-tc_rule_stats_get()
-{
-	local dev=$1; shift
-	local pref=$1; shift
-	local dir=$1; shift
-	local selector=${1:-.packets}; shift
-
-	tc -j -s filter show dev $dev ${dir:-ingress} pref $pref \
-	    | jq ".[1].options.actions[].stats$selector"
-}
-
-tc_rule_handle_stats_get()
-{
-	local id=$1; shift
-	local handle=$1; shift
-	local selector=${1:-.packets}; shift
-	local netns=${1:-""}; shift
-
-	tc $netns -j -s filter show $id \
-	    | jq ".[] | select(.options.handle == $handle) | \
-		  .options.actions[0].stats$selector"
-}
-
 ethtool_stats_get()
 {
 	local dev=$1; shift
@@ -1100,6 +1125,39 @@ mac_get()
 	ip -j link show dev $if_name | jq -r '.[]["address"]'
 }
 
+ether_addr_to_u64()
+{
+	local addr="$1"
+	local order="$((1 << 40))"
+	local val=0
+	local byte
+
+	addr="${addr//:/ }"
+
+	for byte in $addr; do
+		byte="0x$byte"
+		val=$((val + order * byte))
+		order=$((order >> 8))
+	done
+
+	printf "0x%x" $val
+}
+
+u64_to_ether_addr()
+{
+	local val=$1
+	local byte
+	local i
+
+	for ((i = 40; i >= 0; i -= 8)); do
+		byte=$(((val & (0xff << i)) >> i))
+		printf "%02x" $byte
+		if [ $i -ne 0 ]; then
+			printf ":"
+		fi
+	done
+}
+
 ipv6_lladdr_get()
 {
 	local if_name=$1
@@ -1121,12 +1179,19 @@ bridge_ageing_time_get()
 }
 
 declare -A SYSCTL_ORIG
+sysctl_save()
+{
+	local key=$1; shift
+
+	SYSCTL_ORIG[$key]=$(sysctl -n $key)
+}
+
 sysctl_set()
 {
 	local key=$1; shift
 	local value=$1; shift
 
-	SYSCTL_ORIG[$key]=$(sysctl -n $key)
+	sysctl_save "$key"
 	sysctl -qw $key="$value"
 }
 
@@ -1205,22 +1270,6 @@ trap_uninstall()
 	tc filter del dev $dev $direction pref 1 flower
 }
 
-slow_path_trap_install()
-{
-	# For slow-path testing, we need to install a trap to get to
-	# slow path the packets that would otherwise be switched in HW.
-	if [ "${tcflags/skip_hw}" != "$tcflags" ]; then
-		trap_install "$@"
-	fi
-}
-
-slow_path_trap_uninstall()
-{
-	if [ "${tcflags/skip_hw}" != "$tcflags" ]; then
-		trap_uninstall "$@"
-	fi
-}
-
 __icmp_capture_add_del()
 {
 	local add_del=$1; shift
@@ -1237,22 +1286,34 @@ __icmp_capture_add_del()
 
 icmp_capture_install()
 {
-	__icmp_capture_add_del add 100 "" "$@"
+	local tundev=$1; shift
+	local filter=$1; shift
+
+	__icmp_capture_add_del add 100 "" "$tundev" "$filter"
 }
 
 icmp_capture_uninstall()
 {
-	__icmp_capture_add_del del 100 "" "$@"
+	local tundev=$1; shift
+	local filter=$1; shift
+
+	__icmp_capture_add_del del 100 "" "$tundev" "$filter"
 }
 
 icmp6_capture_install()
 {
-	__icmp_capture_add_del add 100 v6 "$@"
+	local tundev=$1; shift
+	local filter=$1; shift
+
+	__icmp_capture_add_del add 100 v6 "$tundev" "$filter"
 }
 
 icmp6_capture_uninstall()
 {
-	__icmp_capture_add_del del 100 v6 "$@"
+	local tundev=$1; shift
+	local filter=$1; shift
+
+	__icmp_capture_add_del del 100 v6 "$tundev" "$filter"
 }
 
 __vlan_capture_add_del()
@@ -1270,12 +1331,18 @@ __vlan_capture_add_del()
 
 vlan_capture_install()
 {
-	__vlan_capture_add_del add 100 "$@"
+	local dev=$1; shift
+	local filter=$1; shift
+
+	__vlan_capture_add_del add 100 "$dev" "$filter"
 }
 
 vlan_capture_uninstall()
 {
-	__vlan_capture_add_del del 100 "$@"
+	local dev=$1; shift
+	local filter=$1; shift
+
+	__vlan_capture_add_del del 100 "$dev" "$filter"
 }
 
 __dscp_capture_add_del()
@@ -1635,34 +1702,61 @@ __start_traffic()
 	local sip=$1; shift
 	local dip=$1; shift
 	local dmac=$1; shift
+	local -a mz_args=("$@")
 
 	$MZ $h_in -p $pktsize -A $sip -B $dip -c 0 \
-		-a own -b $dmac -t "$proto" -q "$@" &
+		-a own -b $dmac -t "$proto" -q "${mz_args[@]}" &
 	sleep 1
 }
 
 start_traffic_pktsize()
 {
 	local pktsize=$1; shift
+	local h_in=$1; shift
+	local sip=$1; shift
+	local dip=$1; shift
+	local dmac=$1; shift
+	local -a mz_args=("$@")
 
-	__start_traffic $pktsize udp "$@"
+	__start_traffic $pktsize udp "$h_in" "$sip" "$dip" "$dmac" \
+			"${mz_args[@]}"
 }
 
 start_tcp_traffic_pktsize()
 {
 	local pktsize=$1; shift
+	local h_in=$1; shift
+	local sip=$1; shift
+	local dip=$1; shift
+	local dmac=$1; shift
+	local -a mz_args=("$@")
 
-	__start_traffic $pktsize tcp "$@"
+	__start_traffic $pktsize tcp "$h_in" "$sip" "$dip" "$dmac" \
+			"${mz_args[@]}"
 }
 
 start_traffic()
 {
-	start_traffic_pktsize 8000 "$@"
+	local h_in=$1; shift
+	local sip=$1; shift
+	local dip=$1; shift
+	local dmac=$1; shift
+	local -a mz_args=("$@")
+
+	start_traffic_pktsize 8000 "$h_in" "$sip" "$dip" "$dmac" \
+			      "${mz_args[@]}"
 }
 
 start_tcp_traffic()
 {
-	start_tcp_traffic_pktsize 8000 "$@"
+	local h_in=$1; shift
+	local sip=$1; shift
+	local dip=$1; shift
+	local dmac=$1; shift
+	local -a mz_args=("$@")
+
+	start_tcp_traffic_pktsize 8000 "$h_in" "$sip" "$dip" "$dmac" \
+				  "${mz_args[@]}"
 }
 
 stop_traffic()
@@ -2144,6 +2238,8 @@ bail_on_lldpad()
 {
 	local reason1="$1"; shift
 	local reason2="$1"; shift
+	local caller=${FUNCNAME[1]}
+	local src=${BASH_SOURCE[1]}
 
 	if systemctl is-active --quiet lldpad; then
 
@@ -2164,7 +2260,8 @@ bail_on_lldpad()
 				an environment variable ALLOW_LLDPAD to a
 				non-empty string.
 			EOF
-			exit 1
+			log_test_skip $src:$caller
+			exit $EXIT_STATUS
 		else
 			return
 		fi
@@ -2176,4 +2273,23 @@ absval()
 	local v=$1; shift
 
 	echo $((v > 0 ? v : -v))
+}
+
+has_unicast_flt()
+{
+	local dev=$1; shift
+	local mac_addr=$(mac_get $dev)
+	local tmp=$(ether_addr_to_u64 $mac_addr)
+	local promisc
+
+	ip link set $dev up
+	ip link add link $dev name macvlan-tmp type macvlan mode private
+	ip link set macvlan-tmp address $(u64_to_ether_addr $((tmp + 1)))
+	ip link set macvlan-tmp up
+
+	promisc=$(ip -j -d link show dev $dev | jq -r '.[].promiscuity')
+
+	ip link del macvlan-tmp
+
+	[[ $promisc == 1 ]] && echo "no" || echo "yes"
 }

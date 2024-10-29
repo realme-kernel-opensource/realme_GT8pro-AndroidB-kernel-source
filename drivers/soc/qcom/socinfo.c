@@ -23,14 +23,6 @@
 
 #include <dt-bindings/arm/qcom,ids.h>
 
-/*
- * SoC version type with major number in the upper 16 bits and minor
- * number in the lower 16 bits.
- */
-#define SOCINFO_MAJOR(ver) (((ver) >> 16) & 0xffff)
-#define SOCINFO_MINOR(ver) ((ver) & 0xffff)
-#define SOCINFO_VERSION(maj, min)  ((((maj) & 0xffff) << 16)|((min) & 0xffff))
-
 /* Helper macros to create soc_id table */
 #define qcom_board_id(id) QCOM_ID_ ## id, __stringify(id)
 #define qcom_board_id_named(id, name) QCOM_ID_ ## id, (name)
@@ -262,6 +254,7 @@ static const char *const pmic_models[] = {
 	[50] = "PM8350B",
 	[51] = "PMR735A",
 	[52] = "PMR735B",
+	[54] = "PM6350",
 	[55] = "PM4125",
 	[58] = "PM8450",
 	[65] = "PM8010",
@@ -271,7 +264,8 @@ static const char *const pmic_models[] = {
 	[72] = "PMR735D",
 	[73] = "PM8550",
 	[74] = "PMK8550",
-	[82] = "SMB2360",
+	[82] = "PMC8380",
+	[83] = "SMB2360",
 };
 
 struct socinfo_params {
@@ -534,6 +528,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(SDA630) },
 	{ qcom_board_id(MSM8905) },
 	{ qcom_board_id(SDX202) },
+	{ qcom_board_id(SDM670) },
 	{ qcom_board_id(SDM450) },
 	{ qcom_board_id(SM8150) },
 	{ qcom_board_id(SDA845) },
@@ -630,6 +625,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(SUNP) },
 	{ qcom_board_id(IPQ5332) },
 	{ qcom_board_id(IPQ5322) },
+	{ qcom_board_id(IPQ5321) },
 	{ qcom_board_id(IPQ5312) },
 	{ qcom_board_id(IPQ5302) },
 	{ qcom_board_id(QCS8550) },

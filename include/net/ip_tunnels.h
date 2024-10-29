@@ -461,9 +461,10 @@ static inline bool pskb_inet_may_pull(struct sk_buff *skb)
 
 /* Variant of pskb_inet_may_pull().
  */
-static inline bool skb_vlan_inet_prepare(struct sk_buff *skb)
+static inline bool skb_vlan_inet_prepare(struct sk_buff *skb,
+					 bool inner_proto_inherit)
 {
-	int nhlen = 0, maclen = ETH_HLEN;
+	int nhlen = 0, maclen = inner_proto_inherit ? 0 : ETH_HLEN;
 	__be16 type = skb->protocol;
 
 	/* Essentially this is skb_protocol(skb, true)
@@ -572,7 +573,7 @@ static inline u8 ip_tunnel_get_ttl(const struct iphdr *iph,
 		return 0;
 }
 
-/* Propogate ECN bits out */
+/* Propagate ECN bits out */
 static inline u8 ip_tunnel_ecn_encap(u8 tos, const struct iphdr *iph,
 				     const struct sk_buff *skb)
 {

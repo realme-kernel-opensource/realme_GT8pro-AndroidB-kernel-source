@@ -11,10 +11,10 @@
 #include <linux/crc8.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
+#include <linux/gpio/consumer.h>
 #include <linux/if_bridge.h>
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
-#include <linux/gpio.h>
 #include <linux/kernel.h>
 #include <linux/mii.h>
 #include <linux/module.h>
@@ -1599,7 +1599,7 @@ static int adin1110_probe_netdevs(struct adin1110_priv *priv)
 		netdev->netdev_ops = &adin1110_netdev_ops;
 		netdev->ethtool_ops = &adin1110_ethtool_ops;
 		netdev->priv_flags |= IFF_UNICAST_FLT;
-		netdev->features |= NETIF_F_NETNS_LOCAL;
+		netdev->netns_local = true;
 
 		port_priv->phydev = get_phy_device(priv->mii_bus, i + 1, false);
 		if (IS_ERR(port_priv->phydev)) {

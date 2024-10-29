@@ -68,7 +68,7 @@
 #define MLX5_UN_SZ_BYTES(typ) (sizeof(union mlx5_ifc_##typ##_bits) / 8)
 #define MLX5_UN_SZ_DW(typ) (sizeof(union mlx5_ifc_##typ##_bits) / 32)
 #define MLX5_BYTE_OFF(typ, fld) (__mlx5_bit_off(typ, fld) / 8)
-#define MLX5_ADDR_OF(typ, p, fld) ((void *)((uint8_t *)(p) + MLX5_BYTE_OFF(typ, fld)))
+#define MLX5_ADDR_OF(typ, p, fld) ((void *)((u8 *)(p) + MLX5_BYTE_OFF(typ, fld)))
 
 /* insert a value to a struct */
 #define MLX5_SET(typ, p, fld, v) do { \
@@ -294,6 +294,7 @@ enum {
 #define MLX5_UMR_FLEX_ALIGNMENT 0x40
 #define MLX5_UMR_MTT_NUM_ENTRIES_ALIGNMENT (MLX5_UMR_FLEX_ALIGNMENT / sizeof(struct mlx5_mtt))
 #define MLX5_UMR_KLM_NUM_ENTRIES_ALIGNMENT (MLX5_UMR_FLEX_ALIGNMENT / sizeof(struct mlx5_klm))
+#define MLX5_UMR_KSM_NUM_ENTRIES_ALIGNMENT (MLX5_UMR_FLEX_ALIGNMENT / sizeof(struct mlx5_ksm))
 
 #define MLX5_USER_INDEX_LEN (MLX5_FLD_SZ_BYTES(qpc, user_index) * 8)
 
@@ -1242,7 +1243,8 @@ enum mlx5_pcam_feature_groups {
 enum mlx5_mcam_reg_groups {
 	MLX5_MCAM_REGS_FIRST_128                    = 0x0,
 	MLX5_MCAM_REGS_0x9100_0x917F                = 0x2,
-	MLX5_MCAM_REGS_NUM                          = 0x3,
+	MLX5_MCAM_REGS_0x9180_0x91FF                = 0x3,
+	MLX5_MCAM_REGS_NUM                          = 0x4,
 };
 
 enum mlx5_mcam_feature_groups {
@@ -1336,6 +1338,9 @@ enum mlx5_qcam_feature_groups {
 #define MLX5_CAP_ESW_FT_FIELD_SUPPORT_2(mdev, cap) \
 	MLX5_CAP_ESW_FLOWTABLE(mdev, ft_field_support_2_esw_fdb.cap)
 
+#define MLX5_CAP_NIC_RX_FT_FIELD_SUPPORT_2(mdev, cap) \
+		MLX5_CAP_FLOWTABLE(mdev, ft_field_support_2_nic_receive.cap)
+
 #define MLX5_CAP_ESW(mdev, cap) \
 	MLX5_GET(e_switch_cap, \
 		 mdev->caps.hca[MLX5_CAP_ESWITCH]->cur, cap)
@@ -1358,6 +1363,9 @@ enum mlx5_qcam_feature_groups {
 
 #define MLX5_CAP_FLOWTABLE_PORT_SELECTION(mdev, cap) \
 	MLX5_CAP_PORT_SELECTION(mdev, flow_table_properties_port_selection.cap)
+
+#define MLX5_CAP_PORT_SELECTION_FT_FIELD_SUPPORT_2(mdev, cap) \
+	MLX5_CAP_PORT_SELECTION(mdev, ft_field_support_2_port_selection.cap)
 
 #define MLX5_CAP_ODP(mdev, cap)\
 	MLX5_GET(odp_cap, mdev->caps.hca[MLX5_CAP_ODP]->cur, cap)
@@ -1384,6 +1392,10 @@ enum mlx5_qcam_feature_groups {
 #define MLX5_CAP_MCAM_REG2(mdev, reg) \
 	MLX5_GET(mcam_reg, (mdev)->caps.mcam[MLX5_MCAM_REGS_0x9100_0x917F], \
 		 mng_access_reg_cap_mask.access_regs2.reg)
+
+#define MLX5_CAP_MCAM_REG3(mdev, reg) \
+	MLX5_GET(mcam_reg, (mdev)->caps.mcam[MLX5_MCAM_REGS_0x9180_0x91FF], \
+		 mng_access_reg_cap_mask.access_regs3.reg)
 
 #define MLX5_CAP_MCAM_FEATURE(mdev, fld) \
 	MLX5_GET(mcam_reg, (mdev)->caps.mcam, mng_feature_cap_mask.enhanced_features.fld)
@@ -1437,6 +1449,7 @@ enum {
 	MLX5_CMD_STAT_BAD_SYS_STATE_ERR		= 0x4,
 	MLX5_CMD_STAT_BAD_RES_ERR		= 0x5,
 	MLX5_CMD_STAT_RES_BUSY			= 0x6,
+	MLX5_CMD_STAT_NOT_READY			= 0x7,
 	MLX5_CMD_STAT_LIM_ERR			= 0x8,
 	MLX5_CMD_STAT_BAD_RES_STATE_ERR		= 0x9,
 	MLX5_CMD_STAT_IX_ERR			= 0xa,
@@ -1460,6 +1473,7 @@ enum {
 	MLX5_PER_TRAFFIC_CLASS_CONGESTION_GROUP = 0x13,
 	MLX5_PHYSICAL_LAYER_STATISTICAL_GROUP = 0x16,
 	MLX5_INFINIBAND_PORT_COUNTERS_GROUP   = 0x20,
+	MLX5_INFINIBAND_EXTENDED_PORT_COUNTERS_GROUP = 0x21,
 };
 
 enum {

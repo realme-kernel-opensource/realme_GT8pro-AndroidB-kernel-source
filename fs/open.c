@@ -203,13 +203,13 @@ long do_sys_ftruncate(unsigned int fd, loff_t length, int small)
 	return error;
 }
 
-SYSCALL_DEFINE2(ftruncate, unsigned int, fd, unsigned long, length)
+SYSCALL_DEFINE2(ftruncate, unsigned int, fd, off_t, length)
 {
 	return do_sys_ftruncate(fd, length, 1);
 }
 
 #ifdef CONFIG_COMPAT
-COMPAT_SYSCALL_DEFINE2(ftruncate, unsigned int, fd, compat_ulong_t, length)
+COMPAT_SYSCALL_DEFINE2(ftruncate, unsigned int, fd, compat_off_t, length)
 {
 	return do_sys_ftruncate(fd, length, 1);
 }
@@ -248,44 +248,44 @@ int vfs_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 {
 	struct inode *inode = file_inode(file);
 	long ret;
+	loff_t sum;
 
 	if (offset < 0 || len <= 0)
 		return -EINVAL;
 
-	/* Return error if mode is not supported */
-	if (mode & ~FALLOC_FL_SUPPORTED_MASK)
+	if (mode & ~(FALLOC_FL_MODE_MASK | FALLOC_FL_KEEP_SIZE))
 		return -EOPNOTSUPP;
 
-	/* Punch hole and zero range are mutually exclusive */
-	if ((mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_ZERO_RANGE)) ==
-	    (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_ZERO_RANGE))
+	/*
+	 * Modes are exclusive, even if that is not obvious from the encoding
+	 * as bit masks and the mix with the flag in the same namespace.
+	 *
+	 * To make things even more complicated, FALLOC_FL_ALLOCATE_RANGE is
+	 * encoded as no bit set.
+	 */
+	switch (mode & FALLOC_FL_MODE_MASK) {
+	case FALLOC_FL_ALLOCATE_RANGE:
+	case FALLOC_FL_UNSHARE_RANGE:
+	case FALLOC_FL_ZERO_RANGE:
+		break;
+	case FALLOC_FL_PUNCH_HOLE:
+		if (!(mode & FALLOC_FL_KEEP_SIZE))
+			return -EOPNOTSUPP;
+		break;
+	case FALLOC_FL_COLLAPSE_RANGE:
+	case FALLOC_FL_INSERT_RANGE:
+		if (mode & FALLOC_FL_KEEP_SIZE)
+			return -EOPNOTSUPP;
+		break;
+	default:
 		return -EOPNOTSUPP;
-
-	/* Punch hole must have keep size set */
-	if ((mode & FALLOC_FL_PUNCH_HOLE) &&
-	    !(mode & FALLOC_FL_KEEP_SIZE))
-		return -EOPNOTSUPP;
-
-	/* Collapse range should only be used exclusively. */
-	if ((mode & FALLOC_FL_COLLAPSE_RANGE) &&
-	    (mode & ~FALLOC_FL_COLLAPSE_RANGE))
-		return -EINVAL;
-
-	/* Insert range should only be used exclusively. */
-	if ((mode & FALLOC_FL_INSERT_RANGE) &&
-	    (mode & ~FALLOC_FL_INSERT_RANGE))
-		return -EINVAL;
-
-	/* Unshare range should only be used with allocate mode. */
-	if ((mode & FALLOC_FL_UNSHARE_RANGE) &&
-	    (mode & ~(FALLOC_FL_UNSHARE_RANGE | FALLOC_FL_KEEP_SIZE)))
-		return -EINVAL;
+	}
 
 	if (!(file->f_mode & FMODE_WRITE))
 		return -EBADF;
 
 	/*
-	 * We can only allow pure fallocate on append only files
+	 * On append-only files only space preallocation is supported.
 	 */
 	if ((mode & ~FALLOC_FL_KEEP_SIZE) && IS_APPEND(inode))
 		return -EPERM;
@@ -320,8 +320,11 @@ int vfs_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 	if (!S_ISREG(inode->i_mode) && !S_ISBLK(inode->i_mode))
 		return -ENODEV;
 
-	/* Check for wrap through zero too */
-	if (((offset + len) > inode->i_sb->s_maxbytes) || ((offset + len) < 0))
+	/* Check for wraparound */
+	if (check_add_overflow(offset, len, &sum))
+		return -EFBIG;
+
+	if (sum > inode->i_sb->s_maxbytes)
 		return -EFBIG;
 
 	if (!file->f_op->fallocate)
@@ -903,10 +906,10 @@ cleanup_inode:
 }
 
 static int do_dentry_open(struct file *f,
-			  struct inode *inode,
 			  int (*open)(struct inode *, struct file *))
 {
 	static const struct file_operations empty_fops = {};
+	struct inode *inode = f->f_path.dentry->d_inode;
 	int error;
 
 	path_get(&f->f_path);
@@ -984,12 +987,11 @@ static int do_dentry_open(struct file *f,
 	 */
 	if (f->f_mode & FMODE_WRITE) {
 		/*
-		 * Paired with smp_mb() in collapse_file() to ensure nr_thps
-		 * is up to date and the update to i_writecount by
-		 * get_write_access() is visible. Ensures subsequent insertion
-		 * of THPs into the page cache will fail.
+		 * Depends on full fence from get_write_access() to synchronize
+		 * against collapse_file() regarding i_writecount and nr_thps
+		 * updates. Ensures subsequent insertion of THPs into the page
+		 * cache will fail.
 		 */
-		smp_mb();
 		if (filemap_nr_thps(inode->i_mapping)) {
 			struct address_space *mapping = inode->i_mapping;
 
@@ -1006,11 +1008,6 @@ static int do_dentry_open(struct file *f,
 		}
 	}
 
-	/*
-	 * Once we return a file with FMODE_OPENED, __fput() will call
-	 * fsnotify_close(), so we need fsnotify_open() here for symmetry.
-	 */
-	fsnotify_open(f);
 	return 0;
 
 cleanup_all:
@@ -1049,7 +1046,7 @@ int finish_open(struct file *file, struct dentry *dentry,
 	BUG_ON(file->f_mode & FMODE_OPENED); /* once it's opened, it's opened */
 
 	file->f_path.dentry = dentry;
-	return do_dentry_open(file, d_backing_inode(dentry), open);
+	return do_dentry_open(file, open);
 }
 EXPORT_SYMBOL(finish_open);
 
@@ -1087,8 +1084,19 @@ EXPORT_SYMBOL(file_path);
  */
 int vfs_open(const struct path *path, struct file *file)
 {
+	int ret;
+
 	file->f_path = *path;
-	return do_dentry_open(file, d_backing_inode(path->dentry), NULL);
+	ret = do_dentry_open(file, NULL);
+	if (!ret) {
+		/*
+		 * Once we return a file with FMODE_OPENED, __fput() will call
+		 * fsnotify_close(), so we need fsnotify_open() here for
+		 * symmetry.
+		 */
+		fsnotify_open(file);
+	}
+	return ret;
 }
 
 struct file *dentry_open(const struct path *path, int flags,
@@ -1157,7 +1165,6 @@ EXPORT_SYMBOL(dentry_create);
  * kernel_file_open - open a file for kernel internal use
  * @path:	path of the file to open
  * @flags:	open flags
- * @inode:	the inode
  * @cred:	credentials for open
  *
  * Open a file for use by in-kernel consumers. The file is not accounted
@@ -1167,7 +1174,7 @@ EXPORT_SYMBOL(dentry_create);
  * Return: Opened file on success, an error pointer on failure.
  */
 struct file *kernel_file_open(const struct path *path, int flags,
-				struct inode *inode, const struct cred *cred)
+				const struct cred *cred)
 {
 	struct file *f;
 	int error;
@@ -1177,11 +1184,13 @@ struct file *kernel_file_open(const struct path *path, int flags,
 		return f;
 
 	f->f_path = *path;
-	error = do_dentry_open(f, inode, NULL);
+	error = do_dentry_open(f, NULL);
 	if (error) {
 		fput(f);
-		f = ERR_PTR(error);
+		return ERR_PTR(error);
 	}
+
+	fsnotify_open(f);
 	return f;
 }
 EXPORT_SYMBOL_GPL(kernel_file_open);

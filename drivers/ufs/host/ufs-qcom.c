@@ -2353,6 +2353,10 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 	if (host->disable_lpm || host->broken_ahit_wa)
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8;
 
+	if (of_device_is_compatible(hba->dev->of_node, "qcom,sm8550-ufshc"))
+		hba->quirks |= UFSHCD_QUIRK_BROKEN_LSDBS_CAP;
+}
+
 #if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO_QTI)
 	hba->android_quirks |= UFSHCD_ANDROID_QUIRK_CUSTOM_CRYPTO_PROFILE;
 #endif
@@ -4736,6 +4740,8 @@ static void ufs_qcom_config_scaling_param(struct ufs_hba *hba,
 	p->timer = DEVFREQ_TIMER_DELAYED;
 	d->upthreshold = 70;
 	d->downdifferential = 65;
+
+	hba->clk_scaling.suspend_on_no_request = true;
 }
 
 #else
@@ -5782,7 +5788,8 @@ static int ufs_qcom_system_thaw(struct device *dev)
 #endif
 
 static const struct of_device_id ufs_qcom_of_match[] = {
-	{ .compatible = "qcom,ufshc"},
+	{ .compatible = "qcom,ufshc" },
+	{ .compatible = "qcom,sm8550-ufshc" },
 	{},
 };
 MODULE_DEVICE_TABLE(of, ufs_qcom_of_match);
@@ -5821,4 +5828,5 @@ static struct platform_driver ufs_qcom_pltform = {
 };
 module_platform_driver(ufs_qcom_pltform);
 
+MODULE_DESCRIPTION("Qualcomm UFS host controller driver");
 MODULE_LICENSE("GPL v2");

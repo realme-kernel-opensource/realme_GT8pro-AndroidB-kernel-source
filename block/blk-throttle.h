@@ -95,22 +95,16 @@ struct throtl_grp {
 	bool has_rules_bps[2];
 	bool has_rules_iops[2];
 
-	/* internally used bytes per second rate limits */
+	/* bytes per second rate limits */
 	uint64_t bps[2];
-	/* user configured bps limits */
-	uint64_t bps_conf[2];
 
-	/* internally used IOPS limits */
+	/* IOPS limits */
 	unsigned int iops[2];
-	/* user configured IOPS limits */
-	unsigned int iops_conf[2];
 
 	/* Number of bytes dispatched in current slice */
 	uint64_t bytes_disp[2];
 	/* Number of bio's dispatched in current slice */
 	unsigned int io_disp[2];
-
-	unsigned long last_low_overflow_time[2];
 
 	uint64_t last_bytes_disp[2];
 	unsigned int last_io_disp[2];

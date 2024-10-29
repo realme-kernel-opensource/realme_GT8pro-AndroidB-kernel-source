@@ -552,9 +552,9 @@ static void ap_poll_thread_stop(void)
  *
  * AP bus driver registration/unregistration.
  */
-static int ap_bus_match(struct device *dev, struct device_driver *drv)
+static int ap_bus_match(struct device *dev, const struct device_driver *drv)
 {
-	struct ap_driver *ap_drv = to_ap_drv(drv);
+	const struct ap_driver *ap_drv = to_ap_drv(drv);
 	struct ap_device_id *id;
 
 	/*
@@ -732,9 +732,9 @@ static void ap_check_bindings_complete(void)
 		if (bound == apqns) {
 			if (!completion_done(&ap_apqn_bindings_complete)) {
 				complete_all(&ap_apqn_bindings_complete);
+				ap_send_bindings_complete_uevent();
 				pr_debug("%s all apqn bindings complete\n", __func__);
 			}
-			ap_send_bindings_complete_uevent();
 		}
 	}
 }
@@ -894,6 +894,12 @@ static int ap_device_probe(struct device *dev)
 			goto out;
 	}
 
+	/*
+	 * Rearm the bindings complete completion to trigger
+	 * bindings complete when all devices are bound again
+	 */
+	reinit_completion(&ap_apqn_bindings_complete);
+
 	/* Add queue/card to list of active queues/cards */
 	spin_lock_bh(&ap_queues_lock);
 	if (is_queue_dev(dev))
@@ -965,11 +971,16 @@ int ap_driver_register(struct ap_driver *ap_drv, struct module *owner,
 		       char *name)
 {
 	struct device_driver *drv = &ap_drv->driver;
+	int rc;
 
 	drv->bus = &ap_bus_type;
 	drv->owner = owner;
 	drv->name = name;
-	return driver_register(drv);
+	rc = driver_register(drv);
+
+	ap_check_bindings_complete();
+
+	return rc;
 }
 EXPORT_SYMBOL(ap_driver_register);
 
@@ -1091,7 +1102,7 @@ EXPORT_SYMBOL(ap_hex2bitmap);
  */
 static int modify_bitmap(const char *str, unsigned long *bitmap, int bits)
 {
-	int a, i, z;
+	unsigned long a, i, z;
 	char *np, sign;
 
 	/* bits needs to be a multiple of 8 */

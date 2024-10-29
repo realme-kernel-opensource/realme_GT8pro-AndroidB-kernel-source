@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/interconnect.h>
 #include <linux/interrupt.h>
+#include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
@@ -799,16 +800,15 @@ error:
 	return ret;
 }
 
-static int qcom_cpufreq_hw_cpu_exit(struct cpufreq_policy *policy)
+static void qcom_cpufreq_hw_cpu_exit(struct cpufreq_policy *policy)
 {
 	struct device *cpu_dev = get_cpu_device(policy->cpu);
+	struct qcom_cpufreq_data *data = policy->driver_data;
 
-	qcom_cpufreq_hw_lmh_exit(policy->driver_data);
+	qcom_cpufreq_hw_lmh_exit(data);
 	dev_pm_opp_remove_all_dynamic(cpu_dev);
 	dev_pm_opp_of_cpumask_remove_table(policy->related_cpus);
 	kfree(policy->freq_table);
-
-	return 0;
 }
 
 static void qcom_cpufreq_ready(struct cpufreq_policy *policy)

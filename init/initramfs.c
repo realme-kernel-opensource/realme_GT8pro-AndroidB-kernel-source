@@ -17,6 +17,7 @@
 #include <linux/namei.h>
 #include <linux/init_syscalls.h>
 #include <linux/umh.h>
+#include <linux/security.h>
 
 #include "do_mounts.h"
 
@@ -575,15 +576,7 @@ extern unsigned long __initramfs_size;
 #include <linux/initrd.h>
 #include <linux/kexec.h>
 
-static ssize_t raw_read(struct file *file, struct kobject *kobj,
-			struct bin_attribute *attr, char *buf,
-			loff_t pos, size_t count)
-{
-	memcpy(buf, attr->private + pos, count);
-	return count;
-}
-
-static BIN_ATTR(initrd, 0440, raw_read, NULL, 0);
+static BIN_ATTR(initrd, 0440, sysfs_bin_attr_simple_read, NULL, 0);
 
 void __init reserve_initrd_mem(void)
 {
@@ -720,6 +713,8 @@ static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 	}
 
 done:
+	security_initramfs_populated();
+
 	/*
 	 * If the initrd region is overlapped with crashkernel reserved region,
 	 * free only memory that is not part of crashkernel region.

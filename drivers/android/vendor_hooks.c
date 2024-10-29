@@ -41,6 +41,7 @@
 #include <trace/hooks/timer.h>
 #include <trace/hooks/topology.h>
 #include <trace/hooks/hung_task.h>
+#include <trace/hooks/fpsimd.h>
 
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
@@ -56,6 +57,9 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_wq_lockup_pool);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_ipi_stop);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_sysrq_crash);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_printk_hotplug);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_printk_caller_id);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_printk_caller);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_printk_ext_header);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_show_suspend_epoch_val);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_show_resume_epoch_val);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_freq_table_limits);
@@ -119,3 +123,4 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_alter_mutex_list_add);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_mutex_unlock_slowpath);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_arch_set_freq_scale);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_cpu_capacity_show);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_is_fpsimd_save);

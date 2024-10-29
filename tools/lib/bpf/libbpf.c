@@ -132,6 +132,7 @@ static const char * const attach_type_name[] = {
 	[BPF_TRACE_UPROBE_MULTI]	= "trace_uprobe_multi",
 	[BPF_NETKIT_PRIMARY]		= "netkit_primary",
 	[BPF_NETKIT_PEER]		= "netkit_peer",
+	[BPF_TRACE_KPROBE_SESSION]	= "trace_kprobe_session",
 };
 
 static const char * const link_type_name[] = {
@@ -149,6 +150,7 @@ static const char * const link_type_name[] = {
 	[BPF_LINK_TYPE_TCX]			= "tcx",
 	[BPF_LINK_TYPE_UPROBE_MULTI]		= "uprobe_multi",
 	[BPF_LINK_TYPE_NETKIT]			= "netkit",
+	[BPF_LINK_TYPE_SOCKMAP]			= "sockmap",
 };
 
 static const char * const map_type_name[] = {
@@ -227,7 +229,30 @@ static const char * const prog_type_name[] = {
 static int __base_pr(enum libbpf_print_level level, const char *format,
 		     va_list args)
 {
-	if (level == LIBBPF_DEBUG)
+	const char *env_var = "LIBBPF_LOG_LEVEL";
+	static enum libbpf_print_level min_level = LIBBPF_INFO;
+	static bool initialized;
+
+	if (!initialized) {
+		char *verbosity;
+
+		initialized = true;
+		verbosity = getenv(env_var);
+		if (verbosity) {
+			if (strcasecmp(verbosity, "warn") == 0)
+				min_level = LIBBPF_WARN;
+			else if (strcasecmp(verbosity, "debug") == 0)
+				min_level = LIBBPF_DEBUG;
+			else if (strcasecmp(verbosity, "info") == 0)
+				min_level = LIBBPF_INFO;
+			else
+				fprintf(stderr, "libbpf: unrecognized '%s' envvar value: '%s', should be one of 'warn', 'debug', or 'info'.\n",
+					env_var, verbosity);
+		}
+	}
+
+	/* if too verbose, skip logging  */
+	if (level > min_level)
 		return 0;
 
 	return vfprintf(stderr, format, args);
@@ -547,6 +572,7 @@ struct bpf_map {
 	bool pinned;
 	bool reused;
 	bool autocreate;
+	bool autoattach;
 	__u64 map_extra;
 };
 
@@ -1126,6 +1152,7 @@ static int bpf_map__init_kern_struct_ops(struct bpf_map *map)
 		const struct btf_type *mtype, *kern_mtype;
 		__u32 mtype_id, kern_mtype_id;
 		void *mdata, *kern_mdata;
+		struct bpf_program *prog;
 		__s64 msize, kern_msize;
 		__u32 moff, kern_moff;
 		__u32 kern_member_idx;
@@ -1143,18 +1170,28 @@ static int bpf_map__init_kern_struct_ops(struct bpf_map *map)
 
 		kern_member = find_member_by_name(kern_btf, kern_type, mname);
 		if (!kern_member) {
-			/* Skip all zeros or null fields if they are not
-			 * presented in the kernel BTF.
-			 */
-			if (libbpf_is_mem_zeroed(mdata, msize)) {
-				pr_info("struct_ops %s: member %s not found in kernel, skipping it as it's set to zero\n",
+			if (!libbpf_is_mem_zeroed(mdata, msize)) {
+				pr_warn("struct_ops init_kern %s: Cannot find member %s in kernel BTF\n",
 					map->name, mname);
-				continue;
+				return -ENOTSUP;
 			}
 
-			pr_warn("struct_ops init_kern %s: Cannot find member %s in kernel BTF\n",
+			if (st_ops->progs[i]) {
+				/* If we had declaratively set struct_ops callback, we need to
+				 * force its autoload to false, because it doesn't have
+				 * a chance of succeeding from POV of the current struct_ops map.
+				 * If this program is still referenced somewhere else, though,
+				 * then bpf_object_adjust_struct_ops_autoload() will update its
+				 * autoload accordingly.
+				 */
+				st_ops->progs[i]->autoload = false;
+				st_ops->progs[i] = NULL;
+			}
+
+			/* Skip all-zero/NULL fields if they are not present in the kernel BTF */
+			pr_info("struct_ops %s: member %s not found in kernel, skipping it as it's set to zero\n",
 				map->name, mname);
-			return -ENOTSUP;
+			continue;
 		}
 
 		kern_member_idx = kern_member - btf_members(kern_type);
@@ -1180,13 +1217,19 @@ static int bpf_map__init_kern_struct_ops(struct bpf_map *map)
 		}
 
 		if (btf_is_ptr(mtype)) {
-			struct bpf_program *prog;
+			prog = *(void **)mdata;
+			/* just like for !kern_member case above, reset declaratively
+			 * set (at compile time) program's autload to false,
+			 * if user replaced it with another program or NULL
+			 */
+			if (st_ops->progs[i] && st_ops->progs[i] != prog)
+				st_ops->progs[i]->autoload = false;
 
 			/* Update the value from the shadow type */
-			prog = *(void **)mdata;
 			st_ops->progs[i] = prog;
 			if (!prog)
 				continue;
+
 			if (!is_valid_st_ops_program(obj, prog)) {
 				pr_warn("struct_ops init_kern %s: member %s is not a struct_ops program\n",
 					map->name, mname);
@@ -1358,6 +1401,7 @@ static int init_struct_ops_maps(struct bpf_object *obj, const char *sec_name,
 		map->def.value_size = type->size;
 		map->def.max_entries = 1;
 		map->def.map_flags = strcmp(sec_name, STRUCT_OPS_LINK_SEC) == 0 ? BPF_F_LINK : 0;
+		map->autoattach = true;
 
 		map->st_ops = calloc(1, sizeof(*map->st_ops));
 		if (!map->st_ops)
@@ -1965,6 +2009,20 @@ static struct extern_desc *find_extern_by_name(const struct bpf_object *obj,
 
 	for (i = 0; i < obj->nr_extern; i++) {
 		if (strcmp(obj->externs[i].name, name) == 0)
+			return &obj->externs[i];
+	}
+	return NULL;
+}
+
+static struct extern_desc *find_extern_by_name_with_len(const struct bpf_object *obj,
+							const void *name, int len)
+{
+	const char *ext_name;
+	int i;
+
+	for (i = 0; i < obj->nr_extern; i++) {
+		ext_name = obj->externs[i].name;
+		if (strlen(ext_name) == len && strncmp(ext_name, name, len) == 0)
 			return &obj->externs[i];
 	}
 	return NULL;
@@ -4763,6 +4821,20 @@ int bpf_map__set_autocreate(struct bpf_map *map, bool autocreate)
 	return 0;
 }
 
+int bpf_map__set_autoattach(struct bpf_map *map, bool autoattach)
+{
+	if (!bpf_map__is_struct_ops(map))
+		return libbpf_err(-EINVAL);
+
+	map->autoattach = autoattach;
+	return 0;
+}
+
+bool bpf_map__autoattach(const struct bpf_map *map)
+{
+	return map->autoattach;
+}
+
 int bpf_map__reuse_fd(struct bpf_map *map, int fd)
 {
 	struct bpf_map_info info;
@@ -7339,7 +7411,11 @@ static int bpf_object_load_prog(struct bpf_object *obj, struct bpf_program *prog
 	__u32 log_level = prog->log_level;
 	int ret, err;
 
-	if (prog->type == BPF_PROG_TYPE_UNSPEC) {
+	/* Be more helpful by rejecting programs that can't be validated early
+	 * with more meaningful and actionable error message.
+	 */
+	switch (prog->type) {
+	case BPF_PROG_TYPE_UNSPEC:
 		/*
 		 * The program type must be set.  Most likely we couldn't find a proper
 		 * section definition at load time, and thus we didn't infer the type.
@@ -7347,6 +7423,15 @@ static int bpf_object_load_prog(struct bpf_object *obj, struct bpf_program *prog
 		pr_warn("prog '%s': missing BPF prog type, check ELF section name '%s'\n",
 			prog->name, prog->sec_name);
 		return -EINVAL;
+	case BPF_PROG_TYPE_STRUCT_OPS:
+		if (prog->attach_btf_id == 0) {
+			pr_warn("prog '%s': SEC(\"struct_ops\") program isn't referenced anywhere, did you forget to use it?\n",
+				prog->name);
+			return -EINVAL;
+		}
+		break;
+	default:
+		break;
 	}
 
 	if (!insns || !insns_cnt)
@@ -7986,7 +8071,10 @@ static int bpf_object__sanitize_maps(struct bpf_object *obj)
 	return 0;
 }
 
-int libbpf_kallsyms_parse(kallsyms_cb_t cb, void *ctx)
+typedef int (*kallsyms_cb_t)(unsigned long long sym_addr, char sym_type,
+			     const char *sym_name, void *ctx);
+
+static int libbpf_kallsyms_parse(kallsyms_cb_t cb, void *ctx)
 {
 	char sym_type, sym_name[500];
 	unsigned long long sym_addr;
@@ -8026,8 +8114,13 @@ static int kallsyms_cb(unsigned long long sym_addr, char sym_type,
 	struct bpf_object *obj = ctx;
 	const struct btf_type *t;
 	struct extern_desc *ext;
+	char *res;
 
-	ext = find_extern_by_name(obj, sym_name);
+	res = strstr(sym_name, ".llvm.");
+	if (sym_type == 'd' && res)
+		ext = find_extern_by_name_with_len(obj, sym_name, res - sym_name);
+	else
+		ext = find_extern_by_name(obj, sym_name);
 	if (!ext || ext->type != EXT_KSYM)
 		return 0;
 
@@ -9249,6 +9342,7 @@ static int attach_tp(const struct bpf_program *prog, long cookie, struct bpf_lin
 static int attach_raw_tp(const struct bpf_program *prog, long cookie, struct bpf_link **link);
 static int attach_trace(const struct bpf_program *prog, long cookie, struct bpf_link **link);
 static int attach_kprobe_multi(const struct bpf_program *prog, long cookie, struct bpf_link **link);
+static int attach_kprobe_session(const struct bpf_program *prog, long cookie, struct bpf_link **link);
 static int attach_uprobe_multi(const struct bpf_program *prog, long cookie, struct bpf_link **link);
 static int attach_lsm(const struct bpf_program *prog, long cookie, struct bpf_link **link);
 static int attach_iter(const struct bpf_program *prog, long cookie, struct bpf_link **link);
@@ -9265,6 +9359,7 @@ static const struct bpf_sec_def section_defs[] = {
 	SEC_DEF("uretprobe.s+",		KPROBE, 0, SEC_SLEEPABLE, attach_uprobe),
 	SEC_DEF("kprobe.multi+",	KPROBE,	BPF_TRACE_KPROBE_MULTI, SEC_NONE, attach_kprobe_multi),
 	SEC_DEF("kretprobe.multi+",	KPROBE,	BPF_TRACE_KPROBE_MULTI, SEC_NONE, attach_kprobe_multi),
+	SEC_DEF("kprobe.session+",	KPROBE,	BPF_TRACE_KPROBE_SESSION, SEC_NONE, attach_kprobe_session),
 	SEC_DEF("uprobe.multi+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_NONE, attach_uprobe_multi),
 	SEC_DEF("uretprobe.multi+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_NONE, attach_uprobe_multi),
 	SEC_DEF("uprobe.multi.s+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_SLEEPABLE, attach_uprobe_multi),
@@ -9835,16 +9930,28 @@ static int find_kernel_btf_id(struct bpf_object *obj, const char *attach_name,
 			      enum bpf_attach_type attach_type,
 			      int *btf_obj_fd, int *btf_type_id)
 {
-	int ret, i;
+	int ret, i, mod_len;
+	const char *fn_name, *mod_name = NULL;
 
-	ret = find_attach_btf_id(obj->btf_vmlinux, attach_name, attach_type);
-	if (ret > 0) {
-		*btf_obj_fd = 0; /* vmlinux BTF */
-		*btf_type_id = ret;
-		return 0;
+	fn_name = strchr(attach_name, ':');
+	if (fn_name) {
+		mod_name = attach_name;
+		mod_len = fn_name - mod_name;
+		fn_name++;
 	}
-	if (ret != -ENOENT)
-		return ret;
+
+	if (!mod_name || strncmp(mod_name, "vmlinux", mod_len) == 0) {
+		ret = find_attach_btf_id(obj->btf_vmlinux,
+					 mod_name ? fn_name : attach_name,
+					 attach_type);
+		if (ret > 0) {
+			*btf_obj_fd = 0; /* vmlinux BTF */
+			*btf_type_id = ret;
+			return 0;
+		}
+		if (ret != -ENOENT)
+			return ret;
+	}
 
 	ret = load_module_btfs(obj);
 	if (ret)
@@ -9853,7 +9960,12 @@ static int find_kernel_btf_id(struct bpf_object *obj, const char *attach_name,
 	for (i = 0; i < obj->btf_module_cnt; i++) {
 		const struct module_btf *mod = &obj->btf_modules[i];
 
-		ret = find_attach_btf_id(mod->btf, attach_name, attach_type);
+		if (mod_name && strncmp(mod->name, mod_name, mod_len) != 0)
+			continue;
+
+		ret = find_attach_btf_id(mod->btf,
+					 mod_name ? fn_name : attach_name,
+					 attach_type);
 		if (ret > 0) {
 			*btf_obj_fd = mod->fd;
 			*btf_type_id = ret;
@@ -10263,7 +10375,7 @@ __bpf_map__iter(const struct bpf_map *m, const struct bpf_object *obj, int i)
 struct bpf_map *
 bpf_object__next_map(const struct bpf_object *obj, const struct bpf_map *prev)
 {
-	if (prev == NULL)
+	if (prev == NULL && obj != NULL)
 		return obj->maps;
 
 	return __bpf_map__iter(prev, obj, 1);
@@ -10272,7 +10384,7 @@ bpf_object__next_map(const struct bpf_object *obj, const struct bpf_map *prev)
 struct bpf_map *
 bpf_object__prev_map(const struct bpf_object *obj, const struct bpf_map *next)
 {
-	if (next == NULL) {
+	if (next == NULL && obj != NULL) {
 		if (!obj->nr_maps)
 			return NULL;
 		return obj->maps + obj->nr_maps - 1;
@@ -11357,13 +11469,14 @@ bpf_program__attach_kprobe_multi_opts(const struct bpf_program *prog,
 	struct kprobe_multi_resolve res = {
 		.pattern = pattern,
 	};
+	enum bpf_attach_type attach_type;
 	struct bpf_link *link = NULL;
 	char errmsg[STRERR_BUFSIZE];
 	const unsigned long *addrs;
 	int err, link_fd, prog_fd;
+	bool retprobe, session;
 	const __u64 *cookies;
 	const char **syms;
-	bool retprobe;
 	size_t cnt;
 
 	if (!OPTS_VALID(opts, bpf_kprobe_multi_opts))
@@ -11402,6 +11515,12 @@ bpf_program__attach_kprobe_multi_opts(const struct bpf_program *prog,
 	}
 
 	retprobe = OPTS_GET(opts, retprobe, false);
+	session  = OPTS_GET(opts, session, false);
+
+	if (retprobe && session)
+		return libbpf_err_ptr(-EINVAL);
+
+	attach_type = session ? BPF_TRACE_KPROBE_SESSION : BPF_TRACE_KPROBE_MULTI;
 
 	lopts.kprobe_multi.syms = syms;
 	lopts.kprobe_multi.addrs = addrs;
@@ -11416,7 +11535,7 @@ bpf_program__attach_kprobe_multi_opts(const struct bpf_program *prog,
 	}
 	link->detach = &bpf_link__detach_fd;
 
-	link_fd = bpf_link_create(prog_fd, 0, BPF_TRACE_KPROBE_MULTI, &lopts);
+	link_fd = bpf_link_create(prog_fd, 0, attach_type, &lopts);
 	if (link_fd < 0) {
 		err = -errno;
 		pr_warn("prog '%s': failed to attach: %s\n",
@@ -11513,13 +11632,39 @@ static int attach_kprobe_multi(const struct bpf_program *prog, long cookie, stru
 
 	n = sscanf(spec, "%m[a-zA-Z0-9_.*?]", &pattern);
 	if (n < 1) {
-		pr_warn("kprobe multi pattern is invalid: %s\n", pattern);
+		pr_warn("kprobe multi pattern is invalid: %s\n", spec);
 		return -EINVAL;
 	}
 
 	*link = bpf_program__attach_kprobe_multi_opts(prog, pattern, &opts);
 	free(pattern);
 	return libbpf_get_error(*link);
+}
+
+static int attach_kprobe_session(const struct bpf_program *prog, long cookie,
+				 struct bpf_link **link)
+{
+	LIBBPF_OPTS(bpf_kprobe_multi_opts, opts, .session = true);
+	const char *spec;
+	char *pattern;
+	int n;
+
+	*link = NULL;
+
+	/* no auto-attach for SEC("kprobe.session") */
+	if (strcmp(prog->sec_name, "kprobe.session") == 0)
+		return 0;
+
+	spec = prog->sec_name + sizeof("kprobe.session/") - 1;
+	n = sscanf(spec, "%m[a-zA-Z0-9_.*?]", &pattern);
+	if (n < 1) {
+		pr_warn("kprobe session pattern is invalid: %s\n", spec);
+		return -EINVAL;
+	}
+
+	*link = bpf_program__attach_kprobe_multi_opts(prog, pattern, &opts);
+	free(pattern);
+	return *link ? 0 : -errno;
 }
 
 static int attach_uprobe_multi(const struct bpf_program *prog, long cookie, struct bpf_link **link)
@@ -12511,6 +12656,12 @@ bpf_program__attach_netns(const struct bpf_program *prog, int netns_fd)
 	return bpf_program_attach_fd(prog, netns_fd, "netns", NULL);
 }
 
+struct bpf_link *
+bpf_program__attach_sockmap(const struct bpf_program *prog, int map_fd)
+{
+	return bpf_program_attach_fd(prog, map_fd, "sockmap", NULL);
+}
+
 struct bpf_link *bpf_program__attach_xdp(const struct bpf_program *prog, int ifindex)
 {
 	/* target_fd/target_ifindex use the same field in LINK_CREATE */
@@ -12765,8 +12916,10 @@ struct bpf_link *bpf_map__attach_struct_ops(const struct bpf_map *map)
 	__u32 zero = 0;
 	int err, fd;
 
-	if (!bpf_map__is_struct_ops(map))
+	if (!bpf_map__is_struct_ops(map)) {
+		pr_warn("map '%s': can't attach non-struct_ops map\n", map->name);
 		return libbpf_err_ptr(-EINVAL);
+	}
 
 	if (map->fd < 0) {
 		pr_warn("map '%s': can't attach BPF map without FD (was it created?)\n", map->name);
@@ -13559,14 +13712,15 @@ int libbpf_num_possible_cpus(void)
 
 static int populate_skeleton_maps(const struct bpf_object *obj,
 				  struct bpf_map_skeleton *maps,
-				  size_t map_cnt)
+				  size_t map_cnt, size_t map_skel_sz)
 {
 	int i;
 
 	for (i = 0; i < map_cnt; i++) {
-		struct bpf_map **map = maps[i].map;
-		const char *name = maps[i].name;
-		void **mmaped = maps[i].mmaped;
+		struct bpf_map_skeleton *map_skel = (void *)maps + i * map_skel_sz;
+		struct bpf_map **map = map_skel->map;
+		const char *name = map_skel->name;
+		void **mmaped = map_skel->mmaped;
 
 		*map = bpf_object__find_map_by_name(obj, name);
 		if (!*map) {
@@ -13583,13 +13737,14 @@ static int populate_skeleton_maps(const struct bpf_object *obj,
 
 static int populate_skeleton_progs(const struct bpf_object *obj,
 				   struct bpf_prog_skeleton *progs,
-				   size_t prog_cnt)
+				   size_t prog_cnt, size_t prog_skel_sz)
 {
 	int i;
 
 	for (i = 0; i < prog_cnt; i++) {
-		struct bpf_program **prog = progs[i].prog;
-		const char *name = progs[i].name;
+		struct bpf_prog_skeleton *prog_skel = (void *)progs + i * prog_skel_sz;
+		struct bpf_program **prog = prog_skel->prog;
+		const char *name = prog_skel->name;
 
 		*prog = bpf_object__find_program_by_name(obj, name);
 		if (!*prog) {
@@ -13630,13 +13785,13 @@ int bpf_object__open_skeleton(struct bpf_object_skeleton *s,
 	}
 
 	*s->obj = obj;
-	err = populate_skeleton_maps(obj, s->maps, s->map_cnt);
+	err = populate_skeleton_maps(obj, s->maps, s->map_cnt, s->map_skel_sz);
 	if (err) {
 		pr_warn("failed to populate skeleton maps for '%s': %d\n", s->name, err);
 		return libbpf_err(err);
 	}
 
-	err = populate_skeleton_progs(obj, s->progs, s->prog_cnt);
+	err = populate_skeleton_progs(obj, s->progs, s->prog_cnt, s->prog_skel_sz);
 	if (err) {
 		pr_warn("failed to populate skeleton progs for '%s': %d\n", s->name, err);
 		return libbpf_err(err);
@@ -13666,20 +13821,20 @@ int bpf_object__open_subskeleton(struct bpf_object_subskeleton *s)
 		return libbpf_err(-errno);
 	}
 
-	err = populate_skeleton_maps(s->obj, s->maps, s->map_cnt);
+	err = populate_skeleton_maps(s->obj, s->maps, s->map_cnt, s->map_skel_sz);
 	if (err) {
 		pr_warn("failed to populate subskeleton maps: %d\n", err);
 		return libbpf_err(err);
 	}
 
-	err = populate_skeleton_progs(s->obj, s->progs, s->prog_cnt);
+	err = populate_skeleton_progs(s->obj, s->progs, s->prog_cnt, s->prog_skel_sz);
 	if (err) {
 		pr_warn("failed to populate subskeleton maps: %d\n", err);
 		return libbpf_err(err);
 	}
 
 	for (var_idx = 0; var_idx < s->var_cnt; var_idx++) {
-		var_skel = &s->vars[var_idx];
+		var_skel = (void *)s->vars + var_idx * s->var_skel_sz;
 		map = *var_skel->map;
 		map_type_id = bpf_map__btf_value_type_id(map);
 		map_type = btf__type_by_id(btf, map_type_id);
@@ -13726,10 +13881,11 @@ int bpf_object__load_skeleton(struct bpf_object_skeleton *s)
 	}
 
 	for (i = 0; i < s->map_cnt; i++) {
-		struct bpf_map *map = *s->maps[i].map;
+		struct bpf_map_skeleton *map_skel = (void *)s->maps + i * s->map_skel_sz;
+		struct bpf_map *map = *map_skel->map;
 		size_t mmap_sz = bpf_map_mmap_sz(map);
 		int prot, map_fd = map->fd;
-		void **mmaped = s->maps[i].mmaped;
+		void **mmaped = map_skel->mmaped;
 
 		if (!mmaped)
 			continue;
@@ -13777,8 +13933,9 @@ int bpf_object__attach_skeleton(struct bpf_object_skeleton *s)
 	int i, err;
 
 	for (i = 0; i < s->prog_cnt; i++) {
-		struct bpf_program *prog = *s->progs[i].prog;
-		struct bpf_link **link = s->progs[i].link;
+		struct bpf_prog_skeleton *prog_skel = (void *)s->progs + i * s->prog_skel_sz;
+		struct bpf_program *prog = *prog_skel->prog;
+		struct bpf_link **link = prog_skel->link;
 
 		if (!prog->autoload || !prog->autoattach)
 			continue;
@@ -13810,6 +13967,38 @@ int bpf_object__attach_skeleton(struct bpf_object_skeleton *s)
 		 */
 	}
 
+
+	for (i = 0; i < s->map_cnt; i++) {
+		struct bpf_map_skeleton *map_skel = (void *)s->maps + i * s->map_skel_sz;
+		struct bpf_map *map = *map_skel->map;
+		struct bpf_link **link;
+
+		if (!map->autocreate || !map->autoattach)
+			continue;
+
+		/* only struct_ops maps can be attached */
+		if (!bpf_map__is_struct_ops(map))
+			continue;
+
+		/* skeleton is created with earlier version of bpftool, notify user */
+		if (s->map_skel_sz < offsetofend(struct bpf_map_skeleton, link)) {
+			pr_warn("map '%s': BPF skeleton version is old, skipping map auto-attachment...\n",
+				bpf_map__name(map));
+			continue;
+		}
+
+		link = map_skel->link;
+		if (*link)
+			continue;
+
+		*link = bpf_map__attach_struct_ops(map);
+		if (!*link) {
+			err = -errno;
+			pr_warn("map '%s': failed to auto-attach: %d\n", bpf_map__name(map), err);
+			return libbpf_err(err);
+		}
+	}
+
 	return 0;
 }
 
@@ -13818,10 +14007,24 @@ void bpf_object__detach_skeleton(struct bpf_object_skeleton *s)
 	int i;
 
 	for (i = 0; i < s->prog_cnt; i++) {
-		struct bpf_link **link = s->progs[i].link;
+		struct bpf_prog_skeleton *prog_skel = (void *)s->progs + i * s->prog_skel_sz;
+		struct bpf_link **link = prog_skel->link;
 
 		bpf_link__destroy(*link);
 		*link = NULL;
+	}
+
+	if (s->map_skel_sz < sizeof(struct bpf_map_skeleton))
+		return;
+
+	for (i = 0; i < s->map_cnt; i++) {
+		struct bpf_map_skeleton *map_skel = (void *)s->maps + i * s->map_skel_sz;
+		struct bpf_link **link = map_skel->link;
+
+		if (link) {
+			bpf_link__destroy(*link);
+			*link = NULL;
+		}
 	}
 }
 
@@ -13830,8 +14033,7 @@ void bpf_object__destroy_skeleton(struct bpf_object_skeleton *s)
 	if (!s)
 		return;
 
-	if (s->progs)
-		bpf_object__detach_skeleton(s);
+	bpf_object__detach_skeleton(s);
 	if (s->obj)
 		bpf_object__close(*s->obj);
 	free(s->maps);

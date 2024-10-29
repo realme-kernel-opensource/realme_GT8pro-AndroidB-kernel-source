@@ -17,7 +17,6 @@ static inline struct unix_sock *unix_get_socket(struct file *filp)
 }
 #endif
 
-extern spinlock_t unix_gc_lock;
 extern unsigned int unix_tot_inflight;
 void unix_add_edges(struct scm_fp_list *fpl, struct unix_sock *receiver);
 void unix_del_edges(struct scm_fp_list *fpl);
@@ -68,6 +67,7 @@ struct unix_skb_parms {
 
 struct scm_stat {
 	atomic_t nr_fds;
+	unsigned long nr_unix_fds;
 };
 
 #define UNIXCB(skb)	(*(struct unix_skb_parms *)&((skb)->cb))
@@ -96,20 +96,6 @@ struct unix_sock {
 
 #define unix_state_lock(s)	spin_lock(&unix_sk(s)->lock)
 #define unix_state_unlock(s)	spin_unlock(&unix_sk(s)->lock)
-enum unix_socket_lock_class {
-	U_LOCK_NORMAL,
-	U_LOCK_SECOND,	/* for double locking, see unix_state_double_lock(). */
-	U_LOCK_DIAG, /* used while dumping icons, see sk_diag_dump_icons(). */
-	U_LOCK_GC_LISTENER, /* used for listening socket while determining gc
-			     * candidates to close a small race window.
-			     */
-};
-
-static inline void unix_state_lock_nested(struct sock *sk,
-				   enum unix_socket_lock_class subclass)
-{
-	spin_lock_nested(&unix_sk(sk)->lock, subclass);
-}
 
 #define peer_wait peer_wq.wait
 

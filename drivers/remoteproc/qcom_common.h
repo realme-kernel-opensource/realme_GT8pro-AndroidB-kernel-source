@@ -62,6 +62,12 @@ typedef void (*rproc_dumpfn_t)(struct rproc *rproc, struct rproc_dump_segment *s
 extern void (*rproc_recovery_set_fn)(struct rproc *rproc);
 void qcom_minidump(struct rproc *rproc, struct device *md_dev,
 			unsigned int minidump_id, rproc_dumpfn_t dumpfn, bool both_dumps);
+struct qcom_rproc_pdm {
+	struct rproc_subdev subdev;
+	struct device *dev;
+	int index;
+	struct auxiliary_device *adev;
+};
 
 void qcom_add_glink_subdev(struct rproc *rproc, struct qcom_rproc_glink *glink,
 			   const char *ssr_name);
@@ -77,6 +83,9 @@ void qcom_add_ssr_subdev(struct rproc *rproc, struct qcom_rproc_ssr *ssr,
 void qcom_notify_early_ssr_clients(struct rproc_subdev *subdev);
 void qcom_remove_ssr_subdev(struct rproc *rproc, struct qcom_rproc_ssr *ssr);
 void qcom_rproc_update_recovery_status(struct rproc *rproc, bool enable);
+
+void qcom_add_pdm_subdev(struct rproc *rproc, struct qcom_rproc_pdm *pdm);
+void qcom_remove_pdm_subdev(struct rproc *rproc, struct qcom_rproc_pdm *pdm);
 
 #if IS_ENABLED(CONFIG_QCOM_SYSMON)
 struct qcom_sysmon *qcom_add_sysmon_subdev(struct rproc *rproc,

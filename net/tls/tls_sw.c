@@ -1201,7 +1201,7 @@ trim_sgl:
 
 	if (!num_async) {
 		goto send_end;
-	} else if (num_zc) {
+	} else if (num_zc || eor) {
 		int err;
 
 		/* Wait for pending encryptions to get completed */
@@ -2147,7 +2147,6 @@ recv_end:
 		if (ret) {
 			if (err >= 0 || err == -EINPROGRESS)
 				err = ret;
-			decrypted = 0;
 			goto end;
 		}
 

@@ -43,6 +43,7 @@
 #include <net/rtnetlink.h>
 #include <net/udp.h>
 #include <net/dst_metadata.h>
+#include <net/inet_dscp.h>
 
 #if IS_ENABLED(CONFIG_IPV6)
 #include <net/ipv6.h>
@@ -293,7 +294,7 @@ static int ip_tunnel_bind_dev(struct net_device *dev)
 
 		ip_tunnel_init_flow(&fl4, iph->protocol, iph->daddr,
 				    iph->saddr, tunnel->parms.o_key,
-				    RT_TOS(iph->tos), dev_net(dev),
+				    iph->tos & INET_DSCP_MASK, dev_net(dev),
 				    tunnel->parms.link, tunnel->fwmark, 0, 0);
 		rt = ip_route_output_key(tunnel->net, &fl4);
 
@@ -543,7 +544,7 @@ static int tnl_update_pmtu(struct net_device *dev, struct sk_buff *skb,
 		struct rt6_info *rt6;
 		__be32 daddr;
 
-		rt6 = skb_valid_dst(skb) ? (struct rt6_info *)skb_dst(skb) :
+		rt6 = skb_valid_dst(skb) ? dst_rt6_info(skb_dst(skb)) :
 					   NULL;
 		daddr = md ? dst : tunnel->parms.iph.daddr;
 
@@ -609,9 +610,9 @@ void ip_md_tunnel_xmit(struct sk_buff *skb, struct net_device *dev,
 			tos = ipv6_get_dsfield((const struct ipv6hdr *)inner_iph);
 	}
 	ip_tunnel_init_flow(&fl4, proto, key->u.ipv4.dst, key->u.ipv4.src,
-			    tunnel_id_to_key32(key->tun_id), RT_TOS(tos),
-			    dev_net(dev), 0, skb->mark, skb_get_hash(skb),
-			    key->flow_flags);
+			    tunnel_id_to_key32(key->tun_id),
+			    tos & INET_DSCP_MASK, dev_net(dev), 0, skb->mark,
+			    skb_get_hash(skb), key->flow_flags);
 
 	if (!tunnel_hlen)
 		tunnel_hlen = ip_encap_hlen(&tun_info->encap);
@@ -772,7 +773,7 @@ void ip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev,
 	}
 
 	ip_tunnel_init_flow(&fl4, protocol, dst, tnl_params->saddr,
-			    tunnel->parms.o_key, RT_TOS(tos),
+			    tunnel->parms.o_key, tos & INET_DSCP_MASK,
 			    dev_net(dev), READ_ONCE(tunnel->parms.link),
 			    tunnel->fwmark, skb_get_hash(skb), 0);
 
@@ -897,7 +898,7 @@ static void ip_tunnel_update(struct ip_tunnel_net *itn,
 		t->fwmark = fwmark;
 		mtu = ip_tunnel_bind_dev(dev);
 		if (set_mtu)
-			dev->mtu = mtu;
+			WRITE_ONCE(dev->mtu, mtu);
 	}
 	dst_cache_reset(&t->dst_cache);
 	netdev_state_change(dev);
@@ -1034,6 +1035,8 @@ bool ip_tunnel_parm_to_user(void __user *data, struct ip_tunnel_parm_kern *kp)
 	    !ip_tunnel_flags_is_be16_compat(kp->o_flags))
 		return false;
 
+	memset(&p, 0, sizeof(p));
+
 	strscpy(p.name, kp->name);
 	p.link = kp->link;
 	p.i_flags = ip_tunnel_flags_to_be16(kp->i_flags);
@@ -1080,7 +1083,7 @@ int __ip_tunnel_change_mtu(struct net_device *dev, int new_mtu, bool strict)
 		new_mtu = max_mtu;
 	}
 
-	dev->mtu = new_mtu;
+	WRITE_ONCE(dev->mtu, new_mtu);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(__ip_tunnel_change_mtu);
@@ -1097,7 +1100,6 @@ static void ip_tunnel_dev_free(struct net_device *dev)
 
 	gro_cells_destroy(&tunnel->gro_cells);
 	dst_cache_destroy(&tunnel->dst_cache);
-	free_percpu(dev->tstats);
 }
 
 void ip_tunnel_dellink(struct net_device *dev, struct list_head *head)
@@ -1118,7 +1120,7 @@ struct net *ip_tunnel_get_link_net(const struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
 
-	return tunnel->net;
+	return READ_ONCE(tunnel->net);
 }
 EXPORT_SYMBOL(ip_tunnel_get_link_net);
 
@@ -1160,7 +1162,7 @@ int ip_tunnel_init_net(struct net *net, unsigned int ip_tnl_net_id,
 	 * Allowing to move it to another netns is clearly unsafe.
 	 */
 	if (!IS_ERR(itn->fb_tunnel_dev)) {
-		itn->fb_tunnel_dev->features |= NETIF_F_NETNS_LOCAL;
+		itn->fb_tunnel_dev->netns_local = true;
 		itn->fb_tunnel_dev->mtu = ip_tunnel_bind_dev(itn->fb_tunnel_dev);
 		ip_tunnel_add(itn, netdev_priv(itn->fb_tunnel_dev));
 		itn->type = itn->fb_tunnel_dev->type;
@@ -1311,26 +1313,21 @@ int ip_tunnel_init(struct net_device *dev)
 
 	dev->needs_free_netdev = true;
 	dev->priv_destructor = ip_tunnel_dev_free;
-	dev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
-	if (!dev->tstats)
-		return -ENOMEM;
+	dev->pcpu_stat_type = NETDEV_PCPU_STAT_TSTATS;
 
 	err = dst_cache_init(&tunnel->dst_cache, GFP_KERNEL);
-	if (err) {
-		free_percpu(dev->tstats);
+	if (err)
 		return err;
-	}
 
 	err = gro_cells_init(&tunnel->gro_cells, dev);
 	if (err) {
 		dst_cache_destroy(&tunnel->dst_cache);
-		free_percpu(dev->tstats);
 		return err;
 	}
 
 	tunnel->dev = dev;
 	tunnel->net = dev_net(dev);
-	strcpy(tunnel->parms.name, dev->name);
+	strscpy(tunnel->parms.name, dev->name);
 	iph->version		= 4;
 	iph->ihl		= 5;
 

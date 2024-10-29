@@ -127,6 +127,30 @@ static ssize_t soc_reset_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(soc_reset);
 
+static ssize_t trigger_edl_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct mhi_device *mhi_dev = to_mhi_device(dev);
+	struct mhi_controller *mhi_cntrl = mhi_dev->mhi_cntrl;
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 10, &val);
+	if (ret < 0)
+		return ret;
+
+	if (!val)
+		return -EINVAL;
+
+	ret = mhi_cntrl->edl_trigger(mhi_cntrl);
+	if (ret)
+		return ret;
+
+	return count;
+}
+static DEVICE_ATTR_WO(trigger_edl);
+
 static struct attribute *mhi_dev_attrs[] = {
 	&dev_attr_serial_number.attr,
 	&dev_attr_oem_pk_hash.attr,
@@ -517,11 +541,9 @@ int mhi_init_mmio(struct mhi_controller *mhi_cntrl)
 	MHI_VERB(dev, "Initializing MHI registers\n");
 
 	/* Read channel db offset */
-	ret = mhi_read_reg(mhi_cntrl, base, CHDBOFF, &val);
-	if (ret) {
-		MHI_ERR(dev, "Unable to read CHDBOFF register\n");
-		return -EIO;
-	}
+	ret = mhi_get_channel_doorbell_offset(mhi_cntrl, &val);
+	if (ret)
+		return ret;
 
 	if (val >= mhi_cntrl->reg_len - (8 * MHI_DEV_WAKE_DB)) {
 		dev_err(dev, "CHDB offset: 0x%x is out of range: 0x%zx\n",
@@ -1037,9 +1059,17 @@ int mhi_register_controller(struct mhi_controller *mhi_cntrl,
 	if (ret)
 		goto err_misc_release;
 
+	if (mhi_cntrl->edl_trigger) {
+		ret = sysfs_create_file(&mhi_dev->dev.kobj, &dev_attr_trigger_edl.attr);
+		if (ret)
+			goto err_release_dev;
+	}
+
 	ret = mhi_misc_sysfs_create(mhi_cntrl);
 	if (ret)
 		goto err_release_dev;
+
+	mhi_cntrl->mhi_dev = mhi_dev;
 
 	mhi_create_debugfs(mhi_cntrl);
 
@@ -1084,6 +1114,10 @@ void mhi_unregister_controller(struct mhi_controller *mhi_cntrl)
 			mhi_free_bhie_table(mhi_cntrl, &mhi_cntrl->rddm_image);
 	}
 	mhi_destroy_debugfs(mhi_cntrl);
+
+	if (mhi_cntrl->edl_trigger)
+		sysfs_remove_file(&mhi_dev->dev.kobj, &dev_attr_trigger_edl.attr);
+
 	destroy_workqueue(mhi_cntrl->hiprio_wq);
 	kfree(mhi_cntrl->mhi_cmd);
 	kfree(mhi_cntrl->mhi_event);
@@ -1437,10 +1471,10 @@ static int mhi_uevent(const struct device *dev, struct kobj_uevent_env *env)
 					mhi_dev->name);
 }
 
-static int mhi_match(struct device *dev, struct device_driver *drv)
+static int mhi_match(struct device *dev, const struct device_driver *drv)
 {
 	struct mhi_device *mhi_dev = to_mhi_device(dev);
-	struct mhi_driver *mhi_drv = to_mhi_driver(drv);
+	const struct mhi_driver *mhi_drv = to_mhi_driver(drv);
 	const struct mhi_device_id *id;
 
 	/*

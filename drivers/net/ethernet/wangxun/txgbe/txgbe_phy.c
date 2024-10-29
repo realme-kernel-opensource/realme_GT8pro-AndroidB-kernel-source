@@ -302,7 +302,7 @@ irqreturn_t txgbe_link_irq_handler(int irq, void *data)
 	status = rd32(wx, TXGBE_CFG_PORT_ST);
 	up = !!(status & TXGBE_CFG_PORT_ST_LINK_UP);
 
-	phylink_mac_change(wx->phylink, up);
+	phylink_pcs_change(&txgbe->xpcs->pcs, up);
 
 	return IRQ_HANDLED;
 }
@@ -688,8 +688,7 @@ static int txgbe_ext_phy_init(struct txgbe *txgbe)
 	mii_bus->parent = &pdev->dev;
 	mii_bus->phy_mask = GENMASK(31, 1);
 	mii_bus->priv = wx;
-	snprintf(mii_bus->id, MII_BUS_ID_SIZE, "txgbe-%x",
-		 (pdev->bus->number << 8) | pdev->devfn);
+	snprintf(mii_bus->id, MII_BUS_ID_SIZE, "txgbe-%x", pci_dev_id(pdev));
 
 	ret = devm_mdiobus_register(&pdev->dev, mii_bus);
 	if (ret) {

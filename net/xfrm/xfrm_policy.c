@@ -45,6 +45,7 @@
 #ifdef CONFIG_XFRM_ESPINTCP
 #include <net/espintcp.h>
 #endif
+#include <net/inet_dscp.h>
 
 #include "xfrm_hash.h"
 
@@ -109,7 +110,11 @@ struct xfrm_pol_inexact_node {
  * 4. saddr:any list from saddr tree
  *
  * This result set then needs to be searched for the policy with
- * the lowest priority.  If two results have same prio, youngest one wins.
+ * the lowest priority.  If two candidates have the same priority, the
+ * struct xfrm_policy pos member with the lower number is used.
+ *
+ * This replicates previous single-list-search algorithm which would
+ * return first matching policy in the (ordered-by-priority) list.
  */
 
 struct xfrm_pol_inexact_key {
@@ -452,6 +457,8 @@ EXPORT_SYMBOL(xfrm_policy_destroy);
 
 static void xfrm_policy_kill(struct xfrm_policy *policy)
 {
+	xfrm_dev_policy_delete(policy);
+
 	write_lock_bh(&policy->lock);
 	policy->walk.dead = 1;
 	write_unlock_bh(&policy->lock);
@@ -1235,6 +1242,17 @@ xfrm_policy_inexact_insert(struct xfrm_policy *policy, u8 dir, int excl)
 	return delpol;
 }
 
+static bool xfrm_policy_is_dead_or_sk(const struct xfrm_policy *policy)
+{
+	int dir;
+
+	if (policy->walk.dead)
+		return true;
+
+	dir = xfrm_policy_id2dir(policy->index);
+	return dir >= XFRM_POLICY_MAX;
+}
+
 static void xfrm_hash_rebuild(struct work_struct *work)
 {
 	struct net *net = container_of(work, struct net,
@@ -1272,13 +1290,10 @@ static void xfrm_hash_rebuild(struct work_struct *work)
 		struct xfrm_pol_inexact_bin *bin;
 		u8 dbits, sbits;
 
-		if (policy->walk.dead)
+		if (xfrm_policy_is_dead_or_sk(policy))
 			continue;
 
 		dir = xfrm_policy_id2dir(policy->index);
-		if (dir >= XFRM_POLICY_MAX)
-			continue;
-
 		if ((dir & XFRM_POLICY_MASK) == XFRM_POLICY_OUT) {
 			if (policy->family == AF_INET) {
 				dbits = rbits4;
@@ -1343,14 +1358,14 @@ static void xfrm_hash_rebuild(struct work_struct *work)
 
 	/* re-insert all policies by order of creation */
 	list_for_each_entry_reverse(policy, &net->xfrm.policy_all, walk.all) {
-		if (policy->walk.dead)
+		if (xfrm_policy_is_dead_or_sk(policy))
 			continue;
-		dir = xfrm_policy_id2dir(policy->index);
-		if (dir >= XFRM_POLICY_MAX) {
-			/* skip socket policies */
-			continue;
-		}
+
+		hlist_del_rcu(&policy->bydst);
+		hlist_del_init(&policy->bydst_inexact_list);
+
 		newpos = NULL;
+		dir = xfrm_policy_id2dir(policy->index);
 		chain = policy_hash_bysel(net, &policy->selector,
 					  policy->family, dir);
 
@@ -1522,7 +1537,6 @@ static void xfrm_policy_insert_inexact_list(struct hlist_head *chain,
 {
 	struct xfrm_policy *pol, *delpol = NULL;
 	struct hlist_node *newpos = NULL;
-	int i = 0;
 
 	hlist_for_each_entry(pol, chain, bydst_inexact_list) {
 		if (pol->type == policy->type &&
@@ -1546,11 +1560,6 @@ static void xfrm_policy_insert_inexact_list(struct hlist_head *chain,
 		hlist_add_behind_rcu(&policy->bydst_inexact_list, newpos);
 	else
 		hlist_add_head_rcu(&policy->bydst_inexact_list, chain);
-
-	hlist_for_each_entry(pol, chain, bydst_inexact_list) {
-		pol->pos = i;
-		i++;
-	}
 }
 
 static struct xfrm_policy *xfrm_policy_insert_list(struct hlist_head *chain,
@@ -1850,7 +1859,6 @@ again:
 
 		__xfrm_policy_unlink(pol, dir);
 		spin_unlock_bh(&net->xfrm.xfrm_policy_lock);
-		xfrm_dev_policy_delete(pol);
 		cnt++;
 		xfrm_audit_policy_delete(pol, 1, task_valid);
 		xfrm_policy_kill(pol);
@@ -1891,7 +1899,6 @@ again:
 
 		__xfrm_policy_unlink(pol, dir);
 		spin_unlock_bh(&net->xfrm.xfrm_policy_lock);
-		xfrm_dev_policy_delete(pol);
 		cnt++;
 		xfrm_audit_policy_delete(pol, 1, task_valid);
 		xfrm_policy_kill(pol);
@@ -2294,9 +2301,51 @@ out:
 	return pol;
 }
 
+static u32 xfrm_gen_pos_slow(struct net *net)
+{
+	struct xfrm_policy *policy;
+	u32 i = 0;
+
+	/* oldest entry is last in list */
+	list_for_each_entry_reverse(policy, &net->xfrm.policy_all, walk.all) {
+		if (!xfrm_policy_is_dead_or_sk(policy))
+			policy->pos = ++i;
+	}
+
+	return i;
+}
+
+static u32 xfrm_gen_pos(struct net *net)
+{
+	const struct xfrm_policy *policy;
+	u32 i = 0;
+
+	/* most recently added policy is at the head of the list */
+	list_for_each_entry(policy, &net->xfrm.policy_all, walk.all) {
+		if (xfrm_policy_is_dead_or_sk(policy))
+			continue;
+
+		if (policy->pos == UINT_MAX)
+			return xfrm_gen_pos_slow(net);
+
+		i = policy->pos + 1;
+		break;
+	}
+
+	return i;
+}
+
 static void __xfrm_policy_link(struct xfrm_policy *pol, int dir)
 {
 	struct net *net = xp_net(pol);
+
+	switch (dir) {
+	case XFRM_POLICY_IN:
+	case XFRM_POLICY_FWD:
+	case XFRM_POLICY_OUT:
+		pol->pos = xfrm_gen_pos(net);
+		break;
+	}
 
 	list_add(&pol->walk.all, &net->xfrm.policy_all);
 	net->xfrm.policy_count[dir]++;
@@ -2342,7 +2391,6 @@ int xfrm_policy_delete(struct xfrm_policy *pol, int dir)
 	pol = __xfrm_policy_unlink(pol, dir);
 	spin_unlock_bh(&net->xfrm.xfrm_policy_lock);
 	if (pol) {
-		xfrm_dev_policy_delete(pol);
 		xfrm_policy_kill(pol);
 		return 0;
 	}
@@ -2489,6 +2537,12 @@ xfrm_tmpl_resolve_one(struct xfrm_policy *policy, const struct flowi *fl,
 
 		x = xfrm_state_find(remote, local, fl, tmpl, policy, &error,
 				    family, policy->if_id);
+		if (x && x->dir && x->dir != XFRM_SA_DIR_OUT) {
+			XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTSTATEDIRERROR);
+			xfrm_state_put(x);
+			error = -EINVAL;
+			goto fail;
+		}
 
 		if (x && x->km.state == XFRM_STATE_VALID) {
 			xfrm[nx++] = x;
@@ -2556,7 +2610,7 @@ xfrm_tmpl_resolve(struct xfrm_policy **pols, int npols, const struct flowi *fl,
 static int xfrm_get_tos(const struct flowi *fl, int family)
 {
 	if (family == AF_INET)
-		return IPTOS_RT_MASK & fl->u.ip4.flowi4_tos;
+		return fl->u.ip4.flowi4_tos & INET_DSCP_MASK;
 
 	return 0;
 }
@@ -2598,8 +2652,7 @@ static void xfrm_init_path(struct xfrm_dst *path, struct dst_entry *dst,
 			   int nfheader_len)
 {
 	if (dst->ops->family == AF_INET6) {
-		struct rt6_info *rt = (struct rt6_info *)dst;
-		path->path_cookie = rt6_get_cookie(rt);
+		path->path_cookie = rt6_get_cookie(dst_rt6_info(dst));
 		path->u.rt6.rt6i_nfheader_len = nfheader_len;
 	}
 }
@@ -3713,12 +3766,15 @@ int __xfrm_policy_check(struct sock *sk, int dir, struct sk_buff *skb,
 		pol = xfrm_in_fwd_icmp(skb, &fl, family, if_id);
 
 	if (!pol) {
+		const bool is_crypto_offload = sp &&
+			(xfrm_input_state(skb)->xso.type == XFRM_DEV_OFFLOAD_CRYPTO);
+
 		if (net->xfrm.policy_default[dir] == XFRM_USERPOLICY_BLOCK) {
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMINNOPOLS);
 			return 0;
 		}
 
-		if (sp && secpath_has_nontransport(sp, 0, &xerr_idx)) {
+		if (sp && secpath_has_nontransport(sp, 0, &xerr_idx) && !is_crypto_offload) {
 			xfrm_secpath_reject(xerr_idx, skb, &fl);
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMINNOPOLS);
 			return 0;
@@ -3905,15 +3961,10 @@ static void xfrm_link_failure(struct sk_buff *skb)
 	/* Impossible. Such dst must be popped before reaches point of failure. */
 }
 
-static struct dst_entry *xfrm_negative_advice(struct dst_entry *dst)
+static void xfrm_negative_advice(struct sock *sk, struct dst_entry *dst)
 {
-	if (dst) {
-		if (dst->obsolete) {
-			dst_release(dst);
-			dst = NULL;
-		}
-	}
-	return dst;
+	if (dst->obsolete)
+		sk_dst_reset(sk);
 }
 
 static void xfrm_init_pmtu(struct xfrm_dst **bundle, int nr)
@@ -4284,8 +4335,14 @@ static int __net_init xfrm_net_init(struct net *net)
 	if (rv < 0)
 		goto out_sysctl;
 
+	rv = xfrm_nat_keepalive_net_init(net);
+	if (rv < 0)
+		goto out_nat_keepalive;
+
 	return 0;
 
+out_nat_keepalive:
+	xfrm_sysctl_fini(net);
 out_sysctl:
 	xfrm_policy_fini(net);
 out_policy:
@@ -4298,6 +4355,7 @@ out_statistics:
 
 static void __net_exit xfrm_net_exit(struct net *net)
 {
+	xfrm_nat_keepalive_net_fini(net);
 	xfrm_sysctl_fini(net);
 	xfrm_policy_fini(net);
 	xfrm_state_fini(net);
@@ -4359,6 +4417,7 @@ void __init xfrm_init(void)
 #endif
 
 	register_xfrm_state_bpf();
+	xfrm_nat_keepalive_init(AF_INET);
 }
 
 #ifdef CONFIG_AUDITSYSCALL
