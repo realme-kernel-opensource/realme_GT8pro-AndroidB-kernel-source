@@ -733,8 +733,12 @@ bool enable_load_sync(int cpu)
 int pipeline_fits_smaller_cpus(struct task_struct *p)
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	unsigned int pipeline_cpu = wts->pipeline_cpu;
 
-	if (cpumask_test_cpu(wts->pipeline_cpu, &cpu_array[0][num_sched_clusters-1]))
+	if (pipeline_cpu == -1)
+		return -1;
+
+	if (cpumask_test_cpu(pipeline_cpu, &cpu_array[0][num_sched_clusters-1]))
 		return 0;
 
 	if (have_heavy_list) {
