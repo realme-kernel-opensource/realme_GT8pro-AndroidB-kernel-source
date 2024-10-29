@@ -328,6 +328,19 @@ static struct clk_branch gpu_cc_freq_measure_clk = {
 	},
 };
 
+static struct clk_branch gpu_cc_gpu_smmu_vote_clk = {
+	.halt_reg = 0x7000,
+	.halt_check = BRANCH_HALT_VOTED,
+	.clkr = {
+		.enable_reg = 0x7000,
+		.enable_mask = BIT(0),
+		.hw.init = &(const struct clk_init_data) {
+			.name = "gpu_cc_gpu_smmu_vote_clk",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
 static struct clk_branch gpu_cc_gx_accu_shift_clk = {
 	.halt_reg = 0x9070,
 	.halt_check = BRANCH_HALT_VOTED,
@@ -482,6 +495,7 @@ static struct clk_regmap *gpu_cc_canoe_clocks[] = {
 	[GPU_CC_DPM_CLK] = &gpu_cc_dpm_clk.clkr,
 	[GPU_CC_FREQ_MEASURE_CLK] = &gpu_cc_freq_measure_clk.clkr,
 	[GPU_CC_GMU_CLK_SRC] = &gpu_cc_gmu_clk_src.clkr,
+	[GPU_CC_GPU_SMMU_VOTE_CLK] = &gpu_cc_gpu_smmu_vote_clk.clkr,
 	[GPU_CC_GX_ACCU_SHIFT_CLK] = &gpu_cc_gx_accu_shift_clk.clkr,
 	[GPU_CC_GX_GMU_CLK] = &gpu_cc_gx_gmu_clk.clkr,
 	[GPU_CC_HUB_AON_CLK] = &gpu_cc_hub_aon_clk.clkr,
