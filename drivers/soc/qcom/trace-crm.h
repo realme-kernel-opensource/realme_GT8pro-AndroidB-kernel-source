@@ -27,7 +27,7 @@ DECLARE_EVENT_CLASS(crm_vcd_votes,
 	),
 
 	TP_fast_assign(
-		       __assign_str(name, name);
+		       __assign_str(name);
 		       __entry->vcd_type = vcd_type;
 		       __entry->resource_idx = resource_idx;
 		       __entry->pwr_state = pwr_state;
@@ -67,7 +67,7 @@ TRACE_EVENT(crm_irq,
 	),
 
 	TP_fast_assign(
-		       __assign_str(name, name);
+		       __assign_str(name);
 		       __entry->vcd_type = vcd_type;
 		       __entry->resource_idx = resource_idx;
 		       __entry->irq_status = irq_status;
@@ -91,7 +91,7 @@ TRACE_EVENT(crm_switch_channel,
 	),
 
 	TP_fast_assign(
-		       __assign_str(name, name);
+		       __assign_str(name);
 		       __entry->ch = ch;
 		       __entry->ret = ret;
 	),

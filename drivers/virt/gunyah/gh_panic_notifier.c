@@ -641,7 +641,7 @@ static int gh_panic_notifier_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int gh_panic_notifier_remove(struct platform_device *pdev)
+static void gh_panic_notifier_remove(struct platform_device *pdev)
 {
 	struct gh_panic_notifier_dev *gpnd;
 
@@ -654,8 +654,6 @@ static int gh_panic_notifier_remove(struct platform_device *pdev)
 		gh_dbl_rx_unregister(gpnd->rx_dbl);
 		wakeup_source_unregister(gpnd->ws);
 	}
-
-	return 0;
 }
 
 static const struct of_device_id gh_panic_notifier_match_table[] = {

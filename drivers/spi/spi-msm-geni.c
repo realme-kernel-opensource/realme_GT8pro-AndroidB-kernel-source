@@ -2770,7 +2770,7 @@ spi_geni_probe_err:
 	return ret;
 }
 
-static int spi_geni_remove(struct platform_device *pdev)
+static void spi_geni_remove(struct platform_device *pdev)
 {
 	int ret;
 	struct spi_controller *master = platform_get_drvdata(pdev);
@@ -2797,8 +2797,6 @@ static int spi_geni_remove(struct platform_device *pdev)
 		ipc_log_context_destroy(geni_mas->ipc_log_tx_rx);
 
 	device_remove_file(&pdev->dev, &dev_attr_spi_max_dump_size);
-
-	return 0;
 }
 
 #if IS_ENABLED(CONFIG_PM)

@@ -33,7 +33,7 @@ TRACE_EVENT(qcom_dcvs_update,
 	),
 
 	TP_fast_assign(
-		__assign_str(name, name);
+		__assign_str(name);
 		__entry->hw = hw;
 		__entry->path = path;
 		__entry->ib = ib;
@@ -106,7 +106,7 @@ TRACE_EVENT(memlat_dev_meas,
 	),
 
 	TP_fast_assign(
-		__assign_str(name, name);
+		__assign_str(name);
 		__entry->dev_id = dev_id;
 		__entry->inst = inst;
 		__entry->mem = mem;
@@ -146,7 +146,7 @@ TRACE_EVENT(memlat_dev_update,
 	),
 
 	TP_fast_assign(
-		__assign_str(name, name);
+		__assign_str(name);
 		__entry->dev_id = dev_id;
 		__entry->inst = inst;
 		__entry->mem = mem;
@@ -178,7 +178,7 @@ TRACE_EVENT(bw_hwmon_meas,
 	),
 
 	TP_fast_assign(
-		__assign_str(name, name);
+		__assign_str(name);
 		__entry->mbps = mbps;
 		__entry->us = us;
 		__entry->wake = wake;
@@ -207,7 +207,7 @@ TRACE_EVENT(bw_hwmon_update,
 	),
 
 	TP_fast_assign(
-		__assign_str(name, name);
+		__assign_str(name);
 		__entry->mbps = mbps;
 		__entry->freq = freq;
 		__entry->up_thres = up_thres;
@@ -241,7 +241,7 @@ TRACE_EVENT(bw_hwmon_debug,
 	),
 
 	TP_fast_assign(
-		__assign_str(name, name);
+		__assign_str(name);
 		__entry->mbps = mbps;
 		__entry->zone = zone;
 		__entry->hist_max = hist_max;

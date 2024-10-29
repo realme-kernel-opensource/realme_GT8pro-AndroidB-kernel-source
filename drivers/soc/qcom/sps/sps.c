@@ -2867,7 +2867,7 @@ alloc_chrdev_region_err:
 	return ret;
 }
 
-static int msm_sps_remove(struct platform_device *pdev)
+static void msm_sps_remove(struct platform_device *pdev)
 {
 	SPS_DBG3(sps, "sps: Enter\n");
 
@@ -2881,7 +2881,6 @@ static int msm_sps_remove(struct platform_device *pdev)
 		clk_put(sps->pmem_clk);
 	clk_put(sps->bamdma_clk);
 
-	return 0;
 }
 
 static struct platform_driver msm_sps_driver = {

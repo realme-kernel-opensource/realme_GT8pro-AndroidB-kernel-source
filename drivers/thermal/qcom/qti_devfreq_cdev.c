@@ -169,7 +169,7 @@ static int devfreq_cdev_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int devfreq_cdev_remove(struct platform_device *pdev)
+static void devfreq_cdev_remove(struct platform_device *pdev)
 {
 	if (devfreq_cdev->cdev) {
 		thermal_cooling_device_unregister(devfreq_cdev->cdev);
@@ -177,8 +177,6 @@ static int devfreq_cdev_remove(struct platform_device *pdev)
 		kfree(devfreq_cdev->freq_table);
 		devfreq_cdev->cdev = NULL;
 	}
-
-	return 0;
 }
 
 static const struct of_device_id devfreq_cdev_match[] = {

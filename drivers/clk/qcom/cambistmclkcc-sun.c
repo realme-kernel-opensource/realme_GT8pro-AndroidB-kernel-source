@@ -543,7 +543,7 @@ static int cam_bist_mclk_cc_sun_probe(struct platform_device *pdev)
 	 */
 	regmap_update_bits(regmap, 0x40f8, BIT(0), BIT(0));
 
-	ret = qcom_cc_really_probe(pdev, &cam_bist_mclk_cc_sun_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &cam_bist_mclk_cc_sun_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register CAM BIST MCLK CC clocks\n");
 		return ret;

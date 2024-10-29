@@ -957,7 +957,7 @@ static void bcl_configure_bcl_peripheral(struct bcl_device *bcl_perph)
 	bcl_write_register(bcl_perph, BCL_MONITOR_EN, BIT(7));
 }
 
-static int bcl_remove(struct platform_device *pdev)
+static void bcl_remove(struct platform_device *pdev)
 {
 	int i = 0;
 	struct bcl_device *bcl_perph =
@@ -967,8 +967,6 @@ static int bcl_remove(struct platform_device *pdev)
 		if (!bcl_perph->param[i].tz_dev)
 			continue;
 	}
-
-	return 0;
 }
 
 static int bcl_probe(struct platform_device *pdev)

@@ -2603,7 +2603,7 @@ reg_error:
 	return rc;
 }
 
-static int battery_chg_remove(struct platform_device *pdev)
+static void battery_chg_remove(struct platform_device *pdev)
 {
 	struct battery_chg_dev *bcdev = platform_get_drvdata(pdev);
 
@@ -2623,8 +2623,6 @@ static int battery_chg_remove(struct platform_device *pdev)
 	cancel_work_sync(&bcdev->usb_type_work);
 	cancel_work_sync(&bcdev->battery_check_work);
 	unregister_reboot_notifier(&bcdev->reboot_notifier);
-
-	return 0;
 }
 
 static const struct of_device_id battery_chg_match_table[] = {

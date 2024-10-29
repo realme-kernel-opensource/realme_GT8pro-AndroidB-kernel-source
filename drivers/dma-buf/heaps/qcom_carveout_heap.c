@@ -226,8 +226,8 @@ static void carveout_heap_free(struct qcom_sg_buffer *buffer)
 
 static struct dma_buf *carveout_heap_allocate(struct dma_heap *heap,
 					      unsigned long len,
-					      unsigned long fd_flags,
-					      unsigned long heap_flags)
+					      u32 fd_flags,
+					      u64 heap_flags)
 {
 	struct carveout_heap *carveout_heap = dma_heap_get_drvdata(heap);
 
@@ -342,8 +342,8 @@ static void carveout_heap_destroy(struct carveout_heap *carveout_heap)
 
 static struct dma_buf *sc_heap_allocate(struct dma_heap *heap,
 					unsigned long len,
-					unsigned long fd_flags,
-					unsigned long heap_flags)
+					u32 fd_flags,
+					u64 heap_flags)
 {
 	struct secure_carveout_heap *sc_heap;
 

@@ -104,14 +104,12 @@ static int qcom_ramoops_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int qcom_ramoops_remove(struct platform_device *pdev)
+static void qcom_ramoops_remove(struct platform_device *pdev)
 {
 	struct platform_device *ramoops_pdev;
 
 	ramoops_pdev = platform_get_drvdata(pdev);
 	platform_device_unregister(ramoops_pdev);
-
-	return 0;
 }
 
 static const struct of_device_id qcom_ramoops_of_match[] = {

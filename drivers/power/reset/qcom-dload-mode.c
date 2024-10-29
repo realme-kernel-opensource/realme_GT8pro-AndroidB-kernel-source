@@ -360,7 +360,7 @@ static int qcom_dload_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int qcom_dload_remove(struct platform_device *pdev)
+static void qcom_dload_remove(struct platform_device *pdev)
 {
 	struct qcom_dload *poweroff = platform_get_drvdata(pdev);
 
@@ -372,8 +372,6 @@ static int qcom_dload_remove(struct platform_device *pdev)
 
 	if (poweroff->dload_dest_addr)
 		iounmap(poweroff->dload_dest_addr);
-
-	return 0;
 }
 
 static const struct platform_device_id qcom_dload_id_match[] = {

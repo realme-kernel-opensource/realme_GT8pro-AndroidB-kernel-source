@@ -588,14 +588,13 @@ static int qtee_shmbridge_probe(struct platform_device *pdev)
 	return qtee_shmbridge_init(pdev);
 }
 
-static int qtee_shmbridge_remove(struct platform_device *pdev)
+static void qtee_shmbridge_remove(struct platform_device *pdev)
 {
 	qtee_shmbridge_deregister(default_bridge.handle);
 	gen_pool_destroy(default_bridge.genpool);
 	dma_unmap_single(&pdev->dev, default_bridge.paddr, default_bridge.size,
 			DMA_TO_DEVICE);
 	free_pages((long)default_bridge.vaddr, get_order(default_bridge.size));
-	return 0;
 }
 
 static const struct of_device_id qtee_shmbridge_of_match[] = {

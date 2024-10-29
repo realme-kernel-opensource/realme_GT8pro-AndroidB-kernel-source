@@ -297,13 +297,11 @@ err_mbox:
 	return ret;
 }
 
-static int qcom_cpucp_remove(struct platform_device *pdev)
+static void qcom_cpucp_remove(struct platform_device *pdev)
 {
 	struct qcom_cpucp_ipc *cpucp_ipc = platform_get_drvdata(pdev);
 
 	mbox_controller_unregister(&cpucp_ipc->mbox);
-
-	return 0;
 }
 
 static const struct qcom_cpucp_mbox_desc cpucp_mbox_desc = {

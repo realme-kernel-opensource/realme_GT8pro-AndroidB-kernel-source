@@ -455,7 +455,7 @@ static int gh_tlmm_vm_mem_access_probe(struct platform_device *pdev)
 
 }
 
-static int gh_tlmm_vm_mem_access_remove(struct platform_device *pdev)
+static void gh_tlmm_vm_mem_access_remove(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
 	bool master;
@@ -467,8 +467,6 @@ static int gh_tlmm_vm_mem_access_remove(struct platform_device *pdev)
 	if (master)
 		gh_mem_notifier_unregister(tlmm_data->mem_cookie);
 	gh_rm_unregister_notifier(&tlmm_data->guest_memshare_nb);
-
-	return 0;
 }
 
 static const struct of_device_id gh_tlmm_vm_mem_access_of_match[] = {

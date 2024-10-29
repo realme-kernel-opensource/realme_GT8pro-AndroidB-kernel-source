@@ -2221,7 +2221,7 @@ static int disp_cc_sun_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0xc00c, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0xc008, BIT(0), BIT(0));
 
-	ret = qcom_cc_really_probe(pdev, &disp_cc_sun_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &disp_cc_sun_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register DISP CC clocks\n");
 		return ret;

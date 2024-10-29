@@ -508,7 +508,7 @@ static int video_cc_sun_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x80f8, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x80d4, BIT(0), BIT(0));
 
-	ret = qcom_cc_really_probe(pdev, &video_cc_sun_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &video_cc_sun_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register VIDEO CC clocks\n");
 		return ret;

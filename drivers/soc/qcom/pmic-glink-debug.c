@@ -478,7 +478,7 @@ static int pmic_glink_debug_add_spmi_bus(struct pmic_glink_debug_dev *gd,
 	return 0;
 }
 
-static int pmic_glink_debug_remove(struct platform_device *pdev)
+static void pmic_glink_debug_remove(struct platform_device *pdev)
 {
 	struct pmic_glink_debug_dev *gd = platform_get_drvdata(pdev);
 	int i;
@@ -496,8 +496,6 @@ static int pmic_glink_debug_remove(struct platform_device *pdev)
 	}
 
 	pmic_glink_unregister_client(gd->client);
-
-	return 0;
 }
 
 static int pmic_glink_debug_probe(struct platform_device *pdev)

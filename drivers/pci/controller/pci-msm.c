@@ -3899,7 +3899,7 @@ static void __maybe_unused
 }
 
 /* Read the curr perf ol value from the cesta register */
-static const char *const msm_pcie_cesta_curr_perf_ol(struct msm_pcie_dev_t *dev)
+static const char * msm_pcie_cesta_curr_perf_ol(struct msm_pcie_dev_t *dev)
 {
 	u32 ret;
 	int res;
@@ -8668,7 +8668,7 @@ out:
 	return ret;
 }
 
-static int msm_pcie_remove(struct platform_device *pdev)
+static void msm_pcie_remove(struct platform_device *pdev)
 {
 	int ret = 0;
 	int rc_idx;
@@ -8724,8 +8724,6 @@ static int msm_pcie_remove(struct platform_device *pdev)
 	msm_pcie_destroy_ipc_logs(rc_idx);
 out:
 	mutex_unlock(&pcie_drv.drv_lock);
-
-	return ret;
 }
 
 static int msm_pcie_link_retrain(struct msm_pcie_dev_t *pcie_dev,

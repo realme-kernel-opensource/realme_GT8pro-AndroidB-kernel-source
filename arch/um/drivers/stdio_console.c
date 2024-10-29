@@ -42,7 +42,7 @@ static struct chan_opts opts = {
 
 static int con_config(char *str, char **error_out);
 static int con_get_config(char *dev, char *str, int size, char **error_out);
-static int con_remove(int n, char **con_remove);
+static void con_remove(int n, char **con_remove);
 
 
 /* Const, except for .mc.list */
@@ -82,9 +82,9 @@ static int con_get_config(char *dev, char *str, int size, char **error_out)
 	return line_get_config(dev, vts, ARRAY_SIZE(vts), str, size, error_out);
 }
 
-static int con_remove(int n, char **error_out)
+static void con_remove(int n, char **error_out)
 {
-	return line_remove(vts, ARRAY_SIZE(vts), n, error_out);
+	line_remove(vts, ARRAY_SIZE(vts), n, error_out);
 }
 
 /* Set in an initcall, checked in an exitcall */

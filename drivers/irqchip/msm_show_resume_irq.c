@@ -91,13 +91,12 @@ static int msm_show_resume_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int msm_show_resume_remove(struct platform_device *pdev)
+static void  msm_show_resume_remove(struct platform_device *pdev)
 {
 	unregister_trace_android_vh_cpuidle_psci_enter(gic_s2idle_enter, NULL);
 	unregister_trace_android_vh_cpuidle_psci_exit(gic_s2idle_exit, NULL);
 	unregister_syscore_ops(&gic_syscore_ops);
 	iounmap(base);
-	return 0;
 }
 
 static const struct of_device_id msm_show_resume_match_table[] = {

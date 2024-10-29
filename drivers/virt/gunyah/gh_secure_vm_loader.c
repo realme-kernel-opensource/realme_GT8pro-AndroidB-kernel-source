@@ -683,7 +683,7 @@ err_unmap_fw:
 	return ret;
 }
 
-static int gh_secure_vm_loader_remove(struct platform_device *pdev)
+static void gh_secure_vm_loader_remove(struct platform_device *pdev)
 {
 	struct gh_sec_vm_dev *sec_vm_dev;
 
@@ -698,7 +698,7 @@ static int gh_secure_vm_loader_remove(struct platform_device *pdev)
 	else
 		of_reserved_mem_device_release(&pdev->dev);
 
-	return gh_virtio_backend_remove(sec_vm_dev->vm_name);
+	gh_virtio_backend_remove(sec_vm_dev->vm_name);
 }
 
 static const struct of_device_id gh_secure_vm_loader_match_table[] = {

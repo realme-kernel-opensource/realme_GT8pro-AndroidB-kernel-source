@@ -863,7 +863,7 @@ error:
 	return ret;
 }
 
-static int msm_eud_remove(struct platform_device *pdev)
+static void msm_eud_remove(struct platform_device *pdev)
 {
 	struct eud_chip *chip = platform_get_drvdata(pdev);
 	struct uart_port *port = &chip->port;
@@ -875,8 +875,6 @@ static int msm_eud_remove(struct platform_device *pdev)
 	device_init_wakeup(chip->dev, false);
 	if (chip->need_phy_clk_vote)
 		clk_disable_unprepare(chip->eud_ahb2phy_clk);
-
-	return 0;
 }
 
 static const struct of_device_id msm_eud_dt_match[] = {

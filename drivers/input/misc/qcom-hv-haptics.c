@@ -5990,7 +5990,7 @@ destroy_ff:
 	return rc;
 }
 
-static int haptics_remove(struct platform_device *pdev)
+static void haptics_remove(struct platform_device *pdev)
 {
 	struct haptics_chip *chip = dev_get_drvdata(&pdev->dev);
 
@@ -6003,8 +6003,6 @@ static int haptics_remove(struct platform_device *pdev)
 	haptics_remove_debugfs(chip);
 	input_unregister_device(chip->input_dev);
 	dev_set_drvdata(chip->dev, NULL);
-
-	return 0;
 }
 
 static void haptics_ds_suspend_config(struct device *dev)

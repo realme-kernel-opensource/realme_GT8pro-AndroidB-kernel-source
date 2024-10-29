@@ -3995,7 +3995,7 @@ static int geni_i3c_wait_for_hotjoin(struct geni_i3c_dev *gi3c)
 	return 0;
 }
 
-static int geni_i3c_remove(struct platform_device *pdev)
+static void geni_i3c_remove(struct platform_device *pdev)
 {
 	struct geni_i3c_dev *gi3c = platform_get_drvdata(pdev);
 	int ret = 0, i;
@@ -4026,8 +4026,6 @@ static int geni_i3c_remove(struct platform_device *pdev)
 	for (i = 0; i < i3c_nos; i++)
 		i3c_geni_dev[i] = NULL;
 	i3c_nos = 0;
-
-	return 0;
 }
 
 static int geni_i3c_resume_early(struct device *dev)

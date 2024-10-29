@@ -1641,14 +1641,12 @@ free_domain:
 	return ret;
 }
 
-static int uaudio_qmi_plat_remove(struct platform_device *pdev)
+static void uaudio_qmi_plat_remove(struct platform_device *pdev)
 {
 	snd_usb_unregister_platform_ops();
 	iommu_detach_device(uaudio_qdev->domain, &pdev->dev);
 	iommu_domain_free(uaudio_qdev->domain);
 	uaudio_qdev->domain = NULL;
-
-	return 0;
 }
 
 static const struct of_device_id of_uaudio_matach[] = {

@@ -23,7 +23,7 @@ TRACE_EVENT(cpucp_log,
 	),
 
 	TP_fast_assign(
-		__assign_str(str, str);
+		__assign_str(str);
 	),
 
 	TP_printk("%s\n", __get_str(str))

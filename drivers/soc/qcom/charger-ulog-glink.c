@@ -432,7 +432,7 @@ static int chg_ulog_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int chg_ulog_remove(struct platform_device *pdev)
+static void chg_ulog_remove(struct platform_device *pdev)
 {
 	struct chg_ulog_glink_dev *cd = platform_get_drvdata(pdev);
 	int rc;
@@ -446,8 +446,6 @@ static int chg_ulog_remove(struct platform_device *pdev)
 
 	ipc_log_context_destroy(cd->ipc_log);
 	ipc_log_context_destroy(cd->ipc_init_log);
-
-	return 0;
 }
 
 static const struct of_device_id chg_ulog_match_table[] = {

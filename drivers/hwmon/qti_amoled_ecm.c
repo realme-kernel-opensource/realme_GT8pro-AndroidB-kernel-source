@@ -1057,11 +1057,11 @@ static int qti_amoled_ecm_probe(struct platform_device *pdev)
 	return qti_amoled_register_panel_notifier(ecm);
 }
 
-static int qti_amoled_ecm_remove(struct platform_device *pdev)
+static void qti_amoled_ecm_remove(struct platform_device *pdev)
 {
 	struct amoled_ecm *ecm = dev_get_drvdata(&pdev->dev);
 
-	return qti_amoled_unregister_panel_notifier(ecm);
+	qti_amoled_unregister_panel_notifier(ecm);
 }
 
 static const struct of_device_id amoled_ecm_match_table[] = {

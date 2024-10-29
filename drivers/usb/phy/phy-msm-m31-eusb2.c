@@ -909,7 +909,7 @@ err_ret:
 	return ret;
 }
 
-static int msm_m31_eusb2_phy_remove(struct platform_device *pdev)
+static void msm_m31_eusb2_phy_remove(struct platform_device *pdev)
 {
 	struct m31_eusb2_phy *phy = platform_get_drvdata(pdev);
 
@@ -923,7 +923,6 @@ static int msm_m31_eusb2_phy_remove(struct platform_device *pdev)
 		clk_disable_unprepare(phy->ref_clk);
 	msm_m31_eusb2_phy_clocks(phy, false);
 	msm_m31_eusb2_phy_power(phy, false);
-	return 0;
 }
 
 static const struct of_device_id msm_usb_id_table[] = {

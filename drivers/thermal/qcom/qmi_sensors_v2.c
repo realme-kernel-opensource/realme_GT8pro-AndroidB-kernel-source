@@ -626,12 +626,10 @@ probe_err:
 	return ret;
 }
 
-static int qmi_sens_device_remove(struct platform_device *pdev)
+static void qmi_sens_device_remove(struct platform_device *pdev)
 {
 	qmi_ts_cleanup();
 	unregister_pm_notifier(&qmi_sensor_pm_nb);
-
-	return 0;
 }
 
 static const struct of_device_id qmi_sens_device_match[] = {

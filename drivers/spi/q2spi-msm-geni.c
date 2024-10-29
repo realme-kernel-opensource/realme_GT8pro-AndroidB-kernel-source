@@ -4512,14 +4512,14 @@ q2spi_err:
 	return ret;
 }
 
-static int q2spi_geni_remove(struct platform_device *pdev)
+static void q2spi_geni_remove(struct platform_device *pdev)
 {
 	struct q2spi_geni *q2spi = platform_get_drvdata(pdev);
 
 	pr_info("%s q2spi=0x%p\n", __func__, q2spi);
 
 	if (!q2spi || !q2spi->base)
-		return 0;
+		return;
 
 	unregister_reboot_notifier(&q2spi->restart_handler);
 	device_remove_file(&pdev->dev, &dev_attr_max_dump_size);
@@ -4546,7 +4546,6 @@ static int q2spi_geni_remove(struct platform_device *pdev)
 
 	if (q2spi->ipc)
 		ipc_log_context_destroy(q2spi->ipc);
-	return 0;
 }
 
 /**

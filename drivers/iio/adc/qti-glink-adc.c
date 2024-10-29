@@ -332,13 +332,11 @@ fail:
 	return ret;
 }
 
-static int glink_adc_remove(struct platform_device *pdev)
+static void glink_adc_remove(struct platform_device *pdev)
 {
 	struct glink_adc_dev *adc = platform_get_drvdata(pdev);
 
 	pmic_glink_unregister_client(adc->client);
-
-	return 0;
 }
 
 static const struct of_device_id glink_adc_match_table[] = {

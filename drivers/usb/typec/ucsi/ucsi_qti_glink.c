@@ -702,7 +702,7 @@ static int ucsi_probe(struct platform_device *pdev)
 	return rc;
 }
 
-static int ucsi_remove(struct platform_device *pdev)
+static void ucsi_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct ucsi_dev *udev = dev_get_drvdata(dev);
@@ -724,8 +724,6 @@ static int ucsi_remove(struct platform_device *pdev)
 
 	ipc_log_context_destroy(ucsi_ipc_log);
 	ucsi_ipc_log = NULL;
-
-	return rc;
 }
 
 static const struct of_device_id ucsi_match_table[] = {

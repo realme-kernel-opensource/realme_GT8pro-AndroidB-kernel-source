@@ -830,7 +830,7 @@ free_rproc:
 	return ret;
 }
 
-static int qcom_spss_remove(struct platform_device *pdev)
+static void qcom_spss_remove(struct platform_device *pdev)
 {
 	struct qcom_spss *spss = platform_get_drvdata(pdev);
 
@@ -840,8 +840,6 @@ static int qcom_spss_remove(struct platform_device *pdev)
 	qcom_remove_sysmon_subdev(spss->sysmon_subdev);
 	device_init_wakeup(spss->dev, false);
 	rproc_free(spss->rproc);
-
-	return 0;
 }
 
 static const struct spss_data spss_resource_init = {

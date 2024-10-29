@@ -726,13 +726,11 @@ static int pmic_pon_log_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int pmic_pon_log_remove(struct platform_device *pdev)
+static void pmic_pon_log_remove(struct platform_device *pdev)
 {
 	struct pmic_pon_log_dev *pon_dev = platform_get_drvdata(pdev);
 
 	ipc_log_context_destroy(pon_dev->ipc_log);
-
-	return 0;
 }
 
 static const struct of_device_id pmic_pon_log_of_match[] = {

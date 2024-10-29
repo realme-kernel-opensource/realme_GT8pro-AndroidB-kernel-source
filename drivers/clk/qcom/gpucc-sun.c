@@ -538,7 +538,7 @@ static int gpu_cc_sun_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x9004, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x90cc, BIT(0), BIT(0));
 
-	ret = qcom_cc_really_probe(pdev, &gpu_cc_sun_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &gpu_cc_sun_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register GPU CC clocks\n");
 		return ret;
@@ -587,7 +587,7 @@ static int gx_clkctl_sun_probe(struct platform_device *pdev)
 		return PTR_ERR(regmap);
 	}
 
-	ret = qcom_cc_really_probe(pdev, &gx_clkctl_sun_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &gx_clkctl_sun_desc, regmap);
 
 	pm_runtime_put(&pdev->dev);
 
