@@ -426,7 +426,7 @@ static struct gdsc gpu_cc_cx_gdsc = {
 	.gds_hw_ctrl = 0x9094,
 	.en_rest_wait_val = 0x2,
 	.en_few_wait_val = 0x2,
-	.clk_dis_wait_val = 0xf,
+	.clk_dis_wait_val = 0x8,
 	.pd = {
 		.name = "gpu_cc_cx_gdsc",
 	},
