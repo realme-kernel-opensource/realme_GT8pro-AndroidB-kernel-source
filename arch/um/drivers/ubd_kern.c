@@ -989,7 +989,7 @@ static int ubd_id(char **str, int *start_out, int *end_out)
 	return n;
 }
 
-static void ubd_remove(int n, char **error_out)
+static int ubd_remove(int n, char **error_out)
 {
 	struct ubd *ubd_dev;
 	int err = -ENODEV;
@@ -1016,6 +1016,7 @@ static void ubd_remove(int n, char **error_out)
 	platform_device_unregister(&ubd_dev->pdev);
 out:
 	mutex_unlock(&ubd_lock);
+	return err;
 }
 
 /* All these are called by mconsole in process context and without
