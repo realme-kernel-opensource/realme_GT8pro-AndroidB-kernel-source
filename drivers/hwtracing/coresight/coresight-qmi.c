@@ -399,13 +399,12 @@ err:
 	return ret;
 }
 
-static int coresight_qmi_remove(struct platform_device *pdev)
+static void coresight_qmi_remove(struct platform_device *pdev)
 {
 	struct qmi_drvdata *drvdata = platform_get_drvdata(pdev);
 
 	qmi_handle_release(&drvdata->handle);
 	coresight_unregister(drvdata->csdev);
-	return 0;
 }
 
 static const struct of_device_id coresight_qmi_match[] = {

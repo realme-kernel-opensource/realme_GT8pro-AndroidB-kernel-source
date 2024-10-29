@@ -1634,7 +1634,7 @@ static int static_tpdm_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int static_tpdm_remove(struct platform_device *pdev)
+static void static_tpdm_remove(struct platform_device *pdev)
 {
 	struct tpdm_drvdata *drvdata = platform_get_drvdata(pdev);
 	struct device *dev = &pdev->dev;
@@ -1642,7 +1642,6 @@ static int static_tpdm_remove(struct platform_device *pdev)
 	pm_runtime_disable(dev);
 
 	coresight_unregister(drvdata->csdev);
-	return 0;
 }
 
 static const struct of_device_id static_tpdm_match[] = {

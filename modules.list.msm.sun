@@ -26,10 +26,12 @@ qcom_tsens.ko
 qcom_dma_heaps.ko
 qcom_iommu_util.ko
 qcom-reboot-reason.ko
+qcom_tzmem.ko
 qcom-scm.ko
 clk-dummy.ko
 cmd-db.ko
 qcom_rpmh.ko
+icc-clk.ko
 clk-qcom.ko
 qcom_cpu_vendor_hooks.ko
 sched-walt.ko

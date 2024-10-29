@@ -708,7 +708,7 @@ static int __init funnel_init(void)
 	if (ret)
 		return ret;
 
-	ret = platform_driver_register(&static_funnel_driver);
+	ret = platform_driver_register(&funnel_driver);
 	if (ret) {
 		pr_info("Error registering platform driver\n");
 		goto pm_clear;
@@ -717,7 +717,7 @@ static int __init funnel_init(void)
 	ret = amba_driver_register(&dynamic_funnel_driver);
 	if (ret) {
 		pr_info("Error registering amba driver\n");
-		platform_driver_unregister(&static_funnel_driver);
+		platform_driver_unregister(&funnel_driver);
 		goto pm_clear;
 	}
 	return ret;
@@ -728,7 +728,7 @@ pm_clear:
 
 static void __exit funnel_exit(void)
 {
-	platform_driver_unregister(&static_funnel_driver);
+	platform_driver_unregister(&funnel_driver);
 	amba_driver_unregister(&dynamic_funnel_driver);
 	funnel_pm_clear();
 }

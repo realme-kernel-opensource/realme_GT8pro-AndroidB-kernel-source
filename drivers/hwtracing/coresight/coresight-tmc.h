@@ -300,7 +300,7 @@ int tmc_wait_for_tmcready(struct tmc_drvdata *drvdata);
 void tmc_flush_and_stop(struct tmc_drvdata *drvdata);
 void tmc_disable_stop_on_flush(struct tmc_drvdata *drvdata);
 void tmc_enable_hw(struct tmc_drvdata *drvdata);
-extern int tmc_etr_usb_init(struct amba_device *adev,
+extern int tmc_etr_usb_init(struct device *dev,
 		struct tmc_drvdata *drvdata);
 void tmc_disable_hw(struct tmc_drvdata *drvdata);
 u32 tmc_get_memwidth_mask(struct tmc_drvdata *drvdata);
@@ -319,8 +319,8 @@ ssize_t tmc_etr_buf_get_data(struct etr_buf *etr_buf,
 int tmc_read_prepare_etr(struct tmc_drvdata *drvdata);
 int tmc_read_unprepare_etr(struct tmc_drvdata *drvdata);
 void tmc_etr_disable_hw(struct tmc_drvdata *drvdata);
-struct byte_cntr *byte_cntr_init(struct amba_device *adev,
-					struct tmc_drvdata *drvdata);
+struct byte_cntr *byte_cntr_init(struct device *dev,
+				 struct tmc_drvdata *drvdata);
 void byte_cntr_remove(struct byte_cntr *byte_cntr);
 extern const struct coresight_ops tmc_etr_cs_ops;
 extern const struct csr_set_atid_op csr_atid_ops;

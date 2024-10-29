@@ -923,7 +923,7 @@ static int __stm_probe(struct device *dev, struct resource *res)
 		goto stm_unregister;
 	}
 
-	if (!of_property_read_u32(adev->dev.of_node, "atid", &trace_id))
+	if (!of_property_read_u32(dev->of_node, "atid", &trace_id))
 		drvdata->static_atid = true;
 	else {
 		trace_id = coresight_trace_id_get_system_id();

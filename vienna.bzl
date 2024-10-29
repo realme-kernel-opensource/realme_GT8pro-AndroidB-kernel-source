@@ -11,6 +11,8 @@ def define_vienna():
         "drivers/clk/qcom/gdsc-regulator.ko",
         "drivers/dma-buf/heaps/qcom_dma_heaps.ko",
         "drivers/firmware/qcom/qcom-scm.ko",
+        "drivers/firmware/qcom/qcom_tzmem.ko",
+        "drivers/interconnect/icc-clk.ko",
         "drivers/iommu/arm/arm-smmu/arm_smmu.ko",
         "drivers/iommu/iommu-logger.ko",
         "drivers/iommu/msm_dma_iommu_mapping.ko",
@@ -34,7 +36,6 @@ def define_vienna():
         "kernel/rcu/rcutorture.ko",
         "kernel/torture.ko",
         "lib/atomic64_test.ko",
-        "lib/test_user_copy.ko",
     ]
 
     for variant in la_variants:

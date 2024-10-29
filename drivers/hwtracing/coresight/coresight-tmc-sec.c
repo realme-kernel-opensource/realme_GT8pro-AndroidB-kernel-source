@@ -674,14 +674,13 @@ static int secure_etr_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int secure_etr_remove(struct platform_device *pdev)
+static void secure_etr_remove(struct platform_device *pdev)
 {
 	struct secure_etr_drvdata *drvdata = platform_get_drvdata(pdev);
 
 	pm_runtime_disable(&pdev->dev);
 	sec_etr_sram_dev_deregister(drvdata);
 	coresight_unregister(drvdata->csdev);
-	return 0;
 }
 
 static const struct of_device_id secure_etr_match[] = {

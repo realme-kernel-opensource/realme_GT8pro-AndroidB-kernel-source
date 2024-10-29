@@ -1028,7 +1028,7 @@ static int csr_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int csr_remove(struct platform_device *pdev)
+static void csr_remove(struct platform_device *pdev)
 {
 	struct csr_drvdata *drvdata = platform_get_drvdata(pdev);
 
@@ -1037,7 +1037,6 @@ static int csr_remove(struct platform_device *pdev)
 	spin_unlock(&csr_spinlock);
 
 	coresight_unregister(drvdata->csdev);
-	return 0;
 }
 
 static const struct of_device_id csr_match[] = {

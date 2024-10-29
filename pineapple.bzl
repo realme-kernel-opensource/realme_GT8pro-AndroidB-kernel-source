@@ -179,7 +179,6 @@ def define_pineapple():
         "kernel/rcu/rcutorture.ko",
         "kernel/torture.ko",
         "lib/atomic64_test.ko",
-        "lib/test_user_copy.ko",
     ]
 
     kernel_vendor_cmdline_extras = ["bootconfig"]

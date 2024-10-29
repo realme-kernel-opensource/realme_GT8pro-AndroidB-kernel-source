@@ -463,10 +463,9 @@ void tmc_usb_disable(struct tmc_usb_data *usb_data)
 		dev_err(&tmcdrvdata->csdev->dev, "usb channel is null.\n");
 }
 
-int tmc_etr_usb_init(struct amba_device *adev,
+int tmc_etr_usb_init(struct device *dev,
 		     struct tmc_drvdata *drvdata)
 {
-	struct device *dev = &adev->dev;
 	struct tmc_usb_data *usb_data;
 	struct byte_cntr *byte_cntr_data;
 	int ret;
