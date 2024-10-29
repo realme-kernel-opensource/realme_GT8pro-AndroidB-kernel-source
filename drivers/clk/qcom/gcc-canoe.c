@@ -4131,7 +4131,7 @@ static int gcc_canoe_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, gcc_ufs_phy_ice_core_clk.halt_reg,
 			   BIT(14), BIT(14));
 
-	ret = qcom_cc_really_probe(pdev, &gcc_canoe_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &gcc_canoe_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register GCC clocks\n");
 		return ret;

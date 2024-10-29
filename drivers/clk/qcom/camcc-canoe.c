@@ -2940,7 +2940,7 @@ static int cam_cc_canoe_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x21364, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x21368, BIT(0), BIT(0));
 
-	ret = qcom_cc_really_probe(pdev, &cam_cc_canoe_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &cam_cc_canoe_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register CAM CC clocks ret=%d\n", ret);
 		return ret;
