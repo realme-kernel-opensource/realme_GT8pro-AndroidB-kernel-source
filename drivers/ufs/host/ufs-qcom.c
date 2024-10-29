@@ -2355,10 +2355,9 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 
 	if (of_device_is_compatible(hba->dev->of_node, "qcom,sm8550-ufshc"))
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_LSDBS_CAP;
-}
 
 #if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO_QTI)
-	hba->android_quirks |= UFSHCD_ANDROID_QUIRK_CUSTOM_CRYPTO_PROFILE;
+	hba->quirks |= UFSHCD_QUIRK_CUSTOM_CRYPTO_PROFILE;
 #endif
 }
 
@@ -2434,7 +2433,7 @@ static void ufs_qcom_wait_for_cq_hp_update(struct ufs_hba *hba)
 	 * Loop and Sleep until the CQ Head update is done.
 	 * See ufs_qcom_esi_handler().
 	 */
-	if (is_mcq_enabled(hba)) {
+	if (hba->mcq_enabled) {
 		while (atomic_read(&host->cqhp_update_pending))
 			/* Wait for 10 - 20 msec */
 			usleep_range(10 * 1000, 20 * 1000);
@@ -4556,7 +4555,7 @@ static void ufs_qcom_dump_dbg_regs(struct ufs_hba *hba)
 	ufshcd_dump_regs(hba, UFS_MEM_ICE, 29 * 4,
 			 "HCI Shared ICE Registers ");
 
-	if (is_mcq_enabled(hba))
+	if (hba->mcq_enabled)
 		ufs_qcom_dump_mcq_dbg_regs(hba);
 
 	/* sleep a bit intermittently as we are dumping too much data */
@@ -4565,7 +4564,7 @@ static void ufs_qcom_dump_dbg_regs(struct ufs_hba *hba)
 	if (in_task()) {
 		usleep_range(1000, 1100);
 
-		if (is_mcq_enabled(hba)) {
+		if (hba->mcq_enabled) {
 			ufs_qcom_dump_mcq_hci_regs(hba);
 			usleep_range(1000, 1100);
 		}
@@ -5356,7 +5355,7 @@ static void ufs_qcom_hook_send_command(void *param, struct ufs_hba *hba,
 
 		ufs_qcom_qos(hba, lrbp->task_tag);
 
-		if (!is_mcq_enabled(hba)) {
+		if (!hba->mcq_enabled) {
 			ufs_qcom_log_str(host, "<,%x,%d,%x,%d\n",
 							lrbp->cmd->cmnd[0],
 							lrbp->task_tag,
@@ -5415,7 +5414,7 @@ static void ufs_qcom_hook_compl_command(void *param, struct ufs_hba *hba,
 		struct request *rq = scsi_cmd_to_rq(lrbp->cmd);
 		int sz = rq ? blk_rq_sectors(rq) : 0;
 
-		if (!is_mcq_enabled(hba)) {
+		if (!hba->mcq_enabled) {
 			ufs_qcom_log_str(host, ">,%x,%d,%x,%d\n",
 							lrbp->cmd->cmnd[0],
 							lrbp->task_tag,

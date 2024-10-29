@@ -25,6 +25,7 @@
 #include <linux/gunyah/gh_common.h>
 #include <linux/gunyah/gh_rm_drv.h>
 #include <linux/gunyah.h>
+#include <linux/vmalloc.h>
 
 #include "rsc_mgr.h"
 #include "gh_guest_pops.h"

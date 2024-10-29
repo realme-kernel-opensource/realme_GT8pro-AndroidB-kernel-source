@@ -102,6 +102,7 @@ enum qcom_socinfo_feature_code {
 	SOCINFO_FC_AF,
 	SOCINFO_FC_AG,
 	SOCINFO_FC_AH,
+	SOCINFO_FC_EXT_RESERVE,
 };
 
 /* Internal feature codes */

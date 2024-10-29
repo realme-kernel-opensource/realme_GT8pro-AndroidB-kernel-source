@@ -111,7 +111,7 @@ static struct configfs_attribute *ost_t_policy_attrs[] = {
 
 static ssize_t notrace __nocfi ost_write(struct stm_data *data,
 		struct stm_output *output, unsigned int chan,
-		const char *buf, size_t count)
+		const char *buf, size_t count, struct stm_source_data * stm_source_data)
 {
 	unsigned int c = output->channel + chan;
 	unsigned int m = output->master;

@@ -2510,11 +2510,6 @@ static void arm_smmu_release_device(struct device *dev)
 	struct arm_smmu_master_cfg *cfg = dev_iommu_priv_get(dev);
 	int ret;
 
-	if (!fwspec || fwspec->ops != &arm_smmu_ops.iommu_ops)
-		return;
-
-	cfg  = dev_iommu_priv_get(dev);
-
 	ret = arm_smmu_rpm_get(cfg->smmu);
 
 	if (ret < 0)

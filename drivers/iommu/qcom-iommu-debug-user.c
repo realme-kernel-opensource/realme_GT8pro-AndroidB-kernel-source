@@ -730,7 +730,7 @@ out:
 	return ret;
 }
 
-static const char * const _size_to_string(unsigned long size)
+static const char *  _size_to_string(unsigned long size)
 {
 	switch (size) {
 	case SZ_4K:
