@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /*
@@ -309,6 +309,7 @@ struct adspsleepmon {
 	struct dentry *debugfs_read_adsp_panic_state;
 	phandle adsp_rproc_phandle;
 	struct rproc *adsp_rproc;
+	struct mutex rpmsg_dev_lock;
 };
 
 static struct adspsleepmon g_adspsleepmon;
@@ -321,6 +322,7 @@ static int sleepmon_get_dsppm_client_stats(void)
 	int result = -EINVAL;
 	struct sleepmon_tx_msg_t rpmsg;
 
+	mutex_lock(&g_adspsleepmon.rpmsg_dev_lock);
 	if (g_adspsleepmon.rpmsgdev && g_adspsleepmon.adsp_version > 0) {
 		rpmsg.adsp_ver_info = SLEEPMON_ADSP_GLINK_VERSION;
 		rpmsg.feature_id = SLEEPMON_DSPPM_FEATURE_INFO;
@@ -332,6 +334,7 @@ static int sleepmon_get_dsppm_client_stats(void)
 		if (result)
 			pr_err("DSPPM client signal send failed :%u\n", result);
 	}
+	mutex_unlock(&g_adspsleepmon.rpmsg_dev_lock);
 
 	return result;
 
@@ -342,6 +345,7 @@ static int sleepmon_send_ssr_command(void)
 	int result = -EINVAL;
 	struct sleepmon_tx_msg_t rpmsg;
 
+	mutex_lock(&g_adspsleepmon.rpmsg_dev_lock);
 	if (g_adspsleepmon.rpmsgdev && g_adspsleepmon.adsp_version > 1) {
 
 		if (g_adspsleepmon.b_config_adsp_ssr_enable) {
@@ -375,6 +379,7 @@ static int sleepmon_send_ssr_command(void)
 	} else {
 		pr_err("ADSP version doesn't support panic\n");
 	}
+	mutex_unlock(&g_adspsleepmon.rpmsg_dev_lock);
 
 	return result;
 }
@@ -384,6 +389,7 @@ static int sleepmon_send_lpi_issue_command(void)
 	int result = -EINVAL;
 	struct sleepmon_tx_msg_t rpmsg;
 
+	mutex_lock(&g_adspsleepmon.rpmsg_dev_lock);
 	if (g_adspsleepmon.rpmsgdev && g_adspsleepmon.adsp_version > 1) {
 		rpmsg.adsp_ver_info = SLEEPMON_ADSP_GLINK_VERSION;
 		rpmsg.feature_id = SLEEPMON_LPI_ISSUE_FEATURE_INFO;
@@ -406,6 +412,7 @@ static int sleepmon_send_lpi_issue_command(void)
 	} else {
 		pr_err("Send LPI issue command failed, ADSP version unsupported\n");
 	}
+	mutex_unlock(&g_adspsleepmon.rpmsg_dev_lock);
 
 	return result;
 }
@@ -1695,8 +1702,10 @@ static int sleepmon_rpmsg_probe(struct rpmsg_device *dev)
 
 static void sleepmon_rpmsg_remove(struct rpmsg_device *dev)
 {
+	mutex_lock(&g_adspsleepmon.rpmsg_dev_lock);
 	g_adspsleepmon.rpmsgdev = NULL;
 	g_adspsleepmon.adsp_version = 0;
+	mutex_unlock(&g_adspsleepmon.rpmsg_dev_lock);
 }
 
 static struct rpmsg_driver sleepmon_rpmsg_client = {
@@ -1717,6 +1726,7 @@ static int adspsleepmon_driver_probe(struct platform_device *pdev)
 	struct adspsleepmon *me = &g_adspsleepmon;
 
 	mutex_init(&g_adspsleepmon.lock);
+	mutex_init(&g_adspsleepmon.rpmsg_dev_lock);
 	/*
 	 * Initialize dtsi config
 	 */
