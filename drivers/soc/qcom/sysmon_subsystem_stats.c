@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -45,6 +45,56 @@ struct sysmon_smem_power_stats_extended {
 	/**< Powerstats updated timestamp (Most significant 32 bits) */
 };
 
+struct sysmon_smem_q6_event_stats_local {
+	u32 QDSP6_clk;
+	/**< Q6 core clock in KHz */
+
+	u32 Ab_vote_lsb;
+	/**< Lower 32bits of the average bandwidth vote in bytes */
+
+	u32 Ab_vote_msb;
+	/**< Upper 32bits of the average bandwidth vote in bytes */
+
+	u32 Ib_vote_lsb;
+	/**< Lower 32bits of instantaneous bandwidth vote in bytes */
+
+	u32 Ib_vote_msb;
+	/**< Upper 32bits of instantaneous bandwidth vote in bytes */
+
+	u32 Sleep_latency;
+	/**< Sleep latency vote in micro-seconds */
+
+};
+
+struct sysmon_smem_q6_event_stats_ext {
+
+	int HMX_Power_state;
+	/**< HMX Power state 1 : HMX ON
+	 *                   0 : HMX OFF
+	 *                  -1 : not supported
+	 */
+
+	int HMX_clk;
+	/**< HMX clock in KHz, -1 When not supported */
+};
+
+struct sysmon_smem_q6_event_stats_extended {
+	u32 featureId_q6Event;
+	/**< Feature [31:28] Size [27:16] version[15:0] */
+
+	struct sysmon_smem_q6_event_stats_local event_stats;
+	/*Structure type to hold DSP Q6 event based statistics*/
+
+	uint32_t Last_update_time_event_lsb;
+	/**< LSB of Smem update lsb timestamp for event based stat updates*/
+
+	uint32_t Last_update_time_event_msb;
+	/**< MSB of Smem updatemsb timestamp for event based stat updates*/
+
+	struct sysmon_smem_q6_event_stats_ext event_stats_ext;
+	/**< Extended DSP Q6 event stats */
+};
+
 struct sysmon_smem_stats {
 	bool smem_init_adsp;
 	bool smem_init_cdsp;
@@ -53,9 +103,9 @@ struct sysmon_smem_stats {
 	struct sysmon_smem_power_stats_extended *sysmon_power_stats_adsp;
 	struct sysmon_smem_power_stats_extended *sysmon_power_stats_cdsp;
 	struct sysmon_smem_power_stats_extended *sysmon_power_stats_slpi;
-	struct sysmon_smem_q6_event_stats *sysmon_event_stats_adsp;
-	struct sysmon_smem_q6_event_stats *sysmon_event_stats_cdsp;
-	struct sysmon_smem_q6_event_stats *sysmon_event_stats_slpi;
+	struct sysmon_smem_q6_event_stats_extended *sysmon_event_stats_adsp;
+	struct sysmon_smem_q6_event_stats_extended *sysmon_event_stats_cdsp;
+	struct sysmon_smem_q6_event_stats_extended *sysmon_event_stats_slpi;
 	struct sleep_stats *sleep_stats_adsp;
 	struct sleep_stats *sleep_stats_cdsp;
 	struct sleep_stats *sleep_stats_slpi;
@@ -201,16 +251,16 @@ static void update_sysmon_smem_pointers(void *smem_pointer, enum dsp_id_t dsp_id
 			if (!IS_ERR_OR_NULL(smem_pointer + size_of_u32)) {
 				if (dsp_id == ADSP)
 					g_sysmon_stats.sysmon_event_stats_adsp =
-					(struct sysmon_smem_q6_event_stats *)
-					(smem_pointer + size_of_u32);
+					(struct sysmon_smem_q6_event_stats_extended *)
+					(smem_pointer);
 				else if (dsp_id == CDSP)
 					g_sysmon_stats.sysmon_event_stats_cdsp =
-					(struct sysmon_smem_q6_event_stats *)
-					(smem_pointer + size_of_u32);
+					(struct sysmon_smem_q6_event_stats_extended *)
+					(smem_pointer);
 				else if (dsp_id == SLPI)
 					g_sysmon_stats.sysmon_event_stats_slpi =
-					(struct sysmon_smem_q6_event_stats *)
-					(smem_pointer + size_of_u32);
+					(struct sysmon_smem_q6_event_stats_extended *)
+					(smem_pointer);
 				else
 					pr_err("%s:subsystem not found %d\n",
 					__func__, SYSMONSTATS_Q6_EVENT_FEATUREID);
@@ -752,6 +802,8 @@ int sysmon_stats_query_q6_votes(enum dsp_id_t dsp_id,
 		struct sysmon_smem_q6_event_stats *sysmon_q6_event_stats)
 {
 	int ret = 0;
+	int ver = 0;
+	struct sysmon_smem_q6_event_stats_extended *events_ptr = NULL;
 
 	if (!sysmon_q6_event_stats) {
 		pr_err("%s: Null pointer received\n", __func__);
@@ -763,9 +815,23 @@ int sysmon_stats_query_q6_votes(enum dsp_id_t dsp_id,
 		if (!g_sysmon_stats.smem_init_adsp)
 			sysmon_smem_init_adsp();
 
-		if (!IS_ERR_OR_NULL(g_sysmon_stats.sysmon_event_stats_adsp))
-			memcpy(sysmon_q6_event_stats, g_sysmon_stats.sysmon_event_stats_adsp,
-				sizeof(struct sysmon_smem_q6_event_stats));
+		if (!IS_ERR_OR_NULL(g_sysmon_stats.sysmon_event_stats_adsp)) {
+			events_ptr = g_sysmon_stats.sysmon_event_stats_adsp;
+			sysmon_q6_event_stats->QDSP6_clk =
+				events_ptr->event_stats.QDSP6_clk;
+			sysmon_q6_event_stats->Ab_vote_lsb =
+				events_ptr->event_stats.Ab_vote_lsb;
+			sysmon_q6_event_stats->Ab_vote_msb =
+				events_ptr->event_stats.Ab_vote_msb;
+			sysmon_q6_event_stats->Ib_vote_lsb =
+				events_ptr->event_stats.Ib_vote_lsb;
+			sysmon_q6_event_stats->Ib_vote_msb =
+				events_ptr->event_stats.Ib_vote_msb;
+			sysmon_q6_event_stats->Sleep_latency =
+				events_ptr->event_stats.Sleep_latency;
+			sysmon_q6_event_stats->HMX_Power_state = -1;
+			sysmon_q6_event_stats->HMX_clk = -1;
+		}
 		else
 			ret = -ENOKEY;
 	break;
@@ -773,9 +839,31 @@ int sysmon_stats_query_q6_votes(enum dsp_id_t dsp_id,
 		if (!g_sysmon_stats.smem_init_cdsp)
 			sysmon_smem_init_cdsp();
 
-		if (!IS_ERR_OR_NULL(g_sysmon_stats.sysmon_event_stats_cdsp))
-			memcpy(sysmon_q6_event_stats, g_sysmon_stats.sysmon_event_stats_cdsp,
-				sizeof(struct sysmon_smem_q6_event_stats));
+		if (!IS_ERR_OR_NULL(g_sysmon_stats.sysmon_event_stats_cdsp)) {
+			events_ptr = g_sysmon_stats.sysmon_event_stats_cdsp;
+			ver = events_ptr->featureId_q6Event & 0xFFFF;
+			sysmon_q6_event_stats->QDSP6_clk =
+				events_ptr->event_stats.QDSP6_clk;
+			sysmon_q6_event_stats->Ab_vote_lsb =
+				events_ptr->event_stats.Ab_vote_lsb;
+			sysmon_q6_event_stats->Ab_vote_msb =
+				events_ptr->event_stats.Ab_vote_msb;
+			sysmon_q6_event_stats->Ib_vote_lsb =
+				events_ptr->event_stats.Ib_vote_lsb;
+			sysmon_q6_event_stats->Ib_vote_msb =
+				events_ptr->event_stats.Ib_vote_msb;
+			sysmon_q6_event_stats->Sleep_latency =
+				events_ptr->event_stats.Sleep_latency;
+			if (ver > 1) {
+				sysmon_q6_event_stats->HMX_Power_state =
+					events_ptr->event_stats_ext.HMX_Power_state;
+				sysmon_q6_event_stats->HMX_clk =
+					events_ptr->event_stats_ext.HMX_clk;
+			} else {
+				sysmon_q6_event_stats->HMX_Power_state = -1;
+				sysmon_q6_event_stats->HMX_clk = -1;
+			}
+		}
 		else
 			ret = -ENOKEY;
 	break;
@@ -783,9 +871,23 @@ int sysmon_stats_query_q6_votes(enum dsp_id_t dsp_id,
 		if (!g_sysmon_stats.smem_init_slpi)
 			sysmon_smem_init_slpi();
 
-		if (!IS_ERR_OR_NULL(g_sysmon_stats.sysmon_event_stats_slpi))
-			memcpy(sysmon_q6_event_stats, g_sysmon_stats.sysmon_event_stats_slpi,
-				sizeof(struct sysmon_smem_q6_event_stats));
+		if (!IS_ERR_OR_NULL(g_sysmon_stats.sysmon_event_stats_slpi)) {
+			events_ptr = g_sysmon_stats.sysmon_event_stats_slpi;
+			sysmon_q6_event_stats->QDSP6_clk =
+				events_ptr->event_stats.QDSP6_clk;
+			sysmon_q6_event_stats->Ab_vote_lsb =
+				events_ptr->event_stats.Ab_vote_lsb;
+			sysmon_q6_event_stats->Ab_vote_msb =
+				events_ptr->event_stats.Ab_vote_msb;
+			sysmon_q6_event_stats->Ib_vote_lsb =
+				events_ptr->event_stats.Ib_vote_lsb;
+			sysmon_q6_event_stats->Ib_vote_msb =
+				events_ptr->event_stats.Ib_vote_msb;
+			sysmon_q6_event_stats->Sleep_latency =
+				events_ptr->event_stats.Sleep_latency;
+			sysmon_q6_event_stats->HMX_Power_state = -1;
+			sysmon_q6_event_stats->HMX_clk = -1;
+		}
 		else
 			ret = -ENOKEY;
 	break;
@@ -1037,23 +1139,25 @@ static int master_adsp_stats_show(struct seq_file *s, void *d)
 	u32 q6_load;
 	u8 ver = 0;
 	struct sysmon_smem_power_stats_extended *ptr = NULL, sysmon_power_stats = { 0 };
+	struct sysmon_smem_q6_event_stats_extended *events_ptr = NULL;
 
 	if (!g_sysmon_stats.smem_init_adsp)
 		sysmon_smem_init_adsp();
 
 	if (g_sysmon_stats.sysmon_event_stats_adsp) {
+		events_ptr = g_sysmon_stats.sysmon_event_stats_adsp;
 		seq_puts(s, "\nsysMon stats:\n\n");
 		seq_printf(s, "Core clock(KHz): %d\n",
-				g_sysmon_stats.sysmon_event_stats_adsp->QDSP6_clk);
+				events_ptr->event_stats.QDSP6_clk);
 		seq_printf(s, "Ab vote(Bytes): %llu\n",
-				(((u64)g_sysmon_stats.sysmon_event_stats_adsp->Ab_vote_msb << 32) |
-					   g_sysmon_stats.sysmon_event_stats_adsp->Ab_vote_lsb));
+				(((u64)events_ptr->event_stats.Ab_vote_msb << 32) |
+					   events_ptr->event_stats.Ab_vote_lsb));
 		seq_printf(s, "Ib vote(Bytes): %llu\n",
-				(((u64)g_sysmon_stats.sysmon_event_stats_adsp->Ib_vote_msb << 32) |
-					   g_sysmon_stats.sysmon_event_stats_adsp->Ib_vote_lsb));
+				(((u64)events_ptr->event_stats.Ib_vote_msb << 32) |
+					   events_ptr->event_stats.Ib_vote_lsb));
 		seq_printf(s, "Sleep latency(usec): %u\n",
-				g_sysmon_stats.sysmon_event_stats_adsp->Sleep_latency > 0 ?
-				g_sysmon_stats.sysmon_event_stats_adsp->Sleep_latency : U32_MAX);
+				events_ptr->event_stats.Sleep_latency > 0 ?
+				events_ptr->event_stats.Sleep_latency : U32_MAX);
 	}
 
 	if (g_sysmon_stats.dsppm_stats_adsp) {
@@ -1163,23 +1267,33 @@ static int master_cdsp_stats_show(struct seq_file *s, void *d)
 	u64 lpm_accumulated = 0;
 	u8 ver = 0;
 	struct sysmon_smem_power_stats_extended *ptr = NULL, sysmon_power_stats = { 0 };
+	struct sysmon_smem_q6_event_stats_extended *events_ptr = NULL;
 
 	if (!g_sysmon_stats.smem_init_cdsp)
 		sysmon_smem_init_cdsp();
 
 	if (g_sysmon_stats.sysmon_event_stats_cdsp) {
+		events_ptr = g_sysmon_stats.sysmon_event_stats_cdsp;
+		ver = events_ptr->featureId_q6Event & 0xFFFF;
 		seq_puts(s, "\nsysMon stats:\n\n");
 		seq_printf(s, "Core clock(KHz): %d\n",
-				g_sysmon_stats.sysmon_event_stats_cdsp->QDSP6_clk);
+				events_ptr->event_stats.QDSP6_clk);
 		seq_printf(s, "Ab vote(Bytes): %llu\n",
-				(((u64)g_sysmon_stats.sysmon_event_stats_cdsp->Ab_vote_msb << 32) |
-					   g_sysmon_stats.sysmon_event_stats_cdsp->Ab_vote_lsb));
+			(((u64)events_ptr->event_stats.Ab_vote_msb << 32) |
+					   events_ptr->event_stats.Ab_vote_lsb));
 		seq_printf(s, "Ib vote(Bytes): %llu\n",
-				(((u64)g_sysmon_stats.sysmon_event_stats_cdsp->Ib_vote_msb << 32) |
-					   g_sysmon_stats.sysmon_event_stats_cdsp->Ib_vote_lsb));
+			(((u64)events_ptr->event_stats.Ib_vote_msb << 32) |
+					   events_ptr->event_stats.Ib_vote_lsb));
 		seq_printf(s, "Sleep latency(usec): %u\n",
-				g_sysmon_stats.sysmon_event_stats_cdsp->Sleep_latency > 0 ?
-				g_sysmon_stats.sysmon_event_stats_cdsp->Sleep_latency : U32_MAX);
+			events_ptr->event_stats.Sleep_latency > 0 ?
+			events_ptr->event_stats.Sleep_latency : U32_MAX);
+		if ((ver > 1) &&
+			(events_ptr->event_stats_ext.HMX_Power_state >= 0)) {
+			seq_printf(s, "HMX Power state: %s\n",
+				events_ptr->event_stats_ext.HMX_Power_state ? "ON" : "OFF");
+			seq_printf(s, "HMX Clock(KHz): %d\n",
+				events_ptr->event_stats_ext.HMX_clk);
+		}
 	}
 
 	if (g_sysmon_stats.dsppm_stats_cdsp) {

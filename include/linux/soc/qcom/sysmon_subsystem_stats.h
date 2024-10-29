@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 /*
  * This header is for sysmon subsystem stats query API's in drivers.
@@ -68,7 +68,17 @@ struct sysmon_smem_q6_event_stats {
 
 	u32 Sleep_latency;
 	/**< Sleep latency vote in micro-seconds */
+
+	int HMX_Power_state;
+	/**< HMX Power state 1 : HMX ON
+	 *                   0 : HMX OFF
+	 *                  -1 : not supported
+	 */
+
+	int HMX_clk;
+	/**< HMX clock in KHz, -1 When not supported */
 };
+
 /*
  * @struct sleep_stats
  * @brief CX collapse mode statistics
