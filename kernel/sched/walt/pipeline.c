@@ -53,7 +53,7 @@ out:
 
 int remove_pipeline(struct walt_task_struct *wts)
 {
-	int i, ret = 0;
+	int i, j, ret = 0;
 	unsigned long flags;
 
 	if (unlikely(walt_disabled))
@@ -61,11 +61,15 @@ int remove_pipeline(struct walt_task_struct *wts)
 
 	raw_spin_lock_irqsave(&pipeline_lock, flags);
 
-	/* assume only one entry of wts exists in the lists */
 	for (i = 0; i < WALT_NR_CPUS; i++) {
 		if (wts == pipeline_wts[i]) {
+			wts->low_latency &= ~WALT_LOW_LATENCY_PIPELINE_BIT;
 			pipeline_wts[i] = NULL;
 			pipeline_nr--;
+			for (j = i; j < WALT_NR_CPUS - 1; j++) {
+				pipeline_wts[j] = pipeline_wts[j + 1];
+				pipeline_wts[j + 1] = NULL;
+			}
 			goto out;
 		}
 	}
@@ -76,7 +80,7 @@ out:
 
 int remove_heavy(struct walt_task_struct *wts)
 {
-	int i, ret = 0;
+	int i, j, ret = 0;
 	unsigned long flags;
 
 	if (unlikely(walt_disabled))
@@ -84,11 +88,15 @@ int remove_heavy(struct walt_task_struct *wts)
 
 	raw_spin_lock_irqsave(&heavy_lock, flags);
 
-	/* assume only one entry of wts exists in the lists */
 	for (i = 0; i < MAX_NR_PIPELINE; i++) {
 		if (wts == heavy_wts[i]) {
 			wts->low_latency &= ~WALT_LOW_LATENCY_HEAVY_BIT;
 			heavy_wts[i] = NULL;
+			have_heavy_list--;
+			for (j = i; j < MAX_NR_PIPELINE - 1; j++) {
+				heavy_wts[j] = heavy_wts[j + 1];
+				heavy_wts[j + 1] = NULL;
+			}
 			goto out;
 		}
 	}
