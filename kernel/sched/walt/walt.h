@@ -306,9 +306,9 @@ extern bool cpus_halted_by_client(struct cpumask *cpu, enum pause_client client)
 
 extern unsigned int sched_get_cpu_util_pct(int cpu);
 extern void sched_update_hyst_times(void);
-extern int sched_boost_handler(struct ctl_table *table, int write,
+extern int sched_boost_handler(const struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos);
-extern int sched_busy_hyst_handler(struct ctl_table *table, int write,
+extern int sched_busy_hyst_handler(const struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos);
 extern u64 walt_sched_clock(void);
 extern void walt_init_tg(struct task_group *tg);
@@ -394,7 +394,7 @@ extern unsigned int high_perf_cluster_freq_cap[MAX_CLUSTERS];
 extern unsigned int freq_cap[MAX_FREQ_CAP][MAX_CLUSTERS];
 extern unsigned int debugfs_walt_features;
 #define walt_feat(feat)		(debugfs_walt_features & feat)
-extern int sched_dynamic_tp_handler(struct ctl_table *table, int write,
+extern int sched_dynamic_tp_handler(const struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos);
 
 extern struct list_head cluster_head;
@@ -1137,7 +1137,7 @@ static inline bool walt_fair_task(struct task_struct *p)
 	return p->prio >= MAX_RT_PRIO && !walt_is_idle_task(p);
 }
 
-extern int sched_long_running_rt_task_ms_handler(struct ctl_table *table, int write,
+extern int sched_long_running_rt_task_ms_handler(const struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp,
 		loff_t *ppos);
 
@@ -1426,15 +1426,15 @@ extern int pipeline_nr;
 
 extern char reason_dump[1024];
 extern void update_smart_freq_capacities_one_cluster(struct walt_sched_cluster *cluster);
-extern int sched_smart_freq_legacy_dump_handler(struct ctl_table *table, int write,
+extern int sched_smart_freq_legacy_dump_handler(const struct ctl_table *table, int write,
 					      void __user *buffer, size_t *lenp, loff_t *ppos);
-extern int sched_smart_freq_ipc_dump_handler(struct ctl_table *table, int write,
+extern int sched_smart_freq_ipc_dump_handler(const struct ctl_table *table, int write,
 					   void __user *buffer, size_t *lenp, loff_t *ppos);
 extern unsigned int sysctl_ipc_freq_levels_cluster0[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster1[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster3[SMART_FMAX_IPC_MAX];
-extern int sched_smart_freq_ipc_handler(struct ctl_table *table, int write,
+extern int sched_smart_freq_ipc_handler(const struct ctl_table *table, int write,
 				      void __user *buffer, size_t *lenp,
 				      loff_t *ppos);
 extern unsigned int sysctl_sched_legacy_smart_freq_hyst_cpu_ns[WALT_NR_CPUS];

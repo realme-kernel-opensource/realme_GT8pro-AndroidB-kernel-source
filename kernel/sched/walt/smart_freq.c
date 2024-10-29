@@ -11,7 +11,7 @@ bool smart_freq_init_done;
 char reason_dump[1024];
 static DEFINE_MUTEX(freq_reason_mutex);
 
-int sched_smart_freq_legacy_dump_handler(struct ctl_table *table, int write,
+int sched_smart_freq_legacy_dump_handler(const struct ctl_table *table, int write,
 					 void __user *buffer, size_t *lenp,
 					 loff_t *ppos)
 {
@@ -37,7 +37,7 @@ int sched_smart_freq_legacy_dump_handler(struct ctl_table *table, int write,
 	return ret;
 }
 
-int sched_smart_freq_ipc_dump_handler(struct ctl_table *table, int write,
+int sched_smart_freq_ipc_dump_handler(const struct ctl_table *table, int write,
 					 void __user *buffer, size_t *lenp,
 					 loff_t *ppos)
 {
@@ -65,7 +65,7 @@ int sched_smart_freq_ipc_dump_handler(struct ctl_table *table, int write,
 	return ret;
 }
 
-int sched_smart_freq_ipc_handler(struct ctl_table *table, int write,
+int sched_smart_freq_ipc_handler(const struct ctl_table *table, int write,
 				      void __user *buffer, size_t *lenp,
 				      loff_t *ppos)
 {

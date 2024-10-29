@@ -105,7 +105,7 @@ unsigned int sysctl_sched_walt_core_util[WALT_NR_CPUS];
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
 
-static int walt_proc_group_thresholds_handler(struct ctl_table *table, int write,
+static int walt_proc_group_thresholds_handler(const struct ctl_table *table, int write,
 				       void __user *buffer, size_t *lenp,
 				       loff_t *ppos)
 {
@@ -171,7 +171,7 @@ unlock_mutex:
 	return ret;
 }
 
-static int walt_proc_user_hint_handler(struct ctl_table *table,
+static int walt_proc_user_hint_handler(const struct ctl_table *table,
 				int write, void __user *buffer, size_t *lenp,
 				loff_t *ppos)
 {
@@ -196,7 +196,7 @@ unlock:
 
 DECLARE_BITMAP(sysctl_bitmap, WALT_NR_CPUS);
 
-static int walt_proc_sbt_pause_handler(struct ctl_table *table,
+static int walt_proc_sbt_pause_handler(const struct ctl_table *table,
 				       int write, void __user *buffer, size_t *lenp,
 				       loff_t *ppos)
 {
@@ -206,11 +206,12 @@ static int walt_proc_sbt_pause_handler(struct ctl_table *table,
 	const unsigned long *bitmaskp = &bitmask;
 	static bool written_once;
 	static DEFINE_MUTEX(mutex);
+	struct ctl_table local_table = *table;
 
 	mutex_lock(&mutex);
 
 	old_value = sysctl_sched_sbt_pause_cpus;
-	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_dointvec_minmax(&local_table, write, buffer, lenp, ppos);
 	if (ret || !write || (old_value == sysctl_sched_sbt_pause_cpus))
 		goto unlock;
 
@@ -230,7 +231,7 @@ unlock:
 }
 
 /* pipeline cpus are non-prime cpus chosen to handle pipeline tasks, e.g. golds */
-static int walt_proc_pipeline_cpus_handler(struct ctl_table *table,
+static int walt_proc_pipeline_cpus_handler(const struct ctl_table *table,
 					   int write, void __user *buffer, size_t *lenp,
 					   loff_t *ppos)
 {
@@ -240,11 +241,12 @@ static int walt_proc_pipeline_cpus_handler(struct ctl_table *table,
 	const unsigned long *bitmaskp = &bitmask;
 	static bool written_once;
 	static DEFINE_MUTEX(mutex);
+	struct ctl_table local_table = *table;
 
 	mutex_lock(&mutex);
 
 	old_value = sysctl_sched_pipeline_cpus;
-	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_dointvec_minmax(&local_table, write, buffer, lenp, ppos);
 	if (ret || !write || (old_value == sysctl_sched_pipeline_cpus))
 		goto unlock;
 
@@ -264,17 +266,18 @@ unlock:
 }
 
 struct task_struct *pipeline_special_task;
-static int sched_pipeline_special_handler(struct ctl_table *table,
+static int sched_pipeline_special_handler(const struct ctl_table *table,
 					   int write, void __user *buffer, size_t *lenp,
 					   loff_t *ppos)
 {
 	int ret = 0;
 	static DEFINE_MUTEX(mutex);
 	struct task_struct *pipeline_special_local;
+	struct ctl_table local_table = *table;
 
 	mutex_lock(&mutex);
 
-	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_dointvec_minmax(&local_table, write, buffer, lenp, ppos);
 	if (ret || !write)
 		goto unlock;
 
@@ -299,7 +302,7 @@ unlock:
 }
 
 
-static int sched_ravg_window_handler(struct ctl_table *table,
+static int sched_ravg_window_handler(const struct ctl_table *table,
 				int write, void __user *buffer, size_t *lenp,
 				loff_t *ppos)
 {
@@ -337,14 +340,15 @@ unlock:
 }
 
 static DEFINE_MUTEX(sysctl_pid_mutex);
-static int sched_task_read_pid_handler(struct ctl_table *table, int write,
+static int sched_task_read_pid_handler(const struct ctl_table *table, int write,
 				       void __user *buffer, size_t *lenp,
 				       loff_t *ppos)
 {
 	int ret;
+	struct ctl_table local_table = *table;
 
 	mutex_lock(&sysctl_pid_mutex);
-	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_dointvec_minmax(&local_table, write, buffer, lenp, ppos);
 	mutex_unlock(&sysctl_pid_mutex);
 
 	return ret;
@@ -364,7 +368,7 @@ enum {
 	MPAM_PART_ID,
 };
 
-static int sched_task_handler(struct ctl_table *table, int write,
+static int sched_task_handler(const struct ctl_table *table, int write,
 				void __user *buffer, size_t *lenp,
 				loff_t *ppos)
 {
@@ -577,7 +581,7 @@ static void sched_update_updown_migrate_values(bool up)
 	}
 }
 
-int sched_updown_migrate_handler(struct ctl_table *table, int write,
+int sched_updown_migrate_handler(const struct ctl_table *table, int write,
 				void __user *buffer, size_t *lenp,
 				loff_t *ppos)
 {
@@ -669,7 +673,7 @@ static void sched_update_updown_early_migrate_values(bool up)
 	}
 }
 
-int sched_updown_early_migrate_handler(struct ctl_table *table, int write,
+int sched_updown_early_migrate_handler(const struct ctl_table *table, int write,
 				void __user *buffer, size_t *lenp,
 				loff_t *ppos)
 {
@@ -736,7 +740,7 @@ unlock_mutex:
 	return ret;
 }
 
-int sched_freq_cap_handler(struct ctl_table *table, int write,
+int sched_freq_cap_handler(const struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp,
 		loff_t *ppos)
 {
@@ -781,15 +785,16 @@ unlock_mutex:
 
 static DEFINE_MUTEX(idle_enough_mutex);
 
-int sched_idle_enough_handler(struct ctl_table *table, int write,
+int sched_idle_enough_handler(const struct ctl_table *table, int write,
 			      void __user *buffer, size_t *lenp,
 			      loff_t *ppos)
 {
 	int ret, i;
+	struct ctl_table local_table = *table;
 
 	mutex_lock(&idle_enough_mutex);
 
-	ret = proc_douintvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_douintvec_minmax(&local_table, write, buffer, lenp, ppos);
 	if (ret)
 		goto unlock_mutex;
 
@@ -803,12 +808,13 @@ unlock_mutex:
 	return ret;
 }
 
-int sched_idle_enough_clust_handler(struct ctl_table *table, int write,
+int sched_idle_enough_clust_handler(const struct ctl_table *table, int write,
 				    void __user *buffer, size_t *lenp,
 				    loff_t *ppos)
 {
 	int ret;
 	int val[MAX_CLUSTERS];
+	struct ctl_table local_table = *table;
 	struct ctl_table tmp = {
 		.data	= &val,
 		.maxlen	= sizeof(unsigned int) * MAX_CLUSTERS,
@@ -827,7 +833,7 @@ int sched_idle_enough_clust_handler(struct ctl_table *table, int write,
 		goto unlock_mutex;
 	}
 
-	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_dointvec_minmax(&local_table, write, buffer, lenp, ppos);
 	if (ret)
 		goto unlock_mutex;
 
@@ -842,15 +848,16 @@ unlock_mutex:
 
 static DEFINE_MUTEX(util_thres_mutex);
 
-int sched_cluster_util_thres_pct_handler(struct ctl_table *table, int write,
+int sched_cluster_util_thres_pct_handler(const struct ctl_table *table, int write,
 					 void __user *buffer, size_t *lenp,
 					 loff_t *ppos)
 {
 	int ret, i;
+	struct ctl_table local_table = *table;
 
 	mutex_lock(&util_thres_mutex);
 
-	ret = proc_douintvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_douintvec_minmax(&local_table, write, buffer, lenp, ppos);
 	if (ret)
 		goto unlock_mutex;
 
@@ -864,12 +871,13 @@ unlock_mutex:
 	return ret;
 }
 
-int sched_cluster_util_thres_pct_clust_handler(struct ctl_table *table, int write,
+int sched_cluster_util_thres_pct_clust_handler(const struct ctl_table *table, int write,
 					       void __user *buffer, size_t *lenp,
 					       loff_t *ppos)
 {
 	int ret;
 	int val[MAX_CLUSTERS];
+	struct ctl_table local_table = *table;
 	struct ctl_table tmp = {
 		.data	= &val,
 		.maxlen	= sizeof(int) * MAX_CLUSTERS,
@@ -888,7 +896,7 @@ int sched_cluster_util_thres_pct_clust_handler(struct ctl_table *table, int writ
 		goto unlock_mutex;
 	}
 
-	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_dointvec_minmax(&local_table, write, buffer, lenp, ppos);
 	if (ret)
 		goto unlock_mutex;
 
@@ -1624,7 +1632,6 @@ static struct ctl_table walt_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_INT_MAX,
 	},
-	{ }
 };
 
 void walt_register_sysctl(void)

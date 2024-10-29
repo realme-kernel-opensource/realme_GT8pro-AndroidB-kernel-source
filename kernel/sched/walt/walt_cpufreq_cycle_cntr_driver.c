@@ -135,9 +135,8 @@ static int walt_cpufreq_cycle_cntr_driver_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int walt_cpufreq_cycle_cntr_driver_remove(struct platform_device *pdev)
+static void walt_cpufreq_cycle_cntr_driver_remove(struct platform_device *pdev)
 {
-	return 0;
 }
 
 static const struct walt_cpufreq_soc_data hw_soc_data = {
