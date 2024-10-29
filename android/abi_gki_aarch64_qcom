@@ -3590,6 +3590,7 @@
   thermal_zone_device_register_with_trips
   thermal_zone_device_unregister
   thermal_zone_device_update
+  thermal_zone_for_each_trip
   thermal_zone_get_crit_temp
   thermal_zone_get_num_trips
   thermal_zone_get_temp
