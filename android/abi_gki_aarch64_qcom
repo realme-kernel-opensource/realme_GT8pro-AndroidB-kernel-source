@@ -722,6 +722,7 @@
   devm_gpiod_get_optional
   devm_gpio_request
   devm_gpio_request_one
+  devm_hwrng_register
   devm_hwspin_lock_register
   devm_i2c_new_dummy_device
   devm_iio_channel_get
