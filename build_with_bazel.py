@@ -377,13 +377,7 @@ class BazelBuilder:
         if self.skip_list:
             self.user_opts.extend(["--//msm-kernel:skip_{}=true".format(s) for s in self.skip_list])
 
-        self.user_opts.extend([
-            "--user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom",
-            "--ignore_missing_projects",
-            "--incompatible_sandbox_hermetic_tmp=false",
-            "--nozstd_dwarf_compression",
-            "--check_visibility=false",
-        ])
+        self.user_opts.append("--incompatible_sandbox_hermetic_tmp=false")
 
         if self.dry_run:
             self.user_opts.append("--nobuild")
