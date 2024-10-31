@@ -59,6 +59,7 @@ def define_sun():
         "drivers/hwtracing/coresight/coresight-tpda.ko",
         "drivers/hwtracing/coresight/coresight-tpdm.ko",
         "drivers/hwtracing/coresight/coresight-trace-noc.ko",
+        "drivers/hwtracing/coresight/coresight-uetm.ko",
         "drivers/hwtracing/stm/stm_console.ko",
         "drivers/hwtracing/stm/stm_core.ko",
         "drivers/hwtracing/stm/stm_ftrace.ko",
