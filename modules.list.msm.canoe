@@ -57,6 +57,7 @@ mem_buf.ko
 mem_buf_dev.ko
 msm_dma_iommu_mapping.ko
 qcom_dma_heaps.ko
+ufshcd-crypto-qti.ko
 qcom_ice.ko
 ufs-qcom.ko
 phy-qcom-ufs-qrbtc-sdm845.ko
