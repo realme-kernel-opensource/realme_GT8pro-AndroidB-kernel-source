@@ -399,9 +399,10 @@ static int mem_id(char **str, int *start_out, int *end_out)
 	return 0;
 }
 
-static void mem_remove(int n, char **error_out)
+static int mem_remove(int n, char **error_out)
 {
 	*error_out = "Memory doesn't support the remove operation";
+	return -EBUSY;
 }
 
 static struct mc_device mem_mc = {

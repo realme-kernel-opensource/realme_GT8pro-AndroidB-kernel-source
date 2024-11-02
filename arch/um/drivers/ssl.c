@@ -36,7 +36,7 @@ static struct chan_opts opts = {
 
 static int ssl_config(char *str, char **error_out);
 static int ssl_get_config(char *dev, char *str, int size, char **error_out);
-static void ssl_remove(int n, char **error_out);
+static int ssl_remove(int n, char **error_out);
 
 
 /* Const, except for .mc.list */
@@ -78,9 +78,9 @@ static int ssl_get_config(char *dev, char *str, int size, char **error_out)
 			       size, error_out);
 }
 
-static void ssl_remove(int n, char **error_out)
+static int ssl_remove(int n, char **error_out)
 {
-	line_remove(serial_lines, ARRAY_SIZE(serial_lines), n,
+	return line_remove(serial_lines, ARRAY_SIZE(serial_lines), n,
 			   error_out);
 }
 
