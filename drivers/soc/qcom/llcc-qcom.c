@@ -1941,12 +1941,6 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	drv_data->bcast_and_regmap = qcom_llcc_init_mmio(pdev, i+1, "llcc_broadcast_and_base");
-	if (IS_ERR(drv_data->bcast_and_regmap)) {
-		ret = PTR_ERR(drv_data->bcast_and_regmap);
-		goto err;
-	}
-
 	/* Extract version of the IP */
 	ret = regmap_read(drv_data->bcast_regmap, cfg->reg_offset[LLCC_COMMON_HW_INFO],
 			  &version);
