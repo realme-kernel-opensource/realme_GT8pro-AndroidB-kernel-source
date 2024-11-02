@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/completion.h>
@@ -35,6 +35,10 @@ static struct mem_buf_msgq_id mem_buf_msgqs[] = {
 	{
 		.name = "trusted_vm",
 		.label = GH_MSGQ_LABEL_MEMBUF,
+	},
+	{
+		.name = "oem_vm",
+		.label = GH_MSGQ_LABEL_MEMBUF_OEMVM,
 	},
 	{
 	},
@@ -351,12 +355,12 @@ static void mem_buf_process_alloc_resp(struct mem_buf_msgq_desc *desc, void *buf
 		 * it can be reclaimed.
 		 */
 		if (!alloc_resp->ret) {
-			desc->msgq_ops->relinquish_memparcel_hdl(desc->hdlr_data,
+			desc->msgq_ops->relinquish_memparcel_hdl(desc,
 								 alloc_resp->obj_id,
 								 alloc_resp->hdl);
 		}
 	} else {
-		txn->txn_ret = desc->msgq_ops->alloc_resp_hdlr(desc->hdlr_data, buf, size,
+		txn->txn_ret = desc->msgq_ops->alloc_resp_hdlr(desc, buf, size,
 							       txn->resp_buf);
 		complete(&txn->txn_done);
 	}
@@ -400,13 +404,13 @@ static void mem_buf_process_msg(struct mem_buf_msgq_desc *desc, void *buf, size_
 
 	switch (hdr->msg_type) {
 	case MEM_BUF_ALLOC_REQ:
-		desc->msgq_ops->alloc_req_hdlr(desc->hdlr_data, buf, size);
+		desc->msgq_ops->alloc_req_hdlr(desc, buf, size);
 		break;
 	case MEM_BUF_ALLOC_RESP:
 		mem_buf_process_alloc_resp(desc, buf, size);
 		break;
 	case MEM_BUF_ALLOC_RELINQUISH:
-		desc->msgq_ops->relinquish_hdlr(desc->hdlr_data, buf, size);
+		desc->msgq_ops->relinquish_hdlr(desc, buf, size);
 		break;
 	case MEM_BUF_ALLOC_RELINQUISH_RESP:
 		mem_buf_process_relinquish_resp(desc, buf, size);
