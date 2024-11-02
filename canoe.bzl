@@ -152,6 +152,7 @@ def define_canoe():
         "drivers/thermal/qcom/ddr_cdev.ko",
         "drivers/thermal/qcom/qcom-spmi-temp-alarm.ko",
         "drivers/thermal/qcom/qcom_tsens.ko",
+        "drivers/thermal/qcom/thermal_config.ko",
         "drivers/tty/hvc/hvc_gunyah.ko",
         "drivers/tty/serial/msm_geni_serial.ko",
         "drivers/ufs/host/ufs-qcom.ko",
