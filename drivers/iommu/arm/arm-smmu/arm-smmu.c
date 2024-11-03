@@ -2103,6 +2103,9 @@ static int arm_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 	/* Looks ok, so add the device to the domain */
 	arm_smmu_master_install_s2crs(cfg, S2CR_TYPE_TRANS,
 				      smmu_domain->cfg.cbndx, fwspec);
+	if (iommu_logger_register(domain, dev, smmu_domain->pgtbl_ops))
+		dev_err(dev, "Registering iommu debug info failed, continuing.\n");
+
 	arm_smmu_rpm_use_autosuspend(smmu);
 rpm_put:
 	arm_smmu_rpm_put(smmu);
