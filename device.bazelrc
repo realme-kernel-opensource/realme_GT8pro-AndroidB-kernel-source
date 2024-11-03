@@ -1,0 +1,6 @@
+# TODO: issuetracker.google.com/issues/372883466
+common --check_visibility=false
+# Disable debug symbol compression for dump parsing tools
+common --no//build/kernel/kleaf:zstd_dwarf_compression
+# TODO: Remove this line when ACK has the symbol list we want to track
+common --//build/kernel/kleaf:user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom
