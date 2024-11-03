@@ -12,6 +12,7 @@ cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko
 debug-regulator.ko
+debugcc-canoe.ko
 dispcc-canoe.ko
 evacc-canoe.ko
 gcc-canoe.ko
