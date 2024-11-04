@@ -19,6 +19,7 @@ def define_vienna():
         "drivers/iommu/qcom_iommu_debug.ko",
         "drivers/iommu/qcom_iommu_util.ko",
         "drivers/irqchip/qcom-pdc.ko",
+        "drivers/nvmem/nvmem_qfprom.ko",
         "drivers/pinctrl/qcom/pinctrl-msm.ko",
         "drivers/pinctrl/qcom/pinctrl-vienna.ko",
         "drivers/regulator/stub-regulator.ko",
