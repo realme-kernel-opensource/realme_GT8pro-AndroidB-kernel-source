@@ -5316,15 +5316,6 @@ static int msm_geni_serial_port_init(struct platform_device *pdev,
 						 sizeof(u32)), GFP_KERNEL);
 		if (!dev_port->rx_fifo)
 			return -ENOMEM;
-		if (dev_port->pm_auto_suspend_disable) {
-			pm_runtime_set_active(&pdev->dev);
-			pm_runtime_forbid(&pdev->dev);
-		} else {
-			pm_runtime_set_suspended(&pdev->dev);
-			pm_runtime_set_autosuspend_delay(&pdev->dev, 150);
-			pm_runtime_use_autosuspend(&pdev->dev);
-			pm_runtime_enable(&pdev->dev);
-		}
 	}
 
 	if (IS_ENABLED(CONFIG_SERIAL_MSM_GENI_HALF_SAMPLING) &&
@@ -5468,6 +5459,16 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		msm_geni_se_clks_on_off(dev_port, true);
 		msm_geni_check_stop_engine(uport);
 		msm_geni_se_clks_on_off(dev_port, false);
+
+		if (dev_port->pm_auto_suspend_disable) {
+			pm_runtime_set_active(&pdev->dev);
+			pm_runtime_forbid(&pdev->dev);
+		} else {
+			pm_runtime_set_suspended(&pdev->dev);
+			pm_runtime_set_autosuspend_delay(&pdev->dev, 150);
+			pm_runtime_use_autosuspend(&pdev->dev);
+			pm_runtime_enable(&pdev->dev);
+		}
 	}
 
 	/* Ignore dependencies on children by runtime PM framework */
