@@ -585,6 +585,10 @@ void smart_freq_init(const char *name)
 		i++;
 	}
 
+	/* initialize smart_freq with default values, if socinfo is not available */
+	if (!name)
+		goto done;
+
 	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
@@ -800,6 +804,7 @@ void smart_freq_init(const char *name)
 			}
 		}
 	}
+done:
 	smart_freq_init_done = true;
 	update_smart_freq_capacities();
 
