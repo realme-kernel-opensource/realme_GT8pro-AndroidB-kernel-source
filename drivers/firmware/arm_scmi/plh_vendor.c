@@ -165,7 +165,7 @@ static int scmi_plh_vendor_protocol_init(const struct scmi_protocol_handle *ph)
 
 static const struct scmi_protocol scmi_plh_vendor = {
 	.id = SCMI_PROTOCOL_PLH,
-	.vendor_id = "qcom",
+	.vendor_id = "Qualcomm",
 	.owner = THIS_MODULE,
 	.instance_init = &scmi_plh_vendor_protocol_init,
 	.ops = &plh_proto_ops,
