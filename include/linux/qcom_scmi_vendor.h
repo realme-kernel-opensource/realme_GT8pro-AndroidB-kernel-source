@@ -2,7 +2,7 @@
 /*
  * Qcom scmi vendor protocol's header
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _QCOM_SCMI_VENDOR_H
@@ -15,8 +15,15 @@
 #define QCOM_SCMI_VENDOR_PROTOCOL    0x80
 
 struct scmi_protocol_handle;
-extern struct scmi_device *get_qcom_scmi_device(void);
 
+#if IS_ENABLED(CONFIG_QTI_QCOM_SCMI_CLIENT)
+extern struct scmi_device *get_qcom_scmi_device(void);
+#else
+static inline struct scmi_device *get_qcom_scmi_device(void)
+{
+	return NULL;
+}
+#endif
 
 /**
  * struct qcom_scmi_vendor_ops - represents the various operations provided

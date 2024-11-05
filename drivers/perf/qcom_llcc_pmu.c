@@ -22,6 +22,7 @@ static uint32_t phys_cpu[NR_CPUS];
 enum llcc_pmu_version {
 	LLCC_PMU_VER1 = 1,
 	LLCC_PMU_VER2,
+	LLCC_PMU_VER3,
 };
 
 struct llcc_pmu {
@@ -34,11 +35,13 @@ struct llcc_pmu {
 
 #define MON_CFG(m) ((m)->lagg_base + 0x200)
 #define MON_CNT(m, cpu) ((m)->lagg_base + 0x220 + 0x4 * cpu)
+#define MON_CFG_V3(m, cpu) ((m)->lagg_base + 0x300 + 0x4 * cpu)
 
 #define LLCC_RD_EV QCOM_LLCC_PMU_RD_EV
 #define ENABLE 0x1
-#define CLEAR 0x10
-#define CLEAR_POS 16
+#define CLEAR_V1 0x10
+#define CLEAR_POS_V2 16
+#define CLEAR_POS_V3 4
 #define DISABLE 0x0
 #define SCALING_FACTOR 0x3
 #define NUM_COUNTERS NR_CPUS
@@ -83,6 +86,11 @@ static void mon_disable(int cpu)
 		reg &= ~(ENABLE << cpu);
 		writel_relaxed(reg, MON_CFG(llccpmu));
 		break;
+	case LLCC_PMU_VER3:
+		reg = readl_relaxed(MON_CFG_V3(llccpmu, cpu));
+		reg &= ~ENABLE;
+		writel_relaxed(reg, MON_CFG_V3(llccpmu, cpu));
+		break;
 	}
 }
 
@@ -90,9 +98,7 @@ static void mon_clear(int cpu)
 {
 	int clear_bit;
 	u32 reg;
-
 	cpu = phys_cpu[cpu];
-	clear_bit = CLEAR_POS + cpu;
 
 	if (!llccpmu->ver) {
 		pr_err("LLCCPMU version not correct\n");
@@ -101,14 +107,23 @@ static void mon_clear(int cpu)
 
 	switch (llccpmu->ver) {
 	case LLCC_PMU_VER1:
-		writel_relaxed(CLEAR, MON_CFG(llccpmu));
+		writel_relaxed(CLEAR_V1, MON_CFG(llccpmu));
 		break;
 	case LLCC_PMU_VER2:
+		clear_bit = CLEAR_POS_V2 + cpu;
 		reg = readl_relaxed(MON_CFG(llccpmu));
 		reg |= (ENABLE << clear_bit);
 		writel_relaxed(reg, MON_CFG(llccpmu));
 		reg &= ~(ENABLE << clear_bit);
 		writel_relaxed(reg, MON_CFG(llccpmu));
+		break;
+	case LLCC_PMU_VER3:
+		clear_bit = CLEAR_POS_V3;
+		reg = readl_relaxed(MON_CFG_V3(llccpmu, cpu));
+		reg |= (ENABLE << clear_bit);
+		writel_relaxed(reg, MON_CFG_V3(llccpmu, cpu));
+		reg &= ~(ENABLE << clear_bit);
+		writel_relaxed(reg, MON_CFG_V3(llccpmu, cpu));
 		break;
 	}
 }
@@ -132,6 +147,11 @@ static void mon_enable(int cpu)
 		reg |= (ENABLE << cpu);
 		writel_relaxed(reg, MON_CFG(llccpmu));
 		break;
+	case LLCC_PMU_VER3:
+		reg = readl_relaxed(MON_CFG_V3(llccpmu, cpu));
+		reg |= ENABLE;
+		writel_relaxed(reg, MON_CFG_V3(llccpmu, cpu));
+		break;
 	}
 }
 
@@ -147,9 +167,8 @@ static unsigned long read_cnt(int cpu)
 
 	switch (llccpmu->ver) {
 	case LLCC_PMU_VER1:
-		value = readl_relaxed(MON_CNT(llccpmu, cpu));
-		break;
 	case LLCC_PMU_VER2:
+	case LLCC_PMU_VER3:
 		value = readl_relaxed(MON_CNT(llccpmu, cpu));
 		break;
 	}
@@ -350,6 +369,7 @@ out:
 static const struct of_device_id qcom_llcc_pmu_match_table[] = {
 	{ .compatible = "qcom,llcc-pmu-ver1", .data = (void *) LLCC_PMU_VER1 },
 	{ .compatible = "qcom,llcc-pmu-ver2", .data = (void *) LLCC_PMU_VER2 },
+	{ .compatible = "qcom,llcc-pmu-ver3", .data = (void *) LLCC_PMU_VER3 },
 	{}
 };
 

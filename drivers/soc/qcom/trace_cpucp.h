@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -13,6 +13,40 @@
 #include <linux/tracepoint.h>
 
 TRACE_EVENT(cpucp_log,
+
+	TP_PROTO(char *str),
+
+	TP_ARGS(str),
+
+	TP_STRUCT__entry(
+		__string(str, str)
+	),
+
+	TP_fast_assign(
+		__assign_str(str);
+	),
+
+	TP_printk("%s\n", __get_str(str))
+);
+
+TRACE_EVENT(pdp0_log,
+
+	TP_PROTO(char *str),
+
+	TP_ARGS(str),
+
+	TP_STRUCT__entry(
+		__string(str, str)
+	),
+
+	TP_fast_assign(
+		__assign_str(str);
+	),
+
+	TP_printk("%s\n", __get_str(str))
+);
+
+TRACE_EVENT(pdp1_log,
 
 	TP_PROTO(char *str),
 
