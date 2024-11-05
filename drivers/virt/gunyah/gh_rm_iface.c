@@ -2847,6 +2847,17 @@ int gh_rm_vm_set_debug(gh_vmid_t vmid)
 }
 EXPORT_SYMBOL_GPL(gh_rm_vm_set_debug);
 
+#ifdef CONFIG_GUNYAH_LEGACY
+/*
+ * On certain hypervisors, GH_RM_RPC_MSG_ID_CALL_VM_GET_VMID call loops
+ * indefinetly instead of returning an error.
+ */
+static int __gh_rm_setup_feature_scm_assign(void)
+{
+	gh_feature_use_scm_assign = true;
+	return 0;
+}
+#else
 static int __gh_rm_setup_feature_scm_assign(void)
 {
 	int ret, gh_acl_sz, gh_sgl_sz;
@@ -2903,6 +2914,7 @@ static int __gh_rm_setup_feature_scm_assign(void)
 	kfree(gh_acl);
 	return 0;
 }
+#endif
 
 int gh_rm_setup_feature_scm_assign(void)
 {
