@@ -282,6 +282,7 @@
 #define QCOM_ID_CANOEP			661
 #define QCOM_ID_VIENNA			669
 #define QCOM_ID_VIENNAP			670
+#define QCOM_ID_ALOR			685
 
 /*
  * The board type and revision information, used by Qualcomm bootloaders and
