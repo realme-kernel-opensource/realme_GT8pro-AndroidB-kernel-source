@@ -60,6 +60,7 @@ def define_canoe():
         "drivers/iio/adc/qcom-spmi-adc5-gen3.ko",
         "drivers/iio/adc/qcom-vadc-common.ko",
         "drivers/input/misc/pm8941-pwrkey.ko",
+        "drivers/input/misc/qcom-hv-haptics.ko",
         "drivers/interconnect/icc-clk.ko",
         "drivers/interconnect/qcom/icc-bcm-voter.ko",
         "drivers/interconnect/qcom/icc-debug.ko",
