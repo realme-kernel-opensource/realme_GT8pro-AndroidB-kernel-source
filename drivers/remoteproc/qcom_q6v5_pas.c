@@ -34,6 +34,7 @@
 #include <trace/hooks/remoteproc.h>
 #include <linux/iopoll.h>
 #include <linux/refcount.h>
+#include <linux/timer.h>
 #include <trace/events/rproc_qcom.h>
 
 #include "qcom_common.h"
@@ -54,6 +55,9 @@
 #define SOCCP_D3  0x8
 
 #define MAX_ASSIGN_COUNT 3
+
+#define EARLY_BOOT_RETRY_COUNT 5
+#define EARLY_BOOT_RETRY_INTERVAL_MS 1000
 
 struct adsp_data {
 	int crash_reason_smem;
@@ -83,6 +87,7 @@ struct adsp_data {
 	int region_assign_vmid;
 	bool dma_phys_below_32b;
 	bool check_status;
+	bool early_boot;
 };
 
 struct qcom_adsp {
@@ -121,6 +126,8 @@ struct qcom_adsp {
 
 	struct completion start_done;
 	struct completion stop_done;
+	struct timer_list boot_timer;
+	u32 count_get_irq;
 
 	phys_addr_t mem_phys;
 	phys_addr_t dtb_mem_phys;
@@ -161,6 +168,8 @@ struct qcom_adsp {
 	refcount_t current_users;
 	void *config_addr;
 	bool check_status;
+	bool ready_irq;
+	bool crash_irq;
 };
 
 static ssize_t txn_id_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -1029,6 +1038,74 @@ static unsigned long adsp_panic(struct rproc *rproc)
 	return qcom_q6v5_panic(&adsp->q6v5);
 }
 
+/*
+ * read_early_boot_register: Read Slave kernel bits
+ *
+ * Function to read the slave kernel bits and update the rproc state
+ * based off the read bits.
+ *
+ * return:
+ *	  -EINVAL if the slave kernel bits have not been set
+ *        -ENODATA if the slave kernel is read but the device has
+ *		not crashed or boot up
+ *        0 if the value has been read and the state has been set
+ *
+ */
+void read_early_boot_register(struct timer_list *timer)
+{
+	struct qcom_adsp *adsp = NULL;
+	int ret = ENODATA;
+
+	adsp = container_of(timer, struct qcom_adsp, boot_timer);
+	if (!adsp)
+		return;
+
+	ret = irq_get_irqchip_state(adsp->q6v5.fatal_irq,
+				    IRQCHIP_STATE_LINE_LEVEL, &adsp->crash_irq);
+	if (adsp->crash_irq) {
+		dev_err(adsp->dev, "Sub system has crashed before driver probe\n");
+		adsp->rproc->state = RPROC_CRASHED;
+	}
+
+	ret = irq_get_irqchip_state(adsp->q6v5.ready_irq,
+				    IRQCHIP_STATE_LINE_LEVEL, &adsp->ready_irq);
+	if (adsp->ready_irq) {
+		dev_info(adsp->dev, "Sub system has boot-up before driver probe\n");
+		adsp->rproc->state = RPROC_DETACHED;
+	}
+
+	if ((adsp->count_get_irq++ < EARLY_BOOT_RETRY_COUNT) && (ret == -ENODEV))
+		mod_timer(&adsp->boot_timer,
+			  jiffies + msecs_to_jiffies(EARLY_BOOT_RETRY_INTERVAL_MS));
+	else
+		complete(&adsp->q6v5.subsys_booted);
+
+}
+
+static int adsp_attach(struct rproc *rproc)
+{
+	struct qcom_adsp *adsp = rproc->priv;
+	int ret = 0;
+
+	if (adsp->q6v5.early_boot) {
+		timer_setup(&adsp->boot_timer, read_early_boot_register, 0);
+		init_completion(&adsp->q6v5.subsys_booted);
+
+		read_early_boot_register(&(adsp->boot_timer));
+
+		wait_for_completion(&adsp->q6v5.subsys_booted);
+		del_timer(&adsp->boot_timer);
+
+		ret = ping_subsystem(&adsp->q6v5);
+		if (ret) {
+			dev_err(adsp->dev, "Timed out on ping/pong, assuming device crashed\n");
+			rproc->state = RPROC_CRASHED;
+		}
+	}
+
+	return ret;
+}
+
 static const struct rproc_ops adsp_ops = {
 	.unprepare = adsp_unprepare,
 	.start = adsp_start,
@@ -1036,6 +1113,7 @@ static const struct rproc_ops adsp_ops = {
 	.da_to_va = adsp_da_to_va,
 	.load = adsp_load,
 	.panic = adsp_panic,
+	.attach = adsp_attach,
 };
 
 static const struct rproc_ops adsp_minidump_ops = {
@@ -1389,7 +1467,7 @@ static int adsp_probe(struct platform_device *pdev)
 
 	ret = qcom_q6v5_init(&adsp->q6v5, pdev, rproc, desc->crash_reason_smem,
 			     desc->crash_reason_stack, desc->smem_host_id,
-			     desc->load_state, qcom_pas_handover);
+			     desc->load_state, desc->early_boot, qcom_pas_handover);
 	if (ret)
 		goto detach_proxy_pds;
 
@@ -1438,6 +1516,21 @@ static int adsp_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Unable to create %s minidump device.\n", md_dev_name);
 
 	qcom_add_ssr_subdev(rproc, &adsp->ssr_subdev, desc->ssr_name);
+
+	/*
+	 * Read back the smp2p slave bits to check if the Subsystem has been
+	 * brought out of reset by another entitiy before kernel entry
+	 */
+	if (adsp->q6v5.early_boot) {
+		adsp->rproc->state = RPROC_DETACHED;
+		ret = ping_subsystem_init(&adsp->q6v5, pdev);
+		if (ret) {
+			dev_err(&pdev->dev, "Unable to find ping/pong bits\n");
+			qcom_remove_sysmon_subdev(adsp->sysmon);
+			return ret;
+		}
+	}
+
 	ret = rproc_add(rproc);
 	if (ret)
 		goto destroy_minidump_dev;
@@ -2126,6 +2219,7 @@ static const struct adsp_data canoe_soccp_resource = {
 	.dtb_pas_id = 0x41,
 	.ssr_name = "soccp",
 	.sysmon_name = "soccp",
+	.early_boot = true,
 };
 
 static const struct adsp_data pineapple_adsp_resource = {

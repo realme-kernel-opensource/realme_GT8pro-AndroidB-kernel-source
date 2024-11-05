@@ -12,22 +12,28 @@ struct rproc;
 struct qcom_smem_state;
 struct qcom_sysmon;
 
+#define PING_TIMEOUT 500 /* in milliseconds */
+#define PING_TEST_WAIT 500 /* in milliseconds */
+
 struct qcom_q6v5 {
 	struct device *dev;
 	struct rproc *rproc;
 
 	struct qcom_smem_state *state;
+	struct qcom_smem_state *ping_state;
 	struct qmp *qmp;
 
 	struct icc_path *path;
 
-	unsigned stop_bit;
+	unsigned int stop_bit;
+	unsigned int ping_bit;
 
 	int wdog_irq;
 	int fatal_irq;
 	int ready_irq;
 	int handover_irq;
 	int stop_irq;
+	int pong_irq;
 
 	struct rproc_subdev *ssr_subdev;
 
@@ -37,6 +43,8 @@ struct qcom_q6v5 {
 
 	struct completion start_done;
 	struct completion stop_done;
+	struct completion subsys_booted;
+	struct completion ping_done;
 
 	int crash_reason;
 	int crash_stack;
@@ -48,11 +56,15 @@ struct qcom_q6v5 {
 	void (*handover)(struct qcom_q6v5 *q6v5);
 	unsigned long long seq;
 	unsigned long long crash_seq;
+
+	bool early_boot;
 };
 
+int ping_subsystem(struct qcom_q6v5 *q6v5);
+int ping_subsystem_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev);
 int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 		   struct rproc *rproc, int crash_reason, int crash_stack,
-		   unsigned int smem_host_id, const char *load_state,
+		   unsigned int smem_host_id, const char *load_state, bool early_boot,
 		   void (*handover)(struct qcom_q6v5 *q6v5));
 void qcom_q6v5_deinit(struct qcom_q6v5 *q6v5);
 
