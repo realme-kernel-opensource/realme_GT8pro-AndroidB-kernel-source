@@ -5442,6 +5442,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	if (ret)
 		goto exit_geni_serial_probe;
 
+	msm_geni_serial_debug_init(uport, is_console);
 	ret = msm_geni_serial_port_init(pdev, dev_port);
 	if (ret)
 		goto exit_geni_serial_probe;
@@ -5449,7 +5450,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "Serial port: %d added.FifoSize: %d is_console: %d\n",
 		 line, uport->fifosize, is_console);
 
-	msm_geni_serial_debug_init(uport, is_console);
 	dev_port->port_setup = false;
 
 	dev_port->uart_error = UART_ERROR_DEFAULT;
