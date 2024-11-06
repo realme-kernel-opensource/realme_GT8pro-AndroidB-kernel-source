@@ -229,7 +229,7 @@ struct gh_vm_console_common_req_payload {
 struct gh_vm_console_write_req_payload {
 	gh_vmid_t vmid;
 	u16 num_bytes;
-	u8 data[0];
+	u8 data[];
 } __packed;
 
 /* Call: GET_ID */
