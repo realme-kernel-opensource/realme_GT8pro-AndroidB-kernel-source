@@ -131,6 +131,7 @@ def define_canoe():
         "drivers/soc/qcom/eud.ko",
         "drivers/soc/qcom/gic_intr_routing.ko",
         "drivers/soc/qcom/llcc-qcom.ko",
+        "drivers/soc/qcom/llcc_perfmon.ko",
         "drivers/soc/qcom/mdt_loader.ko",
         "drivers/soc/qcom/mem-offline.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
