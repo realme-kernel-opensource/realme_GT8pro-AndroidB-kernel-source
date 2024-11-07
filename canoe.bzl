@@ -151,6 +151,7 @@ def define_canoe():
         "drivers/soc/qcom/qcom_rpmh.ko",
         "drivers/soc/qcom/qcom_wdt_core.ko",
         "drivers/soc/qcom/qmi_helpers.ko",
+        "drivers/soc/qcom/qpace/qpace_drv.ko",
         "drivers/soc/qcom/qsee_ipc_irq_bridge.ko",
         "drivers/soc/qcom/secure_buffer.ko",
         "drivers/soc/qcom/smem.ko",

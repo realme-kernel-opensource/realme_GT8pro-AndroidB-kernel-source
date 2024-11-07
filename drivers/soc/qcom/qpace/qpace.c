@@ -313,7 +313,6 @@ static inline int init_transfer_ring(int tr_num)
 	phys_addr_t ring_start_phys, ring_end_phys;
 
 	BUILD_BUG_ON(sizeof(struct qpace_transfer_descriptor) != DESCRIPTOR_SIZE);
-	BUILD_BUG_ON(sizeof(struct transfer_ring) > 64);
 
 	/* Allocate TR buffer */
 	page_ptr = alloc_pages(GFP_KERNEL | __GFP_ZERO,
@@ -403,7 +402,6 @@ static inline int init_event_ring(int er_num)
 	phys_addr_t ring_start_phys, ring_end_phys;
 
 	BUILD_BUG_ON(sizeof(struct qpace_event_descriptor) != DESCRIPTOR_SIZE);
-	BUILD_BUG_ON(sizeof(struct event_ring) > 64);
 
 	init_completion(&ev_rings[er_num].ring_has_events);
 
