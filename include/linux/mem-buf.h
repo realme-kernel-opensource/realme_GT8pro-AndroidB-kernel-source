@@ -68,11 +68,37 @@ struct mem_buf_retrieve_kernel_arg {
 	gh_memparcel_handle_t memparcel_hdl;
 	int fd_flags;
 };
-#if IS_ENABLED(CONFIG_QCOM_MEM_BUF)
+
+#if IS_ENABLED(CONFIG_QCOM_MEM_BUF_GH)
 
 void *mem_buf_alloc(struct mem_buf_allocation_data *alloc_data);
 void mem_buf_free(void *membuf);
 struct gh_sgl_desc *mem_buf_get_sgl(void *membuf);
+struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg);
+
+#else
+
+static inline void *mem_buf_alloc(struct mem_buf_allocation_data *alloc_data)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+static inline void mem_buf_free(void *membuf) {}
+
+static inline struct gh_sgl_desc *mem_buf_get_sgl(void *membuf)
+{
+	return ERR_PTR(-EINVAL);
+}
+
+static inline struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
+{
+	return ERR_PTR(-EINVAL);
+}
+
+#endif /* CONFIG_QCOM_MEM_BUF_GH */
+
+#if IS_ENABLED(CONFIG_QCOM_MEM_BUF_DEV)
+
 int mem_buf_current_vmid(void);
 /*
  * Returns a copy of the Virtual Machine vmids & permissions of the dmabuf.
@@ -83,8 +109,6 @@ int mem_buf_dma_buf_copy_vmperm(struct dma_buf *dmabuf, int **vmids, int **perms
 
 int mem_buf_lend(struct dma_buf *dmabuf,
 		struct mem_buf_lend_kernel_arg *arg);
-
-struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg);
 
 int mem_buf_reclaim(struct dma_buf *dmabuf);
 
@@ -123,77 +147,60 @@ int mem_buf_dma_buf_set_destructor(struct dma_buf *dmabuf,
 
 #else
 
-static inline void *mem_buf_alloc(struct mem_buf_allocation_data *alloc_data)
-{
-	return ERR_PTR(-ENODEV);
-}
-
-static inline void mem_buf_free(void *membuf) {}
-
-static inline struct gh_sgl_desc *mem_buf_get_sgl(void *membuf)
-{
-	return ERR_PTR(-EINVAL);
-}
-
 static inline int mem_buf_current_vmid(void)
 {
 	return -EINVAL;
 }
 
-int mem_buf_dma_buf_copy_vmperm(struct dma_buf *dmabuf, int **vmids, int **perms,
+static inline int mem_buf_dma_buf_copy_vmperm(struct dma_buf *dmabuf, int **vmids, int **perms,
 				int *nr_acl_entries)
 {
 	return -EINVAL;
 }
 
-int mem_buf_lend(struct dma_buf *dmabuf, struct mem_buf_lend_kernel_arg *arg)
+static inline int mem_buf_lend(struct dma_buf *dmabuf, struct mem_buf_lend_kernel_arg *arg)
 {
 	return -EINVAL;
 }
 
-struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
+static inline int mem_buf_reclaim(struct dma_buf *dmabuf)
+{
+	return -EINVAL;
+}
+
+static inline int mem_buf_share(struct dma_buf *dmabuf, struct mem_buf_lend_kernel_arg *arg)
+{
+	return -EINVAL;
+}
+
+static inline struct mem_buf_vmperm *to_mem_buf_vmperm(struct dma_buf *dmabuf)
 {
 	return ERR_PTR(-EINVAL);
 }
 
-int mem_buf_reclaim(struct dma_buf *dmabuf)
-{
-	return -EINVAL;
-}
-
-int mem_buf_share(struct dma_buf *dmabuf, struct mem_buf_lend_kernel_arg *arg)
-{
-	return -EINVAL;
-}
-
-struct mem_buf_vmperm *to_mem_buf_vmperm(struct dma_buf *dmabuf)
-{
-	return ERR_PTR(-EINVAL);
-}
-
-bool mem_buf_dma_buf_exclusive_owner(struct dma_buf *dmabuf)
+static inline bool mem_buf_dma_buf_exclusive_owner(struct dma_buf *dmabuf)
 {
 	return false;
 }
 
-int mem_buf_dma_buf_get_vmperm(struct dma_buf *dmabuf, const int **vmids,
+static inline int mem_buf_dma_buf_get_vmperm(struct dma_buf *dmabuf, const int **vmids,
 				const int **perms, int *nr_acl_entries)
 {
 	return -EINVAL;
 }
 
-int mem_buf_dma_buf_get_memparcel_hdl(struct dma_buf *dmabuf,
+static inline int mem_buf_dma_buf_get_memparcel_hdl(struct dma_buf *dmabuf,
 					gh_memparcel_handle_t *memparcel_hdl)
 {
 	return -EINVAL;
 }
 
-int mem_buf_dma_buf_set_destructor(struct dma_buf *dmabuf,
+static inline int mem_buf_dma_buf_set_destructor(struct dma_buf *dmabuf,
 				   mem_buf_dma_buf_destructor dtor,
 				   void *dtor_data)
 {
 	return -EINVAL;
 }
 
-#endif /* CONFIG_QCOM_MEM_BUF */
+#endif /* CONFIG_QCOM_MEM_BUF_DEV */
 #endif /* _MEM_BUF_H */
