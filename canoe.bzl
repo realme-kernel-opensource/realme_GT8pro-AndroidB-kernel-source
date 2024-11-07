@@ -28,6 +28,7 @@ def define_canoe():
         "drivers/clk/qcom/tcsrcc-canoe.ko",
         "drivers/clk/qcom/videocc-canoe.ko",
         "drivers/cpuidle/governors/qcom_lpm.ko",
+        "drivers/crypto/qcom-rng.ko",
         "drivers/devfreq/governor_gpubw_mon.ko",
         "drivers/devfreq/governor_msm_adreno_tz.ko",
         "drivers/dma-buf/heaps/qcom_dma_heaps.ko",
