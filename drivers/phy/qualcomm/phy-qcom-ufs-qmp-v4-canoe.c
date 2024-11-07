@@ -10,6 +10,27 @@
 static inline void ufs_qcom_phy_qmp_v4_start_serdes(struct ufs_qcom_phy *phy);
 static int ufs_qcom_phy_qmp_v4_is_pcs_ready(struct ufs_qcom_phy *phy_common);
 
+static void ufs_qcom_phy_bsp_tuning(struct ufs_qcom_phy *ufs_qcom_phy)
+{
+	struct device *dev = ufs_qcom_phy->dev;
+	struct phy_tuning_entry *entries;
+	int i;
+
+	if (!ufs_qcom_phy->tuning.entries)
+		return;
+
+	entries = ufs_qcom_phy->tuning.entries;
+	for (i = 0; i < ufs_qcom_phy->tuning.count; i++) {
+		/* device_id == 0 means apply the setting for all vendors */
+		if (!entries[i].device_id ||
+			entries[i].device_id == ufs_qcom_phy->device_id)
+			writel_relaxed(entries[i].tuning_val,
+				ufs_qcom_phy->mmio + entries[i].reg_offset);
+			dev_dbg(dev, "ufs phy tuning: offset=0x%x, val=0x%x\n",
+				entries[i].reg_offset, entries[i].tuning_val);
+	}
+}
+
 static int ufs_qcom_phy_qmp_v4_phy_calibrate(struct phy *generic_phy)
 {
 	struct ufs_qcom_phy *ufs_qcom_phy = get_ufs_qcom_phy(generic_phy);
@@ -33,6 +54,8 @@ static int ufs_qcom_phy_qmp_v4_phy_calibrate(struct phy *generic_phy)
 	}
 
 	is_rate_B = (ufs_qcom_phy->mode == PHY_MODE_UFS_HS_B) ? true : false;
+
+	ufs_qcom_phy_bsp_tuning(ufs_qcom_phy);
 
 	writel_relaxed(0x01, ufs_qcom_phy->mmio + UFS_PHY_SW_RESET);
 	/* Ensure PHY is in reset before writing PHY calibration data */
