@@ -43,9 +43,9 @@ def define_signing_keys():
         name = "signing_key",
         srcs = ["//msm-kernel:certs/qcom_x509.genkey"],
         outs = ["signing_key.pem"],
-        tools = ["//prebuilts/build-tools:linux-x86/bin/openssl"],
+        tools = ["//prebuilts/build-tools:openssl"],
         cmd_bash = """
-          $(location //prebuilts/build-tools:linux-x86/bin/openssl) req -new -nodes -utf8 -sha256 -days 36500 \
+          $(location //prebuilts/build-tools:openssl) req -new -nodes -utf8 -sha256 -days 36500 \
             -batch -x509 -config $(location //msm-kernel:certs/qcom_x509.genkey) \
             -outform PEM -out "$@" -keyout "$@"
         """,
@@ -55,9 +55,9 @@ def define_signing_keys():
         name = "verity_key",
         srcs = ["//msm-kernel:certs/qcom_x509.genkey"],
         outs = ["verity_cert.pem", "verity_key.pem"],
-        tools = ["//prebuilts/build-tools:linux-x86/bin/openssl"],
+        tools = ["//prebuilts/build-tools:openssl"],
         cmd_bash = """
-          $(location //prebuilts/build-tools:linux-x86/bin/openssl) req -new -nodes -utf8 -newkey rsa:1024 -days 36500 \
+          $(location //prebuilts/build-tools:openssl) req -new -nodes -utf8 -newkey rsa:1024 -days 36500 \
             -batch -x509 -config $(location //msm-kernel:certs/qcom_x509.genkey) \
             -outform PEM -out $(location verity_cert.pem) -keyout $(location verity_key.pem)
         """,
