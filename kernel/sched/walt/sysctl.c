@@ -43,10 +43,8 @@ unsigned int sysctl_sched_coloc_busy_hyst_cpu[WALT_NR_CPUS];
 unsigned int sysctl_sched_coloc_busy_hyst_max_ms;
 unsigned int sysctl_sched_coloc_busy_hyst_cpu_busy_pct[WALT_NR_CPUS];
 unsigned int sysctl_sched_util_busy_hyst_enable_cpus;
-unsigned int sysctl_sched_legacy_smart_freq_hyst_enable_cpus;
 unsigned int sysctl_sched_util_busy_hyst_cpu[WALT_NR_CPUS];
 unsigned int sysctl_sched_util_busy_hyst_cpu_util[WALT_NR_CPUS];
-unsigned int sysctl_sched_legacy_smart_freq_hyst_cpu_ns[WALT_NR_CPUS];
 unsigned int sysctl_sched_boost;
 unsigned int sysctl_sched_wake_up_idle[2];
 unsigned int sysctl_input_boost_ms;
@@ -101,6 +99,32 @@ unsigned int sysctl_ipc_freq_levels_cluster1[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster3[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_sched_walt_core_util[WALT_NR_CPUS];
+unsigned int sysctl_pipeline_busy_boost_pct;
+unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
+unsigned int sysctl_cluster01_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster01_load_sync_60fps[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster02_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster03_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster10_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster10_load_sync_60fps[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster12_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster13_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster20_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster21_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster23_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster30_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster31_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int sysctl_cluster32_load_sync[NUM_LOAD_SYNC_SETTINGS];
+unsigned int load_sync_util_thres[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int load_sync_util_thres_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int load_sync_low_pct[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int load_sync_low_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int load_sync_high_pct[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int load_sync_high_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int sysctl_pipeline_special_task_util_thres;
+unsigned int sysctl_pipeline_non_special_task_util_thres;
+unsigned int sysctl_pipeline_pin_thres_low_pct;
+unsigned int sysctl_pipeline_pin_thres_high_pct;
 
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
@@ -909,7 +933,222 @@ unlock_mutex:
 	return ret;
 }
 
+static DEFINE_MUTEX(load_sync_mutex);
+int sched_load_sync_handler(const struct ctl_table *table, int write,
+					       void __user *buffer, size_t *lenp,
+					       loff_t *ppos)
+{
+	int ret;
+	unsigned int *data = (unsigned int *)table->data;
+
+	if (num_sched_clusters <= 0)
+		return -EINVAL;
+
+	mutex_lock(&load_sync_mutex);
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (ret)
+		goto unlock_mutex;
+
+	if (data == &sysctl_cluster01_load_sync[0]) {
+		load_sync_util_thres[0][1] = data[0];
+		load_sync_low_pct[0][1] = data[1];
+		load_sync_high_pct[0][1] = data[2];
+	} else if (data == &sysctl_cluster01_load_sync_60fps[0]) {
+		load_sync_util_thres_60fps[0][1] = data[0];
+		load_sync_low_pct_60fps[0][1] = data[1];
+		load_sync_high_pct_60fps[0][1] = data[2];
+	} else if (data == &sysctl_cluster02_load_sync[0]) {
+		load_sync_util_thres[0][2] = data[0];
+		load_sync_low_pct[0][2] = data[1];
+		load_sync_high_pct[0][2] = data[2];
+	} else if (data == &sysctl_cluster03_load_sync[0]) {
+		load_sync_util_thres[0][3] = data[0];
+		load_sync_low_pct[0][3] = data[1];
+		load_sync_high_pct[0][3] = data[2];
+	} else if (data == &sysctl_cluster10_load_sync[0]) {
+		load_sync_util_thres[1][0] = data[0];
+		load_sync_low_pct[1][0] = data[1];
+		load_sync_high_pct[1][0] = data[2];
+	} else if (data == &sysctl_cluster10_load_sync_60fps[0]) {
+		load_sync_util_thres_60fps[1][0] = data[0];
+		load_sync_low_pct_60fps[1][0] = data[1];
+		load_sync_high_pct_60fps[1][0] = data[2];
+	} else if (data == &sysctl_cluster12_load_sync[0]) {
+		load_sync_util_thres[1][2] = data[0];
+		load_sync_low_pct[1][2] = data[1];
+		load_sync_high_pct[1][2] = data[2];
+	} else if (data == &sysctl_cluster13_load_sync[0]) {
+		load_sync_util_thres[1][3] = data[0];
+		load_sync_low_pct[1][3] = data[1];
+		load_sync_high_pct[1][3] = data[2];
+	} else if (data == &sysctl_cluster20_load_sync[0]) {
+		load_sync_util_thres[2][0] = data[0];
+		load_sync_low_pct[2][0] = data[1];
+		load_sync_high_pct[2][0] = data[2];
+	} else if (data == &sysctl_cluster21_load_sync[0]) {
+		load_sync_util_thres[2][1] = data[0];
+		load_sync_low_pct[2][1] = data[1];
+		load_sync_high_pct[2][1] = data[2];
+	} else if (data == &sysctl_cluster23_load_sync[0]) {
+		load_sync_util_thres[2][3] = data[0];
+		load_sync_low_pct[2][3] = data[1];
+		load_sync_high_pct[2][3] = data[2];
+	} else if (data == &sysctl_cluster30_load_sync[0]) {
+		load_sync_util_thres[3][0] = data[0];
+		load_sync_low_pct[3][0] = data[1];
+		load_sync_high_pct[3][0] = data[2];
+	} else if (data == &sysctl_cluster31_load_sync[0]) {
+		load_sync_util_thres[3][1] = data[0];
+		load_sync_low_pct[3][1] = data[1];
+		load_sync_high_pct[3][1] = data[2];
+	} else if (data == &sysctl_cluster32_load_sync[0]) {
+		load_sync_util_thres[3][2] = data[0];
+		load_sync_low_pct[3][2] = data[1];
+		load_sync_high_pct[3][2] = data[2];
+	}
+
+unlock_mutex:
+	mutex_unlock(&load_sync_mutex);
+	return ret;
+}
+
 #endif /* CONFIG_PROC_SYSCTL */
+
+static struct ctl_table cluster_01[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster01_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+	{
+		.procname	= "load_sync_settings_60fps",
+		.data		= &sysctl_cluster01_load_sync_60fps,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
+
+static struct ctl_table cluster_02[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster02_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
+
+static struct ctl_table cluster_03[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster03_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
+
+static struct ctl_table cluster_10[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster10_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+	{
+		.procname	= "load_sync_settings_60fps",
+		.data		= &sysctl_cluster10_load_sync_60fps,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
+
+static struct ctl_table cluster_12[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster12_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
+
+static struct ctl_table cluster_13[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster13_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
+
+
+static struct ctl_table cluster_20[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster20_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
+
+static struct ctl_table cluster_21[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster21_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
+
+static struct ctl_table cluster_23[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster23_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
+
+static struct ctl_table cluster_30[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster30_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
+
+static struct ctl_table cluster_31[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster31_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
+
+static struct ctl_table cluster_32[] = {
+	{
+		.procname	= "load_sync_settings",
+		.data		= &sysctl_cluster32_load_sync,
+		.maxlen		= NUM_LOAD_SYNC_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_load_sync_handler,
+	},
+};
 
 static struct ctl_table smart_freq_cluster0[] = {
 	{
@@ -1229,24 +1468,6 @@ static struct ctl_table walt_table[] = {
 		.proc_handler	= sched_busy_hyst_handler,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &one_thousand,
-	},
-	{
-		.procname	= "sched_legacy_smart_freq_hysteresis_enable_cpus",
-		.data		= &sysctl_sched_legacy_smart_freq_hyst_enable_cpus,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= sched_busy_hyst_handler,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= &two_hundred_fifty_five,
-	},
-	{
-		.procname	= "sched_legacy_smart_freq_hyst_cpu_ns",
-		.data		= &sysctl_sched_legacy_smart_freq_hyst_cpu_ns,
-		.maxlen		= sizeof(unsigned int) * WALT_NR_CPUS,
-		.mode		= 0644,
-		.proc_handler	= sched_busy_hyst_handler,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= &ns_per_sec,
 	},
 	{
 		.procname	= "sched_ravg_window_nr_ticks",
@@ -1632,36 +1853,116 @@ static struct ctl_table walt_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_INT_MAX,
 	},
+	{
+		.procname	= "sched_pipeline_busy_boost_pct",
+		.data		= &sysctl_pipeline_busy_boost_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "sched_lrpb_active_ms",
+		.data		= &sysctl_sched_lrpb_active_ms,
+		.maxlen		= sizeof(unsigned int) * NUM_PIPELINE_BUSY_THRES,
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_pipeline_special_task_util_thres",
+		.data		= &sysctl_pipeline_special_task_util_thres,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_pipeline_non_special_task_util_thres",
+		.data		= &sysctl_pipeline_non_special_task_util_thres,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_pipeline_pin_thres_low_pct",
+		.data		= &sysctl_pipeline_pin_thres_low_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_pipeline_pin_thres_high_pct",
+		.data		= &sysctl_pipeline_pin_thres_high_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
 };
 
 void walt_register_sysctl(void)
 {
 	struct ctl_table_header *hdr, *hdr2,
 		*hdr3 = NULL, *hdr4 = NULL,
-		*hdr5 = NULL, *hdr6 = NULL;
+		*hdr5 = NULL, *hdr6 = NULL,
+		*hdr7 = NULL, *hdr8 = NULL,
+		*hdr9 = NULL, *hdr10 = NULL,
+		*hdr11 = NULL, *hdr12 = NULL,
+		*hdr13 = NULL, *hdr14 = NULL,
+		*hdr15 = NULL, *hdr16 = NULL,
+		*hdr17 = NULL, *hdr18 = NULL;
 
 	hdr = register_sysctl("walt", walt_table);
 	hdr2 = register_sysctl("walt/input_boost", input_boost_sysctls);
 
 	if (num_sched_clusters >= 1) {
-		hdr3 = register_sysctl("walt/cluster0/smart_freq",
-				smart_freq_cluster0);
+		hdr3 = register_sysctl("walt/cluster0/smart_freq", smart_freq_cluster0);
 		kmemleak_not_leak(hdr3);
 	}
 	if (num_sched_clusters >= 2) {
-		hdr4 = register_sysctl("walt/cluster1/smart_freq",
-				smart_freq_cluster1);
+		hdr4 = register_sysctl("walt/cluster1/smart_freq", smart_freq_cluster1);
+		hdr7 = register_sysctl("walt/cluster0/cluster1", cluster_01);
+		hdr8 = register_sysctl("walt/cluster1/cluster0", cluster_10);
 		kmemleak_not_leak(hdr4);
+		kmemleak_not_leak(hdr7);
+		kmemleak_not_leak(hdr8);
 	}
 	if (num_sched_clusters >= 3) {
-		hdr5 = register_sysctl("walt/cluster2/smart_freq",
-				smart_freq_cluster2);
+		hdr5 = register_sysctl("walt/cluster2/smart_freq", smart_freq_cluster2);
+		hdr9 = register_sysctl("walt/cluster0/cluster2", cluster_02);
+		hdr10 = register_sysctl("walt/cluster1/cluster2", cluster_12);
+		hdr11 = register_sysctl("walt/cluster2/cluster0", cluster_20);
+		hdr12 = register_sysctl("walt/cluster2/cluster1", cluster_21);
 		kmemleak_not_leak(hdr5);
+		kmemleak_not_leak(hdr9);
+		kmemleak_not_leak(hdr10);
+		kmemleak_not_leak(hdr11);
+		kmemleak_not_leak(hdr12);
 	}
 	if (num_sched_clusters >= 4) {
-		hdr6 = register_sysctl("walt/cluster3/smart_freq",
-				smart_freq_cluster3);
+		hdr6 = register_sysctl("walt/cluster3/smart_freq", smart_freq_cluster3);
+		hdr13 = register_sysctl("walt/cluster0/cluster3", cluster_03);
+		hdr14 = register_sysctl("walt/cluster1/cluster3", cluster_13);
+		hdr15 = register_sysctl("walt/cluster2/cluster3", cluster_23);
+		hdr16 = register_sysctl("walt/cluster3/cluster0", cluster_30);
+		hdr17 = register_sysctl("walt/cluster3/cluster1", cluster_31);
+		hdr18 = register_sysctl("walt/cluster3/cluster2", cluster_32);
 		kmemleak_not_leak(hdr6);
+		kmemleak_not_leak(hdr13);
+		kmemleak_not_leak(hdr14);
+		kmemleak_not_leak(hdr15);
+		kmemleak_not_leak(hdr16);
+		kmemleak_not_leak(hdr17);
+		kmemleak_not_leak(hdr18);
 	}
 
 	kmemleak_not_leak(hdr);

@@ -6,7 +6,6 @@
 #include "walt.h"
 #include "trace.h"
 
-unsigned int enable_pipeline_boost;
 
 static DEFINE_RAW_SPINLOCK(pipeline_lock);
 static struct walt_task_struct *pipeline_wts[WALT_NR_CPUS];
@@ -14,10 +13,11 @@ int pipeline_nr;
 
 static DEFINE_RAW_SPINLOCK(heavy_lock);
 static struct walt_task_struct *heavy_wts[MAX_NR_PIPELINE];
+bool pipeline_pinning;
 
 static inline int pipeline_demand(struct walt_task_struct *wts)
 {
-	return wts->coloc_demand;
+	return scale_time_to_util(wts->coloc_demand);
 }
 
 int add_pipeline(struct walt_task_struct *wts)
@@ -53,7 +53,7 @@ out:
 
 int remove_pipeline(struct walt_task_struct *wts)
 {
-	int i, ret = 0;
+	int i, j, ret = 0;
 	unsigned long flags;
 
 	if (unlikely(walt_disabled))
@@ -61,11 +61,15 @@ int remove_pipeline(struct walt_task_struct *wts)
 
 	raw_spin_lock_irqsave(&pipeline_lock, flags);
 
-	/* assume only one entry of wts exists in the lists */
 	for (i = 0; i < WALT_NR_CPUS; i++) {
 		if (wts == pipeline_wts[i]) {
+			wts->low_latency &= ~WALT_LOW_LATENCY_PIPELINE_BIT;
 			pipeline_wts[i] = NULL;
 			pipeline_nr--;
+			for (j = i; j < WALT_NR_CPUS - 1; j++) {
+				pipeline_wts[j] = pipeline_wts[j + 1];
+				pipeline_wts[j + 1] = NULL;
+			}
 			goto out;
 		}
 	}
@@ -76,7 +80,7 @@ out:
 
 int remove_heavy(struct walt_task_struct *wts)
 {
-	int i, ret = 0;
+	int i, j, ret = 0;
 	unsigned long flags;
 
 	if (unlikely(walt_disabled))
@@ -84,11 +88,15 @@ int remove_heavy(struct walt_task_struct *wts)
 
 	raw_spin_lock_irqsave(&heavy_lock, flags);
 
-	/* assume only one entry of wts exists in the lists */
 	for (i = 0; i < MAX_NR_PIPELINE; i++) {
 		if (wts == heavy_wts[i]) {
 			wts->low_latency &= ~WALT_LOW_LATENCY_HEAVY_BIT;
 			heavy_wts[i] = NULL;
+			have_heavy_list--;
+			for (j = i; j < MAX_NR_PIPELINE - 1; j++) {
+				heavy_wts[j] = heavy_wts[j + 1];
+				heavy_wts[j + 1] = NULL;
+			}
 			goto out;
 		}
 	}
@@ -123,27 +131,28 @@ void set_special_task(struct task_struct *pipeline_special_local)
 
 cpumask_t cpus_for_pipeline = { CPU_BITS_NONE };
 
-/* always set boost for max cluster, for pipeline tasks */
-static inline void pipeline_set_boost(bool boost, int flag)
+/* always set unisolation for max cluster, for pipeline tasks */
+static inline void pipeline_set_unisolation(bool set, int flag)
 {
-	static bool isolation_boost;
+	static bool unisolation_state;
 	struct walt_sched_cluster *cluster;
+	static unsigned int enable_pipeline_unisolation;
 
-	if (!boost)
-		enable_pipeline_boost &= ~(1 << flag);
+	if (!set)
+		enable_pipeline_unisolation &= ~(1 << flag);
 	else
-		enable_pipeline_boost |= (1 << flag);
+		enable_pipeline_unisolation |= (1 << flag);
 
-	if (isolation_boost && !enable_pipeline_boost) {
-		isolation_boost = false;
+	if (unisolation_state && !enable_pipeline_unisolation) {
+		unisolation_state = false;
 
 		for_each_sched_cluster(cluster) {
 			if (cpumask_intersects(&cpus_for_pipeline, &cluster->cpus) ||
 			    is_max_possible_cluster_cpu(cpumask_first(&cluster->cpus)))
 				core_ctl_set_cluster_boost(cluster->id, false);
 		}
-	} else if (!isolation_boost && enable_pipeline_boost) {
-		isolation_boost = true;
+	} else if (!unisolation_state && enable_pipeline_unisolation) {
+		unisolation_state = true;
 
 		for_each_sched_cluster(cluster) {
 			if (cpumask_intersects(&cpus_for_pipeline, &cluster->cpus) ||
@@ -155,25 +164,47 @@ static inline void pipeline_set_boost(bool boost, int flag)
 
 /*
  * sysctl_sched_heavy_nr or sysctl_sched_pipeline_util_thres can change at any moment in time.
- * as a result, the ability to set/clear boost state for a particular type of pipeline, is
- * hindered. Detect a transition and reset the boost state of the pipeline method no longer in use.
+ * as a result, the ability to set/clear unisolation state for a particular type of pipeline, is
+ * hindered. Detect a transition and reset the unisolation state of the pipeline method no longer
+ * in use.
  */
-static inline void pipeline_reset_boost(void)
+static inline void pipeline_reset_unisolation_state(void)
 {
 	static bool last_auto_pipeline;
 
 	if ((sysctl_sched_heavy_nr || sysctl_sched_pipeline_util_thres) && !last_auto_pipeline) {
-		pipeline_set_boost(false, MANUAL_PIPELINE);
+		pipeline_set_unisolation(false, MANUAL_PIPELINE);
 		last_auto_pipeline = true;
 	} else if (!sysctl_sched_heavy_nr &&
 			!sysctl_sched_pipeline_util_thres && last_auto_pipeline) {
-		pipeline_set_boost(false, AUTO_PIPELINE);
+		pipeline_set_unisolation(false, AUTO_PIPELINE);
 		last_auto_pipeline = false;
 	}
 }
 
+static inline bool should_pipeline_pin_special(void)
+{
+	if (!pipeline_special_task)
+		return false;
+	if (!heavy_wts[MAX_NR_PIPELINE - 1])
+		return false;
+	if (pipeline_demand(heavy_wts[0]) <= sysctl_pipeline_special_task_util_thres)
+		return true;
+	if (pipeline_demand(heavy_wts[1]) <= sysctl_pipeline_non_special_task_util_thres)
+		return true;
+	if (pipeline_pinning && (pipeline_demand(heavy_wts[0]) <=
+		mult_frac(pipeline_demand(heavy_wts[1]), sysctl_pipeline_pin_thres_low_pct, 100)))
+		return false;
+	if (!pipeline_pinning && (pipeline_demand(heavy_wts[0]) <=
+		mult_frac(pipeline_demand(heavy_wts[1]), sysctl_pipeline_pin_thres_high_pct, 100)))
+		return false;
+
+	return true;
+}
+
 cpumask_t last_available_big_cpus = CPU_MASK_NONE;
 int have_heavy_list;
+u32 total_util;
 bool find_heaviest_topapp(u64 window_start)
 {
 	struct walt_related_thread_group *grp;
@@ -182,17 +213,14 @@ bool find_heaviest_topapp(u64 window_start)
 	static u64 last_rearrange_ns;
 	int i, j, start;
 	struct walt_task_struct *heavy_wts_to_drop[MAX_NR_PIPELINE];
-	u32 total_util = 0;
 
 	if (num_sched_clusters < 2)
 		return false;
 
-	if (last_rearrange_ns && (window_start < (last_rearrange_ns + 100 * MSEC_TO_NSEC)))
-		return false;
-
 	/* lazy enabling disabling until 100mS for colocation or heavy_nr change */
 	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
-	if (!grp || (!sysctl_sched_heavy_nr && !sysctl_sched_pipeline_util_thres)) {
+	if (!grp || (!sysctl_sched_heavy_nr && !sysctl_sched_pipeline_util_thres) ||
+		sched_boost_type) {
 		if (have_heavy_list) {
 			raw_spin_lock_irqsave(&heavy_lock, flags);
 			for (i = 0; i < MAX_NR_PIPELINE; i++) {
@@ -205,10 +233,14 @@ bool find_heaviest_topapp(u64 window_start)
 			raw_spin_unlock_irqrestore(&heavy_lock, flags);
 			have_heavy_list = 0;
 
-			pipeline_set_boost(false, AUTO_PIPELINE);
+			pipeline_set_unisolation(false, AUTO_PIPELINE);
 		}
 		return false;
 	}
+
+	if (last_rearrange_ns && (window_start < (last_rearrange_ns + 100 * MSEC_TO_NSEC)))
+		return false;
+	last_rearrange_ns = window_start;
 
 	raw_spin_lock_irqsave(&grp->lock, flags);
 	raw_spin_lock(&heavy_lock);
@@ -262,6 +294,7 @@ bool find_heaviest_topapp(u64 window_start)
 	 * Determine how many of the top three pipeline tasks
 	 * If "sched_heavy_nr" node is set, the util threshold is ignored.
 	 */
+	total_util = 0;
 	if (sysctl_sched_heavy_nr) {
 		for (i = sysctl_sched_heavy_nr; i < MAX_NR_PIPELINE; i++)
 			heavy_wts[i] = NULL;
@@ -271,7 +304,7 @@ bool find_heaviest_topapp(u64 window_start)
 				total_util += pipeline_demand(heavy_wts[i]);
 		}
 
-		if (scale_time_to_util((u64)total_util) < sysctl_sched_pipeline_util_thres)
+		if (total_util < sysctl_sched_pipeline_util_thres)
 			heavy_wts[MAX_NR_PIPELINE - 1] = NULL;
 	}
 
@@ -293,20 +326,49 @@ bool find_heaviest_topapp(u64 window_start)
 			heavy_wts_to_drop[i]->low_latency &= ~WALT_LOW_LATENCY_HEAVY_BIT;
 			heavy_wts_to_drop[i]->pipeline_cpu = -1;
 		}
+
+		if (heavy_wts[i])
+			heavy_wts[i]->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
 	}
 
-	pipeline_set_boost(true, AUTO_PIPELINE);
+	if (heavy_wts[MAX_NR_PIPELINE - 1])
+		pipeline_set_unisolation(true, AUTO_PIPELINE);
+	else
+		pipeline_set_unisolation(false, AUTO_PIPELINE);
+
+	raw_spin_unlock(&heavy_lock);
+	raw_spin_unlock_irqrestore(&grp->lock, flags);
+	return true;
+}
+
+void assign_heaviest_topapp(bool found_topapp)
+{
+	int i;
+	struct walt_task_struct *wts;
+
+	if (!found_topapp)
+		return;
+
+	raw_spin_lock(&heavy_lock);
 
 	/* start with non-prime cpus chosen for this chipset (e.g. golds) */
 	cpumask_and(&last_available_big_cpus, cpu_online_mask, &cpus_for_pipeline);
 	cpumask_andnot(&last_available_big_cpus, &last_available_big_cpus, cpu_halt_mask);
 
-	if (pipeline_special_task) {
+	/*
+	 * Ensure the special task is only pinned if there are 3 auto pipeline tasks and
+	 * check certain demand conditions between special pipeline task and the largest
+	 * non-special pipeline task.
+	 */
+	if (should_pipeline_pin_special()) {
+		pipeline_pinning = true;
 		heavy_wts[0]->pipeline_cpu =
 			cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
 		heavy_wts[0]->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
 		if (cpumask_test_cpu(heavy_wts[0]->pipeline_cpu, &last_available_big_cpus))
 			cpumask_clear_cpu(heavy_wts[0]->pipeline_cpu, &last_available_big_cpus);
+	} else {
+		pipeline_pinning = false;
 	}
 
 	for (i = 0; i < MAX_NR_PIPELINE; i++) {
@@ -314,7 +376,7 @@ bool find_heaviest_topapp(u64 window_start)
 		if (!wts)
 			continue;
 
-		if (i == 0 && pipeline_special_task)
+		if (i == 0 && pipeline_pinning)
 			continue;
 
 		if (wts->pipeline_cpu != -1) {
@@ -341,7 +403,10 @@ bool find_heaviest_topapp(u64 window_start)
 				heavy_wts[i]->pipeline_cpu = -1;
 				heavy_wts[i] = NULL;
 			} else {
-				wts->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
+				/*
+				 * clear cpu from the avalilable list of pipeline cpus.
+				 * as pipeline_cpu is assigned for the task.
+				 */
 				cpumask_clear_cpu(wts->pipeline_cpu, &last_available_big_cpus);
 			}
 		}
@@ -349,21 +414,16 @@ bool find_heaviest_topapp(u64 window_start)
 			have_heavy_list++;
 	}
 
-	last_rearrange_ns = window_start;
-
 	if (trace_sched_pipeline_tasks_enabled()) {
 		for (i = 0; i < MAX_NR_PIPELINE; i++) {
 			if (heavy_wts[i] != NULL)
 				trace_sched_pipeline_tasks(AUTO_PIPELINE, i, heavy_wts[i],
-						have_heavy_list);
+						have_heavy_list, total_util, pipeline_pinning);
 		}
 	}
 
 	raw_spin_unlock(&heavy_lock);
-	raw_spin_unlock_irqrestore(&grp->lock, flags);
-	return true;
 }
-
 static inline void swap_pipeline_with_prime_locked(struct walt_task_struct *prime_wts,
 						   struct walt_task_struct *other_wts)
 {
@@ -452,10 +512,15 @@ void rearrange_heavy(u64 window_start, bool force)
 	if (num_sched_clusters < 2)
 		return;
 
-	if (pipeline_special_task)
-		return;
-
+	/*
+	 * TODO: As primes are isolated under have_heavy_list < 3, and pipeline misfits are also
+	 * disabled, setting the prime worthy task's pipeline_cpu as CPU7 could lead to the
+	 * pipeline_cpu selection being ignored until the next run of find_heaviest_toppapp(),
+	 * and furthermore remove the task's current gold pipeline_cpu, which could cause the
+	 * task to start bouncing around on the golds, and ultimately lead to suboptimal behavior.
+	 */
 	if (have_heavy_list <= 2) {
+		raw_spin_lock_irqsave(&heavy_lock, flags);
 		find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
 
 		if (prime_wts && !is_prime_worthy(prime_wts)) {
@@ -476,13 +541,17 @@ void rearrange_heavy(u64 window_start, bool force)
 			swap_pipeline_with_prime_locked(NULL, other_wts);
 		}
 
+		raw_spin_unlock_irqrestore(&heavy_lock, flags);
 		return;
 	}
+
+	if (pipeline_pinning)
+		return;
 
 	if (delay_rearrange(window_start, AUTO_PIPELINE, force))
 		return;
 
-	if (!soc_feat(SOC_ENABLE_PIPELINE_SWAPPING_BIT))
+	if (!soc_feat(SOC_ENABLE_PIPELINE_SWAPPING_BIT) && !force)
 		return;
 
 	raw_spin_lock_irqsave(&heavy_lock, flags);
@@ -498,12 +567,12 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 {
 	unsigned long flags;
 	struct walt_task_struct *wts;
-	bool found_pipeline = false;
+	bool set_unisolation = false;
 	u32 max_demand = 0;
 	struct walt_task_struct *prime_wts = NULL;
 	struct walt_task_struct *other_wts = NULL;
 	static int assign_cpu = -1;
-	static bool last_found_pipeline;
+	static bool last_set_unisolation;
 	int i;
 
 	if (sysctl_sched_heavy_nr || sysctl_sched_pipeline_util_thres)
@@ -512,14 +581,15 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 	if (num_sched_clusters < 2)
 		return;
 
+	if (!pipeline_nr || sched_boost_type)
+		goto out;
+
 	if (delay_rearrange(window_start, MANUAL_PIPELINE, false))
 		goto out;
 
 	raw_spin_lock_irqsave(&pipeline_lock, flags);
-	if (pipeline_nr == 0)
-		goto release_lock;
 
-	found_pipeline = true;
+	set_unisolation = true;
 
 	for (i = 0; i < WALT_NR_CPUS; i++) {
 		wts = pipeline_wts[i];
@@ -561,6 +631,7 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 	}
 
 	if (pipeline_nr <= 2) {
+		set_unisolation = false;
 		if (prime_wts && !is_prime_worthy(prime_wts)) {
 			/* demote prime_wts, it is not worthy */
 			assign_cpu = cpumask_next_and(assign_cpu,
@@ -579,7 +650,11 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 		if (!prime_wts && is_prime_worthy(other_wts)) {
 			/* promote other_wts to prime, it is worthy */
 			swap_pipeline_with_prime_locked(NULL, other_wts);
+			set_unisolation = true;
 		}
+
+		if (prime_wts)
+			set_unisolation = true;
 
 		goto release_lock;
 	}
@@ -591,7 +666,7 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 		for (i = 0; i < WALT_NR_CPUS; i++) {
 			if (pipeline_wts[i] != NULL)
 				trace_sched_pipeline_tasks(MANUAL_PIPELINE, i, pipeline_wts[i],
-						pipeline_nr);
+						pipeline_nr, 0, 0);
 		}
 	}
 
@@ -599,20 +674,27 @@ release_lock:
 	raw_spin_unlock_irqrestore(&pipeline_lock, flags);
 
 out:
-	if (found_pipeline ^ last_found_pipeline) {
-		pipeline_set_boost(found_pipeline, MANUAL_PIPELINE);
-		last_found_pipeline = found_pipeline;
+	if (set_unisolation ^ last_set_unisolation) {
+		pipeline_set_unisolation(set_unisolation, MANUAL_PIPELINE);
+		last_set_unisolation = set_unisolation;
 	}
 }
 
-void pipeline_check(struct walt_rq *wrq)
+bool pipeline_check(struct walt_rq *wrq)
 {
 	/* found_topapp should force rearrangement */
 	bool found_topapp = find_heaviest_topapp(wrq->window_start);
 
-	rearrange_heavy(wrq->window_start, found_topapp);
 	rearrange_pipeline_preferred_cpus(wrq->window_start);
-	pipeline_reset_boost();
+	pipeline_reset_unisolation_state();
+
+	return found_topapp;
+}
+
+void pipeline_rearrange(struct walt_rq *wrq, bool found_topapp)
+{
+	assign_heaviest_topapp(found_topapp);
+	rearrange_heavy(wrq->window_start, found_topapp);
 }
 
 bool enable_load_sync(int cpu)
@@ -620,7 +702,7 @@ bool enable_load_sync(int cpu)
 	if (!cpumask_test_cpu(cpu, &pipeline_sync_cpus))
 		return false;
 
-	if (!enable_pipeline_boost)
+	if (!pipeline_in_progress())
 		return false;
 
 	/*
@@ -632,5 +714,50 @@ bool enable_load_sync(int cpu)
 			!cpumask_intersects(&pipeline_sync_cpus, &cpus_for_pipeline))
 		return false;
 
-	return true;
+	/* Ensure to load sync only if there are 3 auto pipeline tasks */
+	if (have_heavy_list)
+		return have_heavy_list == MAX_NR_PIPELINE;
+
+	/*
+	 * If auto pipeline is disabled, manual must be on. Ensure to load sync under manual
+	 * pipeline only if there are 3 or more pipeline tasks
+	 */
+	return pipeline_nr >= MAX_NR_PIPELINE;
+}
+
+/*
+ * pipeline_fits_smaller_cpus evaluates if a pipeline task should be treated as a misfit.
+ * There are three possible outcomes:
+ *	- ret -1: Continue evaluation with task_fits_max().
+ *      - ret  0: Task should be treated as a misfit (does not fit on smaller CPUs).
+ *      - ret  1: Task cannot be treated as a misfit (fits on smaller CPUs).
+ *
+ * If the task is assigned a pipeline CPU which is a prime CPU, ret should be 0, indicating
+ * the task is a misfit.
+ * If the number of pipeline tasks is 2 or fewer, continue evaluation of task_fits_max().
+ * If the number of pipeline tasks is 3 or more, ret should be 1, indicating the task fits on the
+ * smaller CPUs and is not a misfit.
+ */
+int pipeline_fits_smaller_cpus(struct task_struct *p)
+{
+	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	unsigned int pipeline_cpu = wts->pipeline_cpu;
+
+	if (pipeline_cpu == -1)
+		return -1;
+
+	if (cpumask_test_cpu(pipeline_cpu, &cpu_array[0][num_sched_clusters-1]))
+		return 0;
+
+	if (have_heavy_list) {
+		if (have_heavy_list == MAX_NR_PIPELINE)
+			return 1;
+		else
+			return -1;
+	}
+
+	if (pipeline_nr >= MAX_NR_PIPELINE)
+		return 1;
+	else
+		return -1;
 }

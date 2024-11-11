@@ -399,13 +399,39 @@ void smart_freq_update_reason_common(u64 wallclock, int nr_big, u32 wakeup_ctr_s
 		}
 
 		/*
-		 * PIPELINE
+		 * PIPELINE_60FPS_OR_LESSER
 		 */
-		if (cluster_participation_mask & BIT(PIPELINE_SMART_FREQ)) {
-			current_state = pipeline_nr || sysctl_sched_heavy_nr ||
-						sysctl_sched_pipeline_util_thres;
+		if (cluster_participation_mask &
+				BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ)) {
+			current_state = pipeline_in_progress() &&
+						sched_ravg_window >= SCHED_RAVG_16MS_WINDOW;
 			if (current_state)
-				cluster_reasons |= BIT(PIPELINE_SMART_FREQ);
+				cluster_reasons |=
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ);
+		}
+
+		/*
+		 * PIPELINE_90FPS
+		 */
+		if (cluster_participation_mask &
+				BIT(PIPELINE_90FPS_SMART_FREQ)) {
+			current_state = pipeline_in_progress() &&
+						sched_ravg_window == SCHED_RAVG_12MS_WINDOW;
+			if (current_state)
+				cluster_reasons |=
+					BIT(PIPELINE_90FPS_SMART_FREQ);
+		}
+
+		/*
+		 * PIPELINE_120FPS_OR_GREATER
+		 */
+		if (cluster_participation_mask &
+				BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ)) {
+			current_state = pipeline_in_progress() &&
+						sched_ravg_window == SCHED_RAVG_8MS_WINDOW;
+			if (current_state)
+				cluster_reasons |=
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
 		}
 
 		/*
@@ -467,7 +493,7 @@ void smart_freq_init(const char *name)
 		i++;
 	}
 
-	if (!strcmp(name, "SUN")) {
+	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */
@@ -485,7 +511,9 @@ void smart_freq_init(const char *name)
 					BIT(BIG_TASKCNT_SMART_FREQ) |
 					BIT(TRAILBLAZER_SMART_FREQ) |
 					BIT(SBT_SMART_FREQ) |
-					BIT(PIPELINE_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ) |
 					BIT(THERMAL_ROTATION_SMART_FREQ);
 
 				/* IPC */
@@ -514,7 +542,9 @@ void smart_freq_init(const char *name)
 					BIT(BIG_TASKCNT_SMART_FREQ) |
 					BIT(TRAILBLAZER_SMART_FREQ) |
 					BIT(SBT_SMART_FREQ) |
-					BIT(PIPELINE_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ) |
 					BIT(THERMAL_ROTATION_SMART_FREQ);
 
 				/* IPC */
@@ -527,6 +557,85 @@ void smart_freq_init(const char *name)
 					BIT(IPC_A) | BIT(IPC_B) | BIT(IPC_C) | BIT(IPC_D) |
 					BIT(IPC_E);
 				cluster->smart_freq_info->min_cycles = 7004160;
+			}
+		}
+	} else if (!strcmp(name, "TUNA")) {
+		for_each_sched_cluster(cluster) {
+			if (cluster->id == 0) {
+				/* Legacy */
+				cluster->smart_freq_info->legacy_reason_config[0].freq_allowed =
+					1804800;
+				cluster->smart_freq_info->legacy_reason_config[2].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[3].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
+					300000000;
+				cluster->smart_freq_info->smart_freq_participation_mask |=
+					BIT(BOOST_SMART_FREQ) |
+					BIT(SUSTAINED_HIGH_UTIL_SMART_FREQ) |
+					BIT(BIG_TASKCNT_SMART_FREQ) |
+					BIT(SBT_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
+
+			} else if (cluster->id == 1) {
+				/* Legacy */
+				cluster->smart_freq_info->legacy_reason_config[0].freq_allowed =
+					2707200;
+				cluster->smart_freq_info->legacy_reason_config[2].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[3].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
+					300000000;
+				cluster->smart_freq_info->smart_freq_participation_mask |=
+					BIT(BOOST_SMART_FREQ) |
+					BIT(SUSTAINED_HIGH_UTIL_SMART_FREQ) |
+					BIT(BIG_TASKCNT_SMART_FREQ) |
+					BIT(SBT_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
+
+			} else if (cluster->id == 2) {
+				/* Legacy */
+				cluster->smart_freq_info->legacy_reason_config[0].freq_allowed =
+					2707200;
+				cluster->smart_freq_info->legacy_reason_config[2].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[3].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
+					300000000;
+				cluster->smart_freq_info->smart_freq_participation_mask |=
+					BIT(BOOST_SMART_FREQ) |
+					BIT(SUSTAINED_HIGH_UTIL_SMART_FREQ) |
+					BIT(BIG_TASKCNT_SMART_FREQ) |
+					BIT(SBT_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
+
+			} else if (cluster->id == 3) {
+				/* Legacy */
+				cluster->smart_freq_info->legacy_reason_config[0].freq_allowed =
+					2956800;
+				cluster->smart_freq_info->legacy_reason_config[2].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[3].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
+					300000000;
+				cluster->smart_freq_info->smart_freq_participation_mask |=
+					BIT(BOOST_SMART_FREQ) |
+					BIT(SUSTAINED_HIGH_UTIL_SMART_FREQ) |
+					BIT(BIG_TASKCNT_SMART_FREQ) |
+					BIT(SBT_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
 			}
 		}
 	}

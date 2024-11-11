@@ -159,6 +159,8 @@ struct walt_task_struct {
 	u8				high_util_history;
 	u8				mpam_part_id;
 	u8				yield_state;
+	u16				busy_bitmap;
+	u32				period_contrib_run;
 };
 
 #define wts_to_ts(wts) ({ \
@@ -199,7 +201,11 @@ extern int walt_set_cpus_taken(struct cpumask *set);
 extern int walt_unset_cpus_taken(struct cpumask *unset);
 extern cpumask_t walt_get_cpus_taken(void);
 extern int walt_get_cpus_in_state1(struct cpumask *cpus);
+extern int walt_set_enforce_high_irq_cpus(struct cpumask *set);
+extern int walt_unset_enforce_high_irq_cpus(struct cpumask *unset);
+cpumask_t walt_get_enforce_high_irq_cpus(void);
 
+extern void sched_walt_oscillate(unsigned int busy_cpu);
 extern int walt_pause_cpus(struct cpumask *cpus, enum pause_client client);
 extern int walt_resume_cpus(struct cpumask *cpus, enum pause_client client);
 extern int walt_partial_pause_cpus(struct cpumask *cpus, enum pause_client client);
@@ -208,6 +214,7 @@ extern int sched_set_boost(int type);
 extern bool should_boost_bus_dcvs(void);
 extern cpumask_t walt_get_halted_cpus(void);
 #else
+static inline void sched_walt_oscillate(unsigned int busy_cpu) { }
 static inline int sched_lpm_disallowed_time(int cpu, u64 *timeout)
 {
 	return INT_MAX;
@@ -287,6 +294,22 @@ static inline bool should_boost_bus_dcvs(void)
 }
 
 static inline cpumask_t walt_get_halted_cpus(void)
+{
+	cpumask_t t = { CPU_BITS_NONE };
+	return t;
+}
+
+static inline int walt_set_enforce_high_irq_cpus(struct cpumask *set)
+{
+	return -EINVAL;
+}
+
+static inline int walt_unset_enforce_high_irq_cpus(struct cpumask *unset)
+{
+	return -EINVAL;
+}
+
+static inline cpumask_t walt_get_enforce_high_irq_cpus(void)
 {
 	cpumask_t t = { CPU_BITS_NONE };
 	return t;

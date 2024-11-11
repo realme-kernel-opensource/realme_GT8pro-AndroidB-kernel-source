@@ -9,14 +9,14 @@
 #include "walt.h"
 #include "trace.h"
 
-static inline unsigned long walt_lb_cpu_util(int cpu)
+inline unsigned long walt_lb_cpu_util(int cpu)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
 
 	return wrq->walt_stats.cumulative_runnable_avg_scaled;
 }
 
-static void walt_detach_task(struct task_struct *p, struct rq *src_rq,
+void walt_detach_task(struct task_struct *p, struct rq *src_rq,
 			     struct rq *dst_rq)
 {
 	//TODO can we just replace with detach_task in fair.c??
@@ -24,13 +24,13 @@ static void walt_detach_task(struct task_struct *p, struct rq *src_rq,
 	set_task_cpu(p, dst_rq->cpu);
 }
 
-static void walt_attach_task(struct task_struct *p, struct rq *rq)
+void walt_attach_task(struct task_struct *p, struct rq *rq)
 {
 	activate_task(rq, p, 0);
 	wakeup_preempt(rq, p, 0);
 }
 
-static int stop_walt_lb_active_migration(void *data)
+int stop_walt_lb_active_migration(void *data)
 {
 	struct rq *busiest_rq = data;
 	int busiest_cpu = cpu_of(busiest_rq);
@@ -243,12 +243,12 @@ static inline bool _walt_can_migrate_task(struct task_struct *p, int dst_cpu,
 		return false;
 
 	if (to_lower) {
-		if (wts->iowaited)
+		if (wts->iowaited && (wts->demand_scaled < MIN_UTIL_FOR_STORAGE_BALANCING))
 			return false;
 		if (per_task_boost(p) == TASK_BOOST_STRICT_MAX &&
 				task_in_related_thread_group(p))
 			return false;
-		if (walt_pipeline_low_latency_task(p))
+		if (pipeline_in_progress() && walt_pipeline_low_latency_task(p))
 			return false;
 		if (!force && walt_get_rtg_status(p))
 			return false;
@@ -400,8 +400,7 @@ static int walt_lb_pull_tasks(int dst_cpu, int src_cpu, struct task_struct **pul
 				 * the push_task is really pulled onto this CPU.
 				 */
 				wts = (struct walt_task_struct *) p->android_vendor_data1;
-				trace_walt_active_load_balance(p, src_cpu, dst_cpu, wts,
-						-1);
+				trace_walt_active_load_balance(p, src_cpu, dst_cpu, wts);
 				success = stop_one_cpu_nowait(src_cpu,
 						stop_walt_lb_active_migration,
 						src_rq, &src_rq->active_balance_work);
@@ -680,7 +679,7 @@ static int walt_lb_find_busiest_cpu(int dst_cpu, const cpumask_t *src_mask, int 
 static DEFINE_RAW_SPINLOCK(walt_lb_migration_lock);
 void walt_lb_tick(struct rq *rq)
 {
-	int prev_cpu = rq->cpu, new_cpu, ret;
+	int prev_cpu = rq->cpu, new_cpu, ret, storage_balance = false;
 	struct task_struct *p = rq->curr;
 	unsigned long flags;
 	struct walt_rq *prev_wrq = &per_cpu(walt_rq, cpu_of(rq));
@@ -691,12 +690,18 @@ void walt_lb_tick(struct rq *rq)
 		clear_reserved(prev_cpu);
 	raw_spin_unlock(&rq->__lock);
 
+	if (rq->cpu == 0 && is_storage_boost()) {
+		raw_spin_lock_irqsave(&walt_lb_migration_lock, flags);
+		storage_balance = move_storage_load(rq);
+		raw_spin_unlock_irqrestore(&walt_lb_migration_lock, flags);
+	}
+
 	if (!walt_fair_task(p))
 		return;
 
 	walt_cfs_tick(rq);
 
-	if (!rq->misfit_task_load)
+	if (!rq->misfit_task_load || storage_balance)
 		return;
 
 	if (READ_ONCE(p->__state) != TASK_RUNNING || p->nr_cpus_allowed == 1)
@@ -737,7 +742,7 @@ void walt_lb_tick(struct rq *rq)
 	mark_reserved(new_cpu);
 	raw_spin_unlock_irqrestore(&walt_lb_migration_lock, flags);
 
-	trace_walt_active_load_balance(p, prev_cpu, new_cpu, wts, -1);
+	trace_walt_active_load_balance(p, prev_cpu, new_cpu, wts);
 	ret = stop_one_cpu_nowait(prev_cpu,
 			stop_walt_lb_active_migration, rq,
 			&rq->active_balance_work);
@@ -881,6 +886,10 @@ static void walt_newidle_balance(struct rq *this_rq,
 		return;
 
 	if (is_reserved(this_cpu))
+		return;
+
+	/* if cpu entering idle with high irq load skip pulling task */
+	if (sched_cpu_high_irqload(this_cpu))
 		return;
 
 	/*Cluster isn't initialized until after WALT is enabled*/
@@ -1028,6 +1037,10 @@ static void walt_find_busiest_queue(void *unused, int dst_cpu,
 	*done = 1;
 	*busiest = NULL;
 
+	/* if dst_cpu is having high irq load skip searching busy cpu for this */
+	if (sched_cpu_high_irqload(dst_cpu))
+		return;
+
 	/*
 	 * same cluster means, there will only be 1
 	 * CPU in the busy group, so just select it.
@@ -1105,23 +1118,21 @@ static void walt_sched_newidle_balance(void *unused, struct rq *this_rq,
 	walt_newidle_balance(this_rq, rf, pulled_task, done, false);
 }
 
-enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt)
+void sched_walt_oscillate(unsigned int busy_cpu)
 {
 	struct rq *src_rq;
 	struct walt_rq *src_wrq;
-	int dst_cpu, src_cpu;
-	struct task_struct *p;
+	int dst_cpu = -1, src_cpu = -1;
+	struct task_struct *p = NULL;
 	struct walt_task_struct *wts;
 	unsigned long flags;
+	int no_oscillate_reason = 0;
 
-	src_cpu = raw_smp_processor_id();
+	if (!should_oscillate(busy_cpu, &no_oscillate_reason))
+		goto out_fail;
 
-	if (!should_oscillate()) {
-		oscillate_cpu = -1;
-		return HRTIMER_NORESTART;
-	}
-
-	dst_cpu = src_cpu + 1;
+	src_cpu = busy_cpu;
+	dst_cpu = busy_cpu + 1;
 	if (dst_cpu > cpumask_last(&cpu_array[0][num_sched_clusters - 1]))
 		dst_cpu = cpumask_first(&cpu_array[0][num_sched_clusters - 1]);
 
@@ -1134,8 +1145,10 @@ enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt)
 	if (cpumask_test_cpu(dst_cpu, p->cpus_ptr)) {
 		bool success;
 
-		if (src_rq->active_balance)
+		if (src_rq->active_balance) {
+			no_oscillate_reason = 100;
 			goto unlock;
+		}
 
 		src_rq->active_balance = 1;
 		src_rq->push_cpu = dst_cpu;
@@ -1151,27 +1164,29 @@ enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt)
 		 * the push_task is really pulled onto this CPU.
 		 */
 		wts = (struct walt_task_struct *) p->android_vendor_data1;
-		trace_walt_active_load_balance(p, src_cpu, dst_cpu, wts,
-				oscillate_cpu);
-		oscillate_cpu = dst_cpu;
+		oscillate_cpu = src_cpu;
 		success = stop_one_cpu_nowait(src_cpu,
 				stop_walt_lb_active_migration,
 				src_rq, &src_rq->active_balance_work);
 
 		if (!success) {
-			oscillate_cpu = -1;
+			no_oscillate_reason = 101;
 			clear_reserved(dst_cpu);
+			goto out_fail;
 		} else {
 			wake_up_if_idle(dst_cpu);
 		}
-		return HRTIMER_NORESTART;
-
+		goto out;
 	}
 unlock:
 	raw_spin_unlock_irqrestore(&src_rq->__lock, flags);
+out_fail:
 	oscillate_cpu = -1;
-	return HRTIMER_NORESTART;
+out:
+	trace_walt_oscillate(p, src_cpu, dst_cpu, oscillate_cpu, no_oscillate_reason);
+	return;
 }
+EXPORT_SYMBOL_GPL(sched_walt_oscillate);
 
 void walt_lb_init(void)
 {
