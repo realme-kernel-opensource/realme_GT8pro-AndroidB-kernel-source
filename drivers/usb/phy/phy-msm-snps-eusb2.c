@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"eusb2_phy: %s: " fmt, __func__
@@ -1074,12 +1074,12 @@ err_ret:
 	return ret;
 }
 
-static int msm_eusb2_phy_remove(struct platform_device *pdev)
+static void msm_eusb2_phy_remove(struct platform_device *pdev)
 {
 	struct msm_eusb2_phy *phy = platform_get_drvdata(pdev);
 
 	if (!phy)
-		return 0;
+		return;
 
 	flush_work(&phy->vbus_draw_work);
 	if (phy->usb_psy)
@@ -1091,7 +1091,6 @@ static int msm_eusb2_phy_remove(struct platform_device *pdev)
 	clk_disable_unprepare(phy->ref_clk_src);
 	msm_eusb2_phy_clocks(phy, false);
 	msm_eusb2_phy_power(phy, false);
-	return 0;
 }
 
 static const struct of_device_id msm_usb_id_table[] = {
