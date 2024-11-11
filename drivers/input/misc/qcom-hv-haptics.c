@@ -5112,7 +5112,6 @@ static u32 get_lra_impedance_capable_max(struct haptics_chip *chip)
 static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 {
 	u32 vmax_mv, nominal_ohm, current_ma, vmax_margin_mv, play_length_us, lsb_mohm;
-	u8 samples[4] = {0x7f, 0x7f, 0x7f, 0x7f};
 	struct pattern_cfg pattern = {
 		.samples = {
 			    {0xff, T_LRA, false},
@@ -5128,11 +5127,13 @@ static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 		.play_length_us = chip->config.t_lra_us + 2000, /* drive it at least 1 cycle */
 		.preload = false,
 	};
+	u8 samples[4] = {0x7f, 0x7f, 0, 0};
+	u32 t_lra_us = (chip->config.cl_t_lra_us * 3) / 2; /* drive off resonance in FIFO mode */
 	struct fifo_cfg fifo = {
 		.samples = samples,
 		.num_s = ARRAY_SIZE(samples),
-		.period_per_s = T_LRA_DIV_2,	/* drive off resonance of the LRA */
-		.play_length_us = chip->config.t_lra_us * ARRAY_SIZE(samples) / 2 + 2000,
+		.period_per_s = T_LRA_DIV_2, /* half cycle with T_LRA */
+		.play_length_us = t_lra_us + 2000,
 		.preload = false,
 	};
 	u8 val, current_sel;
@@ -5190,6 +5191,11 @@ static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 		goto restore;
 
 	if (chip->hw_type >= HAP530_HV) {
+		/* drive off resonance of the LRA */
+		rc = haptics_config_openloop_lra_period(chip, t_lra_us);
+		if (rc < 0)
+			goto restore;
+
 		rc = haptics_enable_autores(chip, false);
 		if (rc < 0)
 			goto restore;
@@ -5255,6 +5261,13 @@ static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 restore:
 	if (rc < 0)
 		dev_err(chip->dev, "measure LRA impedance failed, rc=%d\n", rc);
+
+	/* restore T_LRA */
+	if (chip->hw_type >= HAP530_HV) {
+		rc = haptics_config_openloop_lra_period(chip, chip->config.cl_t_lra_us);
+		if (rc)
+			return rc;
+	}
 
 	return haptics_masked_write(chip, chip->cfg_addr_base,
 			HAP_CFG_RT_LRA_IMPD_MEAS_CFG_REG,
@@ -5948,8 +5961,8 @@ static int haptics_start_lra_calibrate(struct haptics_chip *chip)
 		goto unlock;
 	}
 
-	/* Sleep at least 4ms to stabilize the LRA from frequency detection */
-	usleep_range(4000, 5000);
+	/* Sleep 50ms to stabilize the LRA from frequency detection */
+	msleep(50);
 	if (chip->config.measure_lra_impedance)
 		rc = haptics_measure_realtime_lra_impedance(chip);
 	else
