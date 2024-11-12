@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include <linux/genalloc.h>
 #include <linux/mailbox_client.h>
@@ -10,6 +10,7 @@
 #include <linux/sizes.h>
 #include <linux/skbuff.h>
 #include <linux/types.h>
+#include <linux/vmalloc.h>
 #include "qrtr.h"
 
 #define MAX_PKT_SZ		SZ_64K
@@ -639,7 +640,7 @@ err:
 	return rc;
 }
 
-static int qrtr_genpool_remove(struct platform_device *pdev)
+static void qrtr_genpool_remove(struct platform_device *pdev)
 {
 	struct qrtr_genpool_dev *qdev = platform_get_drvdata(pdev);
 
@@ -650,7 +651,6 @@ static int qrtr_genpool_remove(struct platform_device *pdev)
 
 	vfree(qdev->ring.buf);
 
-	return 0;
 }
 
 static const struct of_device_id qrtr_genpool_match_table[] = {
