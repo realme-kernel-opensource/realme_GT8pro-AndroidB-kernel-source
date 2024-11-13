@@ -35,6 +35,7 @@ def define_canoe():
         "drivers/firmware/qcom/qcom_tzmem.ko",
         "drivers/firmware/qcom/si_core/mem_object.ko",
         "drivers/firmware/qcom/si_core/si_core_module.ko",
+        "drivers/gpu/drm/display/drm_display_helper.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
         "drivers/hwtracing/coresight/coresight.ko",
         "drivers/hwtracing/coresight/coresight-csr.ko",
