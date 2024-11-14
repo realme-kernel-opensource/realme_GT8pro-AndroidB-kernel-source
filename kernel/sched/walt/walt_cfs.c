@@ -1390,10 +1390,9 @@ out:
  * When preempt = false and nopreempt = false, we leave the preemption
  * decision to CFS.
  */
-static void walt_cfs_check_preempt_wakeup(void *unused, struct rq *rq, struct task_struct *p,
+static void walt_cfs_check_preempt_wakeup_fair(void *unused, struct rq *rq, struct task_struct *p,
 					  bool *preempt, bool *nopreempt, int wake_flags,
-					  struct sched_entity *se, struct sched_entity *pse,
-					  int next_buddy_marked, unsigned int granularity)
+					  struct sched_entity *se, struct sched_entity *pse)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts_p = (struct walt_task_struct *) p->android_vendor_data1;
@@ -1561,6 +1560,6 @@ void walt_cfs_init(void)
 	register_trace_android_vh_binder_set_priority(binder_set_priority_hook, NULL);
 	register_trace_android_vh_binder_restore_priority(binder_restore_priority_hook, NULL);
 
-	register_trace_android_rvh_check_preempt_wakeup(walt_cfs_check_preempt_wakeup, NULL);
+	register_trace_android_rvh_check_preempt_wakeup_fair(walt_cfs_check_preempt_wakeup_fair, NULL);
 	register_trace_android_rvh_replace_next_task_fair(walt_cfs_replace_next_task_fair, NULL);
 }
