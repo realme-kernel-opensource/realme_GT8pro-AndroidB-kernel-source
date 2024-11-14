@@ -328,7 +328,7 @@ static struct gdsc eva_cc_mvs0_gdsc = {
 		.name = "eva_cc_mvs0_gdsc",
 	},
 	.pwrsts = PWRSTS_OFF_ON,
-	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_TRIGGER,
 	.supply = "vdd_mm",
 };
 
