@@ -1989,6 +1989,7 @@ static void msm_geni_uart_gsi_tx_cb(void *ptr)
 
 	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
 		     "%s: Start\n", __func__);
+	uart_xmit_advance(uport, msm_port->xmit_size);
 	geni_se_tx_dma_unprep(&msm_port->se, msm_port->tx_dma,
 			      msm_port->xmit_size);
 	uport->icount.tx += msm_port->xmit_size;
@@ -2167,8 +2168,7 @@ static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
 		     "%s: Start\n", __func__);
 
-	xmit_size = kfifo_out_linear_ptr(&tport->xmit_fifo, &tail_ptr,
-			UART_XMIT_SIZE);
+	xmit_size = kfifo_out_linear_ptr(&tport->xmit_fifo, &tail_ptr, UART_XMIT_SIZE);
 
 	if (xmit_size < WAKEUP_CHARS)
 		uart_write_wakeup(uport);
@@ -2176,8 +2176,7 @@ static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 	if (!xmit_size || msm_port->tx_dma)
 		return;
 
-	dump_ipc(uport, msm_port->ipc_log_tx, "DMA Tx", tail_ptr, 0,
-			xmit_size);
+	dump_ipc(uport, msm_port->ipc_log_tx, "DMA Tx", tail_ptr, 0, xmit_size);
 
 	ret = msm_geni_allocate_chan(uport);
 	if (ret) {
@@ -2393,8 +2392,7 @@ static int msm_geni_serial_prep_dma_tx(struct uart_port *uport)
 	if (atomic_read(&msm_port->flush_buffers))
 		return -EIO;
 
-	xmit_size = kfifo_out_linear_ptr(&tport->xmit_fifo, &tail_ptr,
-				UART_XMIT_SIZE);
+	xmit_size = kfifo_out_linear_ptr(&tport->xmit_fifo, &tail_ptr, UART_XMIT_SIZE);
 
 	if (xmit_size < WAKEUP_CHARS)
 		uart_write_wakeup(uport);
@@ -2402,8 +2400,7 @@ static int msm_geni_serial_prep_dma_tx(struct uart_port *uport)
 	if (!xmit_size)
 		return -EPERM;
 
-	dump_ipc(uport, msm_port->ipc_log_tx, "DMA Tx", tail_ptr, 0,
-			xmit_size);
+	dump_ipc(uport, msm_port->ipc_log_tx, "DMA Tx", tail_ptr, 0, xmit_size);
 
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
 		     "%s: cts_count:%d\n", __func__, uport->icount.cts);
@@ -2417,8 +2414,7 @@ static int msm_geni_serial_prep_dma_tx(struct uart_port *uport)
 	}
 
 	msm_geni_serial_setup_tx(uport, xmit_size);
-	ret = geni_se_tx_dma_prep(&msm_port->se, tail_ptr,
-			xmit_size, &msm_port->tx_dma);
+	ret = geni_se_tx_dma_prep(&msm_port->se, tail_ptr, xmit_size, &msm_port->tx_dma);
 
 	if (!ret) {
 		msm_port->xmit_size = xmit_size;
@@ -3190,8 +3186,7 @@ static int msm_geni_serial_handle_tx(struct uart_port *uport, bool done,
 					SE_GENI_TX_FIFO_STATUS);
 
 	/* Complete the current tx command before taking newly added data */
-	pending = active ? msm_port->cur_tx_remaining :
-				kfifo_len(&tport->xmit_fifo);
+	pending = active ? msm_port->cur_tx_remaining : kfifo_len(&tport->xmit_fifo);
 
 	/* All data has been transmitted and acknowledged as received */
 	if (!pending && !tx_fifo_status && done)
@@ -3429,7 +3424,7 @@ static int msm_geni_serial_handle_dma_tx(struct uart_port *uport)
 	unsigned int len = 0;
 	unsigned long long exec_time = 0, sw_time, comp_time;
 
-	//xmit->tail = (xmit->tail + msm_port->xmit_size) & (UART_XMIT_SIZE - 1);
+	uart_xmit_advance(uport, msm_port->xmit_size);
 	if (msm_port->tx_dma)
 		geni_se_tx_dma_unprep(&msm_port->se, msm_port->tx_dma,
 					msm_port->xmit_size);
