@@ -255,6 +255,11 @@ static void msm_m31_eusb2_phy_clocks(struct m31_eusb2_phy *phy, bool on)
 
 		if (phy->ref_clk)
 			clk_prepare_enable(phy->ref_clk);
+	/* HPG section 5.1.2 PLL Control mentions stabilization time of
+	 * output clocks PLLCK120, PLLCK480, CLK48M while re-enabling them
+	 * to take  around 1.5 ms.
+	 */
+	usleep_range(1500, 2000);
 	} else {
 		if (phy->ref_clk)
 			clk_disable_unprepare(phy->ref_clk);
