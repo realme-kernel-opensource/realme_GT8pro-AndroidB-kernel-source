@@ -401,6 +401,7 @@ MODULE_DEVICE_TABLE(of, eva_cc_canoe_match_table);
 static int eva_cc_canoe_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
+	unsigned int accu_cfg_mask = 0x1f << 21;
 	int ret;
 
 	regmap = qcom_cc_map(pdev, &eva_cc_canoe_desc);
@@ -416,6 +417,14 @@ static int eva_cc_canoe_probe(struct platform_device *pdev)
 		return ret;
 
 	clk_taycan_eko_t_pll_configure(&eva_cc_pll0, regmap, &eva_cc_pll0_config);
+
+	/*
+	 *	Maximize ctl data download delay and enable memory redundancy:
+	 *	MVS0C CFG3
+	 *	MVS0 CFG3
+	 */
+	regmap_update_bits(regmap, 0x8040, accu_cfg_mask, accu_cfg_mask);
+	regmap_update_bits(regmap, 0x8074, accu_cfg_mask, accu_cfg_mask);
 
 	/*
 	 * Keep clocks always enabled:
@@ -455,7 +464,7 @@ static const struct dev_pm_ops eva_cc_canoe_pm_ops = {
 static struct platform_driver eva_cc_canoe_driver = {
 	.probe = eva_cc_canoe_probe,
 	.driver = {
-		.name = "qcom,canoe-evacc",
+		.name = "evacc-canoe",
 		.of_match_table = eva_cc_canoe_match_table,
 		.sync_state = eva_cc_canoe_sync_state,
 		.pm = &eva_cc_canoe_pm_ops,
