@@ -1487,9 +1487,17 @@ extern unsigned int sysctl_ipc_freq_levels_cluster0[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster1[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster3[SMART_FMAX_IPC_MAX];
+extern unsigned int sysctl_legacy_freq_levels_cluster0[LEGACY_SMART_FREQ*2];
+extern unsigned int sysctl_legacy_freq_levels_cluster1[LEGACY_SMART_FREQ*2];
+extern unsigned int sysctl_legacy_freq_levels_cluster2[LEGACY_SMART_FREQ*2];
+extern unsigned int sysctl_legacy_freq_levels_cluster3[LEGACY_SMART_FREQ*2];
 extern int sched_smart_freq_ipc_handler(const struct ctl_table *table, int write,
 				      void __user *buffer, size_t *lenp,
 				      loff_t *ppos);
+
+extern int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int write,
+				void __user *buffer, size_t *lenp,
+				loff_t *ppos);
 
 extern u8 smart_freq_legacy_reason_hyst_ms[LEGACY_SMART_FREQ][WALT_NR_CPUS];
 extern void update_smart_freq_legacy_reason_hyst_time(struct walt_sched_cluster *cluster);

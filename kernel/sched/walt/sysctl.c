@@ -99,6 +99,10 @@ unsigned int sysctl_ipc_freq_levels_cluster0[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster1[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster3[SMART_FMAX_IPC_MAX];
+unsigned int sysctl_legacy_freq_levels_cluster0[LEGACY_SMART_FREQ*2];
+unsigned int sysctl_legacy_freq_levels_cluster1[LEGACY_SMART_FREQ*2];
+unsigned int sysctl_legacy_freq_levels_cluster2[LEGACY_SMART_FREQ*2];
+unsigned int sysctl_legacy_freq_levels_cluster3[LEGACY_SMART_FREQ*2];
 unsigned int sysctl_sched_walt_core_util[WALT_NR_CPUS];
 unsigned int sysctl_pipeline_busy_boost_pct;
 unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
@@ -1195,6 +1199,13 @@ static struct ctl_table smart_freq_cluster0[] = {
 		.mode		= 0444,
 		.proc_handler	= sched_smart_freq_ipc_dump_handler,
 	},
+	{
+		.procname	= "legacy_freq_levels",
+		.data		= &sysctl_legacy_freq_levels_cluster0,
+		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
+		.mode		= 0200,
+		.proc_handler	= sched_smart_freq_legacy_freq_handler,
+	},
 };
 
 static struct ctl_table smart_freq_cluster1[] = {
@@ -1218,6 +1229,13 @@ static struct ctl_table smart_freq_cluster1[] = {
 		.maxlen		= 1024 * sizeof(char),
 		.mode		= 0444,
 		.proc_handler	= sched_smart_freq_ipc_dump_handler,
+	},
+	{
+		.procname	= "legacy_freq_levels",
+		.data		= &sysctl_legacy_freq_levels_cluster1,
+		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
+		.mode		= 0200,
+		.proc_handler	= sched_smart_freq_legacy_freq_handler,
 	},
 };
 
@@ -1243,6 +1261,13 @@ static struct ctl_table smart_freq_cluster2[] = {
 		.mode		= 0444,
 		.proc_handler	= sched_smart_freq_ipc_dump_handler,
 	},
+	{
+		.procname	= "legacy_freq_levels",
+		.data		= &sysctl_legacy_freq_levels_cluster2,
+		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
+		.mode		= 0200,
+		.proc_handler	= sched_smart_freq_legacy_freq_handler,
+	},
 };
 
 static struct ctl_table smart_freq_cluster3[] = {
@@ -1266,6 +1291,13 @@ static struct ctl_table smart_freq_cluster3[] = {
 		.maxlen		= 1024 * sizeof(char),
 		.mode		= 0444,
 		.proc_handler	= sched_smart_freq_ipc_dump_handler,
+	},
+	{
+		.procname	= "legacy_freq_levels",
+		.data		= &sysctl_legacy_freq_levels_cluster3,
+		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
+		.mode		= 0200,
+		.proc_handler	= sched_smart_freq_legacy_freq_handler,
 	},
 };
 
