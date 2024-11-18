@@ -231,6 +231,7 @@ struct walt_sched_cluster {
 	unsigned long		util_to_cost[1024];
 	u64			found_ts;
 	struct smart_freq_cluster_info *smart_freq_info;
+	int8_t			sibling_cluster;
 };
 
 struct walt_rq {

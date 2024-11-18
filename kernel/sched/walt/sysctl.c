@@ -11,6 +11,7 @@
 #include "trace.h"
 
 static int neg_five = -5;
+static int three = 3;
 static int four = 4;
 static int five = 5;
 static int two_hundred_fifty_five = 255;
@@ -1015,6 +1016,28 @@ unlock_mutex:
 
 #endif /* CONFIG_PROC_SYSCTL */
 
+static int sysctl_sched_sibling_cluster_map[4] = {-1, -1, -1, -1};
+static int sched_sibling_cluster_handler(const struct ctl_table *table, int write,
+				       void __user *buffer, size_t *lenp,
+				       loff_t *ppos)
+{
+	int ret = -EACCES, i = 0;
+	static bool initialized;
+	struct walt_sched_cluster *cluster;
+
+	if (write && initialized)
+		return ret;
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (!ret && write) {
+		initialized = true;
+		for_each_sched_cluster(cluster)
+			cluster->sibling_cluster = sysctl_sched_sibling_cluster_map[i++];
+	}
+
+	return ret;
+}
+
 static struct ctl_table cluster_01[] = {
 	{
 		.procname	= "load_sync_settings",
@@ -1907,6 +1930,16 @@ static struct ctl_table walt_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_INT_MAX,
 	},
+	{
+		.procname	= "sched_sibling_cluster",
+		.data		= &sysctl_sched_sibling_cluster_map,
+		.maxlen		= sizeof(int) * 4,
+		.mode		= 0644,
+		.proc_handler	= sched_sibling_cluster_handler,
+		.extra1		= SYSCTL_NEG_ONE,
+		.extra2		= &three,
+	},
+	{ }
 };
 
 void walt_register_sysctl(void)
