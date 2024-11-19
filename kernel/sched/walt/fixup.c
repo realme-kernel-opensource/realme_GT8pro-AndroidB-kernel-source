@@ -5,9 +5,12 @@
  */
 
 #include <trace/hooks/cpufreq.h>
+#include <trace/hooks/sched.h>
 #include <trace/hooks/topology.h>
 
+#include <linux/delay.h>
 #include "walt.h"
+#include "trace.h"
 
 unsigned int cpuinfo_max_freq_cached;
 
@@ -111,8 +114,104 @@ static void android_rvh_cpu_capacity_show(void *unused,
 		*capacity = 100;
 }
 
+/* frequent yielder tracking */
+u8 contiguous_yielding_windows;
+unsigned int total_yield_cnt;
+unsigned int total_sleep_cnt;
+
+void account_yields(u64 wallclock)
+{
+	struct walt_sched_cluster *cluster = cpu_cluster(task_cpu(current));
+	struct smart_freq_cluster_info *smart_freq_info = cluster->smart_freq_info;
+	static u64 yield_counting_window_ts;
+	u64 delta = wallclock - yield_counting_window_ts;
+
+	/* window boundary crossed */
+	if (delta > YIELD_WINDOW_SIZE_NSEC) {
+		unsigned int target_threshold_wake = MAX_YIELD_CNT_GLOBAL_THR;
+		unsigned int target_threshold_sleep = MAX_YIELD_SLEEP_CNT_GLOBAL_THR;
+
+		/*
+		 * if update_window_start comes more than
+		 * YIELD_GRACE_PERIOD_NSEC after the YIELD_WINDOW_SIZE_NSEC then
+		 * extrapolate the threasholds based on  delta time.
+		 */
+
+		if (unlikely(delta > YIELD_WINDOW_SIZE_NSEC + YIELD_GRACE_PERIOD_NSEC)) {
+			target_threshold_wake =
+				div64_u64(delta * MAX_YIELD_CNT_GLOBAL_THR,
+					  YIELD_WINDOW_SIZE_NSEC);
+			target_threshold_sleep =
+				div64_u64(delta * MAX_YIELD_SLEEP_CNT_GLOBAL_THR,
+					  YIELD_WINDOW_SIZE_NSEC);
+		}
+
+		if ((total_yield_cnt >= target_threshold_wake) ||
+		    (total_sleep_cnt >= target_threshold_sleep / 2)) {
+			if (contiguous_yielding_windows < MIN_CONTIGUOUS_YIELDING_WINDOW)
+				contiguous_yielding_windows++;
+		} else {
+			contiguous_yielding_windows = 0;
+		}
+
+		trace_sched_yielder(wallclock, yield_counting_window_ts,
+				    contiguous_yielding_windows,
+				    total_yield_cnt, target_threshold_wake,
+				    total_sleep_cnt, target_threshold_sleep,
+				    smart_freq_info->cluster_active_reason);
+
+		yield_counting_window_ts = wallclock;
+		total_yield_cnt = 0;
+		total_sleep_cnt = 0;
+	}
+}
+
+u8 contiguous_yielding_windows;
+DEFINE_PER_CPU(unsigned int, walt_yield_to_sleep);
+static void walt_do_sched_yield_before(void *unused, long *skip)
+{
+	struct walt_task_struct *wts = (struct walt_task_struct *)current->android_vendor_data1;
+	struct walt_sched_cluster *cluster;
+	struct smart_freq_cluster_info *smart_freq_info;
+	bool in_legacy_uncap;
+
+	if (unlikely(walt_disabled))
+		return;
+
+	if (!walt_fair_task(current))
+		return;
+
+	cluster = cpu_cluster(task_cpu(current));
+	smart_freq_info = cluster->smart_freq_info;
+
+	if ((wts->yield_state & YIELD_CNT_MASK) >= MAX_YIELD_CNT_PER_TASK_THR) {
+		total_yield_cnt++;
+		if (contiguous_yielding_windows >= MIN_CONTIGUOUS_YIELDING_WINDOW) {
+			/*
+			 * if we are under any legacy frequency uncap(i.e some
+			 * load condition, ignore injecting sleep for the
+			 * yielding task.
+			 */
+			in_legacy_uncap =
+				!!(smart_freq_info->cluster_active_reason &
+								~BIT(NO_REASON_SMART_FREQ));
+			if (!in_legacy_uncap) {
+				wts->yield_state |= YIELD_INDUCED_SLEEP;
+				total_sleep_cnt++;
+				*skip = true;
+				per_cpu(walt_yield_to_sleep, raw_smp_processor_id())++;
+				usleep_range_state(YIELD_SLEEP_TIME_USEC, YIELD_SLEEP_TIME_USEC,
+							TASK_INTERRUPTIBLE);
+			}
+		}
+	} else {
+		wts->yield_state++;
+	}
+}
+
 void walt_fixup_init(void)
 {
 	register_trace_android_rvh_show_max_freq(android_rvh_show_max_freq, NULL);
 	register_trace_android_rvh_cpu_capacity_show(android_rvh_cpu_capacity_show, NULL);
+	register_trace_android_rvh_before_do_sched_yield(walt_do_sched_yield_before, NULL);
 }
