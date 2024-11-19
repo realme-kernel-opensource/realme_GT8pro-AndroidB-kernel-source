@@ -3941,6 +3941,12 @@
   uart_unregister_driver
   uart_update_timeout
   uart_write_wakeup
+  __ubsan_handle_add_overflow
+  __ubsan_handle_divrem_overflow
+  __ubsan_handle_mul_overflow
+  __ubsan_handle_negate_overflow
+  __ubsan_handle_out_of_bounds
+  __ubsan_handle_sub_overflow
   uclamp_eff_value
   ucsi_connector_change
   ucsi_create
