@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/dma-mapping.h>
@@ -1061,8 +1061,7 @@ int fast_smmu_init_mapping(struct device *dev, struct iommu_domain *domain,
 }
 EXPORT_SYMBOL(fast_smmu_init_mapping);
 
-static void __fast_smmu_setup_dma_ops(void *data, struct device *dev,
-					u64 dma_base, u64 dma_limit)
+static void __fast_smmu_setup_dma_ops(void *data, struct device *dev)
 {
 	struct dma_fast_smmu_mapping *fast;
 	struct iommu_domain *domain;
@@ -1090,9 +1089,9 @@ static void __fast_smmu_setup_dma_ops(void *data, struct device *dev,
  * Called by drivers who create their own iommu domains via
  * iommu_domain_alloc().
  */
-void fast_smmu_setup_dma_ops(struct device *dev, u64 dma_base, u64 dma_limit)
+void fast_smmu_setup_dma_ops(struct device *dev)
 {
-	__fast_smmu_setup_dma_ops(NULL, dev, dma_base, dma_limit);
+	__fast_smmu_setup_dma_ops(NULL, dev);
 }
 EXPORT_SYMBOL(fast_smmu_setup_dma_ops);
 
