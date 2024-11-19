@@ -262,7 +262,7 @@ def _define_image_build(
         build_vendor_dlkm = build_vendor_dlkm,
         build_system_dlkm = build_system_dlkm,
         modules_list = "modules.list.msm.{}".format(msm_target),
-        system_dlkm_modules_list = "android/gki_system_dlkm_modules",
+        system_dlkm_modules_list = "android/gki_system_dlkm_modules_arm64",
         vendor_dlkm_modules_list = ":{}_vendor_dlkm_modules_list_generated".format(target),
         system_dlkm_modules_blocklist = "modules.systemdlkm_blocklist.msm.{}".format(msm_target),
         vendor_dlkm_modules_blocklist = "modules.vendor_blocklist.msm.{}".format(msm_target),
@@ -275,7 +275,7 @@ def _define_image_build(
             "modules.list.msm.{}".format(msm_target),
             "modules.vendor_blocklist.msm.{}".format(msm_target),
             "modules.systemdlkm_blocklist.msm.{}".format(msm_target),
-            "android/gki_system_dlkm_modules",
+            "android/gki_system_dlkm_modules_arm64",
         ],
     )
 
