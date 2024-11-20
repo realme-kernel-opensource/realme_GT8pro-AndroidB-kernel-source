@@ -55,8 +55,6 @@ static int ufs_qcom_phy_qmp_v4_phy_calibrate(struct phy *generic_phy)
 
 	is_rate_B = (ufs_qcom_phy->mode == PHY_MODE_UFS_HS_B) ? true : false;
 
-	ufs_qcom_phy_bsp_tuning(ufs_qcom_phy);
-
 	writel_relaxed(0x01, ufs_qcom_phy->mmio + UFS_PHY_SW_RESET);
 	/* Ensure PHY is in reset before writing PHY calibration data */
 	wmb();
@@ -80,6 +78,8 @@ static int ufs_qcom_phy_qmp_v4_phy_calibrate(struct phy *generic_phy)
 	if (is_rate_B)
 		ufs_qcom_phy_write_tbl(ufs_qcom_phy, phy_cal_table_rate_B,
 				       ARRAY_SIZE(phy_cal_table_rate_B));
+
+	ufs_qcom_phy_bsp_tuning(ufs_qcom_phy);
 
 	writel_relaxed(0x00, ufs_qcom_phy->mmio + UFS_PHY_SW_RESET);
 	/* flush buffered writes */
