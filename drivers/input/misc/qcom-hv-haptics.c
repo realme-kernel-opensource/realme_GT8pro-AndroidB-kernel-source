@@ -48,6 +48,7 @@
 #define HAP_CFG_V5				0x5
 #define MAJOR_REV(rev)				((rev) >> 8)
 
+#define HAP_CFG_REV_LSB_MASK			GENMASK(7, 0)
 #define HAP_CFG_STATUS_DATA_MSB_REG		0x09
 /* STATUS_DATA_MSB definitions while MOD_STATUS_SEL is 0 */
 #define AUTO_RES_CAL_DONE_BIT			BIT(5)
@@ -593,10 +594,11 @@ enum wa_flags {
 	SLEEP_CLK_32K_SCALE = BIT(2),
 	TOGGLE_EN_TO_FLUSH_FIFO = BIT(3),
 	RECOVER_SWR_SLAVE = BIT(4),
-	EN_RUNTIME_PM = BIT(5),
-	VISENSE_RECOVERY_EN = BIT(6),
-	IGNORE_SWR_IN_SPMI_PLAY = BIT(7),
-	DISCHARGE_VNDRV_LDO = BIT(8),
+	TOGGLE_MODULE_EN = BIT(5),
+	EN_RUNTIME_PM = BIT(6),
+	VISENSE_RECOVERY_EN = BIT(7),
+	IGNORE_SWR_IN_SPMI_PLAY = BIT(8),
+	DISCHARGE_VNDRV_LDO = BIT(9),
 };
 
 static const char * const src_str[] = {
@@ -2129,6 +2131,9 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 					HRTIMER_MODE_REL);
 		}
 	}
+
+	if ((chip->wa_flags & TOGGLE_MODULE_EN) && !en)
+		rc = haptics_toggle_module_enable(chip);
 
 	trace_qcom_haptics_play(en);
 restore:
@@ -3955,6 +3960,9 @@ static int haptics_config_wa(struct haptics_chip *chip)
 			TOGGLE_EN_TO_FLUSH_FIFO | RECOVER_SWR_SLAVE;
 		break;
 	case HAP520_MV:
+		chip->wa_flags |= SLEEP_CLK_32K_SCALE;
+		if (!(chip->cfg_revision & HAP_CFG_REV_LSB_MASK))
+			chip->wa_flags |= TOGGLE_MODULE_EN;
 		break;
 	case HAP525_HV:
 		if (chip->hbst_revision == HAP_BOOST_V0P1)
