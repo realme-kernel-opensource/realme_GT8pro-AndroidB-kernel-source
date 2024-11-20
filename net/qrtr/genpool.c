@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include <linux/genalloc.h>
 #include <linux/mailbox_client.h>
@@ -7,8 +7,10 @@
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
+#include <linux/reboot.h>
 #include <linux/sizes.h>
 #include <linux/skbuff.h>
+#include <linux/spinlock.h>
 #include <linux/types.h>
 #include "qrtr.h"
 
@@ -38,8 +40,20 @@
 #define FIFO_1_HEAD		0x28
 #define FIFO_1_NOTIFY		0x2c
 
+#define LOCAL_STATE		0x30
+
 #define IRQ_SETUP_IDX		0
 #define IRQ_XFER_IDX		1
+
+#define STATE_WAIT_TIMEOUT	msecs_to_jiffies(1000)
+
+enum {
+	LOCAL_STATE_DEFAULT,
+	LOCAL_STATE_INIT,
+	LOCAL_STATE_START,
+	LOCAL_STATE_PREPARE_REBOOT,
+	LOCAL_STATE_REBOOT,
+};
 
 struct qrtr_genpool_hdr {
 	__le16 len;
@@ -81,8 +95,13 @@ struct qrtr_genpool_pipe {
  * @irq_setup: IRQ for signaling completion of fifo setup
  * @irq_setup_label: IRQ name for irq_setup
  * @setup_work: worker to maintain shared memory between edges
+ * @setup_lock: lock for setup and cleanup
  * @irq_xfer: IRQ for incoming transfers
  * @irq_xfer_label: IRQ name for irq_xfer
+ * @state: current state of the local side
+ * @lock: lock for updating local state
+ * @state_wait: wait queue for specific state
+ * @reboot_handler: handle for getting reboot notifications
  */
 struct qrtr_genpool_dev {
 	struct qrtr_endpoint ep;
@@ -106,10 +125,23 @@ struct qrtr_genpool_dev {
 	int irq_setup;
 	char irq_setup_label[LABEL_SIZE];
 	struct work_struct setup_work;
+	struct mutex setup_lock; /* lock for setup and cleanup */
 
 	int irq_xfer;
 	char irq_xfer_label[LABEL_SIZE];
+
+	u32 state;
+	spinlock_t lock; /* lock for local state updates */
+	wait_queue_head_t state_wait;
+
+	struct notifier_block reboot_handler;
 };
+
+static void qrtr_genpool_set_state(struct qrtr_genpool_dev *qdev, u32 state)
+{
+	qdev->state = state;
+	*(u32 *)(qdev->base + LOCAL_STATE) = cpu_to_le32(qdev->state);
+}
 
 static void qrtr_genpool_signal(struct qrtr_genpool_dev *qdev,
 				struct mbox_chan *mbox_chan)
@@ -419,9 +451,14 @@ static irqreturn_t qrtr_genpool_setup_intr(int irq, void *data)
 static irqreturn_t qrtr_genpool_xfer_intr(int irq, void *data)
 {
 	struct qrtr_genpool_dev *qdev = data;
+	unsigned long flags;
 
-	if (!qdev->base)
+	spin_lock_irqsave(&qdev->lock, flags);
+	if (qdev->state != LOCAL_STATE_START) {
+		spin_unlock_irqrestore(&qdev->lock, flags);
 		return IRQ_HANDLED;
+	}
+	spin_unlock_irqrestore(&qdev->lock, flags);
 
 	qrtr_genpool_read(qdev);
 
@@ -432,20 +469,6 @@ static int qrtr_genpool_irq_init(struct qrtr_genpool_dev *qdev)
 {
 	struct device *dev = qdev->dev;
 	int irq, rc;
-
-	irq = of_irq_get(dev->of_node, IRQ_SETUP_IDX);
-	if (irq < 0)
-		return irq;
-
-	qdev->irq_setup = irq;
-	snprintf(qdev->irq_setup_label, LABEL_SIZE, "%s-setup", qdev->label);
-	rc = devm_request_irq(dev, qdev->irq_setup, qrtr_genpool_setup_intr, 0,
-			      qdev->irq_setup_label, qdev);
-	if (rc) {
-		dev_err(dev, "failed to request setup IRQ: %d\n", rc);
-		return rc;
-	}
-	enable_irq_wake(qdev->irq_setup);
 
 	irq = of_irq_get(dev->of_node, IRQ_XFER_IDX);
 	if (irq < 0)
@@ -460,6 +483,20 @@ static int qrtr_genpool_irq_init(struct qrtr_genpool_dev *qdev)
 		return rc;
 	}
 	enable_irq_wake(qdev->irq_xfer);
+
+	irq = of_irq_get(dev->of_node, IRQ_SETUP_IDX);
+	if (irq < 0)
+		return irq;
+
+	qdev->irq_setup = irq;
+	snprintf(qdev->irq_setup_label, LABEL_SIZE, "%s-setup", qdev->label);
+	rc = devm_request_irq(dev, qdev->irq_setup, qrtr_genpool_setup_intr, 0,
+			      qdev->irq_setup_label, qdev);
+	if (rc) {
+		dev_err(dev, "failed to request setup IRQ: %d\n", rc);
+		return rc;
+	}
+	enable_irq_wake(qdev->irq_setup);
 
 	return 0;
 }
@@ -555,7 +592,33 @@ static int qrtr_genpool_memory_init(struct qrtr_genpool_dev *qdev)
 static void qrtr_genpool_setup_work(struct work_struct *work)
 {
 	struct qrtr_genpool_dev *qdev = container_of(work, struct qrtr_genpool_dev, setup_work);
+	unsigned long flags;
+	u32 state_next;
 	int rc;
+
+	mutex_lock(&qdev->setup_lock);
+	spin_lock_irqsave(&qdev->lock, flags);
+	switch (qdev->state) {
+	case LOCAL_STATE_DEFAULT:
+		state_next = LOCAL_STATE_INIT;
+		break;
+	case LOCAL_STATE_INIT:
+	case LOCAL_STATE_START:
+		state_next = LOCAL_STATE_START;
+		break;
+	case LOCAL_STATE_PREPARE_REBOOT:
+		qrtr_genpool_set_state(qdev, LOCAL_STATE_REBOOT);
+		spin_unlock_irqrestore(&qdev->lock, flags);
+		mutex_unlock(&qdev->setup_lock);
+		wake_up_all(&qdev->state_wait);
+		return;
+	case LOCAL_STATE_REBOOT:
+		goto unlock;
+	default:
+		dev_err(qdev->dev, "Unexpected state %u\n", qdev->state);
+		goto unlock;
+	}
+	spin_unlock_irqrestore(&qdev->lock, flags);
 
 	disable_irq(qdev->irq_xfer);
 
@@ -568,7 +631,7 @@ static void qrtr_genpool_setup_work(struct work_struct *work)
 
 	rc = qrtr_genpool_memory_alloc(qdev);
 	if (rc)
-		return;
+		goto setup_unlock;
 
 	qrtr_genpool_fifo_init(qdev);
 
@@ -576,13 +639,78 @@ static void qrtr_genpool_setup_work(struct work_struct *work)
 	rc = qrtr_endpoint_register(&qdev->ep, QRTR_EP_NET_ID_AUTO, false, NULL);
 	if (rc) {
 		dev_err(qdev->dev, "failed to register qrtr endpoint rc%d\n", rc);
-		return;
+		goto setup_unlock;
 	}
 	qdev->ep_registered = true;
 
 	enable_irq(qdev->irq_xfer);
 
+	spin_lock_irqsave(&qdev->lock, flags);
+	qrtr_genpool_set_state(qdev, state_next);
 	qrtr_genpool_signal_setup(qdev);
+
+unlock:
+	spin_unlock_irqrestore(&qdev->lock, flags);
+setup_unlock:
+	mutex_unlock(&qdev->setup_lock);
+}
+
+static int qrtr_genpool_reboot_cb(struct notifier_block *nb,
+				  unsigned long action, void *data)
+{
+	struct qrtr_genpool_dev *qdev = container_of(nb, struct qrtr_genpool_dev, reboot_handler);
+	unsigned long flags;
+	int rc;
+
+	mutex_lock(&qdev->setup_lock);
+	cancel_work_sync(&qdev->setup_work);
+
+	spin_lock_irqsave(&qdev->lock, flags);
+	switch (qdev->state) {
+	case LOCAL_STATE_START:
+		qrtr_genpool_set_state(qdev, LOCAL_STATE_PREPARE_REBOOT);
+		qrtr_genpool_signal_setup(qdev);
+
+		mutex_unlock(&qdev->setup_lock);
+		rc = wait_event_lock_irq_timeout(qdev->state_wait,
+						 qdev->state == LOCAL_STATE_REBOOT,
+						 qdev->lock,
+						 STATE_WAIT_TIMEOUT);
+		if (!rc)
+			dev_dbg(qdev->dev, "timedout waiting for reboot state change\n");
+		qrtr_genpool_set_state(qdev, LOCAL_STATE_REBOOT);
+		spin_unlock_irqrestore(&qdev->lock, flags);
+		mutex_lock(&qdev->setup_lock);
+		break;
+	case LOCAL_STATE_DEFAULT:
+	case LOCAL_STATE_INIT:
+		qrtr_genpool_set_state(qdev, LOCAL_STATE_REBOOT);
+		spin_unlock_irqrestore(&qdev->lock, flags);
+		break;
+	case LOCAL_STATE_PREPARE_REBOOT:
+	case LOCAL_STATE_REBOOT:
+		spin_unlock_irqrestore(&qdev->lock, flags);
+		mutex_unlock(&qdev->setup_lock);
+		return NOTIFY_DONE;
+	default:
+		dev_err(qdev->dev, "Unexpected state %u\n", qdev->state);
+		spin_unlock_irqrestore(&qdev->lock, flags);
+	}
+
+	disable_irq(qdev->irq_xfer);
+
+	if (qdev->ep_registered) {
+		qrtr_endpoint_unregister(&qdev->ep);
+		qdev->ep_registered = false;
+	}
+
+	qrtr_genpool_memory_free(qdev);
+
+	vfree(qdev->ring.buf);
+	qdev->ring.buf = NULL;
+	mutex_unlock(&qdev->setup_lock);
+
+	return NOTIFY_DONE;
 }
 
 /**
@@ -621,7 +749,17 @@ static int qrtr_genpool_probe(struct platform_device *pdev)
 		goto err;
 
 	init_waitqueue_head(&qdev->tx_avail_notify);
+	init_waitqueue_head(&qdev->state_wait);
 	INIT_WORK(&qdev->setup_work, qrtr_genpool_setup_work);
+	mutex_init(&qdev->setup_lock);
+	spin_lock_init(&qdev->lock);
+
+	qdev->reboot_handler.notifier_call = qrtr_genpool_reboot_cb;
+	rc = devm_register_reboot_notifier(qdev->dev, &qdev->reboot_handler);
+	if (rc) {
+		dev_err(qdev->dev, "failed to register reboot notifier rc%d\n", rc);
+		goto err;
+	}
 
 	rc = qrtr_genpool_mbox_init(qdev);
 	if (rc)
@@ -630,6 +768,8 @@ static int qrtr_genpool_probe(struct platform_device *pdev)
 	rc = qrtr_genpool_irq_init(qdev);
 	if (rc)
 		goto err;
+
+	schedule_work(&qdev->setup_work);
 
 	return 0;
 
