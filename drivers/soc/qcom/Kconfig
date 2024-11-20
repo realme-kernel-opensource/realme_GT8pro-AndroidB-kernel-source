@@ -862,4 +862,29 @@ config QCOM_DYNAMIC_RAMOOPS
 	  reserved in ram instead of being fixed address which needs boot firmware
 	  awareness and it reads all ramoops property from device tree and registers
 	  ramoops platform device and driver for this device will still be fs/pstore/ram.c .
+
+config QTI_FCTL_SCMI
+	tristate "Qualcomm Technologies Inc. SCMI client driver for Feature Control"
+	depends on QTI_SCMI_VENDOR_PROTOCOL
+	default n
+	help
+	  Driver to expose feature control configuration APIs to userspace via sysfs.
+
+	  This driver gathers configuration parameters from sysfs
+	  userspace and relays them to CPUCP via SCMI communication.
+	  It is intended to be used by clients familiar with modifying
+	  the feature control settings.
+
+config QTI_DMOF_SCMI
+	tristate "QTI SCMI client driver to Disable Memcpy Optimization Feature"
+	depends on QTI_SCMI_VENDOR_PROTOCOL
+	default n
+	help
+	  Driver to Disable Memcpy Optimization Feature (DMOF) from userspace via sysfs.
+
+	  This driver gathers configuration parameters from user space
+	  via sysfs interface and relays them to CPUCP via SCMI communication.
+
+	  It is intended to be used by clients familiar with
+	  Memcpy Optimization Feature on Qualcomm Technologies, Inc. SOCs.
 endmenu
