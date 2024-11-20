@@ -596,6 +596,7 @@ struct ufs_qcom_host {
 	bool broken_ahit_wa;
 	unsigned long active_cmds;
 	u32 max_cpus;
+	u32 device_id;
 };
 
 static inline u32

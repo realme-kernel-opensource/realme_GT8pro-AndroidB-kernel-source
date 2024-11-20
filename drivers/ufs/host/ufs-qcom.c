@@ -1040,6 +1040,10 @@ static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 		submode = UFS_QCOM_PHY_SUBMODE_NON_G4;
 	phy_set_mode_ext(phy, mode, submode);
 
+	/* Pass the ufs device manufacturer id to the PHY for tuning */
+	if (host->hw_ver.major == 0x6 && host->hw_ver.minor == 0x2)
+		ufs_qcom_phy_set_device_id(phy, host->device_id);
+
 	ret = ufs_qcom_phy_power_on(hba);
 	if (ret) {
 		dev_err(hba->dev, "%s: phy power on failed, ret = %d\n",
@@ -3436,6 +3440,24 @@ cell_put:
 	nvmem_cell_put(nvmem_cell);
 }
 
+/*
+ * ufs_qcom_get_device_id - get the device manufacturer id from xbl
+ */
+static void ufs_qcom_get_device_id(struct ufs_qcom_host *host)
+{
+	u32 reg;
+
+	/*
+	 * The bootloader passes the on board ufs device's manufacturer id
+	 * information to the HLOS using the UFS host controller register's
+	 * UFS_MEM_DEBUG_SPARE_CFG Bit[8:23].
+	 */
+	if (host->hw_ver.major == 0x6 && host->hw_ver.minor == 0x2) {
+		reg = ufshcd_readl(host->hba, REG_UFS_DEBUG_SPARE_CFG);
+		host->device_id = FIELD_GET(GENMASK(23, 8), reg);
+	}
+}
+
 /**
  * ufs_qcom_init - bind phy with controller
  * @hba: host controller instance
@@ -3562,6 +3584,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	if (err)
 		goto out_disable_vccq_parent;
 
+	ufs_qcom_get_device_id(host);
 	ufs_qcom_parse_pm_level(hba);
 	ufs_qcom_parse_limits(host);
 	ufs_qcom_parse_g4_workaround_flag(host);
