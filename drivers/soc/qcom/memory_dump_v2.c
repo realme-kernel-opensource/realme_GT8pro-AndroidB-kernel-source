@@ -785,10 +785,12 @@ static int memory_dump_create_files(struct device *dev,
 static void cpuss_create_nodes(struct device *dev)
 {
 	struct cpuss_dump_data *cpudata = dev_get_drvdata(dev);
-	int i, initialized = cpudata->node_initialized;
+	int i, initialized;
 
 	if (!cpudata)
 		return;
+
+	initialized = cpudata->node_initialized;
 
 	if (cpudata->cpussregdata && !(initialized & PERCORE_REG_INITIALIZED)) {
 		if (memory_dump_create_files(dev, register_dump_attrs))
