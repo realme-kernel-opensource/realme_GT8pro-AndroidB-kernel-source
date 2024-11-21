@@ -17,6 +17,7 @@
 #include <linux/soc/qcom/llcc-qcom.h>
 #include <linux/module.h>
 #include <linux/clk.h>
+#include <linux/of.h>
 #include "llcc_events.h"
 #include "llcc_perfmon.h"
 
@@ -111,6 +112,7 @@ enum fltr_config {
  * @clock_enabled:	flag to control profiling enable and disable
  * @version:		driver version of llcc-qcom
  * @mc_proftag:		Prof tag to MC
+ * @scid_status_trigger:	flag for trigger based scid_status dump
  */
 struct llcc_perfmon_private {
 	struct regmap **llcc_map;
@@ -134,6 +136,7 @@ struct llcc_perfmon_private {
 	struct clk *clock;
 	bool clock_enabled;
 	unsigned long mc_proftag;
+	bool scid_status_trigger;
 };
 
 static inline void llcc_bcast_write(struct llcc_perfmon_private *llcc_priv,
@@ -1059,10 +1062,17 @@ static ssize_t perfmon_scid_status_show(struct device *dev, struct device_attrib
 		char *buf)
 {
 	struct llcc_perfmon_private *llcc_priv = dev_get_drvdata(dev);
-	uint32_t val;
+	uint32_t val, snap_reg_val;
 	unsigned int i, j, offset;
 	ssize_t cnt = 0;
 	unsigned long total;
+
+	if (llcc_priv->scid_status_trigger) {
+		llcc_bcast_read(llcc_priv, TRP_CAP_COUNTERS_DUMP_CFG, &snap_reg_val);
+		regmap_write(llcc_priv->llcc_bcast_map, TRP_CAP_COUNTERS_DUMP_CFG, 0);
+		regmap_write(llcc_priv->llcc_bcast_map, TRP_CAP_COUNTERS_DUMP_CFG, 1);
+		regmap_write(llcc_priv->llcc_bcast_map, TRP_CAP_COUNTERS_DUMP_CFG, 0);
+	}
 
 	for (i = 0; i < SCID_MAX(llcc_priv->version); i++) {
 		total = 0;
@@ -1083,6 +1093,9 @@ static ssize_t perfmon_scid_status_show(struct device *dev, struct device_attrib
 
 		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, ",0x%08lx\n", total);
 	}
+
+	if (llcc_priv->scid_status_trigger)
+		regmap_write(llcc_priv->llcc_bcast_map, TRP_CAP_COUNTERS_DUMP_CFG, snap_reg_val);
 
 	return cnt;
 }
@@ -2405,6 +2418,10 @@ static int llcc_perfmon_probe(struct platform_device *pdev)
 	llcc_priv->clock_enabled = false;
 	offset = LLCC_COMMON_HW_INFO(llcc_priv->version);
 	llcc_bcast_read(llcc_priv, offset, &val);
+	/* Set scid_status_trigger flag based on DT entry for supported platforms */
+	llcc_priv->scid_status_trigger = of_property_read_bool(pdev->dev.of_node,
+							"llcc-scid-status-snapshot");
+
 	pr_info("Revision <%x.%x.%x>, %d MEMORY CNTRLRS connected with LLCC\n",
 			MAJOR_REV_NO(val), BRANCH_NO(val), MINOR_NO(val), llcc_priv->num_mc);
 
