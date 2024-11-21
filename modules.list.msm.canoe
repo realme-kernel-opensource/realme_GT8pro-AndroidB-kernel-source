@@ -87,3 +87,5 @@ qcom_wdt_core.ko
 gh_virt_wdt.ko
 qcom_tzmem.ko
 icc-clk.ko
+cqhci.ko
+sdhci-msm.ko

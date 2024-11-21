@@ -3,7 +3,7 @@
  * drivers/mmc/host/sdhci-msm.c - Qualcomm SDHCI Platform driver
  *
  * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -211,7 +211,6 @@
 #define TLMM_NORTH_SPARE_CORE_IE	BIT(15)
 
 #define SDHCI_CMD_FLAGS_MASK	0xff
-#define	SDHCI_BOOT_DEVICE	0x0
 
 struct sdhci_msm_offset {
 	u32 core_hc_mode;
@@ -411,8 +410,12 @@ struct sdhci_msm_reg_data {
 	struct sdhci_msm_host *msm_host;
 	/* voltage regulator handle */
 	struct regulator *reg;
+	/* Alternative voltage enable/disable regulator handle */
+	struct regulator *reg_en_dis;
 	/* regulator name */
 	const char *name;
+	/* regulator enable/disable name */
+	char en_dis_name[32];
 	/* voltage level to be set */
 	u32 low_vol_level;
 	u32 high_vol_level;
@@ -427,6 +430,8 @@ struct sdhci_msm_reg_data {
 	/* is low power mode setting required for this regulator? */
 	bool lpm_sup;
 	bool set_voltage_sup;
+	bool is_voltage_supplied;
+	bool multi_card_tray_wa_needed;
 };
 
 /*
@@ -1873,6 +1878,25 @@ static int sdhci_msm_dt_parse_vreg_info(struct device *dev,
 	vreg->msm_host = msm_host;
 	vreg->name = vreg_name;
 
+	/*
+	 * To support chipsets where PMIC doesn't support
+	 * PBS ram sequence to turn OFF regulators automatically on
+	 * multicard tray removal, parse and use new regulator resources
+	 * which are exposed by PMIC team for enabling/disabling
+	 * conditions only.
+	 */
+	if (mmc_card_is_removable(host->mmc) &&
+			!vreg->multi_card_tray_wa_needed) {
+		snprintf(prop_name, MAX_PROP_SIZE, "%s-en-dis", vreg_name);
+		strscpy(vreg->en_dis_name, prop_name, sizeof(vreg->en_dis_name));
+
+		snprintf(prop_name, MAX_PROP_SIZE, "%s-supply", vreg->en_dis_name);
+		if (of_parse_phandle(np, prop_name, 0)) {
+			dev_dbg(dev, "Multi card tray WA needed\n");
+			vreg->multi_card_tray_wa_needed = true;
+		}
+	}
+
 	snprintf(prop_name, MAX_PROP_SIZE,
 			"qcom,%s-always-on", vreg_name);
 	if (of_get_property(np, prop_name, NULL))
@@ -1887,9 +1911,11 @@ static int sdhci_msm_dt_parse_vreg_info(struct device *dev,
 			"qcom,%s-voltage-level", vreg_name);
 	prop = of_get_property(np, prop_name, &len);
 	if (!prop || (len != (2 * sizeof(__be32)))) {
+		vreg->is_voltage_supplied = false;
 		dev_warn(dev, "%s %s property\n",
 			prop ? "invalid format" : "no", prop_name);
 	} else {
+		vreg->is_voltage_supplied = true;
 		vreg->low_vol_level = be32_to_cpup(&prop[0]);
 		vreg->high_vol_level = be32_to_cpup(&prop[1]);
 	}
@@ -2344,10 +2370,21 @@ static int sdhci_msm_vreg_init_reg(struct device *dev,
 		goto out;
 	}
 
+	if (vreg->multi_card_tray_wa_needed) {
+		vreg->reg_en_dis = devm_regulator_get(dev, vreg->en_dis_name);
+		if (IS_ERR(vreg->reg_en_dis)) {
+			ret = PTR_ERR(vreg->reg_en_dis);
+			pr_err("%s: devm_regulator_get(%s) failed. ret=%d\n",
+				__func__, vreg->en_dis_name, ret);
+			goto out;
+		}
+	}
+
 	if (regulator_count_voltages(vreg->reg) > 0) {
 		vreg->set_voltage_sup = true;
 		/* sanity check */
-		if (!vreg->high_vol_level || !vreg->hpm_uA) {
+		if ((vreg->is_voltage_supplied && !vreg->high_vol_level) ||
+				!vreg->hpm_uA) {
 			pr_err("%s: %s invalid constraints specified\n",
 			       __func__, vreg->name);
 			ret = -EINVAL;
@@ -2392,7 +2429,7 @@ static int sdhci_msm_vreg_set_voltage(struct sdhci_msm_reg_data *vreg,
 	sdhci_msm_log_str(vreg->msm_host, "reg=%s min_uV=%d max_uV=%d\n",
 			vreg->name, min_uV, max_uV);
 
-	if (vreg->set_voltage_sup) {
+	if (vreg->set_voltage_sup && vreg->is_voltage_supplied) {
 		ret = regulator_set_voltage(vreg->reg, min_uV, max_uV);
 		if (ret) {
 			pr_err("%s: regulator_set_voltage(%s)failed. min_uV=%d,max_uV=%d,ret=%d\n",
@@ -2406,6 +2443,8 @@ static int sdhci_msm_vreg_set_voltage(struct sdhci_msm_reg_data *vreg,
 static int sdhci_msm_vreg_enable(struct sdhci_msm_reg_data *vreg)
 {
 	int ret = 0;
+	bool wa_needed = vreg->multi_card_tray_wa_needed;
+	const char *reg_name = wa_needed ? vreg->en_dis_name : vreg->name;
 
 	/* Put regulator in HPM (high power mode) */
 	ret = sdhci_msm_vreg_set_optimum_mode(vreg, vreg->hpm_uA);
@@ -2419,10 +2458,15 @@ static int sdhci_msm_vreg_enable(struct sdhci_msm_reg_data *vreg)
 		if (ret)
 			return ret;
 	}
-	ret = regulator_enable(vreg->reg);
+
+	if (wa_needed)
+		ret = regulator_enable(vreg->reg_en_dis);
+	else
+		ret = regulator_enable(vreg->reg);
+
 	if (ret) {
 		pr_err("%s: regulator_enable(%s) failed. ret=%d\n",
-				__func__, vreg->name, ret);
+				__func__, reg_name, ret);
 		return ret;
 	}
 	vreg->is_enabled = true;
@@ -2432,13 +2476,19 @@ static int sdhci_msm_vreg_enable(struct sdhci_msm_reg_data *vreg)
 static int sdhci_msm_vreg_disable(struct sdhci_msm_reg_data *vreg)
 {
 	int ret = 0;
+	bool wa_needed = vreg->multi_card_tray_wa_needed;
+	const char *reg_name = wa_needed ? vreg->en_dis_name : vreg->name;
 
 	/* Never disable regulator marked as always_on */
 	if (vreg->is_enabled && !vreg->is_always_on) {
-		ret = regulator_disable(vreg->reg);
+
+		if (wa_needed)
+			ret = regulator_disable(vreg->reg_en_dis);
+		else
+			ret = regulator_disable(vreg->reg);
 		if (ret) {
 			pr_err("%s: regulator_disable(%s) failed. ret=%d\n",
-				__func__, vreg->name, ret);
+				__func__, reg_name, ret);
 			goto out;
 		}
 		vreg->is_enabled = false;
@@ -4811,33 +4861,59 @@ static void sdhci_msm_set_rumi_bus_mode(struct sdhci_host *host)
 	}
 }
 
-static u32 is_bootdevice_sdhci = SDHCI_BOOT_DEVICE;
+static bool is_bootdevice_sdhci = true;
 
-static int sdhci_qcom_read_boot_config(struct platform_device *pdev)
+static bool sdhci_qcom_read_boot_config(struct platform_device *pdev)
 {
-	u32 *buf;
+	u8 *buf;
 	size_t len;
 	struct nvmem_cell *cell;
+	int boot_device_type, data;
+	struct device *dev = &pdev->dev;
 
-	cell = nvmem_cell_get(&pdev->dev, "boot_conf");
+	cell = nvmem_cell_get(dev, "boot_conf");
 	if (IS_ERR(cell)) {
-		dev_warn(&pdev->dev, "nvmem cell get failed\n");
-		return 0;
+		dev_warn(dev, "nvmem cell get failed\n");
+		goto ret;
 	}
 
-	buf = nvmem_cell_read(cell, &len);
+	buf = (u8 *)nvmem_cell_read(cell, &len);
 	if (IS_ERR(buf)) {
-		dev_warn(&pdev->dev, "nvmem cell read failed\n");
-		nvmem_cell_put(cell);
-		return 0;
+		dev_warn(dev, "nvmem cell read failed\n");
+		goto ret_put_nvmem;
 	}
 
-	is_bootdevice_sdhci = (*buf) >> 1 & 0x1f;
-	dev_info(&pdev->dev, "boot_config val = %x is_bootdevice_sdhci = %x\n",
-			*buf, is_bootdevice_sdhci);
-	kfree(buf);
-	nvmem_cell_put(cell);
+	/*
+	 * Boot_device_type value is passed from the dtsi node
+	 */
+	if (of_property_read_u32(dev->of_node, "boot_device_type",
+				&boot_device_type)) {
+		dev_warn(dev, "boot_device_type not present\n");
+		goto ret_free_buf;
+	}
 
+	/*
+	 * Storage boot device fuse is present in QFPROM_RAW_OEM_CONFIG_ROW0_LSB
+	 * this fuse is blown by bootloader and pupulated in boot_config
+	 * register[1:5] - hence shift read data by 1 and mask it with 0x1f.
+	 */
+	data = *buf >> 1 & 0x1f;
+
+	/*
+	 * The value in the boot_device_type in dtsi node should match with the
+	 * value read from the register for the probe to continue.
+	 */
+	is_bootdevice_sdhci = (data == boot_device_type) ? true : false;
+
+	if (!is_bootdevice_sdhci)
+		dev_err(dev, "boot dev in reg = 0x%x boot dev in dtsi = 0x%x\n",
+				data, boot_device_type);
+
+ret_free_buf:
+	kfree(buf);
+ret_put_nvmem:
+	nvmem_cell_put(cell);
+ret:
 	return is_bootdevice_sdhci;
 }
 
@@ -5025,7 +5101,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *node = dev->of_node;
 
-	if (of_property_read_bool(node, "non-removable") && sdhci_qcom_read_boot_config(pdev)) {
+	if (of_property_read_bool(node, "non-removable") && !sdhci_qcom_read_boot_config(pdev)) {
 		dev_err(dev, "SDHCI is not boot dev.\n");
 		return 0;
 	}
@@ -5233,7 +5309,8 @@ static void sdhci_msm_remove(struct platform_device *pdev)
 	int i;
 	int dead;
 
-	if (of_property_read_bool(np, "non-removable") && is_bootdevice_sdhci) {
+	if (of_property_read_bool(np, "non-removable") &&
+			!is_bootdevice_sdhci) {
 		dev_err(&pdev->dev, "SDHCI is not boot dev.\n");
 		return;
 	}
@@ -5370,7 +5447,8 @@ static int sdhci_msm_wrapper_suspend_late(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
 
-	if (of_property_read_bool(np, "non-removable") && is_bootdevice_sdhci) {
+	if (of_property_read_bool(np, "non-removable") &&
+			!is_bootdevice_sdhci) {
 		dev_info(dev, "SDHCI is not boot dev.\n");
 		return 0;
 	}
