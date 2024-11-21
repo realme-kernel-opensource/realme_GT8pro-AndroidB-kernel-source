@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"PMIC_GLINK: %s: " fmt, __func__
@@ -511,6 +511,8 @@ static int pmic_glink_rpmsg_probe(struct rpmsg_device *rpdev)
 static const struct rpmsg_device_id pmic_glink_rpmsg_match[] = {
 	{ "PMIC_RTR_ADSP_APPS" },
 	{ "PMIC_LOGS_ADSP_APPS" },
+	{ "PMIC_RTR_SOCCP_APPS" },
+	{ "PMIC_LOGS_SOCCP_APPS" },
 	{}
 };
 
