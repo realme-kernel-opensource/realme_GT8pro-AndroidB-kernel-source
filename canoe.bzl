@@ -39,6 +39,7 @@ def define_canoe():
         "drivers/firmware/qcom/qcom_tzmem.ko",
         "drivers/firmware/qcom/si_core/mem_object.ko",
         "drivers/firmware/qcom/si_core/si_core_module.ko",
+        "drivers/gpu/drm/display/drm_display_helper.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
         "drivers/i2c/busses/i2c-msm-geni.ko",
         "drivers/i3c/master/i3c-master-msm-geni.ko",
