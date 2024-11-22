@@ -94,6 +94,7 @@
 #define LLCC_COMPUTE1         87
 #define LLCC_CPUSS_OPP        88
 #define LLCC_CPUSS_MPAM1      89
+#define LLCC_PARTIALWRITES    90
 #define LLCC_CAM_IPE_STROV    92
 #define LLCC_CAM_OFE_STROV    93
 #define LLCC_CPUSS_HEU        94
