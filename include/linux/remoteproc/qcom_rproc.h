@@ -25,7 +25,7 @@ struct qcom_ssr_notify_data {
 	bool crashed;
 };
 
-#if IS_ENABLED(CONFIG_QCOM_Q6V5_SOC_V1)
+#if IS_ENABLED(CONFIG_QCOM_Q6V5_PAS_SOCCP_V1)
 
 int rproc_set_state(struct rproc *rproc, bool state);
 

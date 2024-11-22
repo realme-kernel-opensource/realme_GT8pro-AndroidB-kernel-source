@@ -809,7 +809,7 @@ static int rproc_find_status_register(struct qcom_adsp *adsp)
 
 	return 0;
 }
-#if IS_ENABLED(CONFIG_QCOM_Q6V5_SOC_V1)
+#if IS_ENABLED(CONFIG_QCOM_Q6V5_PAS_SOCCP_V1)
 static bool rproc_poll_handover(struct qcom_adsp *adsp)
 {
 	unsigned int retry_num = 50;
