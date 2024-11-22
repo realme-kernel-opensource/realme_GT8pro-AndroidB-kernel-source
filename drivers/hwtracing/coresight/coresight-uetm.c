@@ -803,7 +803,7 @@ static void uetm_disable(struct coresight_device *csdev,
 {
 	struct uetm_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
-	if (coresight_get_mode(csdev == CS_MODE_SYSFS)) {
+	if (coresight_get_mode(csdev) == CS_MODE_SYSFS) {
 		uetm_scmi_stop_uetm_trace(drvdata->uetm_id);
 		coresight_trace_id_put_system_id(drvdata->traceid);
 		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
@@ -887,12 +887,11 @@ static int uetm_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int uetm_remove(struct platform_device *pdev)
+static void uetm_remove(struct platform_device *pdev)
 {
 	struct uetm_drvdata *drvdata = platform_get_drvdata(pdev);
 
 	coresight_unregister(drvdata->csdev);
-	return 0;
 }
 
 static const struct of_device_id uetm_match[] = {
