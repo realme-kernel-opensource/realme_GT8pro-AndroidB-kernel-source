@@ -8,6 +8,8 @@ camcc-canoe.ko
 clk-dummy.ko
 clk-qcom.ko
 clk-rpmh.ko
+sched-walt.ko
+sched-walt-debug.ko
 cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko

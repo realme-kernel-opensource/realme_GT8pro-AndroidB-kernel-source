@@ -193,6 +193,7 @@ def define_canoe():
         "drivers/virt/gunyah/gunyah_rsc_mgr.ko",
         "drivers/virt/gunyah/gunyah_vcpu.ko",
         "kernel/msm_sysstats.ko",
+        "kernel/sched/walt/sched-walt.ko",
         "kernel/trace/qcom_ipc_logging.ko",
         "net/mac80211/mac80211.ko",
         "net/qrtr/qrtr.ko",
@@ -207,6 +208,7 @@ def define_canoe():
         "drivers/misc/lkdtm/lkdtm.ko",
         "kernel/locking/locktorture.ko",
         "kernel/rcu/rcutorture.ko",
+        "kernel/sched/walt/sched-walt-debug.ko",
         "kernel/torture.ko",
         "lib/atomic64_test.ko",
     ]
