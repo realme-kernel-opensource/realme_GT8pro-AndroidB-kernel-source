@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/gunyah/gh_rm_drv.h>
 #include <soc/qcom/secure_buffer.h>
 
 #define CREATE_TRACE_POINTS
@@ -587,6 +588,11 @@ int hyp_assign_table(struct sg_table *table,
 		     int *dest_vmids, int *dest_perms,
 		     int dest_nelems)
 {
+
+	if (!gh_rm_needs_hyp_assign(source_vm_list, source_nelems,
+				dest_vmids, dest_nelems))
+		return 0;
+
 	return _hyp_assign_table(table, table->nents, source_vm_list, source_nelems,
 				 dest_vmids, dest_perms, dest_nelems, true);
 }

@@ -9,6 +9,7 @@
 #include <linux/limits.h>
 #include <linux/module.h>
 #include <linux/vmalloc.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 
 #include <linux/gunyah/gh_msgq.h>
 #include <linux/gunyah/gh_common.h>
@@ -21,12 +22,18 @@
 
 #define GH_RM_MEM_RELEASE_VALID_FLAGS GH_RM_MEM_RELEASE_CLEAR
 #define GH_RM_MEM_RECLAIM_VALID_FLAGS GH_RM_MEM_RECLAIM_CLEAR
-#define GH_RM_MEM_ACCEPT_VALID_FLAGS\
+#define GH_RM_MEM_ACCEPT_VALID_GH_FLAGS\
 	(GH_RM_MEM_ACCEPT_VALIDATE_SANITIZED |\
 	 GH_RM_MEM_ACCEPT_VALIDATE_ACL_ATTRS |\
 	 GH_RM_MEM_ACCEPT_VALIDATE_LABEL |\
 	 GH_RM_MEM_ACCEPT_MAP_IPA_CONTIGUOUS |\
+	 GH_RM_MEM_ACCEPT_SANITIZE_ON_RELEASE |\
 	 GH_RM_MEM_ACCEPT_DONE)
+#define GH_RM_MEM_ACCEPT_VALID_DRIVER_FLAGS\
+	 (GH_RM_MEM_ACCEPT_NO_SANITIZE_ON_RELEASE)
+#define GH_RM_MEM_ACCEPT_VALID_FLAGS\
+	(GH_RM_MEM_ACCEPT_VALID_GH_FLAGS |\
+	 GH_RM_MEM_ACCEPT_VALID_DRIVER_FLAGS)
 #define GH_RM_MEM_SHARE_VALID_FLAGS GH_RM_MEM_SHARE_SANITIZE
 #define GH_RM_MEM_LEND_VALID_FLAGS GH_RM_MEM_LEND_SANITIZE
 #define GH_RM_MEM_DONATE_VALID_FLAGS GH_RM_MEM_DONATE_SANITIZE
@@ -41,6 +48,13 @@
 
 static DEFINE_SPINLOCK(gh_vm_table_lock);
 static struct gh_vm_property gh_vm_table[GH_VM_MAX];
+/*
+ * Feature flag: gh_feature_use_scm_assign
+ * True when current VM is GH_PRIMARY_VM and hypervisor version is < sun.
+ * Indicates qcom_scm_assign_mem() is required when transferring memory to
+ * a Gunyah managed VM.
+ */
+static bool gh_feature_use_scm_assign;
 
 void gh_init_vm_prop_table(void)
 {
@@ -1874,9 +1888,47 @@ static int gh_rm_mem_accept_check_resp(struct gh_mem_accept_resp_payload *resp,
 	return -EINVAL;
 }
 
+/*
+ * Linux wants a santize-by-default policy.
+ * We set the appropriate gunyah flag, unless overridden by
+ * GH_RM_MEM_ACCEPT_NO_SANITIZE_ON_RELEASE, or disallowed by memory type==IO or
+ * lack of write-permission.
+ *
+ * A client explicitly setting GH_RM_MEM_ACCEPT_SANITIZE_ON_RELEASE will take
+ * priority over the above.
+ */
+static u8 gh_rm_mem_accept_sanitize_policy(u8 mem_type,
+				 u8 trans_type, u32 flags,
+				 struct gh_acl_desc *acl_desc)
+{
+	u8 sanitize = GH_RM_MEM_ACCEPT_SANITIZE_ON_RELEASE;
+	int i;
+	gh_vmid_t this_vmid;
+
+	if (flags & GH_RM_MEM_ACCEPT_NO_SANITIZE_ON_RELEASE)
+		return 0;
+
+	if (mem_type == GH_RM_MEM_TYPE_IO || trans_type == GH_RM_TRANS_TYPE_SHARE)
+		return 0;
+
+	if (WARN(gh_rm_get_this_vmid(&this_vmid), "gh_rm_get_this_vmid failed\n"))
+		return sanitize;
+
+	if (WARN(!acl_desc, "Policy requires gh_rm_mem_accept to be called with acl_desc\n"))
+		return sanitize;
+
+	for (i = 0; i < acl_desc->n_acl_entries; i++) {
+		if (acl_desc->acl_entries[i].vmid == this_vmid &&
+		    !(acl_desc->acl_entries[i].perms & GH_RM_ACL_W))
+			return 0;
+	}
+
+	return sanitize;
+}
+
 static struct gh_mem_accept_req_payload_hdr *
 gh_rm_mem_accept_prepare_request(gh_memparcel_handle_t handle, u8 mem_type,
-				 u8 trans_type, u8 flags, gh_label_t label,
+				 u8 trans_type, u32 flags, gh_label_t label,
 				 struct gh_acl_desc *acl_desc,
 				 struct gh_sgl_desc *sgl_desc,
 				 struct gh_mem_attr_desc *mem_attr_desc,
@@ -1924,7 +1976,9 @@ gh_rm_mem_accept_prepare_request(gh_memparcel_handle_t handle, u8 mem_type,
 	req_payload_hdr->memparcel_handle = handle;
 	req_payload_hdr->mem_type = mem_type;
 	req_payload_hdr->trans_type = trans_type;
-	req_payload_hdr->flags = flags;
+	req_payload_hdr->flags = flags & GH_RM_MEM_ACCEPT_VALID_GH_FLAGS;
+	req_payload_hdr->flags |= gh_rm_mem_accept_sanitize_policy(mem_type,
+						trans_type, flags, acl_desc);
 	if (flags & GH_RM_MEM_ACCEPT_VALIDATE_LABEL)
 		req_payload_hdr->validate_label = label;
 	gh_rm_populate_mem_request(req_buf, fn_id, acl_desc, sgl_desc, map_vmid,
@@ -1969,7 +2023,7 @@ gh_rm_mem_accept_prepare_request(gh_memparcel_handle_t handle, u8 mem_type,
  * and multiple calls are needed to obtain the full value.
  */
 struct gh_sgl_desc *gh_rm_mem_accept(gh_memparcel_handle_t handle, u8 mem_type,
-				     u8 trans_type, u8 flags, gh_label_t label,
+				     u8 trans_type, u32 flags, gh_label_t label,
 				     struct gh_acl_desc *acl_desc,
 				     struct gh_sgl_desc *sgl_desc,
 				     struct gh_mem_attr_desc *mem_attr_desc,
@@ -2792,3 +2846,183 @@ int gh_rm_vm_set_debug(gh_vmid_t vmid)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(gh_rm_vm_set_debug);
+
+#ifdef CONFIG_GUNYAH_LEGACY
+/*
+ * On certain hypervisors, GH_RM_RPC_MSG_ID_CALL_VM_GET_VMID call loops
+ * indefinetly instead of returning an error.
+ */
+static int __gh_rm_setup_feature_scm_assign(void)
+{
+	gh_feature_use_scm_assign = true;
+	return 0;
+}
+#else
+static int __gh_rm_setup_feature_scm_assign(void)
+{
+	int ret, gh_acl_sz, gh_sgl_sz;
+	int vmid = 0;
+	gh_vmid_t self_vmid;
+	struct page *page;
+	struct gh_acl_desc *gh_acl;
+	struct gh_sgl_desc *gh_sgl;
+	gh_memparcel_handle_t handle;
+
+	ret = gh_rm_get_this_vmid(&self_vmid);
+	if (ret)
+		return ret;
+
+	if (self_vmid != QCOM_SCM_VMID_HLOS) {
+		gh_feature_use_scm_assign = false;
+		return 0;
+	}
+
+	page = alloc_page(GFP_KERNEL);
+	if (!page)
+		return -ENOMEM;
+
+	gh_acl_sz = sizeof(*gh_acl) + offsetof(struct gh_acl_desc, acl_entries[1]);
+	gh_sgl_sz = sizeof(*gh_sgl) + offsetof(struct gh_sgl_desc, sgl_entries[1]);
+	gh_acl = kzalloc(gh_acl_sz + gh_sgl_sz, GFP_KERNEL);
+	gh_sgl = (void *)gh_acl + gh_acl_sz;
+	if (!gh_acl) {
+		__free_page(page);
+		return -ENOMEM;
+	}
+
+	ret = gh_rm_vm_alloc_vmid(GH_TRUSTED_VM, &vmid);
+	if (ret) {
+		kfree(gh_acl);
+		__free_page(page);
+		return -ENOMEM;
+	}
+
+	gh_acl->n_acl_entries = 1;
+	gh_acl->acl_entries[0].vmid = vmid;
+	gh_acl->acl_entries[0].perms = GH_RM_ACL_R | GH_RM_ACL_W;
+
+	gh_sgl->n_sgl_entries = 1;
+	gh_sgl->sgl_entries[0].ipa_base = page_to_phys(page);
+	gh_sgl->sgl_entries[0].size = PAGE_SIZE;
+
+	ret = ghd_rm_mem_lend(GH_RM_MEM_TYPE_NORMAL, 0, 0, gh_acl, gh_sgl, NULL, &handle);
+	gh_feature_use_scm_assign = ret ? true : false;
+
+	if (ret || !ghd_rm_mem_reclaim(handle, 0))
+		__free_page(page);
+	gh_rm_vm_dealloc_vmid(vmid);
+	kfree(gh_acl);
+	return 0;
+}
+#endif
+
+int gh_rm_setup_feature_scm_assign(void)
+{
+	int ret;
+
+	ret = __gh_rm_setup_feature_scm_assign();
+	if (ret) {
+		gh_feature_use_scm_assign = true;
+		pr_err("%s: Detection of gh_feature_use_scm_assign failed with %d. Default: %s\n",
+			__func__, ret,
+			gh_feature_use_scm_assign ? "Enabled" : "Disabled");
+	} else {
+		pr_info("%s: gh_feature_use_scm_assign mem %s\n", __func__,
+			gh_feature_use_scm_assign ? "Enabled" : "Disabled");
+	}
+
+	return ret;
+}
+
+#define QCOM_SCM_MAX_MANAGED_VMID 0x3F
+static bool is_gh_vm_or_hlos(int vmid)
+{
+	if (vmid > QCOM_SCM_MAX_MANAGED_VMID)
+		return true;
+
+	switch (vmid) {
+	case QCOM_SCM_VMID_SOCCP:
+		fallthrough;
+	case QCOM_SCM_VMID_OEMVM:
+		fallthrough;
+	case QCOM_SCM_VMID_TVM:
+		fallthrough;
+	case QCOM_SCM_VMID_HLOS:
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * SCM ASSIGN Always needed:
+ * Source or Destination contain a CPZ VM.
+ * Source and Destination are exactly HLOS, ie. HLOS-RW -> HLOS-RO.
+ *
+ * SCM ASSIGN never needed:
+ * We are running on !QCOM_SCM_VMID_HLOS
+ */
+bool gh_rm_needs_scm_assign(u64 *src, const struct qcom_scm_vmperm *newvm,
+				unsigned int dest_cnt)
+{
+	int ret, i;
+	gh_vmid_t self_vmid;
+
+	if (gh_feature_use_scm_assign)
+		return true;
+
+	ret = gh_rm_get_this_vmid(&self_vmid);
+	if (ret)
+		return true;
+
+	if (self_vmid != QCOM_SCM_VMID_HLOS)
+		return false;
+
+	for (i = 0; i < BITS_PER_TYPE(*src); i++) {
+		if (!(*src & BIT(i)))
+			continue;
+		if (!is_gh_vm_or_hlos(i))
+			return true;
+	}
+	for (i = 0; i < dest_cnt; i++)
+		if (!is_gh_vm_or_hlos(newvm[i].vmid))
+			return true;
+
+	if (hweight64(*src) == 1 && (*src & BIT(QCOM_SCM_VMID_HLOS)) &&
+	    (dest_cnt == 1) && (newvm[0].vmid == QCOM_SCM_VMID_HLOS))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(gh_rm_needs_scm_assign);
+
+bool gh_rm_needs_hyp_assign(u32 *src_vm_list, int source_nelems,
+				int *dst_vm_list, int dst_nelems)
+{
+	int ret, i;
+	gh_vmid_t self_vmid;
+
+	if (gh_feature_use_scm_assign)
+		return true;
+
+	ret = gh_rm_get_this_vmid(&self_vmid);
+	if (ret)
+		return true;
+
+	if (self_vmid != QCOM_SCM_VMID_HLOS)
+		return false;
+
+	for (i = 0; i < source_nelems; i++)
+		if (!is_gh_vm_or_hlos(src_vm_list[i]))
+			return true;
+	for (i = 0; i < dst_nelems; i++)
+		if (!is_gh_vm_or_hlos(dst_vm_list[i]))
+			return true;
+
+	if (source_nelems == 1 && src_vm_list[0] == QCOM_SCM_VMID_HLOS &&
+	    dst_nelems == 1 && dst_vm_list[0] == QCOM_SCM_VMID_HLOS)
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(gh_rm_needs_hyp_assign);

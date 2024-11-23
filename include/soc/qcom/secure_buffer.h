@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_SECURE_BUFFER_H__
@@ -53,9 +53,6 @@ int hyp_assign_table(struct sg_table *table,
 			u32 *source_vm_list, int source_nelems,
 			int *dest_vmids, int *dest_perms,
 			int dest_nelems);
-int hyp_assign_phys(phys_addr_t addr, u64 size,
-			u32 *source_vmlist, int source_nelems,
-			int *dest_vmids, int *dest_perms, int dest_nelems);
 const char *msm_secure_vmid_to_string(int secure_vmid);
 u32 msm_secure_get_vmid_perms(u32 vmid);
 int page_accessible(unsigned long pfn);
@@ -64,13 +61,6 @@ static inline int hyp_assign_table(struct sg_table *table,
 			u32 *source_vm_list, int source_nelems,
 			int *dest_vmids, int *dest_perms,
 			int dest_nelems)
-{
-	return -EINVAL;
-}
-
-static inline int hyp_assign_phys(phys_addr_t addr, u64 size,
-			u32 *source_vmlist, int source_nelems,
-			int *dest_vmids, int *dest_perms, int dest_nelems)
 {
 	return -EINVAL;
 }

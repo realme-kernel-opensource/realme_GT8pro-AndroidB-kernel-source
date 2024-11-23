@@ -333,4 +333,7 @@ static inline int qcom_scm_qseecom_app_send(u32 app_id,
 
 #endif /* CONFIG_QCOM_QSEECOM */
 
+extern int gh_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz, u64 *src,
+			const struct qcom_scm_vmperm *dstvm,
+			unsigned int nr_dst_vmperm);
 #endif

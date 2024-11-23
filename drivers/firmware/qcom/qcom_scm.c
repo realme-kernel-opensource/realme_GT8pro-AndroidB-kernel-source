@@ -39,6 +39,7 @@
 #include <linux/reset-controller.h>
 #include <linux/sizes.h>
 #include <linux/types.h>
+#include <linux/gunyah/gh_rm_drv.h>
 
 #include "qcom_scm.h"
 #include "qcom_tzmem.h"
@@ -1317,10 +1318,13 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 	size_t dest_sz;
 	size_t src_sz;
 	size_t ptr_sz;
-	int next_vm;
+	u64 next_vm;
 	__le32 *src;
 	int ret, i, b;
 	u64 srcvm_bits = *srcvm;
+
+	if (!gh_rm_needs_scm_assign(srcvm, newvm, dest_cnt))
+		return 0;
 
 	src_sz = hweight64(srcvm_bits) * sizeof(*src);
 	mem_to_map_sz = sizeof(*mem_to_map);

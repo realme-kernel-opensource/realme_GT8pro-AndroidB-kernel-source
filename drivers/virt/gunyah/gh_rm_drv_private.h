@@ -569,4 +569,6 @@ int gh_rm_vm_lookup(enum gh_vm_lookup_type type, const void *name,
 struct gh_vm_get_hyp_res_resp_entry *
 gh_rm_vm_get_hyp_res(gh_vmid_t vmid, u32 *out_n_entries);
 int gh_msgq_populate_cap_info(int label, u64 cap_id, int direction, int irq);
+int gh_rm_setup_feature_scm_assign(void);
+
 #endif /* __GH_RM_DRV_PRIVATE_H */

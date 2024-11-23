@@ -1097,8 +1097,11 @@ static int gh_rm_drv_probe(struct auxiliary_device *adev,
 	if (ret < 0 && ret != -ENODEV)
 		return ret;
 
-	return 0;
+	ret = gh_rm_setup_feature_scm_assign();
+	if (ret)
+		return ret;
 
+	return 0;
 }
 
 static void gh_rm_drv_remove(struct auxiliary_device *adev)
