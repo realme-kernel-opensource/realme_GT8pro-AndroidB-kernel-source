@@ -300,7 +300,35 @@ static int __init hvc_gh_console_init(void)
 #else
 static int __init hvc_gh_console_init(void)
 {
+	int i = 1, j, ret = 0;
+
+	/*
+	 * Initiate the self console to 0.
+	 * If it fails, DCC must be connected, try 1.
+	 */
+	ret = hvc_instantiate(gh_vm_name_to_vtermno(GH_SELF_VM), 0,
+			      &gh_hv_ops);
+
+	if (ret) {
+		ret = hvc_instantiate(gh_vm_name_to_vtermno(GH_SELF_VM), 1,
+			      &gh_hv_ops);
+		if (ret)
+			goto fail;
+
+		i++;
+	}
+
+	for (j = 1; j < GH_VM_MAX; j++, i++) {
+		ret = hvc_instantiate(gh_vm_name_to_vtermno(j), i,
+			      &gh_hv_ops);
+		if (ret)
+			goto fail;
+	}
+
 	return 0;
+
+fail:
+	return -ENODEV;
 }
 #endif /* CONFIG_HVC_GUNYAH_CONSOLE */
 
