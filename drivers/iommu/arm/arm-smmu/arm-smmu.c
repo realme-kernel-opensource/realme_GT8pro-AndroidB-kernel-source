@@ -1334,12 +1334,12 @@ static int arm_smmu_alloc_context_bank(struct arm_smmu_domain *smmu_domain,
 
 static irqreturn_t arm_smmu_context_fault_irq(int irq, void *dev)
 {
-	struct iommu_domain *domain = dev;
-	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
+	struct arm_smmu_domain *smmu_domain = dev;
 
 	/* call the handler that is requested in non-thread irq context */
 	if (smmu_domain->fault_handler_irq)
-		smmu_domain->fault_handler_irq(domain, smmu_domain->handler_irq_token);
+		smmu_domain->fault_handler_irq(&smmu_domain->domain,
+				smmu_domain->handler_irq_token);
 
 	return IRQ_WAKE_THREAD;
 }
