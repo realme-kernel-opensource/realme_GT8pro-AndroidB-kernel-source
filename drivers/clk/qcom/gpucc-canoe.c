@@ -55,7 +55,7 @@ static const struct alpha_pll_config gpu_cc_pll0_config = {
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
 	.config_ctl_hi1_val = 0xf51dea20,
-	.user_ctl_val = 0x00000400,
+	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
 };
 

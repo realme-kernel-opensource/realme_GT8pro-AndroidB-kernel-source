@@ -57,21 +57,22 @@ enum {
 };
 
 static const struct pll_vco pongo_eko_t_vco[] = {
-	{ 38400000, 38400000, 0 },
+	{ 38400000, 153600000, 0 },
 };
 
 static const struct pll_vco taycan_eko_t_vco[] = {
 	{ 249600000, 2500000000, 0 },
 };
 
+/* 257.142858 MHz Configuration */
 static const struct alpha_pll_config disp_cc_pll0_config = {
 	.l = 0xd,
 	.cal_l = 0x48,
 	.alpha = 0x6492,
-	.config_ctl_val = 0x196600e7,
-	.config_ctl_hi_val = 0x058060a0,
-	.config_ctl_hi1_val = 0xb516cb20,
-	.user_ctl_val = 0x00000009,
+	.config_ctl_val = 0x25c400e7,
+	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi1_val = 0xf51dea20,
+	.user_ctl_val = 0x00000008,
 	.user_ctl_hi_val = 0x00000002,
 };
 
@@ -104,14 +105,15 @@ static struct clk_alpha_pll disp_cc_pll0 = {
 	},
 };
 
+/* 300.0 MHz Configuration */
 static const struct alpha_pll_config disp_cc_pll1_config = {
 	.l = 0xf,
 	.cal_l = 0x48,
 	.alpha = 0xa000,
-	.config_ctl_val = 0x196600e7,
-	.config_ctl_hi_val = 0x058060a0,
-	.config_ctl_hi1_val = 0xb516cb20,
-	.user_ctl_val = 0x00000009,
+	.config_ctl_val = 0x25c400e7,
+	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi1_val = 0xf51dea20,
+	.user_ctl_val = 0x00000008,
 	.user_ctl_hi_val = 0x00000002,
 };
 
@@ -143,21 +145,22 @@ static struct clk_alpha_pll disp_cc_pll1 = {
 	},
 };
 
+/* 38.4 MHz Configuration */
 static const struct alpha_pll_config disp_cc_pll2_config = {
 	.l = 0x493,
 	.cal_l = 0x493,
-	.alpha = 0xe000,
-	.config_ctl_val = 0x60000f64,
+	.alpha = 0x0,
+	.config_ctl_val = 0x60000f68,
 	.config_ctl_hi_val = 0x0001c808,
 	.config_ctl_hi1_val = 0x00000000,
-	.config_ctl_hi2_val = 0x040001ac,
+	.config_ctl_hi2_val = 0x040082f4,
 	.test_ctl_val = 0x00000000,
-	.test_ctl_hi_val = 0x0088c496,
-	.test_ctl_hi1_val = 0x40100180,
-	.test_ctl_hi2_val = 0x440005bc,
-	.test_ctl_hi3_val = 0x000003d8,
-	.user_ctl_val = 0x00000441,
-	.user_ctl_hi_val = 0x00250202,
+	.test_ctl_hi_val = 0x0080c496,
+	.test_ctl_hi1_val = 0x40100080,
+	.test_ctl_hi2_val = 0x001001bc,
+	.test_ctl_hi3_val = 0x002003d8,
+	.user_ctl_val = 0x00000400,
+	.user_ctl_hi_val = 0x00e50302,
 };
 
 static struct clk_alpha_pll disp_cc_pll2 = {
@@ -179,7 +182,7 @@ static struct clk_alpha_pll disp_cc_pll2 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 38400000},
+				[VDD_LOWER_D1] = 153600000},
 		},
 	},
 };
@@ -389,11 +392,11 @@ static const struct freq_tbl ftbl_disp_cc_mdss_ahb_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
 	F(100000000, P_DISP_CC_PLL1_OUT_EVEN, 3, 0, 0),
 	F(120000000, P_DISP_CC_PLL1_OUT_EVEN, 3, 0, 0),
-	F(183333333, P_DISP_CC_PLL1_OUT_EVEN, 3, 0, 0),
+	F(165000000, P_DISP_CC_PLL1_OUT_EVEN, 3, 0, 0),
+	F(200000000, P_DISP_CC_PLL1_OUT_EVEN, 3, 0, 0),
 	F(233333333, P_DISP_CC_PLL1_OUT_EVEN, 3, 0, 0),
+	F(261666667, P_DISP_CC_PLL1_OUT_EVEN, 3, 0, 0),
 	F(283333333, P_DISP_CC_PLL1_OUT_EVEN, 3, 0, 0),
-	F(316666667, P_DISP_CC_PLL1_OUT_EVEN, 3, 0, 0),
-	F(333333333, P_DISP_CC_PLL1_OUT_EVEN, 3, 0, 0),
 	{ }
 };
 
@@ -881,7 +884,7 @@ static const struct freq_tbl ftbl_disp_cc_mdss_mdp_clk_src[] = {
 	F(337000000, P_DISP_CC_PLL0_OUT_MAIN, 3, 0, 0),
 	F(417000000, P_DISP_CC_PLL0_OUT_MAIN, 3, 0, 0),
 	F(532000000, P_DISP_CC_PLL0_OUT_MAIN, 3, 0, 0),
-	F(575000000, P_DISP_CC_PLL0_OUT_MAIN, 3, 0, 0),
+	F(600000000, P_DISP_CC_PLL0_OUT_MAIN, 3, 0, 0),
 	F(650000000, P_DISP_CC_PLL0_OUT_MAIN, 3, 0, 0),
 	{ }
 };
@@ -2241,17 +2244,7 @@ static struct platform_driver disp_cc_canoe_driver = {
 	},
 };
 
-static int __init disp_cc_canoe_init(void)
-{
-	return platform_driver_register(&disp_cc_canoe_driver);
-}
-subsys_initcall(disp_cc_canoe_init);
-
-static void __exit disp_cc_canoe_exit(void)
-{
-	platform_driver_unregister(&disp_cc_canoe_driver);
-}
-module_exit(disp_cc_canoe_exit);
+module_platform_driver(disp_cc_canoe_driver);
 
 MODULE_DESCRIPTION("QTI DISP_CC CANOE Driver");
 MODULE_LICENSE("GPL");
