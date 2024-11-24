@@ -869,6 +869,7 @@ MODULE_DEVICE_TABLE(of, video_cc_canoe_match_table);
 static int video_cc_canoe_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
+	unsigned int accu_cfg_mask = 0x1f << 21;
 	int ret;
 
 	regmap = qcom_cc_map(pdev, &video_cc_canoe_desc);
@@ -889,6 +890,20 @@ static int video_cc_canoe_probe(struct platform_device *pdev)
 	clk_taycan_eko_t_pll_configure(&video_cc_pll3, regmap, &video_cc_pll3_config);
 
 	/*
+	 *	Maximize ctl data download delay and enable memory redundancy:
+	 *	MVS0A CFG3
+	 *	MVS0 CFG3
+	 *	MVS0 VPP1 CFG3
+	 *	MVS0 VPP0 CFG3
+	 *	MVS0C CFG3
+	 */
+	regmap_update_bits(regmap, 0x8088, accu_cfg_mask, accu_cfg_mask);
+	regmap_update_bits(regmap, 0x80b4, accu_cfg_mask, accu_cfg_mask);
+	regmap_update_bits(regmap, 0x8100, accu_cfg_mask, accu_cfg_mask);
+	regmap_update_bits(regmap, 0x812c, accu_cfg_mask, accu_cfg_mask);
+	regmap_update_bits(regmap, 0x8158, accu_cfg_mask, accu_cfg_mask);
+
+	/*
 	 * Keep clocks always enabled:
 	 *	video_cc_ahb_clk
 	 *	video_cc_sleep_clk
@@ -899,19 +914,6 @@ static int video_cc_canoe_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x81bc, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x81b0, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x81ac, BIT(0), BIT(0));
-
-	/*
-	 *	Maximized MVS0A CFG3 ctl data download delay
-	 *	Maximized MVS0 CFG3 core data download delay
-	 *	Maximized MVS0 VPP1 CFG3 ctl data download delay
-	 *	Maximized MVS0 VPP0 CFG3 ctl data download delay
-	 *	Maximized MVS0C CFG3 ctl data download delay
-	 */
-	regmap_update_bits(regmap, 0x8088, 0x1e00000, 0x1e00000);
-	regmap_update_bits(regmap, 0x80b4, 0x1e00000, 0x1e00000);
-	regmap_update_bits(regmap, 0x8100, 0x1e00000, 0x1e00000);
-	regmap_update_bits(regmap, 0x812c, 0x1e00000, 0x1e00000);
-	regmap_update_bits(regmap, 0x8158, 0x1e00000, 0x1e00000);
 
 	ret = qcom_cc_really_probe(&pdev->dev, &video_cc_canoe_desc, regmap);
 	if (ret) {
