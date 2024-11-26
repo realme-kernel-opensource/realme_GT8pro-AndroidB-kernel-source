@@ -487,6 +487,7 @@
 
 /* below definitions are only for HAP530_HV */
 #define HAP530_MMAP_NUM_BYTES			8192
+#define VMAX_HDRM_MV_DEFAULT			1500
 
 #define is_between(val, min, max)	\
 	(((min) <= (max)) && ((min) <= (val)) && ((val) <= (max)))
@@ -599,6 +600,7 @@ enum wa_flags {
 	VISENSE_RECOVERY_EN = BIT(7),
 	IGNORE_SWR_IN_SPMI_PLAY = BIT(8),
 	DISCHARGE_VNDRV_LDO = BIT(9),
+	RESTORE_VMAX_HDRM_1P5V = BIT(10),
 };
 
 static const char * const src_str[] = {
@@ -3410,6 +3412,13 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 	}
 
 restore:
+	/* Restore Vmax headroom to 1.5V after SPMI play is done */
+	if (chip->wa_flags & RESTORE_VMAX_HDRM_1P5V) {
+		rc = haptics_set_vmax_headroom_mv(chip, VMAX_HDRM_MV_DEFAULT);
+		if (rc)
+			return rc;
+	}
+
 	/* Restore SWR play mode after SPMI play is done or any faults */
 	if (chip->wa_flags & IGNORE_SWR_IN_SPMI_PLAY)
 		haptics_ignore_swr_play(chip, false);
@@ -3970,7 +3979,8 @@ static int haptics_config_wa(struct haptics_chip *chip)
 		break;
 	case HAP530_HV:
 		chip->wa_flags |= EN_RUNTIME_PM | VISENSE_RECOVERY_EN |
-			IGNORE_SWR_IN_SPMI_PLAY | DISCHARGE_VNDRV_LDO;
+			IGNORE_SWR_IN_SPMI_PLAY | DISCHARGE_VNDRV_LDO |
+			RESTORE_VMAX_HDRM_1P5V;
 		break;
 	default:
 		dev_err(chip->dev, "HW type %d does not match\n",
@@ -4067,6 +4077,12 @@ static int haptics_hw_init(struct haptics_chip *chip)
 	rc = haptics_init_vmax_config(chip);
 	if (rc < 0)
 		return rc;
+
+	if (chip->wa_flags & RESTORE_VMAX_HDRM_1P5V) {
+		rc = haptics_set_vmax_headroom_mv(chip, VMAX_HDRM_MV_DEFAULT);
+		if (rc)
+			return rc;
+	}
 
 	rc = haptics_init_drive_config(chip);
 	if (rc < 0)
@@ -5982,6 +5998,9 @@ static int haptics_start_lra_calibrate(struct haptics_chip *chip)
 	}
 
 unlock:
+	if (chip->wa_flags & RESTORE_VMAX_HDRM_1P5V)
+		haptics_set_vmax_headroom_mv(chip, VMAX_HDRM_MV_DEFAULT);
+
 	haptics_clear_fault(chip);
 	chip->play.in_calibration = false;
 	mutex_unlock(&chip->play.lock);
