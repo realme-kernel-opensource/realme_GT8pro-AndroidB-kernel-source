@@ -133,8 +133,10 @@ static struct seq_buf *md_cntxt_seq_buf;
 static DEFINE_PER_CPU(struct pt_regs, regs_before_stop);
 #endif
 
+#ifdef CONFIG_QCOM_MINIDUMP_PANIC_KTASK_STACK
 #define MD_KTASK_STACK_PAGES	64
 static struct seq_buf *md_ktask_stack_buf;
+#endif
 
 /* Modules information */
 #ifdef CONFIG_MODULES
@@ -1079,6 +1081,7 @@ static void md_ipi_stop(void *unused, struct pt_regs *regs)
 }
 #endif
 
+#ifdef CONFIG_QCOM_MINIDUMP_PANIC_KTASK_STACK
 static bool dump_trace(void *arg, unsigned long where)
 {
 	seq_buf_printf(md_ktask_stack_buf, "%pSb\n", (void *)where);
@@ -1107,6 +1110,7 @@ static void md_dump_ktask_stack(void)
 	}
 	seq_buf_printf(md_ktask_stack_buf, "---ktask stack end---\n");
 }
+#endif
 
 void md_dump_process(void)
 {
@@ -1125,7 +1129,9 @@ dump_rq:
 #endif
 	md_dump_next_event();
 	md_dump_runqueues();
+#ifdef CONFIG_QCOM_MINIDUMP_PANIC_KTASK_STACK
 	md_dump_ktask_stack();
+#endif
 	md_dump_memory();
 	dump_stack_minidump(0);
 	md_in_oops_handler = false;
@@ -1214,8 +1220,10 @@ static void md_register_panic_data(void)
 #endif
 	md_register_panic_entries(MD_RUNQUEUE_PAGES, "KRUNQUEUE",
 				  &md_runq_seq_buf);
+#ifdef CONFIG_QCOM_MINIDUMP_PANIC_KTASK_STACK
 	md_register_panic_entries(MD_KTASK_STACK_PAGES, "KTASK_STACK",
 				  &md_ktask_stack_buf);
+#endif
 }
 
 static int register_vmap_mem(const char *name, void *virual_addr, size_t dump_len)
