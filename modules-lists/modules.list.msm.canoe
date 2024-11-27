@@ -71,6 +71,7 @@ qrtr.ko
 msm_qmp.ko
 qnoc-qos.ko
 qnoc-canoe.ko
+qnoc-alor.ko
 qcom_iommu_debug.ko
 qcom_ipc_logging.ko
 iommu-logger.ko
