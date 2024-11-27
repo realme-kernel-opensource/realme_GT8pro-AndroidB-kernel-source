@@ -2118,7 +2118,7 @@ static struct gdsc disp_cc_mdss_core_gdsc = {
 		.name = "disp_cc_mdss_core_gdsc",
 	},
 	.pwrsts = PWRSTS_OFF_ON,
-	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_SKIP_DIS,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_SKIP_DIS | HW_CTRL_TRIGGER,
 	.supply = "vdd_mm",
 };
 
@@ -2131,7 +2131,7 @@ static struct gdsc disp_cc_mdss_core_int2_gdsc = {
 		.name = "disp_cc_mdss_core_int2_gdsc",
 	},
 	.pwrsts = PWRSTS_OFF_ON,
-	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_SKIP_DIS,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_SKIP_DIS | HW_CTRL_TRIGGER,
 	.supply = "vdd_mm",
 };
 
