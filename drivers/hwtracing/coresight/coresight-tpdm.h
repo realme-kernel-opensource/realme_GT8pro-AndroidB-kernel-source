@@ -227,8 +227,8 @@
 		tpdm_simple_dataset_rw(msr##nr,			\
 		CMB_MSR, nr)
 
-#define TPDA_KEY	"-tpda-"
-#define TRACE_NOC_KEY	"-tracenoc-"
+#define TPDA_KEY	"tpda"
+#define TRACE_NOC_KEY	"tracenoc"
 
 /**
  * struct dsb_dataset - specifics associated to dsb dataset
