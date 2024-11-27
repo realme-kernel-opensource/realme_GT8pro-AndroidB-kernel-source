@@ -47,10 +47,10 @@ static const struct alpha_pll_config eva_cc_pll0_config = {
 	.l = 0x36,
 	.cal_l = 0x48,
 	.alpha = 0xb000,
-	.config_ctl_val = 0x196600e7,
-	.config_ctl_hi_val = 0x058060a0,
-	.config_ctl_hi1_val = 0xb516cb20,
-	.user_ctl_val = 0x00000009,
+	.config_ctl_val = 0x25c400e7,
+	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi1_val = 0xf51dea20,
+	.user_ctl_val = 0x00000008,
 	.user_ctl_hi_val = 0x00000002,
 };
 
@@ -471,17 +471,7 @@ static struct platform_driver eva_cc_canoe_driver = {
 	},
 };
 
-static int __init eva_cc_canoe_init(void)
-{
-	return platform_driver_register(&eva_cc_canoe_driver);
-}
-subsys_initcall(eva_cc_canoe_init);
-
-static void __exit eva_cc_canoe_exit(void)
-{
-	platform_driver_unregister(&eva_cc_canoe_driver);
-}
-module_exit(eva_cc_canoe_exit);
+module_platform_driver(eva_cc_canoe_driver);
 
 MODULE_DESCRIPTION("QTI EVA_CC CANOE Driver");
 MODULE_LICENSE("GPL");

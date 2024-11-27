@@ -66,7 +66,7 @@ static const struct alpha_pll_config cam_cc_pll0_config = {
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
 	.config_ctl_hi1_val = 0xf51dea20,
-	.user_ctl_val = 0x00008400,
+	.user_ctl_val = 0x00008408,
 	.user_ctl_hi_val = 0x00000002,
 };
 
@@ -151,7 +151,7 @@ static const struct alpha_pll_config cam_cc_pll1_config = {
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
 	.config_ctl_hi1_val = 0xf51dea20,
-	.user_ctl_val = 0x00000400,
+	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
 };
 
@@ -213,7 +213,7 @@ static const struct alpha_pll_config cam_cc_pll2_config = {
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
 	.config_ctl_hi1_val = 0xf51dea20,
-	.user_ctl_val = 0x00000400,
+	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
 };
 
@@ -275,7 +275,7 @@ static const struct alpha_pll_config cam_cc_pll3_config = {
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
 	.config_ctl_hi1_val = 0xf51dea20,
-	.user_ctl_val = 0x00000400,
+	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
 };
 
@@ -337,7 +337,7 @@ static const struct alpha_pll_config cam_cc_pll4_config = {
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
 	.config_ctl_hi1_val = 0xf51dea20,
-	.user_ctl_val = 0x00000400,
+	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
 };
 
@@ -399,7 +399,7 @@ static const struct alpha_pll_config cam_cc_pll5_config = {
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
 	.config_ctl_hi1_val = 0xf51dea20,
-	.user_ctl_val = 0x00000400,
+	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
 };
 
@@ -461,7 +461,7 @@ static const struct alpha_pll_config cam_cc_pll6_config = {
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
 	.config_ctl_hi1_val = 0xf51dea20,
-	.user_ctl_val = 0x00008400,
+	.user_ctl_val = 0x00008408,
 	.user_ctl_hi_val = 0x00000002,
 };
 
@@ -546,7 +546,7 @@ static const struct alpha_pll_config cam_cc_pll7_config = {
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
 	.config_ctl_hi1_val = 0xf51dea20,
-	.user_ctl_val = 0x00000400,
+	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
 };
 
