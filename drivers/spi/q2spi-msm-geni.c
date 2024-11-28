@@ -2032,8 +2032,7 @@ static int q2spi_transfer_with_retries(struct q2spi_geni *q2spi, struct q2spi_re
 				goto transfer_exit;
 			}
 
-			if (i == 0 && !atomic_read(&q2spi->doorbell_pending) &&
-			    q2spi->is_start_seq_fail) {
+			if (!atomic_read(&q2spi->doorbell_pending) && q2spi->is_start_seq_fail) {
 				q2spi->is_start_seq_fail = false;
 				ret = q2spi_wakeup_hw_from_sleep(q2spi);
 				if (ret) {
