@@ -102,7 +102,7 @@
 #define SMMU_PMU_READ_ACCESS		0x11
 #define SMMU_PMU_WRITE_ACCESS		0x12
 
-#define SMMU_STATS_OFFSET		0x1000
+#define SMMU_REG_BASE_OFFSET		0x1000
 #define SMMU_STATS_START		0x80
 #define SMMU_STATS_NS_OFFSET		0x500
 #define SMMU_STATS_MTLB_LOOKUP_CNTR		0x88
@@ -815,11 +815,10 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 
 	dev_err(&pdev->dev, "SMMU PMU TCU NS @%pa\n", &mem_resource_1->start);
 
-	smmu_pmu->reg_base = mem_map_0;
-	smmu_pmu->tcu_base = mem_map_0 + SMMU_STATS_OFFSET;
+	smmu_pmu->reg_base = mem_map_0 + SMMU_REG_BASE_OFFSET;
+	smmu_pmu->tcu_base = mem_map_0;
 	smmu_pmu->tcu_base_ns = mem_map_1;
-	smmu_pmu->tcu_base_start =
-		(phys_addr_t)(mem_resource_0->start + SMMU_STATS_OFFSET);
+	smmu_pmu->tcu_base_start = (phys_addr_t)mem_resource_0->start;
 	smmu_pmu->pmu.name =
 		devm_kasprintf(&pdev->dev, GFP_KERNEL, "smmu_0_%llx",
 			       (mem_resource_0->start) >> SMMU_PA_SHIFT);
