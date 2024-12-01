@@ -28,6 +28,8 @@ def define_vienna():
         "drivers/soc/qcom/mem_buf/mem_buf_dev.ko",
         "drivers/soc/qcom/qcom_rpmh.ko",
         "drivers/soc/qcom/secure_buffer.ko",
+        "drivers/soc/qcom/smem.ko",
+        "drivers/soc/qcom/socinfo.ko",
     ]
 
     _vienna_consolidate_in_tree_modules = _vienna_in_tree_modules + [
