@@ -92,6 +92,7 @@
 #define LLCC_CPU_MTE          35
 #define LLCC_VIDEO_APV        83
 #define LLCC_CPUSS_OPP        88
+#define LLCC_CPUSS_MPAM1      89
 #define LLCC_CAM_IPE_STROV    92
 #define LLCC_CAM_OFE_STROV    93
 #define LLCC_CPUSS_HEU        94
