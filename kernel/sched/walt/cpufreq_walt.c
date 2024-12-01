@@ -277,6 +277,7 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	struct cpufreq_policy *policy = wg_policy->policy;
 	unsigned int freq, raw_freq, final_freq, smart_freq;
 	struct waltgov_cpu *wg_driv_cpu = &per_cpu(waltgov_cpu, wg_policy->driving_cpu);
+	struct walt_rq *wrq = &per_cpu(walt_rq, wg_policy->driving_cpu);
 	struct walt_sched_cluster *cluster = NULL;
 	bool skip = false;
 	bool thermal_isolated_now = cpus_halted_by_client(
@@ -284,24 +285,27 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	bool reset_need_freq_update = false;
 	unsigned int smart_reason;
 
-	if (thermal_isolated_now) {
-		if (!wg_policy->thermal_isolated) {
-			/* Entering thermal isolation */
-			wg_policy->thermal_isolated = true;
-			wg_policy->policy->cached_resolved_idx = 0;
-			final_freq = wg_policy->policy->freq_table[0].frequency;
-			__waltgov_update_next_freq(wg_policy, time, final_freq, final_freq);
+	if (soc_feat(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT)) {
+		if (thermal_isolated_now) {
+			if (!wg_policy->thermal_isolated) {
+				/* Entering thermal isolation */
+				wg_policy->thermal_isolated = true;
+				wg_policy->policy->cached_resolved_idx = 0;
+				final_freq = wg_policy->policy->freq_table[0].frequency;
+				__waltgov_update_next_freq(wg_policy, time, final_freq, final_freq);
+			} else {
+				/* no need to change freq, i.e. continue with min freq */
+				final_freq = 0;
+			}
+			raw_freq = final_freq;
+			freq = raw_freq;
+			goto out;
 		} else {
-			final_freq = 0;  /* no need to change freq, i.e. continue with min freq */
-		}
-		raw_freq = final_freq;
-		freq = raw_freq;
-		goto out;
-	} else {
-		if (wg_policy->thermal_isolated) {
-			/* Exiting thermal isolation*/
-			wg_policy->thermal_isolated = false;
-			wg_policy->need_freq_update = true;
+			if (wg_policy->thermal_isolated) {
+				/* Exiting thermal isolation*/
+				wg_policy->thermal_isolated = false;
+				wg_policy->need_freq_update = true;
+			}
 		}
 	}
 
@@ -357,6 +361,11 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 		freq = freq_cap[PARTIAL_HALT_CAP][cluster->id];
 		wg_driv_cpu->reasons |= CPUFREQ_REASON_PARTIAL_HALT_CAP_BIT;
 	}
+
+	if ((wg_driv_cpu->flags & WALT_CPUFREQ_UCLAMP_BIT) &&
+		((wrq->uclamp_limit[UCLAMP_MIN] != 0) ||
+			(wrq->uclamp_limit[UCLAMP_MAX] != SCHED_CAPACITY_SCALE)))
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_UCLAMP_BIT;
 
 	if (wg_policy->cached_raw_freq && freq == wg_policy->cached_raw_freq &&
 		!wg_policy->need_freq_update) {
@@ -610,7 +619,8 @@ static void waltgov_update_freq(struct waltgov_callback *cb, u64 time,
 	trace_waltgov_util_update(wg_cpu->cpu, wg_cpu->util, wg_policy->avg_cap,
 				wg_cpu->max, wg_cpu->walt_load.nl,
 				wg_cpu->walt_load.pl,
-				wg_cpu->walt_load.rtgb_active, flags);
+				wg_cpu->walt_load.rtgb_active, flags,
+				wg_policy->tunables->boost);
 
 	if (waltgov_should_update_freq(wg_policy, time) &&
 	    !(flags & WALT_CPUFREQ_CONTINUE_BIT)) {
