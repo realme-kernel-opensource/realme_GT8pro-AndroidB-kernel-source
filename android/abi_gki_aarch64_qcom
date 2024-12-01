@@ -954,6 +954,7 @@
   down
   down_read
   down_read_interruptible
+  down_read_trylock
   down_timeout
   down_write
   d_path

@@ -101,7 +101,7 @@ int qpace_urgent_compress(phys_addr_t input_addr,
  */
 int qpace_urgent_decompress(phys_addr_t input_addr,
 			    phys_addr_t output_addr,
-			    int input_size);
+			    size_t input_size);
 
 /*
  * qpace_queue_copy() - queue a copy operation
@@ -172,7 +172,7 @@ static inline int qpace_urgent_compress(phys_addr_t input_addr,
 
 static inline int qpace_urgent_decompress(phys_addr_t input_addr,
 					  phys_addr_t output_addr,
-					  int input_size)
+					  size_t input_size)
 {
 	return -EINVAL;
 }
