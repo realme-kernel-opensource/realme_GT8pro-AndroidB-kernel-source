@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 
 #include "coresight-priv.h"
 #include "coresight-common.h"
@@ -1432,12 +1433,19 @@ static int tpdm_probe(struct amba_device *adev, const struct amba_id *id)
 	struct coresight_platform_data *pdata;
 	struct tpdm_drvdata *drvdata;
 	struct coresight_desc desc = { 0 };
+	u32 dump_state = 0;
 	int ret;
 
 	pdata = coresight_get_platform_data(dev);
 	if (IS_ERR(pdata))
 		return PTR_ERR(pdata);
 	adev->dev.platform_data = pdata;
+
+	if (of_property_read_bool(adev->dev.of_node, "qcom,hw-enable-check")) {
+		ret = qcom_scm_get_sec_dump_state(&dump_state);
+		if (ret || !dump_state)
+			return -ENXIO;
+	}
 
 	/* driver data*/
 	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
