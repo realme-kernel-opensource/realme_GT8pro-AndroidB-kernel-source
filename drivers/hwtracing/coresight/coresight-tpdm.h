@@ -323,7 +323,7 @@ struct tpdm_drvdata {
 	struct cmb_dataset	*cmb;
 	u32			dsb_msr_num;
 	u32			cmb_msr_num;
-	struct clk		*dclk;
+	struct clk		*atclk;
 };
 
 /* Enumerate members of various datasets */

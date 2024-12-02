@@ -1057,13 +1057,9 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 		return -ENOMEM;
 
 
-	drvdata->dclk = devm_clk_get(dev, "dynamic_clk");
-	if (!IS_ERR(drvdata->dclk)) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret)
-			return ret;
-	} else
-		drvdata->dclk = NULL;
+	drvdata->atclk = devm_clk_get_optional_enabled(dev, "atclk"); /* optional */
+	if (IS_ERR(drvdata->atclk))
+		return  PTR_ERR(drvdata->atclk);
 
 	/* Validity for the resource is already checked by the AMBA core */
 	base = devm_ioremap_resource(dev, res);
@@ -1089,7 +1085,7 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 	pdata = coresight_cti_get_platform_data(dev);
 	if (IS_ERR(pdata)) {
 		dev_err(dev, "coresight_cti_get_platform_data err\n");
-		return  PTR_ERR(pdata);
+		return PTR_ERR(pdata);
 	}
 
 	/* default to powered - could change on PM notifications */
@@ -1146,8 +1142,6 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 	drvdata->csdev->dev.release = cti_device_release;
 
 	drvdata->extended_cti = is_extended_cti(dev);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 	/* all done - dec pm refcount */
 	pm_runtime_put_sync(&adev->dev);
 	dev_info(&drvdata->csdev->dev, "CTI initialized\n");
@@ -1157,6 +1151,32 @@ pm_release:
 	cti_pm_release(drvdata);
 	return ret;
 }
+
+#ifdef CONFIG_PM
+static int cti_runtime_suspend(struct device *dev)
+{
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (drvdata && !IS_ERR(drvdata->atclk))
+		clk_disable_unprepare(drvdata->atclk);
+
+	return 0;
+}
+
+static int cti_runtime_resume(struct device *dev)
+{
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (drvdata && !IS_ERR(drvdata->atclk))
+		clk_prepare_enable(drvdata->atclk);
+
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops cti_dev_pm_ops = {
+	SET_RUNTIME_PM_OPS(cti_runtime_suspend, cti_runtime_resume, NULL)
+};
 
 static struct amba_cs_uci_id uci_id_cti[] = {
 	{
@@ -1182,6 +1202,7 @@ MODULE_DEVICE_TABLE(amba, cti_ids);
 static struct amba_driver cti_driver = {
 	.drv = {
 		.name	= "coresight-cti",
+		.pm     = pm_ptr(&cti_dev_pm_ops),
 		.suppress_bind_attrs = true,
 	},
 	.probe		= cti_probe,

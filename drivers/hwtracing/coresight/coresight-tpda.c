@@ -229,14 +229,6 @@ static int tpda_enable(struct coresight_device *csdev,
 
 	spin_lock(&drvdata->spinlock);
 
-	if (drvdata->dclk) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret) {
-			spin_unlock(&drvdata->spinlock);
-			return ret;
-		}
-	}
-
 	ret = tpda_alloc_trace_id(csdev);
 	if (ret < 0) {
 		spin_unlock(&drvdata->spinlock);
@@ -281,8 +273,6 @@ static void tpda_disable(struct coresight_device *csdev,
 		csdev->refcnt--;
 	}
 	tpda_release_trace_id(csdev);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 	spin_unlock(&drvdata->spinlock);
 
 	dev_dbg(drvdata->dev, "TPDA inport %d disabled\n", in->dest_port);
@@ -336,13 +326,9 @@ static int tpda_probe(struct amba_device *adev, const struct amba_id *id)
 	drvdata->dev = &adev->dev;
 	dev_set_drvdata(dev, drvdata);
 
-	drvdata->dclk = devm_clk_get(dev, "dynamic_clk");
-	if (!IS_ERR(drvdata->dclk)) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret)
-			return ret;
-	} else
-		drvdata->dclk = NULL;
+	drvdata->atclk = devm_clk_get_optional_enabled(dev, "atclk"); /* optional */
+	if (IS_ERR(drvdata->atclk))
+		return PTR_ERR(drvdata->atclk);
 
 	base = devm_ioremap_resource(dev, &adev->res);
 	if (IS_ERR(base))
@@ -369,11 +355,36 @@ static int tpda_probe(struct amba_device *adev, const struct amba_id *id)
 		return PTR_ERR(drvdata->csdev);
 
 	pm_runtime_put_sync(&adev->dev);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 	dev_dbg(drvdata->dev, "TPDA initialized\n");
 	return 0;
 }
+
+#ifdef CONFIG_PM
+static int tpda_runtime_suspend(struct device *dev)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (drvdata && !IS_ERR(drvdata->atclk))
+		clk_disable_unprepare(drvdata->atclk);
+
+	return 0;
+}
+
+static int tpda_runtime_resume(struct device *dev)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (drvdata && !IS_ERR(drvdata->atclk))
+		clk_prepare_enable(drvdata->atclk);
+
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops tpda_dev_pm_ops = {
+	SET_RUNTIME_PM_OPS(tpda_runtime_suspend,
+			   tpda_runtime_resume, NULL)
+};
 
 static void tpda_remove(struct amba_device *adev)
 {
@@ -398,6 +409,7 @@ static struct amba_id tpda_ids[] = {
 static struct amba_driver tpda_driver = {
 	.drv = {
 		.name   = "coresight-tpda",
+		.pm = &tpda_dev_pm_ops,
 		.suppress_bind_attrs = true,
 	},
 	.probe          = tpda_probe,

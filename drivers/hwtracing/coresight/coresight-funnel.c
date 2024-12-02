@@ -46,7 +46,6 @@ static DEFINE_SPINLOCK(delay_lock);
  * @csdev:	component vitals needed by the framework.
  * @priority:	port selection order.
  * @spinlock:	serialize enable/disable operations.
- * @dclk:	optional clock to be dynamically enabled when this device is enabled.
  */
 struct funnel_drvdata {
 	void __iomem		*base;
@@ -55,7 +54,6 @@ struct funnel_drvdata {
 	struct coresight_device	*csdev;
 	unsigned long		priority;
 	spinlock_t		spinlock;
-	struct clk		*dclk;
 	struct pm_config	pm_config;
 	struct list_head	link;
 };
@@ -95,12 +93,6 @@ static int funnel_enable(struct coresight_device *csdev,
 	unsigned long flags;
 	bool first_enable = false;
 
-	if (drvdata->dclk) {
-		rc = clk_prepare_enable(drvdata->dclk);
-		if (rc)
-			return rc;
-	}
-
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 
 	if (!drvdata->pm_config.hw_powered) {
@@ -118,9 +110,6 @@ static int funnel_enable(struct coresight_device *csdev,
 		atomic_inc(&in->dest_refcnt);
 out:
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
-
-	if (rc && drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 
 	if (first_enable)
 		dev_dbg(&csdev->dev, "FUNNEL inport %d enabled\n",
@@ -168,9 +157,6 @@ static void funnel_disable(struct coresight_device *csdev,
 
 out:
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
-
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 
 	if (last_disable)
 		dev_dbg(&csdev->dev, "FUNNEL inport %d disabled\n",
@@ -234,13 +220,7 @@ static ssize_t funnel_ctrl_show(struct device *dev,
 	ret = pm_runtime_resume_and_get(dev->parent);
 	if (ret < 0)
 		return ret;
-	if (drvdata->dclk) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret) {
-			pm_runtime_put_sync(dev->parent);
-			return ret;
-		}
-	}
+
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 
 	if (!drvdata->pm_config.hw_powered) {
@@ -250,9 +230,8 @@ static ssize_t funnel_ctrl_show(struct device *dev,
 	val = get_funnel_ctrl_hw(drvdata);
 out:
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 	pm_runtime_put_sync(dev->parent);
+
 	if (ret)
 		return ret;
 	else
@@ -357,22 +336,14 @@ static int funnel_probe(struct device *dev, struct resource *res)
 	}
 
 	drvdata->pclk = coresight_get_enable_apb_pclk(dev);
-        if (IS_ERR(drvdata->pclk))
-                return -ENODEV;
-
-	drvdata->dclk = devm_clk_get(dev, "dynamic_clk");
-	if (!IS_ERR(drvdata->dclk)) {
-		ret = clk_prepare_enable(drvdata->dclk);
-		if (ret)
-			return ret;
-	} else
-		drvdata->dclk = NULL;
+	if (IS_ERR(drvdata->pclk))
+		return -ENODEV;
 
 	if (of_property_read_bool(np, "qcom,duplicate-funnel")) {
 		ret = funnel_get_resource_byname(np, "funnel-base-real",
 						 &res_real);
 		if (ret)
-			return ret;
+			goto out_disable_clk;
 
 		res = &res_real;
 		base = devm_ioremap(dev, res->start, resource_size(res));
@@ -419,9 +390,6 @@ static int funnel_probe(struct device *dev, struct resource *res)
 	}
 	funnel_init_power_state(dev, drvdata);
 	ret = 0;
-
-	if (drvdata->dclk)
-		clk_disable_unprepare(drvdata->dclk);
 
 out_disable_clk:
 	if (ret && !IS_ERR_OR_NULL(drvdata->atclk))
