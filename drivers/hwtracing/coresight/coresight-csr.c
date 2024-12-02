@@ -70,6 +70,8 @@ do {									\
 #define CSR_TS_HBEAT_MASK0_HI	(0x098)
 #define CSR_TS_HBEAT_MASK1_LO	(0x09c)
 #define CSR_TS_HBEAT_MASK1_HI	(0x0a0)
+#define CSR_RPMH_STRESS_TRIG0	(0x188)
+#define CSR_RPMH_STRESS_TRIG1	(0x18C)
 #define CSR_ARADDR_EXT		(0x130)
 #define CSR_AWADDR_EXT		(0x134)
 #define MSR_NUM			((drvdata->msr_end - drvdata->msr_start + 1) \
@@ -120,6 +122,8 @@ struct csr_drvdata {
 	u64			hbeat_val1;
 	u64			hbeat_mask0;
 	u64			hbeat_mask1;
+	uint32_t		rpmh_stress_trig0;
+	uint32_t		rpmh_stress_trig1;
 	struct coresight_csr		csr;
 	struct clk		*clk;
 	spinlock_t		spin_lock;
@@ -903,6 +907,92 @@ static ssize_t hbeat_mask1_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(hbeat_mask1);
 
+static ssize_t rpmh_stress_trig0_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct csr_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	if (IS_ERR_OR_NULL(drvdata) || !drvdata->timestamp_support)
+		return -EINVAL;
+
+	return scnprintf(buf, PAGE_SIZE, "%#x\n",
+			 drvdata->rpmh_stress_trig0);
+}
+
+static ssize_t rpmh_stress_trig0_store(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf,
+					  size_t size)
+{
+	struct csr_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val, flags;
+	int ret;
+
+	if (kstrtoul(buf, 16, &val))
+		return -EINVAL;
+
+	ret = clk_prepare_enable(drvdata->clk);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&drvdata->spin_lock, flags);
+
+	drvdata->rpmh_stress_trig0 = val;
+	val = val & 0x0000FFFF;
+
+	CSR_UNLOCK(drvdata);
+	csr_writel(drvdata, val, CSR_RPMH_STRESS_TRIG0);
+	CSR_LOCK(drvdata);
+	spin_unlock_irqrestore(&drvdata->spin_lock, flags);
+	clk_disable_unprepare(drvdata->clk);
+	return size;
+}
+static DEVICE_ATTR_RW(rpmh_stress_trig0);
+
+static ssize_t rpmh_stress_trig1_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct csr_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	if (IS_ERR_OR_NULL(drvdata) || !drvdata->timestamp_support)
+		return -EINVAL;
+
+	return scnprintf(buf, PAGE_SIZE, "%#x\n",
+			 drvdata->rpmh_stress_trig1);
+}
+
+static ssize_t rpmh_stress_trig1_store(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf,
+					  size_t size)
+{
+	struct csr_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val, flags;
+	int ret;
+
+	if (kstrtoul(buf, 16, &val))
+		return -EINVAL;
+
+	ret = clk_prepare_enable(drvdata->clk);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&drvdata->spin_lock, flags);
+
+	drvdata->rpmh_stress_trig1 = val;
+	val = val & 0x0000FFFF;
+
+	CSR_UNLOCK(drvdata);
+	csr_writel(drvdata, val, CSR_RPMH_STRESS_TRIG1);
+	CSR_LOCK(drvdata);
+	spin_unlock_irqrestore(&drvdata->spin_lock, flags);
+	clk_disable_unprepare(drvdata->clk);
+	return size;
+}
+static DEVICE_ATTR_RW(rpmh_stress_trig1);
+
 static struct attribute *swao_csr_attrs[] = {
 	&dev_attr_timestamp.attr,
 	&dev_attr_msr.attr,
@@ -911,6 +1001,8 @@ static struct attribute *swao_csr_attrs[] = {
 	&dev_attr_hbeat_val1.attr,
 	&dev_attr_hbeat_mask0.attr,
 	&dev_attr_hbeat_mask1.attr,
+	&dev_attr_rpmh_stress_trig0.attr,
+	&dev_attr_rpmh_stress_trig1.attr,
 	&dev_attr_timestamp_ctrl.attr,
 	NULL,
 };
