@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "iommu-debug: %s: " fmt, __func__
@@ -239,7 +239,6 @@ static const struct file_operations iommu_debug_usecase_fops = {
 	.open	 = simple_open,
 	.read	 = iommu_debug_usecase_read,
 	.write   = iommu_debug_usecase_write,
-	.llseek	 = no_llseek,
 };
 
 static int iommu_debug_debugfs_setup(struct iommu_debug_device *ddev)

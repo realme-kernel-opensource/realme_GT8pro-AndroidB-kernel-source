@@ -319,7 +319,7 @@ static void walt_select_task_rq_rt(void *unused, struct task_struct *task, int c
 	 * If we're on asym system ensure we consider the different capacities
 	 * of the CPUs when searching for the lowest_mask.
 	 */
-	ret = cpupri_find_fitness(&task_rq(task)->rd->cpupri, task,
+	ret = cpupri_find_fitness(&task_rq(task)->rd->cpupri, task, task,
 				lowest_mask, walt_rt_task_fits_capacity);
 
 	packing_cpu = walt_find_and_choose_cluster_packing_cpu(0, task);

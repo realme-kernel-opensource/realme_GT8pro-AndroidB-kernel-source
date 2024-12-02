@@ -277,7 +277,6 @@ static const struct file_operations byte_cntr_fops = {
 	.open		= tmc_etr_byte_cntr_open,
 	.read		= tmc_etr_byte_cntr_read,
 	.release	= tmc_etr_byte_cntr_release,
-	.llseek		= no_llseek,
 };
 
 static int byte_cntr_register_chardev(struct byte_cntr *byte_cntr_data)

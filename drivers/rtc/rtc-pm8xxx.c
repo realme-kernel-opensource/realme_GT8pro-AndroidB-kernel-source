@@ -16,8 +16,7 @@
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
-
-#include <asm/unaligned.h>
+#include <linux/unaligned.h>
 
 /* RTC_CTRL register bit fields */
 #define PM8xxx_RTC_ENABLE		BIT(7)

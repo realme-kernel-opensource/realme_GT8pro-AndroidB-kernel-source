@@ -84,7 +84,7 @@ bool debug_symbol_available(void)
 
 	if (!debug_symbol.addresses) {
 		debug_symbol.addresses = (unsigned long *)
-						__phys_to_kimg(kinfo->_addresses_pa);
+						__phys_to_kimg(kinfo->_text_pa);
 		debug_symbol.offsets = (int *)
 						__phys_to_kimg(kinfo->_offsets_pa);
 		debug_symbol.names = (u8 *)

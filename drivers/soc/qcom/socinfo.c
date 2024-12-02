@@ -17,9 +17,8 @@
 #include <linux/stringify.h>
 #include <linux/sys_soc.h>
 #include <linux/types.h>
+#include <linux/unaligned.h>
 #include <soc/qcom/socinfo.h>
-
-#include <asm/unaligned.h>
 
 #include <dt-bindings/arm/qcom,ids.h>
 

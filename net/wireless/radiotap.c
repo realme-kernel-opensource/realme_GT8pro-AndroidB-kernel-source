@@ -16,9 +16,9 @@
 
 #include <linux/kernel.h>
 #include <linux/export.h>
+#include <linux/unaligned.h>
 #include <net/cfg80211.h>
 #include <net/ieee80211_radiotap.h>
-#include <asm/unaligned.h>
 
 /* function prototypes and related defs are in include/net/cfg80211.h */
 

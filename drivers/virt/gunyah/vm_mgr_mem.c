@@ -433,7 +433,7 @@ int gunyah_gup_demand_page(struct gunyah_vm *ghvm, u64 gpa, bool write)
 
 	folio = page_folio(page);
 
-	if (!PageSwapBacked(page)) {
+	if (!folio_test_swapbacked(folio)) {
 		ret = -EIO;
 		goto unpin_page;
 	}

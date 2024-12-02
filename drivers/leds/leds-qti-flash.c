@@ -1741,7 +1741,7 @@ static int qti_flash_led_register_device(struct qti_flash_led *led,
 
 		scnprintf(buffer, sizeof(buffer), "hw_strobe_gpio%d", i);
 		rc = devm_gpio_request_one(&led->pdev->dev,
-				led->hw_strobe_gpio[i], GPIOF_DIR_OUT,
+				led->hw_strobe_gpio[i], GPIOF_OUT_INIT_LOW,
 				buffer);
 		if (rc < 0) {
 			pr_err("Failed to acquire gpio rc = %d\n", rc);

@@ -29,13 +29,13 @@
 #define DDUMP_WAIT_WAKEIRQ_TIMEOUT	msecs_to_jiffies(1000)
 
 static void qcom_ddump_to_shm(struct kmsg_dumper *dumper,
-			  enum kmsg_dump_reason reason)
+			  struct kmsg_dump_detail *detail)
 {
 	struct qcom_dmesg_dumper *qdd = container_of(dumper,
 					struct qcom_dmesg_dumper, dump);
 	size_t len;
 
-	dev_warn(qdd->dev, "reason = %d\n", reason);
+	dev_warn(qdd->dev, "detail->reason = %d\n", detail->reason);
 	kmsg_dump_rewind(&qdd->iter);
 	memset(qdd->base, 0, qdd->size);
 	kmsg_dump_get_buffer(&qdd->iter, false, qdd->base, qdd->size, &len);
@@ -46,9 +46,12 @@ static int qcom_ddump_gh_panic_handler(struct notifier_block *nb,
 				 unsigned long cmd, void *data)
 {
 	struct qcom_dmesg_dumper *qdd;
+	struct kmsg_dump_detail detail = {
+		.reason = KMSG_DUMP_PANIC,
+		.description = NULL};
 
 	qdd = container_of(nb, struct qcom_dmesg_dumper, gh_panic_nb);
-	qcom_ddump_to_shm(&qdd->dump, KMSG_DUMP_PANIC);
+	qcom_ddump_to_shm(&qdd->dump, &detail);
 
 	return NOTIFY_DONE;
 }

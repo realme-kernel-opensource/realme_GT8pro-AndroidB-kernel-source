@@ -16,10 +16,9 @@
 #include <linux/slab.h>
 #include <linux/spmi.h>
 #include <linux/string.h>
+#include <linux/unaligned.h>
 
 #include <linux/soc/qcom/qti_pmic_glink.h>
-
-#include <asm-generic/unaligned.h>
 
 #define MSG_OWNER_REG_DUMP		32783
 #define MSG_TYPE_REQ_RESP		1

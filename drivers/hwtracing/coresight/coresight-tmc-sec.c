@@ -386,7 +386,6 @@ static const struct file_operations secure_etr_fops = {
 	.open		= secure_etr_open,
 	.read		= secure_etr_read,
 	.release	= secure_etr_release,
-	.llseek		= no_llseek,
 };
 
 static int sec_etr_sram_dev_register(struct secure_etr_drvdata *drvdata)
