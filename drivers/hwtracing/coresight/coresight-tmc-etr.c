@@ -1800,6 +1800,7 @@ static int _tmc_disable_etr_sink(struct coresight_device *csdev,
 {
 	unsigned long flags;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+	u32 previous_mode;
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 
@@ -1830,6 +1831,8 @@ static int _tmc_disable_etr_sink(struct coresight_device *csdev,
 		tmc_usb_disable(drvdata->usb_data);
 		spin_lock_irqsave(&drvdata->spinlock, flags);
 	}
+	/* Presave mode to ensure if it's need to stop byte_cntr. */
+	previous_mode = coresight_get_mode(csdev);
 	/* Dissociate from monitored process. */
 	drvdata->pid = -1;
 	coresight_set_mode(csdev, CS_MODE_DISABLED);
@@ -1837,7 +1840,8 @@ static int _tmc_disable_etr_sink(struct coresight_device *csdev,
 	drvdata->perf_buf = NULL;
 
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
-	if (drvdata->out_mode == TMC_ETR_OUT_MODE_MEM)
+	if (previous_mode == CS_MODE_SYSFS &&
+			drvdata->out_mode == TMC_ETR_OUT_MODE_MEM)
 		tmc_etr_byte_cntr_stop(drvdata->byte_cntr);
 
 	dev_dbg(&csdev->dev, "TMC-ETR disabled\n");
