@@ -490,6 +490,9 @@ static void etm_event_start(struct perf_event *event, int flags)
 	if (WARN_ON_ONCE(!sink))
 		goto fail_end_stop;
 
+	/* Save the event_data for this ETM */
+	ctxt->event_data = event_data;
+
 	/* Nothing will happen without a path */
 	if (coresight_enable_path(path, CS_MODE_PERF, handle))
 		goto fail_end_stop;
@@ -514,8 +517,6 @@ static void etm_event_start(struct perf_event *event, int flags)
 out:
 	/* Tell the perf core the event is alive */
 	event->hw.state = 0;
-	/* Save the event_data for this ETM */
-	ctxt->event_data = event_data;
 	return;
 
 fail_disable_path:
@@ -554,8 +555,6 @@ static void etm_event_stop(struct perf_event *event, int mode)
 		return;
 
 	event_data = ctxt->event_data;
-	/* Clear the event_data as this ETM is stopping the trace. */
-	ctxt->event_data = NULL;
 
 	if (event->hw.state == PERF_HES_STOPPED)
 		return;
@@ -593,6 +592,9 @@ static void etm_event_stop(struct perf_event *event, int mode)
 
 	/* tell the core */
 	event->hw.state = PERF_HES_STOPPED;
+
+	/* Clear the event_data as this ETM is stopping the trace. */
+	ctxt->event_data = NULL;
 
 	/*
 	 * If the handle is not bound to an event anymore
@@ -752,6 +754,21 @@ int etm_perf_symlink(struct coresight_device *csdev, bool link)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(etm_perf_symlink);
+
+struct list_head *etm_event_get_path(struct perf_event *event)
+{
+	int cpu = smp_processor_id();
+	struct etm_ctxt *ctxt = this_cpu_ptr(&etm_ctxt);
+	struct etm_event_data *event_data = ctxt->event_data;
+
+	if (!event_data) {
+		pr_err("Error event_data is NULL\n");
+		return NULL;
+	}
+
+	return etm_event_cpu_path(event_data, cpu);
+}
+EXPORT_SYMBOL_GPL(etm_event_get_path);
 
 static ssize_t etm_perf_sink_name_show(struct device *dev,
 				       struct device_attribute *dattr,

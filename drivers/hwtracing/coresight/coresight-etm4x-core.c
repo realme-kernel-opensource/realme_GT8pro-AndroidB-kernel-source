@@ -788,13 +788,13 @@ static int etm4_enable_perf(struct coresight_device *csdev,
 	}
 	drvdata->trcid = (u8)trace_id;
 
-	coresight_csr_set_etr_atid(csdev, drvdata->trcid, true);
+	coresight_csr_set_etr_atid(csdev, drvdata->trcid, true, etm_event_get_path(event));
 
 	/* And enable it */
 	ret = etm4_enable_hw(drvdata);
 
 	if (ret)
-		coresight_csr_set_etr_atid(csdev, drvdata->trcid, false);
+		coresight_csr_set_etr_atid(csdev, drvdata->trcid, false, etm_event_get_path(event));
 
 out:
 	return ret;
@@ -822,7 +822,7 @@ static int etm4_enable_sysfs(struct coresight_device *csdev)
 	if (ret < 0)
 		goto unlock_sysfs_enable;
 
-	coresight_csr_set_etr_atid(csdev, drvdata->trcid, true);
+	coresight_csr_set_etr_atid(csdev, drvdata->trcid, true, NULL);
 
 	/*
 	 * Executing etm4_enable_hw on the cpu whose ETM is being enabled
@@ -837,7 +837,7 @@ static int etm4_enable_sysfs(struct coresight_device *csdev)
 		drvdata->sticky_enable = true;
 
 	if (ret) {
-		coresight_csr_set_etr_atid(csdev, drvdata->trcid, false);
+		coresight_csr_set_etr_atid(csdev, drvdata->trcid, false, NULL);
 		etm4_release_trace_id(drvdata);
 	}
 
@@ -975,6 +975,7 @@ static int etm4_disable_perf(struct coresight_device *csdev,
 	 * called at the end of the session.
 	 */
 
+	coresight_csr_set_etr_atid(csdev, drvdata->trcid, false, etm_event_get_path(event));
 	return 0;
 }
 
@@ -997,6 +998,8 @@ static void etm4_disable_sysfs(struct coresight_device *csdev)
 	 */
 	smp_call_function_single(drvdata->cpu, etm4_disable_hw, drvdata, 1);
 
+	coresight_csr_set_etr_atid(csdev, drvdata->trcid, false, NULL);
+
 	spin_unlock(&drvdata->spinlock);
 	cpus_read_unlock();
 
@@ -1014,7 +1017,6 @@ static void etm4_disable(struct coresight_device *csdev,
 			 struct perf_event *event)
 {
 	enum cs_mode mode;
-	struct etmv4_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
 	/*
 	 * For as long as the tracer isn't disabled another entity can't
@@ -1034,7 +1036,6 @@ static void etm4_disable(struct coresight_device *csdev,
 		break;
 	}
 
-	coresight_csr_set_etr_atid(csdev, drvdata->trcid, false);
 	if (mode)
 		coresight_set_mode(csdev, CS_MODE_DISABLED);
 }

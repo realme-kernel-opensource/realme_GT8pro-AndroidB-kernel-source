@@ -778,7 +778,7 @@ static int uetm_enable(struct coresight_device *csdev,
 	uetm_store_config(drvdata);
 	spin_unlock(&drvdata->spinlock);
 
-	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true);
+	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true, NULL);
 
 	ret = uetm_scmi_set_uetm_config(drvdata->uetm_id);
 
@@ -793,7 +793,7 @@ static int uetm_enable(struct coresight_device *csdev,
 
 release_atid:
 	coresight_trace_id_put_system_id(drvdata->traceid);
-	coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+	coresight_csr_set_etr_atid(csdev, drvdata->traceid, false, NULL);
 	coresight_set_mode(csdev, CS_MODE_DISABLED);
 	return ret;
 };
@@ -806,7 +806,7 @@ static void uetm_disable(struct coresight_device *csdev,
 	if (coresight_get_mode(csdev) == CS_MODE_SYSFS) {
 		uetm_scmi_stop_uetm_trace(drvdata->uetm_id);
 		coresight_trace_id_put_system_id(drvdata->traceid);
-		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false, NULL);
 		coresight_set_mode(csdev, CS_MODE_DISABLED);
 	}
 };
