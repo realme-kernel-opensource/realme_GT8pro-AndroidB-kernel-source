@@ -18,6 +18,7 @@
 #include <linux/elf.h>
 #include <linux/slab.h>
 #include <linux/panic_notifier.h>
+#include <linux/vmalloc.h>
 #include <soc/qcom/minidump.h>
 #include "elf.h"
 
@@ -734,7 +735,7 @@ out:
 	return ret;
 }
 
-static int qcom_va_md_driver_remove(struct platform_device *pdev)
+static void qcom_va_md_driver_remove(struct platform_device *pdev)
 {
 	struct va_md_s_data *va_md_s_data, *tmp;
 	struct notifier_block_list *nbl, *tmpnbl;
@@ -760,7 +761,6 @@ static int qcom_va_md_driver_remove(struct platform_device *pdev)
 	atomic_notifier_chain_unregister(&panic_notifier_list, &qcom_va_md_elf_panic_blk);
 	atomic_notifier_chain_unregister(&panic_notifier_list, &qcom_va_md_panic_blk);
 	vunmap((void *)va_md_data.elf_mem);
-	return 0;
 }
 
 static int qcom_va_md_driver_probe(struct platform_device *pdev)

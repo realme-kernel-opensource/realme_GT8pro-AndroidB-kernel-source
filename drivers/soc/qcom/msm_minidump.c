@@ -891,13 +891,12 @@ static int msm_minidump_add_header(void)
 	return 0;
 }
 
-static int msm_minidump_driver_remove(struct platform_device *pdev)
+static void msm_minidump_driver_remove(struct platform_device *pdev)
 {
 	/* TO-DO.
 	 *Free the required resources and set the global
 	 * variables as minidump is not initialized.
 	 */
-	return 0;
 }
 
 static int msm_minidump_driver_probe(struct platform_device *pdev)
