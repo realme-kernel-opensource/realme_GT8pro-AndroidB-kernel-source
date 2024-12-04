@@ -8,6 +8,7 @@
 
 
 #include <linux/dma-buf.h>
+#include <linux/mem-buf.h>
 #include <uapi/linux/mem-buf.h>
 #include <linux/gunyah/gh_rm_drv.h>
 #include "../../drivers/dma-buf/heaps/qcom_sg_ops.h"
@@ -31,6 +32,23 @@ struct mem_buf_dmabuf_obj {
 	unsigned long memmap_base;
 	size_t memmap_size;
 };
+
+struct dmabuf_membuf_helper {
+	void *(*dmabuf_membuf_alloc)(struct mem_buf_allocation_data *alloc_data);
+	void (*dmabuf_membuf_free)(void *__membuf);
+	struct gh_sgl_desc *(*dmabuf_membuf_get_sgl)(void *__membuf);
+	int (*dmabuf_membuf_prepare_altmap)(struct mem_buf_dmabuf_obj *obj,
+			struct gh_sgl_desc **__sgl_desc, size_t dmabuf_size);
+	size_t (*dmabuf_membuf_determine_memmap_size)(size_t dmabuf_size);
+};
+
+#if IS_ENABLED(CONFIG_QCOM_DMABUF_HEAPS_TVM_CARVEOUT)
+void register_helper(struct dmabuf_membuf_helper *helper_obj);
+#else
+static inline void register_helper(struct dmabuf_membuf_helper *helper_obj)
+{
+}
+#endif /* CONFIG_QCOM_DMABUF_HEAPS_TVM_CARVEOUT */
 
 int prepare_altmap(struct mem_buf_dmabuf_obj *obj,
 		struct gh_sgl_desc **__sgl_desc, size_t dmabuf_size);

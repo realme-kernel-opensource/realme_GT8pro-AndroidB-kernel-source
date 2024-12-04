@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cdev.h>
@@ -13,7 +13,7 @@
 #include <linux/mem-buf.h>
 #include <linux/module.h>
 #include <linux/of.h>
-
+#include <linux/mem-buf-altmap.h>
 #include "mem-buf-gh.h"
 #include "mem-buf-ids.h"
 
@@ -386,10 +386,32 @@ static struct platform_driver mem_buf_msgq_driver = {
 	},
 };
 
+#if defined(CONFIG_QCOM_MEM_BUF_GH)
+struct dmabuf_membuf_helper dmabuf_membuf_helper = {
+	.dmabuf_membuf_alloc = mem_buf_alloc,
+	.dmabuf_membuf_free = mem_buf_free,
+	.dmabuf_membuf_get_sgl = mem_buf_get_sgl,
+	.dmabuf_membuf_prepare_altmap = prepare_altmap,
+	.dmabuf_membuf_determine_memmap_size = determine_memmap_size,
+};
+
+static void register_dmabuf_helper(void)
+{
+	register_helper(&dmabuf_membuf_helper);
+}
+#else
+
+static void register_dmabuf_helper(void)
+{
+	register_helper(NULL);
+}
+#endif
+
 static int __init mem_buf_init(void)
 {
 	int ret;
 
+	register_dmabuf_helper();
 	ret = alloc_chrdev_region(&mem_buf_dev_no, 0, MEM_BUF_MAX_DEVS,
 				  "membuf");
 	if (ret < 0)
