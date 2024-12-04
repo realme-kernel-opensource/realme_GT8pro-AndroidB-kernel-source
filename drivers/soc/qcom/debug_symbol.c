@@ -12,7 +12,7 @@
  *      Changed the compression method from stem compression to "table lookup"
  *      compression (see scripts/kallsyms.c for a more complete description)
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * This driver is based on Google Debug Kinfo Driver
  */
 
@@ -155,9 +155,6 @@ tail:
 /* In line with kallsyms_sym_address from kernel/kallsyms.c */
 static unsigned long debug_symbol_sym_address(int idx)
 {
-	if (!IS_ENABLED(CONFIG_KALLSYMS_BASE_RELATIVE))
-		return debug_symbol.addresses[idx];
-
 	if (!IS_ENABLED(CONFIG_KALLSYMS_ABSOLUTE_PERCPU))
 		return debug_symbol.relative_base + (u32)debug_symbol.offsets[idx];
 
