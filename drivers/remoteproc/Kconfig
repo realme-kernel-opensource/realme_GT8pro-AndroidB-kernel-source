@@ -168,7 +168,7 @@ config QCOM_RPROC_COMMON
 	tristate
 	select AUXILIARY_BUS
 
-config QCOM_Q6V5_PAS_SOC_V1
+config QCOM_Q6V5_PAS_SOCCP_V1
 	bool "SOCCP V1"
 	depends on QCOM_Q6V5_PAS
 	help
