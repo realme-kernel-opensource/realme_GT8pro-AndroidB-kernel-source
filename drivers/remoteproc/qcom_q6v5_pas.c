@@ -2276,6 +2276,7 @@ static const struct adsp_data canoe_adsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 2,
+	.auto_boot = true,
 };
 
 static const struct adsp_data canoe_cdsp_resource = {
