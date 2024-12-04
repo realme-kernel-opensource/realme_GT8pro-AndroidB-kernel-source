@@ -34,6 +34,7 @@ def define_canoe():
         "drivers/dma-buf/heaps/qcom_dma_heaps.ko",
         "drivers/dma/qcom/bam_dma.ko",
         "drivers/dma/qcom/msm_gpi.ko",
+        "drivers/edac/qcom_edac.ko",
         "drivers/firmware/arm_scmi/qcom_scmi_vendor.ko",
         "drivers/firmware/qcom/qcom-scm.ko",
         "drivers/firmware/qcom/qcom_tzmem.ko",
