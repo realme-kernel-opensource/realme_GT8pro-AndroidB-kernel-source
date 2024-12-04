@@ -89,6 +89,7 @@
   __bitmap_equal
   bitmap_find_next_zero_area_off
   bitmap_free
+  bitmap_from_arr32
   __bitmap_intersects
   __bitmap_or
   bitmap_print_to_pagebuf
@@ -2594,7 +2595,9 @@
   perf_event_read_local
   perf_event_read_value
   perf_event_release_kernel
+  perf_event_update_userpage
   perf_get_aux
+  perf_pmu_migrate_context
   perf_pmu_register
   perf_pmu_unregister
   perf_report_aux_output_id
