@@ -1367,6 +1367,7 @@
   get_task_cred
   get_task_mm
   get_task_pid
+  __get_unmapped_area
   get_unmapped_area
   get_unused_fd_flags
   get_user_ifreq
@@ -2226,6 +2227,7 @@
   mmc_send_tuning
   __mmdrop
   mmput
+  mm_get_unmapped_area
   mod_delayed_work_on
   mod_node_page_state
   mod_timer
