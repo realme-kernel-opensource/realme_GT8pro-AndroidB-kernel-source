@@ -31,7 +31,14 @@
 
 #define UETM_MAX_STATE 4
 #define UETM_MAX_CFG 2
+
+#define UETM_CORE_LANE 2
 #define UETM_UNCORE_LANE 4
+#define UETM_QMX_LANE 4
+
+#define UETM_CORE_CFG_NUM 1
+#define UETM_UNCORE_CFG_NUM 2
+#define UETM_QMX_CFG_NUM 2
 
 #define LANE_IDX(n) (n / 2)
 #define UETM_ATB_CFG_ATID_MASK GENMASK(6, 0)
@@ -41,13 +48,18 @@ static const struct qcom_scmi_vendor_ops *ops;
 static struct scmi_protocol_handle *ph;
 static uint32_t uetm_cnt;
 
+enum uetm_type {
+	CORE_UETM = 2,
+	UNCORE_UETM = 4,
+	QMX_UETM = 5
+};
 
 struct __packed uetm_platform_config {
 	uint32_t uetm_cnt;
 };
 
 struct __packed uetm_config {
-	uint8_t lane;
+	uint8_t type;
 	uint64_t base_address;
 	uint32_t size;
 	uint8_t cluster_id;
@@ -77,6 +89,7 @@ struct uetm_drvdata {
 	void __iomem            *base;
 	struct coresight_device	*csdev;
 	spinlock_t              spinlock;
+	enum uetm_type          type;
 	uint8_t                 lane;
 	uint64_t                base_address;
 	uint32_t                uetm_id;
@@ -87,6 +100,7 @@ struct uetm_drvdata {
 	uint8_t                 state_idx;
 	uint8_t                 lane_idx;
 	bool                    uncore_uetm;
+	bool			qmx_uetm;
 	struct uetm_reg_config  *config;
 };
 
@@ -124,7 +138,11 @@ static int uetm_scmi_get_uetm_config(struct uetm_drvdata *drvdata)
 
 		if (drvdata->uncore_uetm) {
 			if (rx_value.cluster_id == drvdata->cluster_id
-				&& rx_value.lane == UETM_UNCORE_LANE)
+				&& rx_value.type == UNCORE_UETM)
+				break;
+		} else if (drvdata->qmx_uetm) {
+			if (rx_value.cluster_id == drvdata->cluster_id
+				&& rx_value.type == QMX_UETM)
 				break;
 		} else {
 			if (rx_value.cluster_id == drvdata->cluster_id
@@ -138,8 +156,15 @@ static int uetm_scmi_get_uetm_config(struct uetm_drvdata *drvdata)
 		return -EINVAL;
 	drvdata->base_address = rx_value.base_address;
 	drvdata->size = rx_value.size;
-	drvdata->lane = rx_value.lane;
+	drvdata->type = rx_value.type;
 	drvdata->uetm_id = idx;
+
+	if (drvdata->type == CORE_UETM)
+		drvdata->lane = UETM_CORE_LANE;
+	else if (drvdata->type == UNCORE_UETM)
+		drvdata->lane = UETM_UNCORE_LANE;
+	else if (drvdata->type == QMX_UETM)
+		drvdata->lane = UETM_QMX_LANE;
 
 	return 0;
 }
@@ -708,12 +733,16 @@ static void uetm_store_config(struct uetm_drvdata *drvdata)
 	int cfg_num;
 	struct uetm_reg_config *config = drvdata->config;
 
-	cfg_num = drvdata->lane / 2;
-
-	if (drvdata->uncore_uetm)
+	if (drvdata->type == UNCORE_UETM) {
+		cfg_num = UETM_UNCORE_CFG_NUM;
 		*base++ = config->ocla_cfg1;
-	else
+	} else if (drvdata->type == CORE_UETM) {
+		cfg_num = UETM_CORE_CFG_NUM;
 		*base++ = config->ocla_cfg;
+	} else if (drvdata->type == QMX_UETM) {
+		cfg_num = UETM_QMX_CFG_NUM;
+		*base++ = config->ocla_cfg;
+	}
 	*base++ = config->atb_cfg;
 	*base++ = config->uetm_cfg;
 
@@ -740,7 +769,7 @@ static void uetm_store_config(struct uetm_drvdata *drvdata)
 		for (j = 0; j < cfg_num; j++)
 			*base++ = config->cntr_cfg[i][j];
 
-	if (drvdata->uncore_uetm) {
+	if (drvdata->type == UNCORE_UETM) {
 		*base++ = config->ocla_cfg2;
 		*base++ = config->ocla_cfg;
 	}
@@ -849,8 +878,10 @@ static int uetm_probe(struct platform_device *pdev)
 	drvdata->cluster_id = (uint8_t)value;
 	drvdata->uncore_uetm = of_property_read_bool(pdev->dev.of_node,
 			"qcom,uncore_uetm");
+	drvdata->qmx_uetm = of_property_read_bool(pdev->dev.of_node,
+			"qcom,qmx_uetm");
 
-	if (!drvdata->uncore_uetm) {
+	if (!drvdata->uncore_uetm && !drvdata->qmx_uetm) {
 		ret = of_property_read_u32(pdev->dev.of_node, "core",
 		&value);
 		if (ret)
