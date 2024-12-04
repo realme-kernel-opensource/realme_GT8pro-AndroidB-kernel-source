@@ -19,7 +19,7 @@ def sign_boot_img(ctx):
     command = """
     cp {boot_img} {boot_dir}/{boot_name}
     {tool} add_hash_footer --image {boot_dir}/{boot_name} --algorithm SHA256_RSA4096 \
-            --key {key} --partition_size 100663296 --partition_name boot \
+            --key {key} --partition_size {boot_partition_size} --partition_name boot \
             {proplist}
     """.format(
         boot_img = boot_img.path,

@@ -293,6 +293,7 @@ def _define_image_build(
             "com.android.build.boot.os_version:13",
             "com.android.build.boot.security_patch:2023-05-05",
         ],
+        boot_partition_size = int(boot_image_opts.boot_partition_size),
     )
 
     native.filegroup(
