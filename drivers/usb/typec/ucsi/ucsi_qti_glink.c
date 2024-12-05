@@ -21,7 +21,13 @@
 /* PPM specific definitions */
 #define MSG_OWNER_UC			32779
 #define MSG_TYPE_REQ_RESP		1
-#define UCSI_BUF_SIZE			48
+#define UCSI_V1_BUF_SIZE		48
+/*
+ * For UCSI v2.0, MSG_IN and MSG_OUT size got increased from 16 to 256 bytes
+ * thereby increasing the total buffer size to 528 bytes.
+ */
+#define UCSI_V2_BUF_SIZE		528
+#define UCSI_BUF_SIZE			UCSI_V2_BUF_SIZE
 
 #define UC_NOTIFY_RECEIVER_UCSI		0x0
 #define UC_UCSI_READ_BUF_REQ		0x11
@@ -80,6 +86,8 @@ struct ucsi_dev {
 	struct mutex			write_lock;
 	struct mutex			state_lock;
 	struct ucsi_read_buf_resp_msg	rx_buf;
+	struct ucsi_write_buf_req_msg	tx_buf;
+	u16				ucsi_version;
 	unsigned long			flags;
 	atomic_t			rx_valid;
 	struct work_struct		setup_work;
@@ -159,16 +167,44 @@ static void ucsi_log(struct ucsi_dev *udev, const char *prefix,
 	}
 }
 
+static size_t ucsi_get_max_len(struct ucsi_dev *udev, bool tx)
+{
+	size_t max_len = 0;
+
+	if (!udev->ucsi_version || (udev->ucsi_version > UCSI_VERSION_1_2 &&
+	    udev->ucsi_version <= UCSI_VERSION_2_1)) {
+		/* If UCSI version is unknown, use the maximum length. */
+		if (tx)
+			max_len = sizeof(struct ucsi_write_buf_req_msg);
+		else
+			max_len = sizeof(struct ucsi_read_buf_resp_msg);
+	} else if (udev->ucsi_version <= UCSI_VERSION_1_2) {
+		/*
+		 * This is basically following the size of struct
+		 * ucsi_read_buf_resp_msg or ucsi_write_buf_req_msg
+		 * but with appropriate UCSI message buffer size.
+		 */
+		max_len = sizeof(struct pmic_glink_hdr) + UCSI_V1_BUF_SIZE +
+				sizeof(u32);
+	}
+
+	return max_len;
+}
+
 static int handle_ucsi_read_ack(struct ucsi_dev *udev, void *data, size_t len)
 {
-	if (len != sizeof(udev->rx_buf)) {
+	size_t max_len;
+
+	max_len = ucsi_get_max_len(udev, false);
+	if (len > max_len) {
 		pr_err("Incorrect received length %zu expected %zu\n", len,
-			sizeof(udev->rx_buf));
+			max_len);
 		atomic_set(&udev->rx_valid, 0);
 		return -EINVAL;
 	}
 
-	memcpy(&udev->rx_buf, data, sizeof(udev->rx_buf));
+	memset(&udev->rx_buf, 0, sizeof(udev->rx_buf));
+	memcpy(&udev->rx_buf, data, max_len);
 	if (udev->rx_buf.ret_code) {
 		pr_err("ret_code: %u\n", udev->rx_buf.ret_code);
 		return -EINVAL;
@@ -282,12 +318,19 @@ static int ucsi_callback(void *priv, void *data, size_t len)
 	return 0;
 }
 
-static bool validate_ucsi_msg(unsigned int offset, size_t len)
+static bool validate_ucsi_msg(struct ucsi_dev *udev, unsigned int offset,
+				size_t len)
 {
-	pr_debug("offset %u len %zu\n", offset, len);
+	size_t max_len = 0;
 
-	if (offset > UCSI_BUF_SIZE - 1 || len > UCSI_BUF_SIZE ||
-		offset + len > UCSI_BUF_SIZE) {
+	if (udev->ucsi_version <= UCSI_VERSION_1_2)
+		max_len = UCSI_V1_BUF_SIZE;
+	else if (udev->ucsi_version <= UCSI_VERSION_2_1)
+		max_len = UCSI_V2_BUF_SIZE;
+
+	pr_debug("offset %u len %zu max_len: %zu\n", offset, len, max_len);
+
+	if (offset + len > max_len) {
 		pr_err("Incorrect length %zu or offset %u\n", len, offset);
 		return false;
 	}
@@ -298,10 +341,11 @@ static bool validate_ucsi_msg(unsigned int offset, size_t len)
 static int ucsi_qti_glink_write(struct ucsi_dev *udev, unsigned int offset,
 			       const void *val, size_t val_len, bool sync)
 {
-	struct ucsi_write_buf_req_msg ucsi_buf = { { 0 } };
+	struct ucsi_write_buf_req_msg *ucsi_buf;
+	size_t tx_len;
 	int rc;
 
-	if (!validate_ucsi_msg(offset, val_len))
+	if (!validate_ucsi_msg(udev, offset, val_len))
 		return -EINVAL;
 
 	ucsi_log(udev, sync ? "sync_write:" : "async_write:", offset,
@@ -310,12 +354,15 @@ static int ucsi_qti_glink_write(struct ucsi_dev *udev, unsigned int offset,
 	if (atomic_read(&udev->state) == PMIC_GLINK_STATE_DOWN)
 		return 0;
 
-	ucsi_buf.hdr.owner = MSG_OWNER_UC;
-	ucsi_buf.hdr.type = MSG_TYPE_REQ_RESP;
-	ucsi_buf.hdr.opcode = UC_UCSI_WRITE_BUF_REQ;
-	memcpy(&ucsi_buf.buf[offset], val, val_len);
-
 	mutex_lock(&udev->write_lock);
+	ucsi_buf = &udev->tx_buf;
+	memset(ucsi_buf, 0, sizeof(*ucsi_buf));
+	ucsi_buf->hdr.owner = MSG_OWNER_UC;
+	ucsi_buf->hdr.type = MSG_TYPE_REQ_RESP;
+	ucsi_buf->hdr.opcode = UC_UCSI_WRITE_BUF_REQ;
+	memcpy(&ucsi_buf->buf[offset], val, val_len);
+	tx_len = ucsi_get_max_len(udev, true);
+
 	pr_debug("%s write\n", sync ? "sync" : "async");
 	reinit_completion(&udev->write_ack);
 
@@ -324,8 +371,7 @@ static int ucsi_qti_glink_write(struct ucsi_dev *udev, unsigned int offset,
 		reinit_completion(&udev->sync_write_ack);
 	}
 
-	rc = pmic_glink_write(udev->client, &ucsi_buf,
-					sizeof(ucsi_buf));
+	rc = pmic_glink_write(udev->client, ucsi_buf, tx_len);
 	if (rc < 0) {
 		pr_err("Error in sending message rc=%d\n", rc);
 		goto out;
@@ -378,14 +424,13 @@ static int ucsi_qti_sync_control(struct ucsi *ucsi, u64 command)
 				sizeof(command), true);
 }
 
-static int ucsi_qti_read(struct ucsi *ucsi, unsigned int offset,
+static int ucsi_qti_read(struct ucsi_dev *udev, unsigned int offset,
 			       void *val, size_t val_len)
 {
-	struct ucsi_dev *udev = ucsi_get_drvdata(ucsi);
 	struct ucsi_read_buf_req_msg ucsi_buf = { { 0 } };
 	int rc;
 
-	if (!validate_ucsi_msg(offset, val_len))
+	if (!validate_ucsi_msg(udev, offset, val_len))
 		return -EINVAL;
 
 	if (atomic_read(&udev->state) == PMIC_GLINK_STATE_DOWN)
@@ -433,18 +478,24 @@ out:
 
 static int ucsi_qti_read_version(struct ucsi *ucsi, u16 *version)
 {
-	return ucsi_qti_read(ucsi, UCSI_VERSION, version, sizeof(*version));
+	struct ucsi_dev *udev = ucsi_get_drvdata(ucsi);
+
+	return ucsi_qti_read(udev, UCSI_VERSION, version, sizeof(*version));
 }
 
 static int ucsi_qti_read_cci(struct ucsi *ucsi, u32 *cci)
 {
-	return ucsi_qti_read(ucsi, UCSI_CCI, cci, sizeof(*cci));
+	struct ucsi_dev *udev = ucsi_get_drvdata(ucsi);
+
+	return ucsi_qti_read(udev, UCSI_CCI, cci, sizeof(*cci));
 }
 
 static int ucsi_qti_read_message_in(struct ucsi *ucsi, void *val,
 					size_t val_len)
 {
-	return ucsi_qti_read(ucsi, UCSI_MESSAGE_IN, val, val_len);
+	struct ucsi_dev *udev = ucsi_get_drvdata(ucsi);
+
+	return ucsi_qti_read(udev, UCSI_MESSAGE_IN, val, val_len);
 }
 
 static const struct ucsi_operations ucsi_qti_ops = {
@@ -543,6 +594,7 @@ static int ucsi_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct pmic_glink_client_data client_data;
 	struct ucsi_dev *udev;
+	u16 version = 0;
 	int rc;
 
 	udev = devm_kzalloc(dev, sizeof(*udev), GFP_KERNEL);
@@ -574,6 +626,22 @@ static int ucsi_probe(struct platform_device *pdev)
 				rc);
 		return rc;
 	}
+
+	rc = ucsi_qti_read(udev, UCSI_VERSION, &version, sizeof(version));
+	if (rc < 0)  {
+		dev_err(dev, "Error reading version rc=%d\n", rc);
+		pmic_glink_unregister_client(udev->client);
+		return rc;
+	}
+
+	if (version == 0 || version > UCSI_VERSION_2_1) {
+		dev_err(dev, "UCSI version %x not supported\n", version);
+		pmic_glink_unregister_client(udev->client);
+		return -ENODEV;
+	}
+
+	dev_info(dev, "UCSI version: %x\n", version);
+	udev->ucsi_version = version;
 
 	platform_set_drvdata(pdev, udev);
 	udev->dev = dev;
