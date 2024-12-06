@@ -119,7 +119,7 @@ static void migrate_tasks(struct rq *dead_rq, struct rq_flags *rf)
 		if (rq->nr_running == 1)
 			break;
 
-		next = pick_migrate_task(rq);
+		next = pick_task(rq);
 
 		/*
 		 * Argh ... no iterator for tasks, we need to remove the
