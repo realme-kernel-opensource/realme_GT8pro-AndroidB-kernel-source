@@ -24,6 +24,7 @@ def define_vienna():
         "drivers/pinctrl/qcom/pinctrl-vienna.ko",
         "drivers/regulator/stub-regulator.ko",
         "drivers/soc/qcom/cmd-db.ko",
+        "drivers/soc/qcom/eud.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
         "drivers/soc/qcom/mem_buf/mem_buf_dev.ko",
         "drivers/soc/qcom/qcom_rpmh.ko",
