@@ -1625,7 +1625,7 @@ static int static_tpdm_probe(struct platform_device *pdev)
 
 	desc.type = CORESIGHT_DEV_TYPE_SOURCE;
 	desc.subtype.source_subtype =
-				CORESIGHT_DEV_SUBTYPE_SOURCE_SOFTWARE;
+				CORESIGHT_DEV_SUBTYPE_SOURCE_TPDM;
 	desc.ops = &static_tpdm_cs_ops;
 	desc.groups = static_tpdm_attr_grps;
 

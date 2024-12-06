@@ -29,6 +29,19 @@ static bool coresight_device_is_tpdm(struct coresight_device *csdev)
 			CORESIGHT_DEV_SUBTYPE_SOURCE_TPDM);
 }
 
+static bool is_static_tpdm(struct coresight_device *csdev)
+{
+	const char *compatible;
+	bool ret = false;
+
+	if (!fwnode_property_read_string(dev_fwnode(csdev->dev.parent),
+		"compatible", &compatible)) {
+		if (!strcmp(compatible, "qcom,coresight-static-tpdm"))
+			ret = true;
+	}
+	return ret;
+}
+
 static void tpda_clear_element_size(struct coresight_device *csdev)
 {
 	struct tpda_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
@@ -114,6 +127,8 @@ static int tpda_get_element_size(struct tpda_drvdata *drvdata,
 		if (coresight_device_is_tpdm(in)) {
 			if (drvdata->dsb_esize || drvdata->cmb_esize)
 				return -EEXIST;
+			if (is_static_tpdm(in))
+				return IS_STATIC_TPDM;
 			rc = tpdm_read_element_size(drvdata, in);
 			if (rc)
 				return rc;
@@ -148,11 +163,14 @@ static int tpda_enable_port(struct tpda_drvdata *drvdata, int port)
 	val = readl_relaxed(drvdata->base + TPDA_Pn_CR(port));
 	tpda_clear_element_size(drvdata->csdev);
 	rc = tpda_get_element_size(drvdata, drvdata->csdev, port);
-	if (!rc && (drvdata->dsb_esize || drvdata->cmb_esize)) {
-		tpda_set_element_size(drvdata, &val);
+	if ((!rc && (drvdata->dsb_esize || drvdata->cmb_esize))
+	    || rc == IS_STATIC_TPDM) {
+		if (!rc && (drvdata->dsb_esize || drvdata->cmb_esize))
+			tpda_set_element_size(drvdata, &val);
 		/* Enable the port */
 		val |= TPDA_Pn_CR_ENA;
 		writel_relaxed(val, drvdata->base + TPDA_Pn_CR(port));
+		rc = 0;
 	} else if (rc == -EEXIST)
 		dev_warn_once(&drvdata->csdev->dev,
 			      "Detected multiple TPDMs on port %d", port);
