@@ -6222,8 +6222,22 @@ static int haptics_lpass_ssr_notifier(struct notifier_block *nb, unsigned long e
 	if (!(chip->wa_flags & VISENSE_RECOVERY_EN))
 		return NOTIFY_DONE;
 
+	if (!is_swr_play_enabled(chip)) {
+		dev_dbg(chip->dev, "ignore VISENSE recovery if not in SWR play\n");
+		return NOTIFY_DONE;
+	}
+
 	switch (event) {
 	case QCOM_SSR_BEFORE_SHUTDOWN:
+		/*
+		 * Enable HAPTICS_EN to keep haptics module clock on during ADSP
+		 * SSR. It's needed for keeping haptics SPMI and SWR data port in
+		 * correct state, and it could be disabled after ADSP SSR.
+		 */
+		rc = haptics_runtime_resume_get(chip);
+		if (rc < 0)
+			return rc;
+
 		val = 0;
 		rc = haptics_write(chip, chip->cfg_addr_base, HAP_CFG_SWR_ACCESS_REG,  &val, 1);
 		if (rc < 0)
@@ -6241,6 +6255,7 @@ static int haptics_lpass_ssr_notifier(struct notifier_block *nb, unsigned long e
 		if (rc < 0)
 			return rc;
 
+		haptics_runtime_autosuspend_put(chip);
 		dev_dbg(chip->dev, "QCOM_SSR_BEFORE_POWERUP is handled\n");
 		break;
 	default:
