@@ -2327,6 +2327,7 @@ static const struct adsp_data canoe_soccp_resource = {
 	.ssr_name = "soccp",
 	.sysmon_name = "soccp",
 	.early_boot = true,
+	.auto_boot = true,
 };
 
 static const struct adsp_data pineapple_adsp_resource = {
