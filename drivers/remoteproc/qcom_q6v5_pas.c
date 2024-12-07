@@ -2296,6 +2296,7 @@ static const struct adsp_data canoe_cdsp_resource = {
 	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
 	.crash_reason_stack = 660,
 	.smem_host_id = 5,
+	.auto_boot = true,
 };
 
 static const struct adsp_data canoe_mpss_resource = {
