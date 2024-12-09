@@ -636,15 +636,6 @@ static const struct clk_parent_data cam_cc_parent_data_1[] = {
 	{ .hw = &cam_cc_pll6_out_even.clkr.hw },
 };
 
-static const struct clk_parent_data cam_cc_parent_data_1_ao[] = {
-	{ .fw_name = "bi_tcxo_ao" },
-	{ .hw = &cam_cc_pll0.clkr.hw },
-	{ .hw = &cam_cc_pll0_out_even.clkr.hw },
-	{ .hw = &cam_cc_pll0_out_odd.clkr.hw },
-	{ .hw = &cam_cc_pll6_out_odd.clkr.hw },
-	{ .hw = &cam_cc_pll6_out_even.clkr.hw },
-};
-
 static const struct parent_map cam_cc_parent_map_2[] = {
 	{ P_BI_TCXO, 0 },
 	{ P_CAM_CC_PLL0_OUT_MAIN, 1 },
@@ -715,8 +706,8 @@ static const struct parent_map cam_cc_parent_map_8[] = {
 	{ P_BI_TCXO, 0 },
 };
 
-static const struct clk_parent_data cam_cc_parent_data_8_ao[] = {
-	{ .fw_name = "bi_tcxo_ao" },
+static const struct clk_parent_data cam_cc_parent_data_8[] = {
+	{ .fw_name = "bi_tcxo" },
 };
 
 static const struct freq_tbl ftbl_cam_cc_camnoc_rt_axi_clk_src[] = {
@@ -1368,10 +1359,18 @@ static struct clk_rcg2 cam_cc_slow_ahb_clk_src = {
 	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "cam_cc_slow_ahb_clk_src",
-		.parent_data = cam_cc_parent_data_1_ao,
-		.num_parents = ARRAY_SIZE(cam_cc_parent_data_1_ao),
+		.parent_data = cam_cc_parent_data_1,
+		.num_parents = ARRAY_SIZE(cam_cc_parent_data_1),
 		.flags = CLK_SET_RATE_PARENT,
 		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_classes = cam_cc_canoe_regulators_1,
+		.num_vdd_classes = ARRAY_SIZE(cam_cc_canoe_regulators_1),
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER_D1] = 56470588,
+			[VDD_LOWER] = 80000000},
 	},
 };
 
@@ -1501,10 +1500,16 @@ static struct clk_rcg2 cam_cc_xo_clk_src = {
 	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "cam_cc_xo_clk_src",
-		.parent_data = cam_cc_parent_data_8_ao,
-		.num_parents = ARRAY_SIZE(cam_cc_parent_data_8_ao),
+		.parent_data = cam_cc_parent_data_8,
+		.num_parents = ARRAY_SIZE(cam_cc_parent_data_8),
 		.flags = CLK_SET_RATE_PARENT,
 		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_class = &vdd_mm,
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER_D1] = 19200000},
 	},
 };
 
