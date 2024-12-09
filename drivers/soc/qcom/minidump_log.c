@@ -64,7 +64,7 @@
 #endif
 #include "minidump_memory.h"
 #endif
-#include "../../../kernel/time/tick-internal.h"
+#include "kernel/time/tick-internal.h"
 
 #ifdef CONFIG_QCOM_DYN_MINIDUMP_STACK
 

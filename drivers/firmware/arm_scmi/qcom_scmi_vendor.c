@@ -3,7 +3,7 @@
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include "common.h"
+#include "drivers/firmware/arm_scmi/common.h"
 #include <linux/qcom_scmi_vendor.h>
 
 #define	EXTENDED_MSG_ID			0

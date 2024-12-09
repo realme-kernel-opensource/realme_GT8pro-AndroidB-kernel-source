@@ -21,7 +21,7 @@
 #include <linux/rpmsg.h>
 #include <linux/rpmsg/qcom_smd.h>
 
-#include "rpmsg_internal.h"
+#include "drivers/rpmsg/rpmsg_internal.h"
 
 /*
  * The Qualcomm Shared Memory communication solution provides point-to-point

@@ -37,7 +37,6 @@ def register_modules(registry):
             "drivers/rpmsg/qcom_glink_native.c",
             "drivers/rpmsg/qcom_glink_native.h",
             "drivers/rpmsg/qcom_glink_ssr.c",
-            "drivers/rpmsg/rpmsg_internal.h",
         ],
         deps = [
             # do not sort
@@ -120,7 +119,6 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/rpmsg/qcom_smd.c",
-            "drivers/rpmsg/rpmsg_internal.h",
         ],
         deps = [
             # do not sort

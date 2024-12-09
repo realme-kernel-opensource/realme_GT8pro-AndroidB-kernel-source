@@ -41,7 +41,7 @@
 #include "qcom_common.h"
 #include "qcom_pil_info.h"
 #include "qcom_q6v5.h"
-#include "remoteproc_internal.h"
+#include "drivers/remoteproc/remoteproc_internal.h"
 
 #define ADSP_DECRYPT_SHUTDOWN_DELAY_MS	100
 #define RPROC_HANDOVER_POLL_DELAY_MS	1

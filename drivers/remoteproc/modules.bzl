@@ -19,7 +19,6 @@ def register_modules(registry):
             "drivers/remoteproc/qcom_common.h",
             "drivers/remoteproc/qcom_q6v5.c",
             "drivers/remoteproc/qcom_q6v5.h",
-            "drivers/remoteproc/remoteproc_internal.h",
         ],
         deps = [
             # do not sort
@@ -54,7 +53,6 @@ def register_modules(registry):
             "drivers/remoteproc/qcom_pil_info.h",
             "drivers/remoteproc/qcom_q6v5.h",
             "drivers/remoteproc/qcom_q6v5_pas.c",
-            "drivers/remoteproc/remoteproc_internal.h",
         ],
         deps = [
             # do not sort
@@ -93,7 +91,6 @@ def register_modules(registry):
             # do not sort
             "drivers/remoteproc/qcom_common.h",
             "drivers/remoteproc/qcom_spss.c",
-            "drivers/remoteproc/remoteproc_internal.h",
         ],
         deps = [
             # do not sort
@@ -130,7 +127,6 @@ def register_modules(registry):
             # do not sort
             "drivers/remoteproc/qcom_common.h",
             "drivers/remoteproc/qcom_sysmon.c",
-            "drivers/remoteproc/remoteproc_internal.h",
         ],
         deps = [
             # do not sort
@@ -164,8 +160,6 @@ def register_modules(registry):
             "drivers/remoteproc/qcom_common.c",
             "drivers/remoteproc/qcom_common.h",
             "drivers/remoteproc/qcom_tracepoints.c",
-            "drivers/remoteproc/remoteproc_elf_helpers.h",
-            "drivers/remoteproc/remoteproc_internal.h",
         ],
         deps = [
             # do not sort

@@ -21,7 +21,6 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/adsp_sleepmon.c",
             "drivers/remoteproc/qcom_common.h",
-            "drivers/remoteproc/remoteproc_internal.h",
         ],
         deps = [
             # do not sort
@@ -232,7 +231,6 @@ def register_modules(registry):
         config = "CONFIG_QCOM_DEBUG_SYMBOL",
         srcs = [
             # do not sort
-            "drivers/android/debug_kinfo.h",
             "drivers/soc/qcom/debug_symbol.c",
             "drivers/soc/qcom/debug_symbol.h",
         ],
@@ -441,9 +439,6 @@ def register_modules(registry):
             "drivers/soc/qcom/minidump_memory.h",
             "drivers/soc/qcom/minidump_private.h",
             "drivers/soc/qcom/msm_minidump.c",
-            "kernel/time/tick-internal.h",
-            "kernel/time/tick-sched.h",
-            "kernel/time/timekeeping.h",
         ],
         conditional_srcs = {
             "CONFIG_QCOM_MINIDUMP_PANIC_MEMORY_INFO": {
@@ -545,7 +540,6 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/remoteproc/qcom_common.h",
-            "drivers/remoteproc/remoteproc_internal.h",
             "drivers/soc/qcom/pdr_interface.c",
             "drivers/soc/qcom/pdr_internal.h",
         ],
@@ -770,7 +764,6 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/debug_symbol.h",
             "drivers/soc/qcom/qcom_logbuf_vendor_hooks.c",
-            "kernel/printk/printk_ringbuffer.h",
         ],
         deps = [
             # do not sort

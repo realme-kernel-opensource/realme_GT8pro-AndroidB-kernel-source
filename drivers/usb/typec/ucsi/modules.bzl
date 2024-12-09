@@ -5,7 +5,6 @@ def register_modules(registry):
         config = "CONFIG_UCSI_QTI_GLINK",
         srcs = [
             # do not sort
-            "drivers/usb/typec/ucsi/ucsi.h",
             "drivers/usb/typec/ucsi/ucsi_qti_glink.c",
         ],
         deps = [

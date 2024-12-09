@@ -11,7 +11,7 @@
 #include <linux/ipc_logging.h>
 #include <linux/usb/functionfs.h>
 
-#include "u_fs.h"
+#include "drivers/usb/gadget/function/u_fs.h"
 
 /* Copied from f_fs.c */
 struct ffs_io_data {

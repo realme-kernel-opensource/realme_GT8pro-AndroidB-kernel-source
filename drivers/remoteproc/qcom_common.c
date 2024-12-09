@@ -23,8 +23,8 @@
 #include <trace/hooks/remoteproc.h>
 #include <trace/events/rproc_qcom.h>
 
-#include "remoteproc_elf_helpers.h"
-#include "remoteproc_internal.h"
+#include "drivers/remoteproc/remoteproc_elf_helpers.h"
+#include "drivers/remoteproc/remoteproc_internal.h"
 #include "qcom_common.h"
 
 #define SSR_NOTIF_TIMEOUT CONFIG_RPROC_SSR_NOTIF_TIMEOUT

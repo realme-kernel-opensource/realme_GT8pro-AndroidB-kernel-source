@@ -11,8 +11,8 @@
 #include <linux/regmap.h>
 #include <linux/soc/qcom/llcc-qcom.h>
 
-#include "edac_mc.h"
-#include "edac_device.h"
+#include "drivers/edac/edac_mc.h"
+#include "drivers/edac/edac_device.h"
 
 #define EDAC_LLCC                       "qcom_llcc"
 

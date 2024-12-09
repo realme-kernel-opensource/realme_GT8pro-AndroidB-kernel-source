@@ -5,8 +5,6 @@ def register_modules(registry):
         config = "CONFIG_EDAC_QCOM",
         srcs = [
             # do not sort
-            "drivers/edac/edac_device.h",
-            "drivers/edac/edac_mc.h",
             "drivers/edac/qcom_edac.c",
         ],
     )

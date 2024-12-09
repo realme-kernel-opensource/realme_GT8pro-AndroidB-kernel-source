@@ -5,10 +5,8 @@ def register_modules(registry):
         config = "CONFIG_QCOM_BAM_DMA",
         srcs = [
             # do not sort
-            "drivers/dma/dmaengine.h",
             "drivers/dma/qcom/bam_dma.c",
             "drivers/dma/qcom/bam_dma_trace.h",
-            "drivers/dma/virt-dma.h",
         ],
         deps = [
             # do not sort
@@ -34,10 +32,8 @@ def register_modules(registry):
         config = "CONFIG_MSM_GPI_DMA",
         srcs = [
             # do not sort
-            "drivers/dma/dmaengine.h",
             "drivers/dma/qcom/msm_gpi.c",
             "drivers/dma/qcom/msm_gpi_mmio.h",
-            "drivers/dma/virt-dma.h",
         ],
         deps = [
             # do not sort

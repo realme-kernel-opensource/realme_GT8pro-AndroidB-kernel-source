@@ -28,12 +28,12 @@
 #include <linux/usb/audio-v3.h>
 #include <linux/ipc_logging.h>
 
-#include "usbaudio.h"
-#include "card.h"
-#include "endpoint.h"
-#include "helper.h"
-#include "pcm.h"
-#include "power.h"
+#include "sound/usb/usbaudio.h"
+#include "sound/usb/card.h"
+#include "sound/usb/endpoint.h"
+#include "sound/usb/helper.h"
+#include "sound/usb/pcm.h"
+#include "sound/usb/power.h"
 #include "usb_audio_qmi_v01.h"
 
 #define BUS_INTERVAL_FULL_SPEED 1000 /* in us */

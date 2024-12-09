@@ -25,12 +25,8 @@ def register_modules(registry):
         config = "CONFIG_MMC_SDHCI_MSM",
         srcs = [
             # do not sort
-            "drivers/mmc/core/core.h",
             "drivers/mmc/host/cqhci.h",
-            "drivers/mmc/host/sdhci-cqhci.h",
             "drivers/mmc/host/sdhci-msm.c",
-            "drivers/mmc/host/sdhci-pltfm.h",
-            "drivers/mmc/host/sdhci.h",
         ],
         deps = [
             # do not sort

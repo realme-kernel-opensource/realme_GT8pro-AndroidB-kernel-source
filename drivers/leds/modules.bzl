@@ -12,7 +12,6 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/leds/leds-qti-flash.c",
-            "drivers/leds/leds.h",
         ],
         deps = [
             # do not sort

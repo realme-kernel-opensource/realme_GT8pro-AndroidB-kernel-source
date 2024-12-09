@@ -15,7 +15,7 @@
 #include <linux/slab.h>
 #include <linux/soc/qcom/qti_pmic_glink.h>
 
-#include "ucsi.h"
+#include "drivers/usb/typec/ucsi/ucsi.h"
 
 /* PPM specific definitions */
 #define MSG_OWNER_UC			32779

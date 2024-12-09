@@ -30,7 +30,7 @@
 #include "qcom_common.h"
 #include "qcom_pil_info.h"
 #include "qcom_q6v5.h"
-#include "remoteproc_internal.h"
+#include "drivers/remoteproc/remoteproc_internal.h"
 
 /* time out value */
 #define ACK_TIMEOUT			1000

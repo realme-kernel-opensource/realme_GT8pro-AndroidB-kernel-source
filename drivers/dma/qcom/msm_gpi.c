@@ -30,8 +30,8 @@
 #include <linux/cacheflush.h>
 #include <linux/msm_gpi.h>
 #include <linux/delay.h>
-#include "../dmaengine.h"
-#include "../virt-dma.h"
+#include "drivers/dma/dmaengine.h"
+#include "drivers/dma/virt-dma.h"
 #include "msm_gpi_mmio.h"
 
 /* global logging macros */

@@ -17,7 +17,7 @@
 #include <soc/qcom/minidump.h>
 #include <linux/kallsyms.h>
 
-#include "../../../kernel/printk/printk_ringbuffer.h"
+#include "kernel/printk/printk_ringbuffer.h"
 #include "debug_symbol.h"
 
 void register_log_minidump(struct printk_ringbuffer *prb)

@@ -31,10 +31,10 @@
 
 #include <soc/qcom/ice.h>
 
-#include "sdhci-cqhci.h"
-#include "sdhci-pltfm.h"
+#include "drivers/mmc/host/sdhci-cqhci.h"
+#include "drivers/mmc/host/sdhci-pltfm.h"
 #include "cqhci.h"
-#include "../core/core.h"
+#include "drivers/mmc/core/core.h"
 #include <linux/qtee_shmbridge.h>
 
 #define CORE_MCI_VERSION		0x50

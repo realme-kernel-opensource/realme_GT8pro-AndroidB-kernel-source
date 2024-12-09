@@ -24,7 +24,7 @@
 #include <linux/soc/qcom/qcom_aoss.h>
 
 #include "qcom_common.h"
-#include "remoteproc_internal.h"
+#include "drivers/remoteproc/remoteproc_internal.h"
 
 #define ERR_READY	0
 #define PBL_DONE	1

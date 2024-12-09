@@ -44,8 +44,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/ipc_logging.h>
 
-#include "../dmaengine.h"
-#include "../virt-dma.h"
+#include "drivers/dma/dmaengine.h"
+#include "drivers/dma/virt-dma.h"
 
 struct bam_desc_hw {
 	__le32 addr;		/* Buffer physical address */

@@ -4,7 +4,7 @@
 
 #include <linux/timer.h>
 #include <linux/remoteproc.h>
-#include "remoteproc_internal.h"
+#include "drivers/remoteproc/remoteproc_internal.h"
 #include <linux/soc/qcom/qmi.h>
 #include <linux/remoteproc/qcom_rproc.h>
 

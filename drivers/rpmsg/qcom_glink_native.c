@@ -25,7 +25,7 @@
 #include <linux/termios.h>
 #include <linux/ipc_logging.h>
 
-#include "rpmsg_internal.h"
+#include "drivers/rpmsg/rpmsg_internal.h"
 #include "qcom_glink_native.h"
 
 #define GLINK_LOG_PAGE_CNT 32

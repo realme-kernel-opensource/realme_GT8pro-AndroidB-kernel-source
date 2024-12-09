@@ -5,15 +5,9 @@ def register_modules(registry):
         config = "CONFIG_SND_USB_AUDIO_QMI",
         srcs = [
             # do not sort
-            "sound/usb/card.h",
-            "sound/usb/endpoint.h",
-            "sound/usb/helper.h",
-            "sound/usb/pcm.h",
-            "sound/usb/power.h",
             "sound/usb/usb_audio_qmi_svc.c",
             "sound/usb/usb_audio_qmi_v01.c",
             "sound/usb/usb_audio_qmi_v01.h",
-            "sound/usb/usbaudio.h",
         ],
         deps = [
             # do not sort

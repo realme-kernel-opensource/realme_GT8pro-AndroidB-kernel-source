@@ -21,7 +21,7 @@
 #include <linux/regmap.h>
 #include <linux/soc/qcom/battery_charger.h>
 
-#include "leds.h"
+#include "drivers/leds/leds.h"
 
 #define FLASH_LED_REVISION1			0x00
 

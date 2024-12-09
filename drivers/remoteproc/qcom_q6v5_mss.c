@@ -30,7 +30,7 @@
 #include <linux/iopoll.h>
 #include <linux/slab.h>
 
-#include "remoteproc_internal.h"
+#include "drivers/remoteproc/remoteproc_internal.h"
 #include "qcom_common.h"
 #include "qcom_pil_info.h"
 #include "qcom_q6v5.h"

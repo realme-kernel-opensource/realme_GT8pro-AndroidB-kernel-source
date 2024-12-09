@@ -6,7 +6,6 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/usb/gadget/function/f_fs_ipc_log.c",
-            "drivers/usb/gadget/function/u_fs.h",
         ],
         deps = [
             # do not sort

@@ -26,7 +26,7 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/kallsyms.h>
 #include "debug_symbol.h"
-#include "../../android/debug_kinfo.h"
+#include "drivers/android/debug_kinfo.h"
 
 struct debug_symbol_data {
 	const unsigned long *addresses;
