@@ -454,13 +454,6 @@ struct msm_geni_serial_port {
 	enum uart_port_state port_state;
 	struct uart_kpi_capture uart_kpi_tx[UART_KPI_TX_RX_INSTANCES];
 	struct uart_kpi_capture uart_kpi_rx[UART_KPI_TX_RX_INSTANCES];
-
-	/**
-	 * mutex to prevent race condition between runtime
-	 * suspend and get_mctrl which tries to access IOS registers
-	 * when runtime suspend was in progress
-	 */
-	struct mutex suspend_resume_lock;
 };
 
 static const struct uart_ops msm_geni_serial_pops;
@@ -513,13 +506,6 @@ static void setup_config0_tre(struct uart_port *uport,
 static void msm_geni_uart_gsi_tx_cb(void *ptr);
 static void msm_geni_uart_gsi_rx_cb(void *ptr);
 
-static bool device_pending_suspend(struct uart_port *uport)
-{
-	int usage_count = atomic_read(&uport->dev->power.usage_count);
-
-	return (pm_runtime_status_suspended(uport->dev) && !usage_count);
-}
-
 /*
  * geni_se_dump_dbg_regs() - Dumps uart debug registers content for debug
  *
@@ -553,9 +539,9 @@ void geni_se_dump_dbg_regs(struct uart_port *uport)
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	void __iomem *base = uport->membase;
 
-	if (device_pending_suspend(uport)) {
+	if (!pm_runtime_active(uport->dev)) {
 		UART_LOG_DBG(port->ipc_log_misc, uport->dev,
-			     "%s: Device is suspended, Return\n", __func__);
+			     "%s: Device is not in active state, Return\n", __func__);
 		return;
 	}
 
@@ -1368,10 +1354,9 @@ static void msm_geni_serial_break_ctl(struct uart_port *uport, int ctl)
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	int ret = 0;
 
-	if (!uart_console(uport) && device_pending_suspend(uport)) {
+	if (!uart_console(uport) && !pm_runtime_active(uport->dev)) {
 		UART_LOG_DBG(port->ipc_log_misc, uport->dev,
-			"%s.Device is suspended, %s\n",
-			__func__, current->comm);
+			     "%s.Device is not in active state, %s\n", __func__, current->comm);
 		return;
 	}
 
@@ -1400,20 +1385,10 @@ static unsigned int msm_geni_serial_get_mctrl(struct uart_port *uport)
 	unsigned int mctrl = TIOCM_DSR | TIOCM_CAR;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 
-	if (!uart_console(uport)) {
-		if (!mutex_trylock(&port->suspend_resume_lock)) {
-			UART_LOG_DBG(port->ipc_log_misc, uport->dev,
-					"%s.Device is being suspended, %s\n",
-					__func__, current->comm);
-			return mctrl;
-		}
-		if (device_pending_suspend(uport)) {
-			UART_LOG_DBG(port->ipc_log_misc, uport->dev,
-					"%s.Device is suspended, %s\n",
-					__func__, current->comm);
-			mutex_unlock(&port->suspend_resume_lock);
-			return mctrl | TIOCM_CTS;
-		}
+	if (!uart_console(uport) && !pm_runtime_active(uport->dev)) {
+		UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+			     "%s.Device is not in active state, %s\n", __func__, current->comm);
+		return mctrl | TIOCM_CTS;
 	}
 
 	geni_ios = geni_read_reg(uport->membase, SE_GENI_IOS);
@@ -1427,9 +1402,6 @@ static unsigned int msm_geni_serial_get_mctrl(struct uart_port *uport)
 
 	UART_LOG_DBG(port->ipc_log_misc, uport->dev, "%s: geni_ios:0x%x, mctrl:0x%x\n",
 		__func__, geni_ios, mctrl);
-
-	if (!uart_console(uport))
-		mutex_unlock(&port->suspend_resume_lock);
 
 	return mctrl;
 }
@@ -1453,9 +1425,9 @@ static void msm_geni_serial_set_mctrl(struct uart_port *uport,
 	u32 uart_manual_rfr = 0;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 
-	if (device_pending_suspend(uport)) {
+	if (!uart_console(uport) && !pm_runtime_active(uport->dev)) {
 		UART_LOG_DBG(port->ipc_log_misc, uport->dev,
-			     "%s.Device is suspended, %s: mctrl=0x%x\n",
+			     "%s.Device is not in active state, %s: mctrl=0x%x\n",
 			     __func__, current->comm, mctrl);
 		return;
 	}
@@ -2730,10 +2702,9 @@ static void msm_geni_serial_stop_tx(struct uart_port *uport)
 {
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 
-	if (!uart_console(uport) && device_pending_suspend(uport)) {
-		dev_err(uport->dev, "%s.Device is suspended.\n", __func__);
+	if (!uart_console(uport) && !pm_runtime_active(uport->dev)) {
 		UART_LOG_DBG(port->ipc_log_misc, uport->dev,
-				"%s.Device is suspended.\n", __func__);
+			     "%s.Device is not in active state.\n", __func__);
 		return;
 	}
 	stop_tx_sequencer(uport);
@@ -2804,10 +2775,9 @@ static void msm_geni_serial_start_rx(struct uart_port *uport)
 {
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 
-	if (!uart_console(uport) && device_pending_suspend(uport)) {
-		dev_err(uport->dev, "%s.Device is suspended.\n", __func__);
+	if (!uart_console(uport) && !pm_runtime_active(uport->dev)) {
 		UART_LOG_DBG(port->ipc_log_misc, uport->dev,
-				"%s.Device is suspended.\n", __func__);
+			     "%s.Device is not in active state.\n", __func__);
 		return;
 	}
 	start_rx_sequencer(&port->uport);
@@ -3099,9 +3069,9 @@ static void msm_geni_serial_stop_rx(struct uart_port *uport)
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	int ret;
 
-	if (!uart_console(uport) && device_pending_suspend(uport)) {
+	if (!uart_console(uport) && !pm_runtime_active(uport->dev)) {
 		UART_LOG_DBG(port->ipc_log_misc, uport->dev,
-				"%s.Device is suspended.\n", __func__);
+			     "%s.Device is not in active state.\n", __func__);
 		complete(&port->xfer);
 		return;
 	}
@@ -3928,10 +3898,8 @@ static void msm_geni_serial_flush(struct uart_port *uport)
 {
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 
-	if (port->ioctl_count) {
-		atomic_set(&port->flush_buffers, 1);
-		msm_geni_serial_stop_tx(uport);
-	}
+	atomic_set(&port->flush_buffers, 1);
+	msm_geni_serial_stop_tx(uport);
 }
 
 static void msm_geni_serial_shutdown(struct uart_port *uport)
@@ -4031,9 +3999,9 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 						     __func__, ret, j);
 					/* Sleep for 50msecs and check if port is suspended */
 					usleep_range(45000, 50000);
-					if (device_pending_suspend(uport)) {
+					if (!pm_runtime_active(uport->dev)) {
 						UART_LOG_DBG(msm_port->ipc_log_pwr, uport->dev,
-							     "%s Uport Suspended\n", __func__);
+							     "%s Uport not active\n", __func__);
 						ret = 0;
 						break;
 					}
@@ -4043,9 +4011,9 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 		}
 
 		if (j == SUSPEND_RETRY_COUNT + 1) {
-			if (device_pending_suspend(uport))
+			if (!pm_runtime_active(uport->dev))
 				UART_LOG_DBG(msm_port->ipc_log_pwr, uport->dev,
-					     "%s Uport Suspended\n", __func__);
+					     "%s Uport not active\n", __func__);
 			else
 				UART_LOG_DBG(msm_port->ipc_log_pwr, uport->dev,
 					     "%s Error! Unable to put uport to Suspend\n",
@@ -4539,7 +4507,7 @@ static unsigned int msm_geni_serial_tx_empty(struct uart_port *uport)
 	unsigned int is_tx_empty = 1;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 
-	if (!uart_console(uport) && device_pending_suspend(uport))
+	if (!uart_console(uport) && !pm_runtime_active(uport->dev))
 		return 1;
 
 	if (port->xfer_mode == GENI_SE_DMA)
@@ -5496,8 +5464,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	if (!dev_port->is_console)
 		spin_lock_init(&dev_port->rx_lock);
 
-	mutex_init(&dev_port->suspend_resume_lock);
-
 	ret = uart_add_one_port(drv, uport);
 	if (ret)
 		dev_err(&pdev->dev, "Failed to register uart_port: %d\n", ret);
@@ -5604,7 +5570,6 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 	u32 geni_status = geni_read_reg(port->uport.membase,
 							SE_GENI_STATUS);
 
-	mutex_lock(&port->suspend_resume_lock);
 	UART_LOG_DBG(port->ipc_log_pwr, dev,
 		"%s: Start geni_status : 0x%x\n", __func__, geni_status);
 
@@ -5717,7 +5682,6 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 	UART_LOG_DBG(port->ipc_log_pwr, dev, "%s: End %d\n", __func__, ret);
 	__pm_relax(port->geni_wake);
 exit_runtime_suspend:
-	mutex_unlock(&port->suspend_resume_lock);
 	return ret;
 }
 
