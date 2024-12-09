@@ -2319,6 +2319,24 @@ int qcom_scm_query_encrypted_log_feature(u64 *enabled)
 }
 EXPORT_SYMBOL(qcom_scm_query_encrypted_log_feature);
 
+int qcom_scm_query_log_status(u64 *status)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_QSEELOG,
+		.cmd = QCOM_SCM_QUERY_LOG_STATUS,
+		.owner = ARM_SMCCC_OWNER_TRUSTED_OS
+	};
+	struct qcom_scm_res res;
+
+	ret = qcom_scm_call(__scm->dev, &desc, &res);
+	if (!ret)
+		*status = res.result[0];
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_query_log_status);
+
 int qcom_scm_request_encrypted_log(phys_addr_t buf,
 				   size_t len,
 				   uint32_t log_id,
