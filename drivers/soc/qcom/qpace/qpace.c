@@ -681,15 +681,16 @@ static inline void event_ring_increment(struct event_ring *ring)
 		ring->hw_read_ptr++;
 }
 
-void qpace_consume_er(int er_num,
-		      process_ed_fn success_handler,
-		      process_ed_fn fail_handler)
+int qpace_consume_er(int er_num,
+		     process_ed_fn success_handler,
+		     process_ed_fn fail_handler)
 {
 	struct event_ring *ring = &ev_rings[er_num];
 	u32 er_ring_reg_val;
 	phys_addr_t hw_write_ptr_phys_addr;
 	struct qpace_event_descriptor *ed;
 	int ed_offset;
+	int n_consumed_entries = 0;
 
 	/* Get new value of HW write ptr to determine the number of produced EDs */
 	hw_write_ptr_phys_addr = QPACE_READ_ER_REG(er_num, QPACE_DMA_ER_MGR_0_WR_PTR_L_OFFSET);
@@ -710,7 +711,7 @@ void qpace_consume_er(int er_num,
 	/* Unrolled ring buffer loop */
 	if (ring->hw_read_ptr >= ring->hw_write_ptr) {
 		for (; ed < ring->ring_buffer_start + DESCRIPTORS_PER_RING;
-		     ed++) {
+		     ed++, n_consumed_entries++) {
 			ed_offset = ed - ring->ring_buffer_start;
 
 			/* Process the ED */
@@ -721,7 +722,7 @@ void qpace_consume_er(int er_num,
 		ed = ring->ring_buffer_start;
 	}
 
-	for (; ed < ring->hw_write_ptr; ed++) {
+	for (; ed < ring->hw_write_ptr; ed++, n_consumed_entries++) {
 		ed_offset = ed - ring->ring_buffer_start;
 
 		/* Process the ED */
@@ -729,6 +730,8 @@ void qpace_consume_er(int er_num,
 	}
 
 	qpace_free_er_entries(er_num);
+
+	return n_consumed_entries;
 }
 EXPORT_SYMBOL_GPL(qpace_consume_er);
 

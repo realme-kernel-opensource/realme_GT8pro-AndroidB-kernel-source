@@ -157,10 +157,12 @@ void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep);
  * @fail_handler: Callback for processing a failed event
  *
  * Process the completed events in the event ring corresponding to @er_num
+ *
+ * Return: the number of consumed entries in the ring correspond to @er_num
  */
-void qpace_consume_er(int er_num,
-		      process_ed_fn success_handler,
-		      process_ed_fn fail_handler);
+int qpace_consume_er(int er_num,
+		     process_ed_fn success_handler,
+		     process_ed_fn fail_handler);
 
 #else /* CONFIG_QTI_PAGE_COMPRESSION_ENGINE */
 
@@ -199,11 +201,11 @@ static inline void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep)
 
 }
 
-static inline void qpace_consume_er(int er_num,
-				    process_ed_fn success_handler,
-				    process_ed_fn fail_handler)
+static inline int qpace_consume_er(int er_num,
+				   process_ed_fn success_handler,
+				   process_ed_fn fail_handler)
 {
-
+	return 0;
 }
 
 #endif
