@@ -120,7 +120,7 @@ static int dummy_source_enable(struct coresight_device *csdev,
 		}
 	}
 
-	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true);
+	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true, NULL);
 	dev_dbg(csdev->dev.parent, "Dummy source enabled\n");
 
 	return 0;
@@ -132,7 +132,7 @@ static void dummy_source_disable(struct coresight_device *csdev,
 	struct dummy_drvdata *drvdata =
 		 dev_get_drvdata(csdev->dev.parent);
 	if (coresight_get_mode(csdev) == CS_MODE_SYSFS) {
-		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false, NULL);
 		if (drvdata->static_atid)
 			coresight_trace_id_free_reserved_id(drvdata->traceid);
 		else

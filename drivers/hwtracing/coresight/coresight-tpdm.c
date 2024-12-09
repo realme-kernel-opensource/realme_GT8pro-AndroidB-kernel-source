@@ -492,7 +492,7 @@ static int tpdm_enable(struct coresight_device *csdev, struct perf_event *event,
 		return ret;
 	}
 	drvdata->traceid = ret;
-	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true);
+	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true, NULL);
 	__tpdm_enable(drvdata);
 	spin_unlock(&drvdata->spinlock);
 
@@ -546,7 +546,7 @@ static void tpdm_disable(struct coresight_device *csdev,
 	if (coresight_get_mode(csdev) == CS_MODE_SYSFS) {
 		spin_lock(&drvdata->spinlock);
 		__tpdm_disable(drvdata);
-		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false, NULL);
 		drvdata->traceid = 0;
 		spin_unlock(&drvdata->spinlock);
 
@@ -1563,7 +1563,7 @@ static int static_tpdm_enable(struct coresight_device *csdev,
 		return ret;
 
 	drvdata->traceid = ret;
-	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true);
+	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true, NULL);
 
 	dev_info(drvdata->dev, "TPDM tracing enabled\n");
 
@@ -1583,7 +1583,7 @@ static void static_tpdm_disable(struct coresight_device *csdev,
 	}
 
 	coresight_set_mode(csdev, CS_MODE_DISABLED);
-	coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+	coresight_csr_set_etr_atid(csdev, drvdata->traceid, false, NULL);
 	drvdata->traceid = 0;
 
 	dev_info(drvdata->dev, "TPDM tracing disabled\n");
