@@ -919,6 +919,9 @@ static void rproc_recovery_notifier(void *data, struct rproc *rproc)
 
 	pr_info("qcom rproc: %s: recovery %s\n", rproc->name, recovery);
 
+	if (strnstr(rproc->name, "spss", strlen(rproc->name)))
+		return;
+
 	if (rproc_recovery_set_fn)
 		(rproc_recovery_set_fn)(rproc);
 }
