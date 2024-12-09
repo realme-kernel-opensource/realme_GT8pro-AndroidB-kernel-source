@@ -176,6 +176,7 @@ def define_canoe():
         "drivers/soc/qcom/socinfo.ko",
         "drivers/soc/qcom/sps/sps_drv.ko",
         "drivers/soc/qcom/sysmon_subsystem_stats.ko",
+        "drivers/soc/qcom/wcd_usbss_i2c.ko",
         "drivers/spi/spi-msm-geni.ko",
         "drivers/spmi/spmi-pmic-arb.ko",
         "drivers/spmi/spmi-pmic-arb-debug.ko",
