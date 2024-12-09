@@ -345,8 +345,11 @@ static int tpda_probe(struct amba_device *adev, const struct amba_id *id)
 	dev_set_drvdata(dev, drvdata);
 
 	drvdata->atclk = devm_clk_get_optional_enabled(dev, "atclk"); /* optional */
-	if (IS_ERR(drvdata->atclk))
-		return PTR_ERR(drvdata->atclk);
+	if (IS_ERR(drvdata->atclk)) {
+		ret = PTR_ERR(drvdata->atclk);
+		dev_err(dev, "enable/get atclk fail, ret = %d\n", ret);
+		return  ret == -ETIMEDOUT ? -EPROBE_DEFER : ret;
+	}
 
 	base = devm_ioremap_resource(dev, &adev->res);
 	if (IS_ERR(base))
