@@ -50,6 +50,7 @@ pmic-pon-log.ko
 qcom-pdc.ko
 qcom-dload-mode.ko
 memory_dump_v2.ko
+minidump.ko
 pinctrl-msm.ko
 pinctrl-canoe.ko
 qcom_tsens.ko
