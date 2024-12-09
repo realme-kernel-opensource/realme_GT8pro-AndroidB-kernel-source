@@ -3185,6 +3185,10 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	/* Let all above stores be available after this */
 	smp_store_release(&__scm, scm);
 
+	/* unification to make sure scm transactions go over HAB channel */
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,scm-hab"))
+		__qcom_scm_init();
+
 	__get_convention();
 	ret  = __qcom_multi_smc_init(scm, pdev);
 	if (ret)
@@ -3293,6 +3297,7 @@ subsys_initcall(qcom_scm_init);
 #if IS_MODULE(CONFIG_QCOM_SCM)
 static void __exit qcom_scm_exit(void)
 {
+	__qcom_scm_qcpe_exit();
 	qtee_shmbridge_driver_exit();
 	platform_driver_unregister(&qcom_scm_driver);
 }

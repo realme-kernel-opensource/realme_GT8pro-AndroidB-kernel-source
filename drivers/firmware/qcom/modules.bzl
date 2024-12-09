@@ -27,11 +27,18 @@ def register_modules(registry):
                     "drivers/firmware/qcom/qtee_shmbridge.c",
                 ],
             },
+            "CONFIG_MSM_HAB": {
+                True: [
+                    # do not sort
+                    "drivers/firmware/qcom/qcom_scm_hab.c",
+                ],
+            },
         },
         deps = [
             # do not sort
             "drivers/firmware/qcom/qcom_tzmem",
             "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/soc/qcom/hab/msm_hab",
         ],
     )
 
