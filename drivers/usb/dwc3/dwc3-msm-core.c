@@ -6038,7 +6038,8 @@ static int dwc3_msm_check_extcon_prop(struct platform_device *pdev)
 			regulator_register_notifier(mdwc->dpdm_reg,
 					&mdwc->dpdm_nb);
 		} else {
-			if (!mdwc->role_switch)
+			if (!mdwc->role_switch &&
+			    dwc3_msm_extcon_is_valid_source(mdwc))
 				queue_work(mdwc->sm_usb_wq, &mdwc->sm_work);
 		}
 	}
