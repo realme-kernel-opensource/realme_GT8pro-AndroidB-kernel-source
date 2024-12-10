@@ -2027,49 +2027,6 @@ static struct clk_branch gcc_ddrss_pcie_sf_qtb_clk = {
 	},
 };
 
-static struct clk_branch gcc_disp_ahb_clk = {
-	.halt_reg = 0x27004,
-	.halt_check = BRANCH_HALT_DELAY,
-	.hwcg_reg = 0x27004,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x27004,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_disp_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_disp_hf_axi_clk = {
-	.halt_reg = 0x2701c,
-	.halt_check = BRANCH_HALT_SKIP,
-	.clkr = {
-		.enable_reg = 0x2701c,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_disp_hf_axi_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_disp_sf_axi_clk = {
-	.halt_reg = 0x27008,
-	.halt_check = BRANCH_HALT_SKIP,
-	.hwcg_reg = 0x27008,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x27008,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_disp_sf_axi_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch gcc_eva_axi0_clk = {
 	.halt_reg = 0x9f008,
 	.halt_check = BRANCH_HALT_SKIP,
@@ -3829,9 +3786,6 @@ static struct clk_regmap *gcc_canoe_clocks[] = {
 	[GCC_CFG_NOC_USB3_PRIM_AXI_CLK] = &gcc_cfg_noc_usb3_prim_axi_clk.clkr,
 	[GCC_CNOC_PCIE_SF_AXI_CLK] = &gcc_cnoc_pcie_sf_axi_clk.clkr,
 	[GCC_DDRSS_PCIE_SF_QTB_CLK] = &gcc_ddrss_pcie_sf_qtb_clk.clkr,
-	[GCC_DISP_AHB_CLK] = &gcc_disp_ahb_clk.clkr,
-	[GCC_DISP_HF_AXI_CLK] = &gcc_disp_hf_axi_clk.clkr,
-	[GCC_DISP_SF_AXI_CLK] = &gcc_disp_sf_axi_clk.clkr,
 	[GCC_EVA_AXI0_CLK] = &gcc_eva_axi0_clk.clkr,
 	[GCC_EVA_AXI0C_CLK] = &gcc_eva_axi0c_clk.clkr,
 	[GCC_GP1_CLK] = &gcc_gp1_clk.clkr,
@@ -4108,6 +4062,9 @@ static int gcc_canoe_probe(struct platform_device *pdev)
 	 *	gcc_cam_bist_mclk_ahb_clk
 	 *	gcc_camera_ahb_clk
 	 *	gcc_camera_xo_clk
+	 *	gcc_disp_ahb_clk
+	 *	gcc_disp_sf_axi_clk
+	 *	gcc_disp_hf_axi_clk
 	 *	gcc_eva_ahb_clk
 	 *	gcc_eva_xo_clk
 	 *	gcc_gpu_cfg_ahb_clk
@@ -4119,6 +4076,9 @@ static int gcc_canoe_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0xa0004, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x26004, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x2603c, BIT(0), BIT(0));
+	regmap_update_bits(regmap, 0x27004, BIT(0), BIT(0));
+	regmap_update_bits(regmap, 0x27008, BIT(0), BIT(0));
+	regmap_update_bits(regmap, 0x2701c, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x9f004, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x9f024, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x71004, BIT(0), BIT(0));
