@@ -109,6 +109,9 @@ void walt_config(void)
 	sysctl_pipeline_pin_thres_low_pct = 50;
 	sysctl_pipeline_pin_thres_high_pct = 60;
 
+	/* Initialize smart freq configurations */
+	smart_freq_init(name);
+
 	/* return if socinfo is not available */
 	if (!name)
 		return;
@@ -243,6 +246,4 @@ void walt_config(void)
 		}
 
 	}
-
-	smart_freq_init(name);
 }

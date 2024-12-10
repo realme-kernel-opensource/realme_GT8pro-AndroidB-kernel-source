@@ -509,9 +509,13 @@ void rearrange_heavy(u64 window_start, bool force)
 	struct walt_task_struct *other_wts = NULL;
 	unsigned long flags;
 
+	if (!pipeline_in_progress())
+		return;
+
 	if (num_sched_clusters < 2)
 		return;
 
+	raw_spin_lock_irqsave(&heavy_lock, flags);
 	/*
 	 * TODO: As primes are isolated under have_heavy_list < 3, and pipeline misfits are also
 	 * disabled, setting the prime worthy task's pipeline_cpu as CPU7 could lead to the
@@ -520,7 +524,6 @@ void rearrange_heavy(u64 window_start, bool force)
 	 * task to start bouncing around on the golds, and ultimately lead to suboptimal behavior.
 	 */
 	if (have_heavy_list <= 2) {
-		raw_spin_lock_irqsave(&heavy_lock, flags);
 		find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
 
 		if (prime_wts && !is_prime_worthy(prime_wts)) {
@@ -541,25 +544,23 @@ void rearrange_heavy(u64 window_start, bool force)
 			swap_pipeline_with_prime_locked(NULL, other_wts);
 		}
 
-		raw_spin_unlock_irqrestore(&heavy_lock, flags);
-		return;
+		goto out;
 	}
 
 	if (pipeline_pinning)
-		return;
+		goto out;
 
 	if (delay_rearrange(window_start, AUTO_PIPELINE, force))
-		return;
+		goto out;
 
 	if (!soc_feat(SOC_ENABLE_PIPELINE_SWAPPING_BIT) && !force)
-		return;
-
-	raw_spin_lock_irqsave(&heavy_lock, flags);
+		goto out;
 
 	/* swap prime for have_heavy_list >= 3 */
 	find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
 	swap_pipeline_with_prime_locked(prime_wts, other_wts);
 
+out:
 	raw_spin_unlock_irqrestore(&heavy_lock, flags);
 }
 

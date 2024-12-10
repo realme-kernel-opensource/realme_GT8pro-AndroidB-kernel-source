@@ -90,6 +90,8 @@ TRACE_EVENT(sched_update_history,
 		__field(int,			cpu)
 		__field(u16,			trailblazer_demand)
 		__field(u8,			high_util_history)
+		__field(u64,			uclamp_min)
+		__field(u64,			uclamp_max)
 	),
 
 	TP_fast_assign(
@@ -109,9 +111,11 @@ TRACE_EVENT(sched_update_history,
 		__entry->cpu		= rq->cpu;
 		__entry->trailblazer_demand = trailblazer_demand;
 		__entry->high_util_history = wts->high_util_history;
+		__entry->uclamp_min	= uclamp_eff_value(p, UCLAMP_MIN);
+		__entry->uclamp_max	= uclamp_eff_value(p, UCLAMP_MAX);
 	),
 
-	TP_printk("pid=%d comm=%s runtime=%u samples=%d event=%s demand=%u (hist: %u %u %u %u %u) (hist_util: %u %u %u %u %u) coloc_demand=%u pred_demand_scaled=%u cpu=%d nr_big=%u trailblazer_demand=%u high_util_history=%u",
+	TP_printk("pid=%d comm=%s runtime=%u samples=%d event=%s demand=%u (hist: %u %u %u %u %u) (hist_util: %u %u %u %u %u) coloc_demand=%u pred_demand_scaled=%u cpu=%d nr_big=%u trailblazer_demand=%u high_util_history=%u uclamp_min=%llu uclamp_max=%llu",
 		__entry->pid, __entry->comm,
 		__entry->runtime, __entry->samples,
 		task_event_names[__entry->evt],
@@ -124,7 +128,7 @@ TRACE_EVENT(sched_update_history,
 		__entry->hist_util[4],
 		__entry->coloc_demand, __entry->pred_demand_scaled,
 		__entry->cpu, __entry->nr_big_tasks, __entry->trailblazer_demand,
-		__entry->high_util_history)
+		__entry->high_util_history, __entry->uclamp_min, __entry->uclamp_max)
 );
 
 TRACE_EVENT(sched_get_task_cpu_cycles,
@@ -1012,6 +1016,7 @@ TRACE_EVENT(sched_cpu_util,
 		__field(u64,	prs_gprs)
 		__field(unsigned int,	lowest_mask)
 		__field(unsigned long,	thermal_pressure)
+		__field(int,		sibling_cluster)
 	),
 
 	TP_fast_assign(
@@ -1040,12 +1045,13 @@ TRACE_EVENT(sched_cpu_util,
 		else
 			__entry->lowest_mask	= cpumask_bits(lowest_mask)[0];
 		__entry->thermal_pressure	= arch_scale_hw_pressure(cpu);
+		__entry->sibling_cluster = cpu_cluster(cpu)->sibling_cluster;
 	),
 
-	TP_printk("cpu=%d nr_running=%d cpu_util=%ld cpu_util_cum=%ld capacity_curr=%lu capacity=%lu capacity_orig=%lu idle_exit_latency=%u irqload=%llu online=%u, inactive=%u, halted=%u, reserved=%u, high_irq_load=%u enforce_high_irq_load=%d nr_rtg_hp=%u prs_gprs=%llu lowest_mask=0x%x thermal_pressure=%lu",
+	TP_printk("cpu=%d nr_running=%d cpu_util=%ld cpu_util_cum=%ld capacity_curr=%lu capacity=%lu capacity_orig=%lu sibling_cluster=%d idle_exit_latency=%u irqload=%llu online=%u, inactive=%u, halted=%u, reserved=%u, high_irq_load=%u enforce_high_irq_load=%d nr_rtg_hp=%u prs_gprs=%llu lowest_mask=0x%x thermal_pressure=%lu",
 		__entry->cpu, __entry->nr_running, __entry->cpu_util,
 		__entry->cpu_util_cum, __entry->capacity_curr,
-		__entry->capacity, __entry->capacity_orig,
+		__entry->capacity, __entry->capacity_orig, __entry->sibling_cluster,
 		__entry->idle_exit_latency, __entry->irqload, __entry->online,
 		__entry->inactive, __entry->halted, __entry->reserved, __entry->high_irq_load,
 		__entry->enforce_high_irq, __entry->nr_rtg_high_prio_tasks, __entry->prs_gprs,
@@ -1524,9 +1530,10 @@ TRACE_EVENT(halt_cpus_start,
 );
 
 TRACE_EVENT(halt_cpus,
-	    TP_PROTO(struct cpumask *cpus, u64 start_time, unsigned char halt, int err),
+	    TP_PROTO(struct cpumask *cpus, u64 start_time, unsigned char halt,
+		    int err, enum pause_client client),
 
-	    TP_ARGS(cpus, start_time, halt, err),
+	    TP_ARGS(cpus, start_time, halt, err, client),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,   cpus)
@@ -1535,6 +1542,7 @@ TRACE_EVENT(halt_cpus,
 		    __field(unsigned int,   time)
 		    __field(unsigned char,  halt)
 		    __field(unsigned char,  success)
+		    __field(enum pause_client,        client)
 		    ),
 
 	    TP_fast_assign(
@@ -1544,11 +1552,12 @@ TRACE_EVENT(halt_cpus,
 		    __entry->time        = div64_u64(sched_clock() - start_time, 1000);
 		    __entry->halt        = halt;
 		    __entry->success     = ((err >= 0)?1:0);
+		    __entry->client	 = client;
 		    ),
 
-	    TP_printk("req_cpus=0x%x halt_cpus=0x%x partial_halt_cpus=0x%x time=%u us halt=%d success=%d",
+	    TP_printk("req_cpus=0x%x halt_cpus=0x%x partial_halt_cpus=0x%x time=%u us halt=%d success=%d client=0x%x",
 		      __entry->cpus, __entry->halted_cpus, __entry->partial_halted_cpus,
-		      __entry->time, __entry->halt, __entry->success)
+		      __entry->time, __entry->halt, __entry->success, __entry->client)
 );
 
 TRACE_EVENT(sched_task_handler,
