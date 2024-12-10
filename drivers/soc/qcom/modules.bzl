@@ -994,6 +994,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qti_dmof_scmi",
+        out = "qti_dmof_scmi.ko",
+        config = "CONFIG_QTI_DMOF_SCMI",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qti_dmof_scmi.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qti_pmic_glink",
         out = "qti_pmic_glink.ko",
         config = "CONFIG_QTI_PMIC_GLINK",
