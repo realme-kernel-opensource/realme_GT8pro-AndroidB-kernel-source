@@ -13,6 +13,7 @@ def define_vienna():
         "drivers/dma-buf/heaps/qcom_dma_heaps.ko",
         "drivers/firmware/qcom/qcom-scm.ko",
         "drivers/firmware/qcom/qcom_tzmem.ko",
+        "drivers/hwspinlock/qcom_hwspinlock.ko",
         "drivers/interconnect/icc-clk.ko",
         "drivers/iommu/arm/arm-smmu/arm_smmu.ko",
         "drivers/iommu/iommu-logger.ko",
