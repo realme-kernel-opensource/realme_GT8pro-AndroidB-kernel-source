@@ -110,13 +110,11 @@ static int qcom_cpuss_sleep_stats_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int qcom_cpuss_sleep_stats_remove(struct platform_device *pdev)
+static void qcom_cpuss_sleep_stats_remove(struct platform_device *pdev)
 {
 	struct dentry *root = platform_get_drvdata(pdev);
 
 	debugfs_remove_recursive(root);
-
-	return 0;
 }
 
 struct stats_config qcom_cpuss_cntr_offsets = {
