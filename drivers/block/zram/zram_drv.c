@@ -2711,10 +2711,7 @@ static int zram_add(void)
 	 * Override the first ZRAM device to use QPaCE, let other block devices
 	 * use chosen algorithm.
 	 */
-#if !IS_ENABLED(CONFIG_QTI_PAGE_COMPRESSION_ENGINE)
-	use_qpace = false;
-#endif
-	if (use_qpace) {
+	if (is_qpace_enabled() && use_qpace) {
 		zram->qpace = true;
 		lim.features &= ~BLK_FEAT_SYNCHRONOUS;
 		use_qpace = false;
