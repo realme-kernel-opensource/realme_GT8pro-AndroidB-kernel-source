@@ -2679,8 +2679,24 @@ static const struct msm_pinctrl_soc_data canoe_tlmm = {
 	.egpio_func = 11,
 };
 
+static const struct msm_pinctrl_soc_data canoe_vm_tlmm = {
+	.pins = canoe_pins,
+	.npins = ARRAY_SIZE(canoe_pins),
+	.functions = canoe_functions,
+	.nfunctions = ARRAY_SIZE(canoe_functions),
+	.groups = canoe_groups,
+	.ngroups = ARRAY_SIZE(canoe_groups),
+	.ngpios = 218,
+	.qup_regs = canoe_qup_regs,
+	.nqup_regs = ARRAY_SIZE(canoe_qup_regs),
+	.wakeirq_map = canoe_pdc_map,
+	.nwakeirq_map = ARRAY_SIZE(canoe_pdc_map),
+	.egpio_func = 11,
+};
+
 static const struct of_device_id canoe_tlmm_of_match[] = {
 	{ .compatible = "qcom,canoe-tlmm", .data = &canoe_tlmm},
+	{ .compatible = "qcom,canoe-vm-tlmm", .data = &canoe_vm_tlmm },
 	{},
 };
 
