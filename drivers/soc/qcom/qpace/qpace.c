@@ -295,6 +295,7 @@ struct event_ring {
 
 	struct qpace_event_descriptor *hw_read_ptr;
 	struct qpace_event_descriptor *hw_write_ptr;
+	bool cycle_bit;
 };
 
 static struct transfer_ring *tr_rings;
@@ -442,6 +443,16 @@ static inline int init_event_ring(int er_num)
 			   FIELD_GET(GENMASK(63, 32), ring_end_phys));
 	QPACE_WRITE_ER_REG(er_num, QPACE_DMA_ER_MGR_0_RD_PTR_L_OFFSET,
 			   FIELD_GET(GENMASK(31, 0), ring_end_phys) - DESCRIPTOR_SIZE);
+
+	/*
+	 * Since struct event_ring->cycle_bit is zero initialized, for the initial pass
+	 * by HW, an invalid ED will need to have a cycle bit of 1 / true, which will be
+	 * cleared once a valid event has been placed in an ED.
+	 */
+	for (struct qpace_event_descriptor *ed = ev_rings[er_num].ring_buffer_start;
+	     ed < ev_rings[er_num].ring_buffer_start + DESCRIPTORS_PER_RING;
+	     ed++)
+		ed->cycle_bit = true;
 
 	return 0;
 }
@@ -686,18 +697,9 @@ int qpace_consume_er(int er_num,
 		     process_ed_fn fail_handler)
 {
 	struct event_ring *ring = &ev_rings[er_num];
-	u32 er_ring_reg_val;
-	phys_addr_t hw_write_ptr_phys_addr;
 	struct qpace_event_descriptor *ed;
 	int ed_offset;
 	int n_consumed_entries = 0;
-
-	/* Get new value of HW write ptr to determine the number of produced EDs */
-	hw_write_ptr_phys_addr = QPACE_READ_ER_REG(er_num, QPACE_DMA_ER_MGR_0_WR_PTR_L_OFFSET);
-	er_ring_reg_val = QPACE_READ_ER_REG(er_num, QPACE_DMA_ER_MGR_0_WR_PTR_H_OFFSET);
-	hw_write_ptr_phys_addr |= FIELD_PREP(GENMASK(63, 32), er_ring_reg_val);
-
-	ring->hw_write_ptr = phys_to_virt(hw_write_ptr_phys_addr);
 
 	/*
 	 * The read pointer indicates the last ED processed by SW, so we
@@ -708,26 +710,25 @@ int qpace_consume_er(int er_num,
 	/* Initialize loop iterator */
 	ed = ring->hw_read_ptr;
 
+loop_again:
 	/* Unrolled ring buffer loop */
-	if (ring->hw_read_ptr >= ring->hw_write_ptr) {
-		for (; ed < ring->ring_buffer_start + DESCRIPTORS_PER_RING;
-		     ed++, n_consumed_entries++) {
-			ed_offset = ed - ring->ring_buffer_start;
-
-			/* Process the ED */
-			consume_ed(ed, ed_offset, success_handler, fail_handler);
-		}
-
-		/* Set ed to point to start */
-		ed = ring->ring_buffer_start;
-	}
-
-	for (; ed < ring->hw_write_ptr; ed++, n_consumed_entries++) {
+	for (; ed < ring->ring_buffer_start + DESCRIPTORS_PER_RING &&
+	     ed->cycle_bit == ring->cycle_bit;
+	     ed++, n_consumed_entries++) {
 		ed_offset = ed - ring->ring_buffer_start;
 
 		/* Process the ED */
 		consume_ed(ed, ed_offset, success_handler, fail_handler);
 	}
+
+	if (ed == ring->ring_buffer_start + DESCRIPTORS_PER_RING) {
+		/* Set ed to point to start,  */
+		ed = ring->ring_buffer_start;
+		ring->cycle_bit = !ring->cycle_bit;
+		goto loop_again;
+	}
+
+	ring->hw_write_ptr = ed;
 
 	qpace_free_er_entries(er_num);
 

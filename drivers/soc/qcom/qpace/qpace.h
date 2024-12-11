@@ -48,6 +48,7 @@ struct qpace_event_descriptor {
 
 	uint64_t completion_code:4;
 	uint64_t tr_ring_id:4;
+	uint64_t unused:2;
 	uint64_t cycle_bit:1;
 	uint64_t replication_found:1;
 
