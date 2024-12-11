@@ -1963,8 +1963,8 @@ static int qpace_zram_write_page(struct zram *zram, struct bio *bio)
 	zmeta.start_time = start_time;
 
 	if (!((iter.bi_sector & (SECTORS_PER_PAGE - 1)) == 0 && iter.bi_size == PAGE_SIZE)) {
-		pr_err("%s: Bad BIO, size: %x, sector: %llx\n", __func__,
-		       iter.bi_size, iter.bi_sector & (SECTORS_PER_PAGE - 1));
+		pr_debug("%s: Bad BIO, size: %x, sector: %llx\n", __func__,
+			 iter.bi_size, iter.bi_sector & (SECTORS_PER_PAGE - 1));
 		zram_write_page_err_handler(&zmeta);
 		return -EINVAL;
 	}

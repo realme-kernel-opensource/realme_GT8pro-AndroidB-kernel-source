@@ -379,6 +379,8 @@ static int init_transfer_rings(void)
 
 	tr_rings = kmalloc_array(NUM_RINGS, sizeof(struct transfer_ring),
 				 GFP_KERNEL | __GFP_ZERO);
+	if (!tr_rings)
+		return -ENOMEM;
 
 	for (int tr_num = 0; tr_num < NUM_RINGS; tr_num++) {
 		ret = init_transfer_ring(tr_num);
@@ -471,6 +473,8 @@ static int init_event_rings(void)
 
 	ev_rings = kmalloc_array(NUM_RINGS, sizeof(struct event_ring),
 				 GFP_KERNEL | __GFP_ZERO);
+	if (!ev_rings)
+		return -ENOMEM;
 
 	for (int er_num = 0; er_num < NUM_RINGS; er_num++) {
 		ret = init_event_ring(er_num);
@@ -683,10 +687,6 @@ static inline void qpace_free_er_entries(int er_num)
 			   FIELD_GET(GENMASK(63, 32), last_processed_ed_phys_addr));
 	QPACE_WRITE_ER_REG(er_num, QPACE_DMA_ER_MGR_0_RD_PTR_L_OFFSET,
 			   FIELD_GET(GENMASK(31, 0), last_processed_ed_phys_addr));
-
-	/* re-enable interrupts for this event ring */
-	QPACE_WRITE_GEN_CMD_REG(QPACE_COMMON_EE_DMA_ER_COMPL_STAT_CLR_OFFSET,
-				1 << er_num);
 }
 
 static inline void consume_ed(struct qpace_event_descriptor *ed, int ed_index,
@@ -769,6 +769,8 @@ static irqreturn_t event_or_word_error_interrupt_handler(int irq, void *unused)
 
 	for (int er_num = 0; er_num < NUM_RINGS; er_num++)
 		if (status_reg & (1 << er_num)) {
+
+			/* re-enable interrupts for this event ring */
 			QPACE_WRITE_GEN_CMD_REG(QPACE_COMMON_EE_DMA_ER_COMPL_STAT_CLR_OFFSET,
 						1 << er_num);
 
