@@ -20,6 +20,7 @@
 #include <linux/types.h>
 #include <linux/delay.h>
 #include <linux/workqueue.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 
 #include <linux/irqchip/arm-gic-v3.h>
 #include <trace/hooks/gic_v3.h>
@@ -73,6 +74,40 @@ struct gic_quirk {
 	u32 iidr;
 	u32 mask;
 };
+
+static int process_cpu_index(struct device_node *np, int cpu_index, int clss)
+{
+	struct device_node *dev_phandle;
+	const __be32 *reg;
+	u32 cpu_mpidr = 0;
+	int ret;
+
+	dev_phandle = of_parse_phandle(np, "qcom,gic-cpulist", cpu_index);
+	if (!dev_phandle) {
+		pr_err("Invalid CPU index: %d\n", cpu_index);
+		return -EINVAL;
+	}
+	reg = of_get_property(dev_phandle, "reg", NULL);
+	if (!reg) {
+		pr_err("Failed to get reg property for CPU%d\n", cpu_index);
+		ret = -EINVAL;
+		goto dec_node;
+	}
+	cpu_mpidr = be32_to_cpu(reg[1]);
+	ret = qcom_scm_set_gic_cpuclass(cpu_mpidr, clss);
+	if (ret) {
+		pr_err("Runtime CPU configuration for GIC failed for CPU%d at address 0x%x\n",
+				cpu_index, cpu_mpidr);
+		ret = -EINVAL;
+		goto dec_node;
+	}
+
+	ret = 0;
+
+dec_node:
+	of_node_put(dev_phandle);
+	return ret;
+}
 
 static bool gicd_typer_1_of_N_supported(void __iomem *base)
 {
@@ -617,6 +652,7 @@ void gic_irq_handler_entry_notifer(void *ignore, int irq,
 static int gic_intr_routing_probe(struct platform_device *pdev)
 {
 	struct device_node *dev_phandle;
+	bool runtime_cpu_class_en;
 	int i, cpus_len, cpu;
 	int rc = 0;
 
@@ -627,13 +663,22 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	runtime_cpu_class_en = of_property_read_bool(pdev->dev.of_node,
+			"qcom,gic-runtime-cpu-class-en");
+
 	for (i = 0; i < cpus_len; i++) {
 		dev_phandle = of_parse_phandle(pdev->dev.of_node, "qcom,gic-class0-cpus", i);
 		if (dev_phandle) {
 			cpu = of_cpu_node_to_id(dev_phandle);
-			if (cpu >= 0)
+			if (cpu >= 0) {
+				if (runtime_cpu_class_en) {
+					rc = process_cpu_index(pdev->dev.of_node, cpu, 0);
+					if (rc < 0)
+						return rc;
+				}
 				cpumask_set_cpu(cpu,
 						&gic_routing_data.gic_routing_class0_cpus);
+			}
 		}
 		of_node_put(dev_phandle);
 	}
@@ -649,9 +694,15 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 		dev_phandle = of_parse_phandle(pdev->dev.of_node, "qcom,gic-class1-cpus", i);
 		if (dev_phandle) {
 			cpu = of_cpu_node_to_id(dev_phandle);
-			if (cpu >= 0)
+			if (cpu >= 0) {
+				if (runtime_cpu_class_en) {
+					rc = process_cpu_index(pdev->dev.of_node, cpu, 1);
+					if (rc < 0)
+						return rc;
+				}
 				cpumask_set_cpu(cpu,
 						&gic_routing_data.gic_routing_class1_cpus);
+			}
 		}
 		of_node_put(dev_phandle);
 	}
