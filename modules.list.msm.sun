@@ -66,6 +66,7 @@ icc-bcm-voter.ko
 icc-debug.ko
 icc-rpmh.ko
 qcom_cpucp.ko
+cpucp_fast.ko
 qcom_scmi_vendor.ko
 qcom_scmi_client.ko
 dcvs_fp.ko

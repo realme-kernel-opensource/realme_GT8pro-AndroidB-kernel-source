@@ -140,6 +140,7 @@ def define_sun():
         "drivers/soc/qcom/charger-ulog-glink.ko",
         "drivers/soc/qcom/cmd-db.ko",
         "drivers/soc/qcom/cpu_phys_log_map.ko",
+        "drivers/soc/qcom/cpucp_fast.ko",
         "drivers/soc/qcom/cpucp_log.ko",
         "drivers/soc/qcom/crm-v2.ko",
         "drivers/soc/qcom/dcc_v2.ko",
