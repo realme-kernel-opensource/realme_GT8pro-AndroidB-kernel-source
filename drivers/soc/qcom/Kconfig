@@ -14,16 +14,6 @@ config SPS
 		2. Peripheral-to-Memory.
 		3. Memory-to-Memory.
 
-config SPS_SUPPORT_BAMDMA
-	bool "SPS supports BAM DMA"
-	depends on SPS
-	help
-	  The BAM-DMA is used for Memory-to-Memory transfers.
-	  The main use cases is RPC between processors.
-	  The BAM-DMA hardware has 2 registers sets:
-		1. A BAM HW like all the peripherals.
-		2. A DMA channel configuration (i.e. channel priority).
-
 config SPS_SUPPORT_NDP_BAM
 	bool "SPS supports NDP BAM"
 	depends on SPS
@@ -55,15 +45,6 @@ config QCOM_COMMAND_DB
 	  resource on a RPM-hardened platform must use this database to get
 	  SoC specific identifier and information for the shared resources.
 
-config QCOM_CPUSS_SLEEP_STATS_V4
-	tristate "Qualcomm Technologies, Inc. (QTI) CPUSS sleep stats v4 driver"
-	depends on DEBUG_FS
-	help
-	  Qualcomm Technologies, Inc. (QTI) CPUSS sleep stats v4 driver to
-	  get hardware LPM counts and residency for particular cluster low
-	  power modes. This driver creates debugfs entry which provide
-	  provision to read those counters.
-
 config QCOM_CRM
 	tristate "Qualcomm Technologies, Inc. (QTI) CRM driver"
 	depends on QCOM_RPMH && (ARCH_QCOM || COMPILE_TEST)
@@ -84,22 +65,6 @@ config QCOM_CRM_V2
 	  of hardware components aggregate requests for these resources and
 	  help apply the aggregated power state on the resource.
 
-config QCOM_CPR
-	tristate "QCOM Core Power Reduction (CPR) support"
-	depends on ARCH_QCOM && HAS_IOMEM
-	select PM_OPP
-	select REGMAP
-	help
-	  Say Y here to enable support for the CPR hardware found on Qualcomm
-	  SoCs like QCS404.
-
-	  This driver populates CPU OPPs tables and makes adjustments to the
-	  tables based on feedback from the CPR hardware. If you want to do
-	  CPUfrequency scaling say Y here.
-
-	  To compile this driver as a module, choose M here: the module will
-	  be called qcom-cpr
-
 config QCOM_DCC_V2
        tristate "Qualcomm Technologies Data Capture and Compare enigne support for V2"
        help
@@ -115,15 +80,6 @@ config QCOM_GENI_SE
 	  Qualcomm Technologies, Inc. Universal Peripheral (QUP) Wrapper. This
 	  driver is also used to manage the common aspects of multiple Serial
 	  Engines present in the QUP.
-
-config QCOM_GSBI
-	tristate "QCOM General Serial Bus Interface"
-	depends on ARCH_QCOM || COMPILE_TEST
-	select MFD_SYSCON
-	help
-	  Say y here to enable GSBI support.  The GSBI provides control
-	  functions for connecting the underlying serial UART, SPI, and I2C
-	  devices to the output pins.
 
 config QCOM_CPUCP
         tristate "Qualcomm Technologies, Inc. CPUCP driver"
@@ -174,10 +130,6 @@ config QCOM_LLCC
 	  SDM845. This provides interfaces to clients that use the LLCC.
 	  Say yes here to enable LLCC slice driver.
 
-config QCOM_KRYO_L2_ACCESSORS
-	bool
-	depends on (ARCH_QCOM || COMPILE_TEST) && ARM64
-
 config QCOM_LLCC_PERFMON
 	tristate "Qualcomm Technologies, Inc. LLCC Perfmon driver"
 	depends on QCOM_LLCC
@@ -191,16 +143,6 @@ config QCOM_LLCC_PERFMON
 config QCOM_MDT_LOADER
 	tristate
 	select QCOM_SCM
-
-config QCOM_OCMEM
-	tristate "Qualcomm On Chip Memory (OCMEM) driver"
-	depends on ARCH_QCOM
-	select QCOM_SCM
-	help
-	  The On Chip Memory (OCMEM) allocator allows various clients to
-	  allocate memory from OCMEM based on performance, latency and power
-	  requirements. This is typically used by the GPU, camera/video, and
-	  audio components on some Snapdragon SoCs.
 
 config QCOM_PCIE_PDC
 	tristate "Qualcomm Technologies, Inc. (QTI) PCIe PDC driver"
@@ -251,73 +193,11 @@ config PDR_INDICATION_NOTIF_TIMEOUT
 	  the start and end of notifications, before a warning
 	  is emitted.
 
-config QCOM_PMIC_PDCHARGER_ULOG
-	tristate "Qualcomm PMIC PDCharger ULOG driver"
-	depends on RPMSG
-	depends on EVENT_TRACING
-	help
-	  The Qualcomm PMIC PDCharger ULOG driver provides access to logs of
-	  the ADSP firmware PDCharger module in charge of Battery and Power
-	  Delivery on modern systems.
-
-	  Say yes here to support PDCharger ULOG event tracing on modern
-	  Qualcomm platforms.
-
-config QCOM_PMIC_GLINK
-	tristate "Qualcomm PMIC GLINK driver"
-	depends on RPMSG
-	depends on TYPEC
-	depends on DRM
-	depends on NET
-	depends on OF
-	select AUXILIARY_BUS
-	select QCOM_PDR_HELPERS
-	select DRM_AUX_HPD_BRIDGE
-	help
-	  The Qualcomm PMIC GLINK driver provides access, over GLINK, to the
-	  USB and battery firmware running on one of the coprocessors in
-	  several modern Qualcomm platforms.
-
-	  Say yes here to support USB-C and battery status on modern Qualcomm
-	  platforms.
-
 config QCOM_QMI_HELPERS
 	tristate
 	depends on NET
 
-config QCOM_RAMP_CTRL
-	tristate "Qualcomm Ramp Controller driver"
-	depends on ARCH_QCOM || COMPILE_TEST
-	help
-	  The Ramp Controller is used to program the sequence ID for pulse
-	  swallowing, enable sequence and link sequence IDs for the CPU
-	  cores on some Qualcomm SoCs.
-	  Say y here to enable support for the ramp controller.
-
-source "drivers/soc/qcom/memshare/Kconfig"
-
-config QCOM_RMTFS_MEM
-	tristate "Qualcomm Remote Filesystem memory driver"
-	depends on ARCH_QCOM
-	select QCOM_SCM
-	help
-	  The Qualcomm remote filesystem memory driver is used for allocating
-	  and exposing regions of shared memory with remote processors for the
-	  purpose of exchanging sector-data between the remote filesystem
-	  service and its clients.
-
-	  Say y here if you intend to boot the modem remoteproc.
-
-config QCOM_RPM_MASTER_STATS
-	tristate "Qualcomm RPM Master stats"
-	depends on ARCH_QCOM || COMPILE_TEST
-	help
-	  The RPM Master sleep stats driver provides detailed per-subsystem
-	  sleep/wake data, read from the RPM message RAM. It can be used to
-	  assess whether all the low-power modes available are entered as
-	  expected or to check which part of the SoC prevents it from sleeping.
-
-	  Say y here if you intend to debug or monitor platform sleep.
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/qcom/memshare/Kconfig"
 
 config QCOM_RPMH
 	tristate "Qualcomm RPM-Hardened (RPMH) Communication"
@@ -339,22 +219,6 @@ config QCOM_SMEM
 	  The driver provides an interface to items in a heap shared among all
 	  processors in a Qualcomm platform.
 
-config QCOM_SMD_RPM
-	tristate "Qualcomm Resource Power Manager (RPM) over SMD"
-	depends on ARCH_QCOM || COMPILE_TEST
-	depends on RPMSG
-	depends on RPMSG_QCOM_SMD || RPMSG_QCOM_SMD=n
-	help
-	  If you say yes to this option, support will be included for the
-	  Resource Power Manager system found in the Qualcomm 8974 based
-	  devices.
-
-	  This is required to access many regulators, clocks and bus
-	  frequencies controlled by the RPM on these devices.
-
-	  Say M here if you want to include support for the Qualcomm RPM as a
-	  module. This will build a module called "qcom-smd-rpm".
-
 config QCOM_MEMORY_DUMP_V2
 	tristate "QCOM Memory Dump V2 Support"
 	help
@@ -371,9 +235,6 @@ config QCOM_DYNAMIC_MEMORY_DUMP
 	  dump entry via sysfs node, the memory reserved for the entry
 	  can be reclaimed if this dump entry is not enabled at running
           time.
-
-config QCOM_SMEM_STATE
-	bool
 
 config QCOM_SMP2P
 	tristate "Qualcomm Shared Memory Point to Point support"
@@ -438,15 +299,6 @@ config QCOM_CPU_PHYS_LOG_MAP
 	  Enable the support for CPU Physical Logical Map, this driver
 	  makes it easy for clients to fetch the equivalent physical CPU
 	  for a given logical CPU.
-
-config QCOM_SPM
-	tristate "Qualcomm Subsystem Power Manager (SPM)"
-	depends on ARCH_QCOM || COMPILE_TEST
-	select QCOM_SCM
-	help
-	  Enable the support for the Qualcomm Subsystem Power Manager, used
-	  to manage cores, L2 low power modes and to configure the internal
-	  Adaptive Voltage Scaler parameters, where supported.
 
 config QCOM_STATS
 	tristate "Qualcomm Technologies, Inc. (QTI) Sleep stats driver"
@@ -574,36 +426,7 @@ config QCOM_WATCHDOG_USERSPACE_PET
 	  interval that matches the time set in the pet-time config.
 	  The feature is supported through device sysfs files.
 
-source "drivers/soc/qcom/dcvs/Kconfig"
-
-config QCOM_WCNSS_CTRL
-	tristate "Qualcomm WCNSS control driver"
-	depends on ARCH_QCOM || COMPILE_TEST
-	depends on RPMSG
-	help
-	  Client driver for the WCNSS_CTRL SMD channel, used to download nv
-	  firmware to a newly booted WCNSS chip.
-
-config QCOM_APR
-	tristate "Qualcomm APR/GPR Bus (Asynchronous/Generic Packet Router)"
-	depends on ARCH_QCOM || COMPILE_TEST
-	depends on RPMSG
-	depends on NET
-	select QCOM_PDR_HELPERS
-	help
-	  Enable APR IPC protocol support between
-	  application processor and QDSP6. APR is
-	  used by audio driver to configure QDSP6
-	  ASM, ADM and AFE modules.
-
-config QPNP_PBS
-	tristate "PBS trigger support for QPNP PMIC"
-	depends on SPMI
-	help
-	  This driver supports configuring software PBS trigger event through PBS
-	  RAM on Qualcomm Technologies, Inc. QPNP PMICs. This module provides
-	  the APIs to the client drivers that wants to send the PBS trigger
-	  event to the PBS RAM.
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/qcom/dcvs/Kconfig"
 
 config QCOM_SYSMON_SUBSYSTEM_STATS
 	tristate "Qualcomm Technologies SysMon DSP subsystem stats"
@@ -623,14 +446,6 @@ config QCOM_CDSP_RM
 	  CPU L3 clock for improving IO-Coherent throughput and opt for QoS mode
 	  to improve RPC latency. The driver also registers cooling devices for
 	  CDSP subsystem and implements Cx ipeak limit management.
-
-config CDSPRM_VTCM_DYNAMIC_DEBUG
-	bool "Enable for VTCM parition test enablement"
-	help
-	  The VTCM dynamic debug flag is used to enable the vtcm partition test
-	  feature from the debugfs node from cdsprm driver.When the test is
-	  enabled, the vtcm partition details are sent to the CDSP via rpmsg
-	  channel.
 
 config QCOM_ADSP_SLEEPMON
 	tristate "ADSP sleep monitor"
@@ -871,7 +686,7 @@ config QCOM_MEM_HOOKS
 	  If unsure, say 'M' here to ensure that the hooks are compiled
 	  in.
 
-source "drivers/soc/qcom/mem_buf/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/qcom/mem_buf/Kconfig"
 
 config QCOM_MEM_OFFLINE
 	tristate "Dynamic Memory Region Offline driver"
@@ -1033,16 +848,6 @@ config MSM_PERFORMANCE
           when requested by the userspace by changing the cpufreq policy
           fmin and fmax. The user space can request  the cpu freq change by
           writing cpu#:freq values
-
-config SHOW_SUSPEND_EPOCH
-        tristate "Show epoch values in suspend resume cycles"
-        depends on ARCH_QCOM
-        help
-          Show epoch values when device enter and exit out of suspend
-          and resume. These epoch values are useful to know how long
-          the device is in suspend state. These values can be used to
-          synchronize various subsystem timestamps and have an unique
-          timestamp to correlate between various subsystems.
 
 config QCOM_DYNAMIC_RAMOOPS
 	tristate "Enable Dynamic Ramoops Device support"
