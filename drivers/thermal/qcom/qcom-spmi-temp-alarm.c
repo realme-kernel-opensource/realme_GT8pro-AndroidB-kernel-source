@@ -16,7 +16,8 @@
 #include <linux/regmap.h>
 #include <linux/thermal.h>
 
-#include "../thermal_hwmon.h"
+#include "drivers/thermal/thermal_core.h"
+#include "drivers/thermal/thermal_hwmon.h"
 
 #define QPNP_TM_REG_DIG_MINOR		0x00
 #define QPNP_TM_REG_DIG_MAJOR		0x01

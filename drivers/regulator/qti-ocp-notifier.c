@@ -17,7 +17,7 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 
-#include "internal.h"
+#include "drivers/regulator/internal.h"
 
 #define OCP_LOG_ENTRY_SIZE	2
 #define IPC_LOG_PAGES		3

@@ -8,7 +8,7 @@
 #define __QCOM_CLK_DEBUG_H__
 
 #include <linux/platform_device.h>
-#include "../clk.h"
+#include "drivers/clk/clk.h"
 
 /**
  * struct mux_regmap_names - Structure of mux regmap mapping

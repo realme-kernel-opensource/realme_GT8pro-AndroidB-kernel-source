@@ -2,7 +2,6 @@
 /*
  * Copyright (c) 2019, The Linux Foundation. All rights reserved.
  */
-
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
 #include <linux/bitops.h>

@@ -9,7 +9,6 @@
  * for CPU L3 frequency and QoS along with Cx Limit management and
  * thermal cooling handling.
  */
-
 #define pr_fmt(fmt) "cdsprm: " fmt
 
 #include <linux/kernel.h>

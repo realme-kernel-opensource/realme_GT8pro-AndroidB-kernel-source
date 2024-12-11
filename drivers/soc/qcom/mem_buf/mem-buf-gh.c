@@ -1099,6 +1099,7 @@ err_alloc_acl_list:
 	kfree(membuf);
 	return ERR_PTR(ret);
 }
+EXPORT_SYMBOL_GPL(mem_buf_alloc);
 
 void mem_buf_free(void *__membuf)
 {

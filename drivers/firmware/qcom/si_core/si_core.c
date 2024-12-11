@@ -3,6 +3,8 @@
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#define pr_fmt(fmt) "si-core: %s: " fmt, __func__
+
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 #include <linux/module.h>

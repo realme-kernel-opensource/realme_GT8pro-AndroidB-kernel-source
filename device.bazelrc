@@ -2,5 +2,7 @@
 common --check_visibility=false
 # Disable debug symbol compression for dump parsing tools
 common --no//build/kernel/kleaf:zstd_dwarf_compression
+# Unsafe headers needed by our modules
+common --//build/kernel/kleaf:allow_ddk_unsafe_headers
 # TODO: Remove this line when ACK has the symbol list we want to track
-common --//build/kernel/kleaf:user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom
+common --//build/kernel/kleaf:user_kmi_symbol_lists=//soc-repo:android/abi_gki_aarch64_qcom

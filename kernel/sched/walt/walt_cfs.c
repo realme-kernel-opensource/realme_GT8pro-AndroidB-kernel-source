@@ -10,8 +10,8 @@
 
 #include "walt.h"
 #include "trace.h"
-#include <../../../drivers/android/binder_internal.h>
-#include "../../../drivers/android/binder_trace.h"
+#include "drivers/android/binder_internal.h"
+#include "drivers/android/binder_trace.h"
 
 static void create_util_to_cost_pd(struct em_perf_domain *pd)
 {

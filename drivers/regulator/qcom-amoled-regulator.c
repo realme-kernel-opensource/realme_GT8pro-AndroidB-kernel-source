@@ -3,7 +3,6 @@
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
 #define pr_fmt(fmt)	"AMOLED: %s: " fmt, __func__
 
 #include <linux/kernel.h>

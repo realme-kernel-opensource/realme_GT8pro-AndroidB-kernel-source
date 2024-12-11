@@ -3,7 +3,6 @@
  * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
  * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
 #define pr_fmt(fmt)	"altmode-glink: %s: " fmt, __func__
 
 #include <linux/debugfs.h>

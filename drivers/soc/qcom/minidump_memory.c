@@ -25,8 +25,8 @@
 #include <linux/qcom_dma_heap.h>
 #include "debug_symbol.h"
 #include "minidump_memory.h"
-#include "../../../mm/slab.h"
-#include "../mm/internal.h"
+#include "mm/slab.h"
+#include "mm/internal.h"
 
 /* Meminfo */
 static struct seq_buf *md_meminfo_seq_buf;

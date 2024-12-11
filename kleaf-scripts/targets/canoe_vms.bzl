@@ -1,0 +1,44 @@
+load(":target_variants.bzl", "vm_types", "vm_variants")
+load(":kleaf-scripts/msm_common.bzl", "get_out_dir")
+load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
+load("//build:msm_kernel_extensions.bzl", "define_combined_vm_image", "define_extras")
+load(":kleaf-scripts/image_opts.bzl", "vm_image_opts")
+
+target_name = "canoe-vms"
+
+def define_canoe_vms(vm_image_opts = vm_image_opts()):
+    base_target = "canoe-tuivm"
+    for variant in vm_variants:
+        base_tv = "{}_{}".format(base_target, variant)
+
+        if variant == "debug-defconfig":
+            base_kernel = "kernel_aarch64_qtvm_debug"
+        else:
+            base_kernel = "kernel_aarch64_qtvm"
+
+        out_dtb_list = [":canoe-{}_{}_vm_dtb_img".format(vt, variant) for vt in vm_types]
+        dist_targets = (
+            ["canoe-{}_{}_vm_dist".format(vt, variant) for vt in vm_types] +
+            ["canoe-{}_{}_dist".format(vt, variant) for vt in vm_types] +
+            [":canoe-{}_{}_modules_install".format(vt, variant) for vt in vm_types]
+        ) + out_dtb_list
+
+        copy_to_dist_dir(
+            name = "{}_{}_dist".format(target_name, variant),
+            data = dist_targets,
+            dist_dir = "{}/dist".format(get_out_dir(target_name, variant)),
+            flat = True,
+            wipe_dist_dir = True,
+            allow_duplicate_filenames = True,
+            mode_overrides = {
+                "**/vmlinux": "755",
+                "**/Image": "755",
+                "**/*.dtb*": "755",
+                "**/gen_init_cpio": "755",
+                "**/sign-file": "755",
+                "**/*": "644",
+            },
+        )
+
+        define_extras(base_tv, kbuild_config = base_kernel, alias = "{}_{}".format(target_name, variant))
+    define_combined_vm_image(target_name, variant, vm_image_opts.vm_size_ext4)

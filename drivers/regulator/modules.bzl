@@ -1,0 +1,121 @@
+def register_modules(registry):
+    registry.register(
+        name = "drivers/regulator/debug-regulator",
+        out = "debug-regulator.ko",
+        config = "CONFIG_REGULATOR_DEBUG_CONTROL",
+        srcs = [
+            # do not sort
+            "drivers/regulator/debug-regulator.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/regulator/proxy-consumer",
+        out = "proxy-consumer.ko",
+        config = "CONFIG_REGULATOR_PROXY_CONSUMER",
+        srcs = [
+            # do not sort
+            "drivers/regulator/proxy-consumer.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/regulator/qcom-amoled-regulator",
+        out = "qcom-amoled-regulator.ko",
+        config = "CONFIG_REGULATOR_QCOM_AMOLED",
+        srcs = [
+            # do not sort
+            "drivers/regulator/qcom-amoled-regulator.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/regulator/debug-regulator",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/regulator/qti-fixed-regulator",
+        out = "qti-fixed-regulator.ko",
+        config = "CONFIG_REGULATOR_QTI_FIXED_VOLTAGE",
+        srcs = [
+            # do not sort
+            "drivers/regulator/qti-fixed-regulator.c",
+            "drivers/regulator/fixed.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/regulator/debug-regulator",
+            "drivers/regulator/proxy-consumer",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/regulator/qti-ocp-notifier",
+        out = "qti-ocp-notifier.ko",
+        config = "CONFIG_REGULATOR_QTI_OCP_NOTIFIER",
+        srcs = [
+            # do not sort
+            "drivers/regulator/qti-ocp-notifier.c",
+        ],
+        deps = [
+            # do not sort
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/soc/qcom/minidump",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/debug_symbol",
+            "drivers/dma-buf/heaps/qcom_dma_heaps",
+            "drivers/iommu/msm_dma_iommu_mapping",
+            "drivers/soc/qcom/mem_buf/mem_buf_dev",
+            "drivers/soc/qcom/secure_buffer",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/regulator/rpmh-regulator",
+        out = "rpmh-regulator.ko",
+        config = "CONFIG_REGULATOR_RPMH",
+        srcs = [
+            # do not sort
+            "drivers/regulator/rpmh-regulator.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_rpmh",
+            "drivers/soc/qcom/cmd-db",
+            "drivers/regulator/debug-regulator",
+            "drivers/regulator/proxy-consumer",
+            "drivers/soc/qcom/crm-v2",
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/soc/qcom/minidump",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/debug_symbol",
+            "drivers/dma-buf/heaps/qcom_dma_heaps",
+            "drivers/iommu/msm_dma_iommu_mapping",
+            "drivers/soc/qcom/mem_buf/mem_buf_dev",
+            "drivers/soc/qcom/secure_buffer",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/regulator/stub-regulator",
+        out = "stub-regulator.ko",
+        config = "CONFIG_REGULATOR_STUB",
+        srcs = [
+            # do not sort
+            "drivers/regulator/stub-regulator.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/regulator/debug-regulator",
+        ],
+    )

@@ -7,8 +7,8 @@
 #ifndef __DWC3_DEBUG_IPC_H
 #define __DWC3_DEBUG_IPC_H
 
-#include "core.h"
-#include "debug.h"
+#include "drivers/usb/dwc3/core.h"
+#include "drivers/usb/dwc3/debug.h"
 #include <linux/ipc_logging.h>
 
 /*

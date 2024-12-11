@@ -14,6 +14,10 @@ config SPS
 		2. Peripheral-to-Memory.
 		3. Memory-to-Memory.
 
+config QCOM_INLINE_CRYPTO_ENGINE
+	tristate
+	select QCOM_SCM
+
 config SPS_SUPPORT_NDP_BAM
 	bool "SPS supports NDP BAM"
 	depends on SPS

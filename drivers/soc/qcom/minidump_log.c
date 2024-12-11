@@ -45,7 +45,7 @@
 #include <asm/memory.h>
 
 #include <linux/sched/cputime.h>
-#include "../../../kernel/sched/sched.h"
+#include "kernel/sched/sched.h"
 #include <linux/sched/walt.h>
 
 #include <linux/kdebug.h>

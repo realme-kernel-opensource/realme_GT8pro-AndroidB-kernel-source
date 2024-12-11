@@ -6,7 +6,6 @@
  *
  * Copyright (C) 2005 Mark M. Hoffman <mhoffman@lightlink.com>
  */
-
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/bitops.h>

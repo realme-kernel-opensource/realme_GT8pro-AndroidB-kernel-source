@@ -407,9 +407,10 @@ static int gh_tlmm_vm_mem_access_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, tlmm_data);
 	tlmm_data->dev = dev;
 
-	if (gh_tlmm_vm_populate_vm_info(pdev, tlmm_data)) {
-		dev_err(dev, "Failed to populate TLMM VM info\n");
-		return -EINVAL;
+	ret = gh_tlmm_vm_populate_vm_info(pdev, tlmm_data);
+	if (ret) {
+		dev_err(dev, "Failed to populate TLMM VM info ret:%d\n", ret);
+		return ret;
 	}
 
 	node = of_find_compatible_node(NULL, NULL, "qcom,gunyah-vm-id-1.0");
@@ -446,7 +447,6 @@ static int gh_tlmm_vm_mem_access_probe(struct platform_device *pdev)
 		ret = ghd_rm_get_vmid(GH_SELF_VM, &vmid);
 		if (ret)
 			return ret;
-
 
 		gh_tlmm_vm_mem_release(tlmm_data);
 	}

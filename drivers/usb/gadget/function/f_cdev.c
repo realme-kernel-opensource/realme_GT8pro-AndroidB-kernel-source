@@ -19,7 +19,6 @@
  */
 
 #ifdef pr_fmt
-#undef pr_fmt
 #endif
 #define pr_fmt(fmt) "%s: " fmt, __func__
 

@@ -16,7 +16,7 @@
 #include <linux/string.h>
 #include <linux/qti-regmap-debugfs.h>
 
-#include "internal.h"
+#include "drivers/base/regmap/internal.h"
 
 struct regmap_qti_debugfs {
 	struct list_head	list;

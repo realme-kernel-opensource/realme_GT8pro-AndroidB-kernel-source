@@ -7,7 +7,7 @@
 #ifndef _UFSHCD_CRYPTO_QTI_H
 #define _UFSHCD_CRYPTO_QTI_H
 
-#include "ufshcd.h"
+#include <ufs/ufshcd.h>
 #include "ufshcd-crypto.h"
 
 #if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO_QTI)

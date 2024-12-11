@@ -26,7 +26,7 @@
 
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
 
-#include "../../thermal/thermal_core.h"
+#include "drivers/thermal/thermal_core.h"
 
 static LIST_HEAD(adc_tm_device_list);
 

@@ -3,7 +3,6 @@
  * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
  * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
 #define DRIVER_NAME "msm_sharedmem"
 #define pr_fmt(fmt) DRIVER_NAME ": %s: " fmt, __func__
 

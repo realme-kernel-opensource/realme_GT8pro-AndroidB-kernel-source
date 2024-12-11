@@ -46,7 +46,7 @@
 
 #include "arm-smmu.h"
 
-#include "../../dma-iommu.h"
+#include "drivers/iommu/dma-iommu.h"
 #include "../../iommu-logger.h"
 #include "../../qcom-dma-iommu-generic.h"
 #include "../../qcom-io-pgtable-alloc.h"

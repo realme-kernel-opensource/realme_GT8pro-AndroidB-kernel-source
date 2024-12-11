@@ -4,7 +4,6 @@
  * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
-
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
 #include <linux/debugfs.h>

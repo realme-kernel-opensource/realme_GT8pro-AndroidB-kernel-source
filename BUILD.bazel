@@ -10,11 +10,13 @@ load(":kleaf-scripts/targets/canoe.bzl",
     "define_canoe_tuivm",
     "define_canoe_oemvm",
     "define_canoe")
+load(":kleaf-scripts/targets/canoe_vms.bzl","define_canoe_vms")
+load(":kleaf-scripts/targets/sun_vms.bzl","define_sun_vms")
 load(
     ":kleaf-scripts/targets/sun.bzl",
     "define_sun",
-    "define_sun_oemvm",
     "define_sun_tuivm",
+    "define_sun_oemvm",
 )
 load(":kleaf-scripts/targets/vienna.bzl", "define_vienna")
 
@@ -45,6 +47,26 @@ genrule(
 )
 
 filegroup(
+    name = "dt_bindings_headers",
+    srcs = glob([
+        "include/dt-bindings/**/*.h",
+    ]),
+    visibility = ["//visibility:public"],
+)
+
+ddk_headers(
+    name = "dt_bindings",
+    hdrs = [
+        # do not sort
+        ":dt_bindings_headers",
+    ],
+    includes = [
+        "include",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
     name = "additional_msm_headers_aarch64_globs",
     srcs = glob([
         "arch/arm64/include/**/*.h",
@@ -67,7 +89,7 @@ ddk_headers(
         "include",
         "include/uapi",
     ],
-    visibility = ["//visibility:private"],
+    visibility = ["//visibility:public"],
 )
 
 ddk_headers(
@@ -108,8 +130,12 @@ define_sun_tuivm()
 
 define_sun_oemvm()
 
+define_sun_vms()
+
 define_canoe_tuivm()
 
 define_canoe_oemvm()
+
+define_canoe_vms()
 
 define_vienna()

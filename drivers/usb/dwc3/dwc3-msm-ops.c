@@ -12,9 +12,9 @@
 #include <linux/sched.h>
 #include <linux/usb/dwc3-msm.h>
 #include <linux/usb/composite.h>
-#include "core.h"
+#include "drivers/usb/dwc3/core.h"
 #include "debug-ipc.h"
-#include "gadget.h"
+#include "drivers/usb/dwc3/gadget.h"
 
 struct kprobe_data {
 	struct dwc3 *dwc;

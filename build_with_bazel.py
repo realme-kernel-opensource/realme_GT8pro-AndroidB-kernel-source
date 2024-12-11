@@ -12,10 +12,10 @@ import sys
 import subprocess
 
 HOST_TARGETS = ["dtc"]
-DEFAULT_SKIP_LIST = ["abi"]
+DEFAULT_SKIP_LIST = []
 MSM_EXTENSIONS = "build/msm_kernel_extensions.bzl"
 ABL_EXTENSIONS = "build/abl_extensions.bzl"
-DEFAULT_MSM_EXTENSIONS_SRC = "../msm-kernel/msm_kernel_extensions.bzl"
+DEFAULT_MSM_EXTENSIONS_SRC = "../soc-repo/msm_kernel_extensions.bzl"
 DEFAULT_ABL_EXTENSIONS_SRC = "../bootable/bootloader/edk2/abl_extensions.bzl"
 DEFAULT_OUT_DIR = "{workspace}/out/msm-kernel-{target}-{variant}"
 
@@ -140,21 +140,20 @@ class BazelBuilder:
                     re.compile(r"//{}:{}_.*_{}_dist".format(self.kernel_dir, t, s))
                     for s in self.skip_list
                 ]
-                query = 'filter("{}_.*_dist$", attr(generator_function, define_msm_platforms, {}/...))'.format(
-                    t, self.kernel_dir
+                query = 'filter("{}_.*_dist$", attr(generator_function, define_{}, {}/...))'.format(
+                    t, t.replace("-", "_"), self.kernel_dir
                 )
             else:
                 skip_list_re = [
                     re.compile(r"//{}:{}_{}_{}_dist".format(self.kernel_dir, t, v, s))
                     for s in self.skip_list
                 ]
-                query = 'filter("{}_{}.*_dist$", attr(generator_function, define_msm_platforms, {}/...))'.format(
-                    t, v, self.kernel_dir
+                query = 'filter("{}_{}.*_dist$", attr(generator_function, define_{}, {}/...))'.format(
+                    t, v, t.replace("-", "_"), self.kernel_dir
                 )
 
             cmdline = [
                 self.bazel_bin,
-                self.bazel_cache,
                 "query",
                 "--ui_event_filters=-info",
                 "--noshow_progress",
@@ -206,7 +205,7 @@ class BazelBuilder:
 
     def clean_legacy_generated_files(self):
         """Clean generated files from legacy build to avoid conflicts with Bazel"""
-        for f in glob.glob("{}/msm-kernel/arch/arm64/configs/vendor/*_defconfig".format(self.workspace)):
+        for f in glob.glob("{}/soc-repo/arch/arm64/configs/vendor/*_defconfig".format(self.workspace)):
             os.remove(f)
 
         f = os.path.join(self.workspace, "bootable", "bootloader", "edk2", "Conf", ".AutoGenIdFile.txt")
@@ -375,7 +374,7 @@ class BazelBuilder:
             sys.exit(1)
 
         if self.skip_list:
-            self.user_opts.extend(["--//msm-kernel:skip_{}=true".format(s) for s in self.skip_list])
+            self.user_opts.extend(["--//soc-repo:skip_{}=true".format(s) for s in self.skip_list if s != 'abi'])
 
         self.user_opts.append("--incompatible_sandbox_hermetic_tmp=false")
 
@@ -384,11 +383,11 @@ class BazelBuilder:
 
         try:
             if self.gki_headers:
-                gki_files_path = os.path.join(self.workspace, 'msm-kernel/files_gki_aarch64.txt')
+                gki_files_path = os.path.join(self.workspace, 'soc-repo/files_gki_aarch64.txt')
                 gki_f = open(gki_files_path, 'r')
                 gki_files = gki_f.readlines()
                 common_d = os.path.join(self.workspace, "common")
-                msm_d = os.path.join(self.workspace, "msm-kernel")
+                msm_d = os.path.join(self.workspace, "soc-repo")
                 for f in gki_files:
                     if ".h" in f:
                         logging.info('GKI header file...%s', f)
@@ -399,7 +398,7 @@ class BazelBuilder:
                         os.symlink(common_f, msm_f)
                 gki_f.close()
 
-            logging.debug(
+            logging.info(
                 "Building the following targets:\n%s",
                 "\n".join([t.bazel_label for t in targets_to_build])
             )
@@ -415,11 +414,11 @@ class BazelBuilder:
             if self.gki_headers:
                 status = subprocess.Popen(["git", "checkout",
                                      "--pathspec-from-file=files_gki_aarch64.txt"],
-                                    cwd=os.path.join(self.workspace, "msm-kernel"))
+                                    cwd=os.path.join(self.workspace, "soc-repo"))
                 status.wait()
                 if status.returncode != 0:
                     logging.error("Failed to restore headers from symlinks")
-                    logging.error("You might want to check your msm-kernel tree")
+                    logging.error("You might want to check your soc-repo tree")
 
 def main():
     """Main script entrypoint"""
@@ -440,7 +439,7 @@ def main():
         metavar="BUILD_RULE",
         action="append",
         default=[],
-        help="Skip specific build rules (e.g. --skip abl will skip the //msm-kernel:<target>_<variant>_abl build)",
+        help="Skip specific build rules (e.g. --skip abl will skip the //soc-repo:<target>_<variant>_abl build)",
     )
     parser.add_argument(
         "-o",
@@ -488,6 +487,7 @@ def main():
     )
 
     args.skip.extend(DEFAULT_SKIP_LIST)
+
 
     builder = BazelBuilder(
         args.target,

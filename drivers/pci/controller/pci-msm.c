@@ -52,7 +52,7 @@
 #include <soc/qcom/pcie-pdc.h>
 #endif /* CONFIG_QCOM_PCIE_PDC */
 
-#include "../pci.h"
+#include "drivers/pci/pci.h"
 
 #define PCIE_VENDOR_ID_QCOM (0x17cb)
 

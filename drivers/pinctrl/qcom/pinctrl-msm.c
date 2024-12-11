@@ -29,9 +29,9 @@
 #include <linux/bitmap.h>
 #include <linux/sizes.h>
 
-#include "../core.h"
-#include "../pinconf.h"
-#include "../pinctrl-utils.h"
+#include "drivers/pinctrl/core.h"
+#include "drivers/pinctrl/pinconf.h"
+#include "drivers/pinctrl/pinctrl-utils.h"
 
 #include "pinctrl-msm.h"
 

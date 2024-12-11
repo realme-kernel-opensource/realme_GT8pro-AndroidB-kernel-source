@@ -20,7 +20,7 @@
 #include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/thermal.h>
-#include "../thermal_hwmon.h"
+#include "drivers/thermal/thermal_hwmon.h"
 #include "tsens.h"
 #include "thermal_zone_internal.h"
 

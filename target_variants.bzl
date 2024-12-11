@@ -1,9 +1,9 @@
 targets = [
     # keep sorted
     "canoe",
-    "gen3auto",
+    #"gen3auto",
     "sun",
-    "vienna",
+    #"vienna",
 ]
 
 la_variants = [
@@ -14,12 +14,12 @@ la_variants = [
 
 le_targets = [
     # keep sorted
-    "sun-allyes",
+    #"sun-allyes",
 ]
 
 le_variants = [
     # keep sorted
-    "perf-defconfig",
+    #"perf-defconfig",
 ]
 
 vm_types = [

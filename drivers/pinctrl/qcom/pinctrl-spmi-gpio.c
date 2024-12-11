@@ -22,8 +22,8 @@
 
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
 
-#include "../core.h"
-#include "../pinctrl-utils.h"
+#include "drivers/pinctrl/core.h"
+#include "drivers/pinctrl/pinctrl-utils.h"
 
 #define PMIC_GPIO_ADDRESS_RANGE			0x100
 

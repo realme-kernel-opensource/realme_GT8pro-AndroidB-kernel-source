@@ -9,7 +9,7 @@
 #include <linux/slab.h>
 #include <linux/qcom-iommu-util.h>
 #include <linux/qcom-io-pgtable.h>
-#include "iommu-priv.h"
+#include "drivers/iommu/iommu-priv.h"
 #include <linux/xarray.h>
 #include "qcom-dma-iommu-generic.h"
 #include "qcom-io-pgtable-alloc.h"

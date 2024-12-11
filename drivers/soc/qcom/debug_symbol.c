@@ -15,7 +15,6 @@
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * This driver is based on Google Debug Kinfo Driver
  */
-
 #define pr_fmt(fmt) "DebugSymbol: " fmt
 
 #include <linux/init.h>

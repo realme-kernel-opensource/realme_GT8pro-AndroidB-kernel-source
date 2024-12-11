@@ -49,7 +49,7 @@
 #include <linux/rcupdate_trace.h>
 #include <linux/nmi.h>
 
-#include "rcu.h"
+#include "kernel/rcu/rcu.h"
 
 MODULE_DESCRIPTION("Read-Copy Update module-based torture test facility");
 MODULE_LICENSE("GPL");

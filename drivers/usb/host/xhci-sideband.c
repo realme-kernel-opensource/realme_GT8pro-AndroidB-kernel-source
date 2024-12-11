@@ -11,7 +11,7 @@
 #include <linux/usb/xhci-sideband.h>
 #include <linux/dma-direct.h>
 
-#include "xhci.h"
+#include "drivers/usb/host/xhci.h"
 
 /* sideband internal helpers */
 static struct sg_table *

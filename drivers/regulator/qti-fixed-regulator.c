@@ -2,4 +2,4 @@
 /* Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #define QTI_FIXED_REGULATOR
-#include "fixed.c"
+#include "fixed.h"

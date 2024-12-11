@@ -14,7 +14,7 @@
 #include <soc/qcom/socinfo.h>
 
 #include "bcm-voter.h"
-#include "icc-common.h"
+#include "drivers/interconnect/qcom/icc-common.h"
 #include "icc-debug.h"
 #include "icc-rpmh.h"
 #include "qnoc-qos.h"

@@ -22,7 +22,7 @@
 
 #include <trace/events/power.h>
 
-#include "internal.h"
+#include "drivers/regulator/internal.h"
 
 struct debug_regulator {
 	struct list_head	list;

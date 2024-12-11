@@ -26,7 +26,7 @@
 #include <asm/barrier.h>
 #include "qcom-io-pgtable-alloc.h"
 
-#include "io-pgtable-arm.h"
+#include "drivers/iommu/io-pgtable-arm.h"
 
 #define ARM_LPAE_MAX_ADDR_BITS		52
 #define ARM_LPAE_S2_MAX_CONCAT_PAGES	16

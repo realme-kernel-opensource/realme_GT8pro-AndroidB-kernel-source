@@ -3,7 +3,6 @@
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
 #define pr_fmt(fmt) "qcom-bwmon: " fmt
 
 #include <linux/kernel.h>

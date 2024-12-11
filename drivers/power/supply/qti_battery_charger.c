@@ -3,7 +3,6 @@
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
 #define pr_fmt(fmt)	"BATTERY_CHG: %s: " fmt, __func__
 
 #include <linux/debugfs.h>

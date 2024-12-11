@@ -51,7 +51,6 @@
  *
  * Based on Virtio PCI driver by Anthony Liguori, copyright IBM Corp. 2007
  */
-
 #define pr_fmt(fmt) "virtio-mmio: " fmt
 
 #include <linux/acpi.h>

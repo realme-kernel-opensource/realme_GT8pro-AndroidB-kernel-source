@@ -3,7 +3,6 @@
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
 #define pr_fmt(fmt)	"UCSI: %s: " fmt, __func__
 
 #include <clocksource/arm_arch_timer.h>

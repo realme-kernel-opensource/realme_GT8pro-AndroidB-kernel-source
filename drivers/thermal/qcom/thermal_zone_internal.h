@@ -7,7 +7,7 @@
 #define __QTI_THERMAL_ZONE_INTERNAL_H
 
 #include <linux/thermal.h>
-#include "../thermal_core.h"
+#include "drivers/thermal/thermal_core.h"
 
 /* Generic helpers for thermal zone -> change_mode ops */
 static inline __maybe_unused int qti_tz_change_mode(struct thermal_zone_device *tz,

@@ -4,7 +4,7 @@
  */
 
 #include <trace/hooks/dtask.h>
-#include "../../locking/mutex.h"
+#include "kernel/locking/mutex.h"
 #include "walt.h"
 
 static void android_vh_alter_mutex_list_add(void *unused, struct mutex *lock,

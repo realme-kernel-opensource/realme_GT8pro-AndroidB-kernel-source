@@ -6134,7 +6134,7 @@ static int haptics_boost_notifier(struct notifier_block *nb, unsigned long event
 	return 0;
 }
 
-#include "qcom-hv-haptics-debugfs.c"
+#include "qcom-hv-haptics-debugfs.h"
 
 static int haptics_lpass_ssr_notifier(struct notifier_block *nb, unsigned long event, void *data)
 {

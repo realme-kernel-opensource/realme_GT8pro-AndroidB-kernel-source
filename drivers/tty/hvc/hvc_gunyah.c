@@ -20,7 +20,7 @@
 #include <linux/gunyah/gh_rm_drv.h>
 #include <linux/gunyah/gh_vm.h>
 
-#include "hvc_console.h"
+#include "drivers/tty/hvc/hvc_console.h"
 
 /*
  * Note: hvc_alloc follows first-come, first-served for assigning

@@ -9,7 +9,7 @@
 #include <linux/slab.h>
 #include <trace/events/power.h>
 
-#include "../internal.h"
+#include "drivers/interconnect/internal.h"
 
 static LIST_HEAD(icc_providers);
 static DEFINE_MUTEX(debug_lock);

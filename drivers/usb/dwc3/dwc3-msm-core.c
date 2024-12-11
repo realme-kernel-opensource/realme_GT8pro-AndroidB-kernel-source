@@ -49,10 +49,10 @@
 #include <linux/soc/qcom/wcd939x-i2c.h>
 #include <linux/usb/repeater.h>
 
-#include "core.h"
-#include "gadget.h"
-#include "debug.h"
-#include "xhci.h"
+#include "drivers/usb/dwc3/core.h"
+#include "drivers/usb/dwc3/gadget.h"
+#include "drivers/usb/dwc3/debug.h"
+#include "drivers/usb/host/xhci.h"
 #include "debug-ipc.h"
 
 #define NUM_LOG_PAGES   12

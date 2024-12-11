@@ -2,7 +2,6 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  */
-
 #define pr_fmt(fmt)	"CHARGER_ULOG: %s: " fmt, __func__
 
 #include <linux/debugfs.h>

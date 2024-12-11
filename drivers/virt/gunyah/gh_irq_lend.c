@@ -496,10 +496,19 @@ static int __init gh_irq_lend_init(void)
 		return ret;
 
 	ret = gh_register_vm_notifier(&gh_irq_vm_nb);
-	if (ret)
+	if (ret) {
+		gh_rm_unregister_notifier(&gh_irq_lent_nb);
 		return ret;
+	}
 
-	return gh_rm_register_notifier(&gh_irq_released_accepted_nb);
+	ret = gh_rm_register_notifier(&gh_irq_released_accepted_nb);
+	if (ret) {
+		gh_unregister_vm_notifier(&gh_irq_vm_nb);
+		gh_rm_unregister_notifier(&gh_irq_lent_nb);
+		return ret;
+	}
+
+	return 0;
 }
 module_init(gh_irq_lend_init);
 

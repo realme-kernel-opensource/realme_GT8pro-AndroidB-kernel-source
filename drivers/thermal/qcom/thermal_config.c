@@ -2,7 +2,6 @@
 /*
  * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
 #define pr_fmt(fmt) "%s:%s " fmt, KBUILD_MODNAME, __func__
 
 #include <linux/debugfs.h>
@@ -13,7 +12,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 
-#include "../thermal_core.h"
+#include "drivers/thermal/thermal_core.h"
 
 static struct dentry *thermal_debugfs_parent;
 static struct dentry *thermal_debugfs_config;

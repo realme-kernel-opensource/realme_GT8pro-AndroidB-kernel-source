@@ -60,7 +60,7 @@ static int sg_version_num = 30536;	/* 2 digits for each component */
 #include <scsi/scsi_tcq.h>
 #include <scsi/sg.h>
 
-#include "scsi_logging.h"
+#include "drivers/scsi/scsi_logging.h"
 
 #ifdef CONFIG_SCSI_PROC_FS
 #include <linux/proc_fs.h>

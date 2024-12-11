@@ -9,9 +9,6 @@
 #include <linux/qtee_shmbridge.h>
 #include <linux/firmware/qcom/si_object.h>
 
-#undef pr_fmt
-#define pr_fmt(fmt) "si-core: %s: " fmt, __func__
-
 /* QTEE object ID API. */
 
 enum si_object_type si_object_type(unsigned int object_id);

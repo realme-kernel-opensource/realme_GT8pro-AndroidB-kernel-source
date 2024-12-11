@@ -10,7 +10,6 @@
  * derived from SMEM statistics, the driver detects and acts on
  * possible aDSP sleep (voting related) issues.
  */
-
 #define pr_fmt(fmt) "adsp_sleepmon: " fmt
 
 #include <linux/kernel.h>
@@ -39,7 +38,7 @@
 #include <asm/arch_timer.h>
 #include <linux/jiffies.h>
 #include <linux/suspend.h>
-#include <../../remoteproc/qcom_common.h>
+#include "qcom_common.h"
 #include <uapi/misc/adsp_sleepmon.h>
 
 #define ADSPSLEEPMON_SMEM_ADSP_PID                              2

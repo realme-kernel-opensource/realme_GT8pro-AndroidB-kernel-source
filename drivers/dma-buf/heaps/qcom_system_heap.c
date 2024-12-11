@@ -59,7 +59,7 @@
 #include "qcom_sg_ops.h"
 #include "qcom_system_heap.h"
 #include "qcom_system_movable_heap.h"
-#include "../../../mm/internal.h"
+#include "mm/internal.h"
 
 #if IS_ENABLED(CONFIG_QCOM_DMABUF_HEAPS_PAGE_POOL_REFILL)
 #define DYNAMIC_POOL_FILL_MARK (100 * SZ_1M)

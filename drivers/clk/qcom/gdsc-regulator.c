@@ -26,7 +26,7 @@
 #include <linux/mailbox/qmp.h>
 #include <linux/interconnect.h>
 
-#include "../../regulator/internal.h"
+#include "drivers/regulator/internal.h"
 #include "gdsc-debug.h"
 
 #define CREATE_TRACE_POINTS

@@ -1,7 +1,7 @@
 ################################################################################
 ## Inheriting configs from ACK
-. "${ROOT_DIR}/msm-kernel/build.config.common"
-. "${ROOT_DIR}/msm-kernel/build.config.aarch64"
+. "${ROOT_DIR}/soc-repo/build.config.common"
+. "${ROOT_DIR}/soc-repo/build.config.aarch64"
 
 ################################################################################
 ## Variant setup
@@ -9,8 +9,8 @@ MSM_ARCH=gen3auto
 VARIANTS=(consolidate perf)
 [ -z "${VARIANT}" ] && VARIANT=perf
 
-if [ -e "${ROOT_DIR}/msm-kernel" ] && [ "${KERNEL_DIR}" = "common" ]; then
-	KERNEL_DIR="msm-kernel"
+if [ -e "${ROOT_DIR}/soc-repo" ] && [ "${KERNEL_DIR}" = "common" ]; then
+	KERNEL_DIR="soc-repo"
 fi
 
 ABL_SRC=bootable/bootloader/edk2
