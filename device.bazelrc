@@ -6,3 +6,5 @@ common --no//build/kernel/kleaf:zstd_dwarf_compression
 common --//build/kernel/kleaf:allow_ddk_unsafe_headers
 # TODO: Remove this line when ACK has the symbol list we want to track
 common --//build/kernel/kleaf:user_kmi_symbol_lists=//soc-repo:android/abi_gki_aarch64_qcom
+build --flag_alias=socrepo=//build/kernel/kleaf:socrepo
+build --//build/kernel/kleaf:socrepo=true
