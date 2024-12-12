@@ -86,6 +86,8 @@
 #define OTST2_MAX_CURRENT_MA		500
 #define OTST3_MAX_CURRENT_MA		200
 
+#define FLASH_LMH_TRIGGER_LIMIT_MA	1000
+
 enum hw_type {
 	QCOM_MVFLASH_3CH,
 	QCOM_MVFLASH_4CH,
@@ -111,6 +113,7 @@ enum {
 	REG_IRESOLUTION,
 	REG_CHAN_STROBE,
 	REG_CHAN_EN,
+	REG_MITIGATION_SW,
 	REG_THERM_THRSH1,
 	REG_THERM_THRSH2,
 	REG_THERM_THRSH3,
@@ -127,6 +130,7 @@ static struct reg_field mvflash_3ch_regs[REG_MAX_COUNT] = {
 	REG_FIELD(0x47, 0, 5),                  /* iresolution	*/
 	REG_FIELD_ID(0x49, 0, 2, 3, 1),         /* chan_strobe	*/
 	REG_FIELD(0x4c, 0, 2),                  /* chan_en	*/
+	REG_FIELD(0x6f, 0, 1),			/* mitigation_sw */
 	REG_FIELD(0x56, 0, 2),			/* therm_thrsh1 */
 	REG_FIELD(0x57, 0, 2),			/* therm_thrsh2 */
 	REG_FIELD(0x58, 0, 2),			/* therm_thrsh3 */
@@ -142,6 +146,7 @@ static struct reg_field mvflash_4ch_regs[REG_MAX_COUNT] = {
 	REG_FIELD(0x49, 0, 3),			/* iresolution	*/
 	REG_FIELD_ID(0x4a, 0, 6, 4, 1),		/* chan_strobe	*/
 	REG_FIELD(0x4e, 0, 3),			/* chan_en	*/
+	REG_FIELD(0x65, 0, 1),			/* mitigation_sw */
 	REG_FIELD(0x7a, 0, 2),			/* therm_thrsh1 */
 	REG_FIELD(0x78, 0, 2),			/* therm_thrsh2 */
 };
@@ -156,6 +161,7 @@ struct qcom_flash_data {
 	u8			max_channels;
 	u8			chan_en_bits;
 	u8			revision;
+	bool			trigger_lmh;
 };
 
 struct qcom_flash_led {
@@ -196,6 +202,23 @@ static int set_flash_module_en(struct qcom_flash_led *led, bool en)
 	return rc;
 }
 
+static int set_lmh_mitigation(struct qcom_flash_led *led, bool enable)
+{
+	struct qcom_flash_data *flash_data = led->flash_data;
+	int rc;
+
+	if (enable == flash_data->trigger_lmh)
+		return 0;
+
+	rc = regmap_field_write(flash_data->r_fields[REG_MITIGATION_SW],
+						enable ? 1 : 0);
+	if (rc < 0)
+		return rc;
+
+	flash_data->trigger_lmh = enable;
+	return 0;
+}
+
 static int update_allowed_flash_current(struct qcom_flash_led *led, u32 *current_ma, bool strobe)
 {
 	struct qcom_flash_data *flash_data = led->flash_data;
@@ -213,6 +236,12 @@ static int update_allowed_flash_current(struct qcom_flash_led *led, u32 *current
 			flash_data->total_ma -= led->current_in_use_ma;
 		else
 			flash_data->total_ma = 0;
+
+		if (flash_data->total_ma < FLASH_LMH_TRIGGER_LIMIT_MA) {
+			rc  = set_lmh_mitigation(led, false);
+			if (rc < 0)
+				goto unlock;
+		}
 
 		led->current_in_use_ma = 0;
 		if (!strobe)
@@ -295,6 +324,15 @@ static int update_allowed_flash_current(struct qcom_flash_led *led, u32 *current
 	*current_ma = min_t(u32, *current_ma, avail_ma);
 	led->current_in_use_ma = *current_ma;
 	flash_data->total_ma += led->current_in_use_ma;
+
+	if (flash_data->total_ma >= FLASH_LMH_TRIGGER_LIMIT_MA) {
+		rc = set_lmh_mitigation(led, true);
+		if (rc < 0)
+			goto unlock;
+
+		/* Wait for LMH mitigation to take effect */
+		usleep_range(500, 600);
+	}
 
 	dev_dbg(led->flash.led_cdev.dev, "allowed flash current: %dmA, total current: %dmA\n",
 					led->current_in_use_ma, flash_data->total_ma);
