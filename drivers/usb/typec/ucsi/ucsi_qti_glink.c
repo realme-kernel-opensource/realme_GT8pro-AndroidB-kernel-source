@@ -204,7 +204,7 @@ static int handle_ucsi_read_ack(struct ucsi_dev *udev, void *data, size_t len)
 	}
 
 	memset(&udev->rx_buf, 0, sizeof(udev->rx_buf));
-	memcpy(&udev->rx_buf, data, max_len);
+	memcpy(&udev->rx_buf, data, len);
 	if (udev->rx_buf.ret_code) {
 		pr_err("ret_code: %u\n", udev->rx_buf.ret_code);
 		return -EINVAL;
