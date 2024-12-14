@@ -128,7 +128,7 @@ enum rpmh_regulator_reg_index {
  * This is the maximum number of voltage levels that may be defined for an ARC
  * resource.
  */
-#define RPMH_ARC_MAX_LEVELS		16
+#define RPMH_ARC_MAX_LEVELS		32
 
 #define RPMH_REGULATOR_LEVEL_OFF	0
 
@@ -1429,7 +1429,7 @@ static int rpmh_regulator_arc_get_voltage_sel(struct regulator_dev *rdev)
  * are registered for each ARC rpmh-regulator device.
  *
  * Data ranges:
- * ARC voltage level:      0 - 15 (fixed in hardware)
+ * ARC voltage level:      0 - 31 (fixed in hardware)
  * Consumer voltage level: 1 - 513 (could be expanded to larger values)
  *
  * Return: consumer voltage level
@@ -1491,8 +1491,8 @@ static const struct regulator_ops *rpmh_regulator_ops[] = {
  * @aggr_vreg:		Pointer to the aggregated rpmh regulator resource
  *
  * The set of supported RPMH_REGULATOR_LEVEL_* voltage levels (0 - ~512) that
- * map to ARC operating levels (0 - 15) is defined in aux data per ARC resource
- * in the command db SMEM data structure.  It is in a u16 array with 1 to 16
+ * map to ARC operating levels (0 - 31) is defined in aux data per ARC resource
+ * in the command db SMEM data structure.  It is in a u16 array with 1 to 32
  * elements.  Note that the aux data array may be zero padded at the end for
  * data alignment purposes.  Such padding entries are invalid and must be
  * ignored.
