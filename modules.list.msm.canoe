@@ -10,6 +10,7 @@ clk-qcom.ko
 clk-rpmh.ko
 sched-walt.ko
 sched-walt-debug.ko
+qcom_cpu_vendor_hooks.ko
 cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko
@@ -23,6 +24,7 @@ gpucc-canoe.ko
 tcsrcc-canoe.ko
 videocc-canoe.ko
 smem.ko
+debug_symbol.ko
 socinfo.ko
 icc-bcm-voter.ko
 icc-debug.ko
