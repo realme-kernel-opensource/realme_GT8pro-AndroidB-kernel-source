@@ -658,6 +658,8 @@ struct gpi_desc {
 	struct gpii_chan *gpii_chan;
 };
 
+#define PTR_H_OFFSET	4
+
 #define GPI_SMMU_ATTACH BIT(0)
 #define GPI_SMMU_S1_BYPASS BIT(1)
 #define GPI_SMMU_FAST BIT(2)
@@ -1878,6 +1880,7 @@ static inline void gpi_write_ch_db(struct gpii_chan *gpii_chan,
 
 	p_wp = to_physical(ring, wp);
 	gpi_write_reg(gpii, gpii_chan->ch_cntxt_db_reg, (u32)p_wp);
+	gpi_write_reg(gpii, gpii_chan->ch_cntxt_db_reg + PTR_H_OFFSET, p_wp >> 32);
 }
 
 /* program event ring DB register */
@@ -1889,6 +1892,7 @@ static inline void gpi_write_ev_db(struct gpii *gpii,
 
 	p_wp = ring->phys_addr + (wp - ring->base);
 	gpi_write_reg(gpii, gpii->ev_cntxt_db_reg, (u32)p_wp);
+	gpi_write_reg(gpii, gpii->ev_cntxt_db_reg + PTR_H_OFFSET, p_wp >> 32);
 }
 
 /* notify client with generic event */
@@ -2613,7 +2617,8 @@ static void gpi_process_events(struct gpii *gpii)
 	struct gpii_chan *gpii_chan;
 	u32 chid, type;
 
-	cntxt_rp = gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg);
+	cntxt_rp = gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg) |
+		   (u64)gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg + PTR_H_OFFSET) << 32;
 	rp = to_virtual(ev_ring, cntxt_rp);
 	local_rp = to_physical(ev_ring, ev_ring->rp);
 
@@ -2683,7 +2688,8 @@ static void gpi_process_events(struct gpii *gpii)
 		/* clear pending IEOB events */
 		gpi_write_reg(gpii, gpii->ieob_clr_reg, BIT(0));
 
-		cntxt_rp = gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg);
+		cntxt_rp = gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg) |
+			   (u64)gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg + PTR_H_OFFSET) << 32;
 		/* make sure event_ring rp updates before proceeding */
 		mb();
 		rp = to_virtual(ev_ring, cntxt_rp);
@@ -2734,13 +2740,14 @@ void gpi_mark_stale_events(struct gpii_chan *gpii_chan)
 	struct gpii *gpii = gpii_chan->gpii;
 	struct gpi_ring *ev_ring = gpii->ev_ring;
 	void *ev_rp;
-	u32 cntxt_rp, local_rp;
+	phys_addr_t cntxt_rp, local_rp;
 
 	GPII_INFO(gpii, gpii_chan->chid, "Enter\n");
-	cntxt_rp = gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg);
+	cntxt_rp = gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg) |
+		   (u64)gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg + PTR_H_OFFSET) << 32;
 
 	ev_rp = ev_ring->rp;
-	local_rp = (u32)to_physical(ev_ring, ev_rp);
+	local_rp = to_physical(ev_ring, ev_rp);
 	while (local_rp != cntxt_rp) {
 		union gpi_event *gpi_event = ev_rp;
 		u32 chid = gpi_event->xfer_compl_event.chid;
@@ -2750,8 +2757,9 @@ void gpi_mark_stale_events(struct gpii_chan *gpii_chan)
 		ev_rp += ev_ring->el_size;
 		if (ev_rp >= (ev_ring->base + ev_ring->len))
 			ev_rp = ev_ring->base;
-		cntxt_rp = gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg);
-		local_rp = (u32)to_physical(ev_ring, ev_rp);
+		cntxt_rp = gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg) |
+			   (u64)gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg + PTR_H_OFFSET) << 32;
+		local_rp = to_physical(ev_ring, ev_rp);
 	}
 }
 
@@ -3387,7 +3395,8 @@ static int gpi_pause(struct dma_chan *chan)
 		  type1, type2);
 	}
 
-	cntxt_rp = gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg);
+	cntxt_rp = gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg) |
+		   (u64)gpi_read_reg(gpii, gpii->ev_ring_rp_lsb_reg + PTR_H_OFFSET) << 32;
 	if (!cntxt_rp) {
 		GPII_ERR(gpii, GPI_DBG_COMMON, "invalid cntxt_rp");
 		mutex_unlock(&gpii->ctrl_lock);
