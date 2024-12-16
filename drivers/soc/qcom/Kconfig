@@ -231,6 +231,15 @@ config QCOM_RPMH
 	  of hardware components aggregate requests for these resources and
 	  help apply the aggregated state on the resource.
 
+config QCOM_RPMH_TIMEOUT
+	int "Timeout for RPMH and CRM communication"
+	default 5000
+	depends on QCOM_RPMH || QCOM_CRM || QCOM_CRM_V2
+	help
+	  The amount of time, in milliseconds that should enough to get
+	  response from RPMh for the resource request from APSS.
+	  Wait this much time before a warning is emitted.
+
 config QCOM_SMEM
 	tristate "Qualcomm Shared Memory Manager (SMEM)"
 	depends on ARCH_QCOM || COMPILE_TEST
