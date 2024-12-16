@@ -639,14 +639,29 @@ EXPORT_SYMBOL_GPL(qpace_trigger_tr);
  */
 void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep)
 {
+	struct event_ring *ev_ring = &ev_rings[tr_num];
+	struct qpace_event_descriptor *first_ed_to_consume;
+
+	if (ev_ring->hw_read_ptr == ev_ring->ring_buffer_start + DESCRIPTORS_PER_RING - 1)
+		first_ed_to_consume = ev_ring->ring_buffer_start;
+	else
+		first_ed_to_consume = ev_ring->hw_read_ptr + 1;
+
+retry:
 	if (no_sleep)
 		while (!try_wait_for_completion(&ev_rings[tr_num].ring_has_events))
 			udelay(100);
 	else
 		wait_for_completion(&ev_rings[tr_num].ring_has_events);
 
-	pm_relax(qpace_dev);
+	/*
+	 * Check the first ed to consume to see if it has been created yet. If not,
+	 * treat the interrupt as spurious and wait for another one.
+	 */
+	if (first_ed_to_consume->cycle_bit != ev_ring->cycle_bit)
+		goto retry;
 
+	pm_relax(qpace_dev);
 	qpace_free_tr_entries(tr_num);
 }
 EXPORT_SYMBOL_GPL(qpace_wait_for_tr_consumption);
