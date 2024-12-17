@@ -13,7 +13,7 @@
 
 #define REG_BASE 0x100000
 #define REG_SIZE 0x1000
-#define PINGROUP(id, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, wake_off, bit)	\
+#define PINGROUP(id, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, wake_off, bit)	\
 	{					        \
 		.grp = PINCTRL_PINGROUP("gpio" #id,	\
 			gpio##id##_pins,		\
@@ -53,10 +53,9 @@
 			msm_mux_##f8,			\
 			msm_mux_##f9,			\
 			msm_mux_##f10,			\
-			msm_mux_##f11,			\
-			msm_mux_##f12 /* egpio mode */	\
+			msm_mux_##f11 /* egpio mode */	\
 		},					        \
-		.nfuncs = 13,				\
+		.nfuncs = 12,				\
 	}
 
 #define SDC_QDSD_PINGROUP(pg_name, ctl, pull, drv)	\
@@ -270,6 +269,13 @@ static const struct pinctrl_pin_desc vienna_pins[] = {
 	PINCTRL_PIN(147, "GPIO_147"),
 	PINCTRL_PIN(148, "GPIO_148"),
 	PINCTRL_PIN(149, "GPIO_149"),
+	PINCTRL_PIN(150, "SDC1_RCLK"),
+	PINCTRL_PIN(151, "SDC1_CLK"),
+	PINCTRL_PIN(152, "SDC1_CMD"),
+	PINCTRL_PIN(153, "SDC1_DATA"),
+	PINCTRL_PIN(154, "SDC2_CLK"),
+	PINCTRL_PIN(155, "SDC2_CMD"),
+	PINCTRL_PIN(156, "SDC2_DATA"),
 };
 
 #define DECLARE_MSM_GPIO_PINS(pin) \
@@ -425,6 +431,13 @@ DECLARE_MSM_GPIO_PINS(147);
 DECLARE_MSM_GPIO_PINS(148);
 DECLARE_MSM_GPIO_PINS(149);
 
+static const unsigned int sdc1_rclk_pins[] = { 150 };
+static const unsigned int sdc1_clk_pins[] = { 151 };
+static const unsigned int sdc1_cmd_pins[] = { 152 };
+static const unsigned int sdc1_data_pins[] = { 153 };
+static const unsigned int sdc2_clk_pins[] = { 154 };
+static const unsigned int sdc2_cmd_pins[] = { 155 };
+static const unsigned int sdc2_data_pins[] = { 156 };
 
 enum vienna_functions {
 	msm_mux_gpio,
@@ -464,6 +477,7 @@ enum vienna_functions {
 	msm_mux_ddr_pxi0,
 	msm_mux_dll_qmspi0,
 	msm_mux_dll_qmspi1,
+	msm_mux_egpio,
 	msm_mux_etdac_calib0,
 	msm_mux_etdac_calib1,
 	msm_mux_etdac_calib10,
@@ -507,10 +521,14 @@ enum vienna_functions {
 	msm_mux_hpi_d8,
 	msm_mux_hpi_d9,
 	msm_mux_hpi_dqs_dm1,
-	msm_mux_i2s0_data0,
-	msm_mux_i2s0_data1,
-	msm_mux_i2s0_sck,
-	msm_mux_i2s0_ws,
+	msm_mux_i2s0_data0_mira,
+	msm_mux_i2s0_data0_mirb,
+	msm_mux_i2s0_data1_mira,
+	msm_mux_i2s0_data1_mirb,
+	msm_mux_i2s0_sck_mira,
+	msm_mux_i2s0_sck_mirb,
+	msm_mux_i2s0_ws_mira,
+	msm_mux_i2s0_ws_mirb,
 	msm_mux_ibi_i3c,
 	msm_mux_jitter_bist,
 	msm_mux_m_voc,
@@ -521,12 +539,10 @@ enum vienna_functions {
 	msm_mux_mdp_vsync_e,
 	msm_mux_mdp_vsync_p,
 	msm_mux_mdp_vsync_s,
-	msm_mux_nav_gpio0,
-	msm_mux_nav_gpio1,
 	msm_mux_nav_gpio2,
 	msm_mux_nav_gpio3,
-	msm_mux_opi_ce,
 	msm_mux_opi_clk,
+	msm_mux_opi_cs_n,
 	msm_mux_opi_d0,
 	msm_mux_opi_d1,
 	msm_mux_opi_d2,
@@ -536,7 +552,6 @@ enum vienna_functions {
 	msm_mux_opi_d6,
 	msm_mux_opi_d7,
 	msm_mux_opi_dqs_dm0,
-	msm_mux_opi_reset,
 	msm_mux_pa_indicator,
 	msm_mux_pcie0_clk_req_n_mira,
 	msm_mux_pcie0_clk_req_n_mirb,
@@ -574,7 +589,6 @@ enum vienna_functions {
 	msm_mux_phase_flag9,
 	msm_mux_pll_bist_sync,
 	msm_mux_pll_clk_aux,
-	msm_mux_pll_ref_clk,
 	msm_mux_pll_reset_n,
 	msm_mux_prng_rosc0,
 	msm_mux_prng_rosc1,
@@ -610,51 +624,68 @@ enum vienna_functions {
 	msm_mux_qup0_se0_l1,
 	msm_mux_qup0_se0_l2,
 	msm_mux_qup0_se0_l3,
-	msm_mux_qup0_se0_l4,
-	msm_mux_qup0_se0_l5,
 	msm_mux_qup0_se10_l0,
 	msm_mux_qup0_se10_l1,
+	msm_mux_qup0_se10_l2,
+	msm_mux_qup0_se10_l3,
 	msm_mux_qup0_se1_l0,
 	msm_mux_qup0_se1_l1,
 	msm_mux_qup0_se1_l2,
 	msm_mux_qup0_se1_l3,
-	msm_mux_qup0_se2_l0,
-	msm_mux_qup0_se2_l1,
-	msm_mux_qup0_se2_l2,
-	msm_mux_qup0_se2_l3,
-	msm_mux_qup0_se2_l4,
-	msm_mux_qup0_se3_l0,
-	msm_mux_qup0_se3_l1,
-	msm_mux_qup0_se3_l2,
-	msm_mux_qup0_se3_l3,
+	msm_mux_qup0_se2_l0_mira,
+	msm_mux_qup0_se2_l0_mirb,
+	msm_mux_qup0_se2_l1_mira,
+	msm_mux_qup0_se2_l1_mirb,
+	msm_mux_qup0_se2_l2_mira,
+	msm_mux_qup0_se2_l2_mirb,
+	msm_mux_qup0_se2_l3_mira,
+	msm_mux_qup0_se2_l3_mirb,
+	msm_mux_qup0_se3_l0_mira,
+	msm_mux_qup0_se3_l0_mirb,
+	msm_mux_qup0_se3_l1_mira,
+	msm_mux_qup0_se3_l1_mirb,
+	msm_mux_qup0_se3_l2_mira,
+	msm_mux_qup0_se3_l2_mirb,
+	msm_mux_qup0_se3_l3_mira,
+	msm_mux_qup0_se3_l3_mirb,
 	msm_mux_qup0_se4_l0,
 	msm_mux_qup0_se4_l1,
 	msm_mux_qup0_se4_l2,
 	msm_mux_qup0_se4_l3,
-	msm_mux_qup0_se5_l0,
-	msm_mux_qup0_se5_l1,
-	msm_mux_qup0_se5_l2,
-	msm_mux_qup0_se5_l3,
+	msm_mux_qup0_se5_l0_mira,
+	msm_mux_qup0_se5_l0_mirb,
+	msm_mux_qup0_se5_l1_mira,
+	msm_mux_qup0_se5_l1_mirb,
+	msm_mux_qup0_se5_l2_mira,
+	msm_mux_qup0_se5_l2_mirb,
+	msm_mux_qup0_se5_l3_mira,
+	msm_mux_qup0_se5_l3_mirb,
 	msm_mux_qup0_se6_l0,
 	msm_mux_qup0_se6_l1,
 	msm_mux_qup0_se6_l2,
 	msm_mux_qup0_se6_l3,
-	msm_mux_qup0_se7_l0,
-	msm_mux_qup0_se7_l1,
-	msm_mux_qup0_se7_l2,
-	msm_mux_qup0_se7_l3,
+	msm_mux_qup0_se7_l0_mira,
+	msm_mux_qup0_se7_l0_mirb,
+	msm_mux_qup0_se7_l1_mira,
+	msm_mux_qup0_se7_l1_mirb,
+	msm_mux_qup0_se7_l2_mira,
+	msm_mux_qup0_se7_l2_mirb,
+	msm_mux_qup0_se7_l3_mira,
+	msm_mux_qup0_se7_l3_mirb,
+	msm_mux_qup0_se8_l0,
+	msm_mux_qup0_se8_l1,
+	msm_mux_qup0_se8_l2,
+	msm_mux_qup0_se8_l3,
+	msm_mux_qup0_se9_l0,
+	msm_mux_qup0_se9_l1,
+	msm_mux_qup0_se9_l2,
+	msm_mux_qup0_se9_l3,
 	msm_mux_sdc1_tb_trig,
-	msm_mux_sdc2None,
 	msm_mux_sdc2_clk,
-	msm_mux_sdc2_clk_fb,
 	msm_mux_sdc2_cmd,
+	msm_mux_sdc2_data,
 	msm_mux_sdc2_tb_trig,
 	msm_mux_sw_ctrl,
-	msm_mux_t2a_int,
-	msm_mux_tgu_ch0_trigout,
-	msm_mux_tgu_ch1_trigout,
-	msm_mux_tgu_ch2_trigout,
-	msm_mux_tgu_ch3_trigout,
 	msm_mux_tmess_prng0,
 	msm_mux_tmess_prng1,
 	msm_mux_tsense_pwm1,
@@ -689,13 +720,11 @@ enum vienna_functions {
 	msm_mux_uim0_present,
 	msm_mux_uim0_reset,
 	msm_mux_usb2phy_ac_en,
-	msm_mux_usb_phy_ps,
 	msm_mux_vfr_1,
 	msm_mux_vsense_trigger_mirnat,
 	msm_mux_wci_uart_rxd,
 	msm_mux_wci_uart_txd,
 	msm_mux_wcn_sw,
-	msm_mux_wcn_sw_ctrl,
 	msm_mux_NA,
 };
 
@@ -726,811 +755,1153 @@ static const char *const gpio_groups[] = {
 	"gpio138", "gpio139", "gpio140", "gpio141", "gpio142", "gpio143",
 	"gpio144", "gpio145", "gpio146", "gpio147", "gpio148", "gpio149",
 };
+
 static const char *const a2t_int_groups[] = {
 	"gpio77",
 };
+
 static const char *const adsp_ext_groups[] = {
 	"gpio33",
 };
+
 static const char *const aoss_cti_groups[] = {
-	"gpio47", "gpio48", "gpio49", "gpio50",
+	"gpio16", "gpio17", "gpio18", "gpio19",
 };
+
 static const char *const atest_bbrx0_groups[] = {
 	"gpio110",
 };
+
 static const char *const atest_bbrx1_groups[] = {
 	"gpio109",
 };
+
 static const char *const atest_char0_groups[] = {
 	"gpio73",
 };
+
 static const char *const atest_char1_groups[] = {
 	"gpio87",
 };
+
 static const char *const atest_char2_groups[] = {
 	"gpio75",
 };
+
 static const char *const atest_char3_groups[] = {
 	"gpio76",
 };
+
 static const char *const atest_char_start_groups[] = {
 	"gpio77",
 };
+
 static const char *const atest_usb00_groups[] = {
 	"gpio103",
 };
+
 static const char *const atest_usb01_groups[] = {
 	"gpio104",
 };
+
 static const char *const atest_usb02_groups[] = {
 	"gpio105",
 };
+
 static const char *const atest_usb03_groups[] = {
 	"gpio106",
 };
+
 static const char *const audio_ext_mclk0_groups[] = {
 	"gpio34",
 };
+
 static const char *const audio_ext_mclk1_groups[] = {
 	"gpio35",
 };
+
 static const char *const audio_ref_clk_groups[] = {
 	"gpio34",
 };
+
 static const char *const cam_mclk_groups[] = {
 	"gpio32", "gpio33",
 };
+
 static const char *const cci_async_in0_groups[] = {
-	"gpio40",
+	"gpio34",
 };
+
 static const char *const cci_i2c_scl0_groups[] = {
 	"gpio37",
 };
+
 static const char *const cci_i2c_scl1_groups[] = {
 	"gpio39",
 };
+
 static const char *const cci_i2c_sda0_groups[] = {
 	"gpio36",
 };
+
 static const char *const cci_i2c_sda1_groups[] = {
 	"gpio38",
 };
+
 static const char *const cci_timer0_groups[] = {
 	"gpio34",
 };
+
 static const char *const cci_timer1_groups[] = {
 	"gpio35",
 };
+
 static const char *const cci_timer2_groups[] = {
-	"gpio36",
+	"gpio25",
 };
+
 static const char *const cci_timer3_groups[] = {
-	"gpio40",
+	"gpio24",
 };
+
 static const char *const clk_dac_groups[] = {
 	"gpio47",
 };
+
 static const char *const dbg_out_clk_groups[] = {
 	"gpio28",
 };
+
 static const char *const ddr_bist_complete_groups[] = {
 	"gpio4",
 };
+
 static const char *const ddr_bist_fail_groups[] = {
 	"gpio1",
 };
+
 static const char *const ddr_bist_start_groups[] = {
 	"gpio2",
 };
+
 static const char *const ddr_bist_stop_groups[] = {
 	"gpio3",
 };
+
 static const char *const ddr_pxi0_groups[] = {
 	"gpio103", "gpio104",
 };
+
 static const char *const dll_qmspi0_groups[] = {
-	"gpio123", "gpio125",
+	"gpio107", "gpio109",
 };
+
 static const char *const dll_qmspi1_groups[] = {
-	"gpio124", "gpio126",
+	"gpio108", "gpio110",
 };
+
+static const char *const egpio_groups[] = {
+	"gpio28", "gpio29", "gpio40", "gpio72", "gpio78", "gpio90",
+	"gpio91", "gpio92", "gpio93", "gpio94", "gpio95", "gpio96",
+	"gpio97", "gpio98", "gpio99", "gpio100", "gpio101", "gpio102",
+	"gpio103", "gpio104", "gpio105", "gpio106", "gpio107", "gpio108",
+	"gpio109", "gpio110", "gpio111", "gpio112", "gpio113", "gpio114",
+	"gpio115", "gpio116", "gpio117", "gpio118", "gpio119", "gpio120",
+	"gpio121", "gpio122", "gpio123", "gpio124", "gpio125", "gpio126",
+	"gpio127", "gpio128", "gpio129", "gpio130", "gpio131", "gpio132",
+	"gpio133", "gpio134", "gpio135", "gpio139", "gpio140", "gpio141",
+	"gpio142", "gpio145", "gpio149",
+};
+
 static const char *const etdac_calib0_groups[] = {
 	"gpio142",
 };
+
 static const char *const etdac_calib1_groups[] = {
 	"gpio145",
 };
+
 static const char *const etdac_calib10_groups[] = {
 	"gpio20",
 };
+
 static const char *const etdac_calib11_groups[] = {
 	"gpio21",
 };
+
 static const char *const etdac_calib12_groups[] = {
 	"gpio22",
 };
+
 static const char *const etdac_calib13_groups[] = {
 	"gpio23",
 };
+
 static const char *const etdac_calib14_groups[] = {
 	"gpio24",
 };
+
 static const char *const etdac_calib15_groups[] = {
 	"gpio25",
 };
+
 static const char *const etdac_calib16_groups[] = {
 	"gpio26",
 };
+
 static const char *const etdac_calib17_groups[] = {
 	"gpio27",
 };
+
 static const char *const etdac_calib18_groups[] = {
 	"gpio19",
 };
+
 static const char *const etdac_calib19_groups[] = {
 	"gpio40",
 };
+
 static const char *const etdac_calib2_groups[] = {
 	"gpio143",
 };
+
 static const char *const etdac_calib20_groups[] = {
 	"gpio30",
 };
+
 static const char *const etdac_calib21_groups[] = {
 	"gpio31",
 };
+
 static const char *const etdac_calib22_groups[] = {
 	"gpio41",
 };
+
 static const char *const etdac_calib23_groups[] = {
 	"gpio42",
 };
+
 static const char *const etdac_calib24_groups[] = {
 	"gpio43",
 };
+
 static const char *const etdac_calib25_groups[] = {
 	"gpio46",
 };
+
 static const char *const etdac_calib3_groups[] = {
 	"gpio144",
 };
+
 static const char *const etdac_calib4_groups[] = {
 	"gpio146",
 };
+
 static const char *const etdac_calib5_groups[] = {
 	"gpio10",
 };
+
 static const char *const etdac_calib6_groups[] = {
 	"gpio11",
 };
+
 static const char *const etdac_calib7_groups[] = {
 	"gpio6",
 };
+
 static const char *const etdac_calib8_groups[] = {
 	"gpio17",
 };
+
 static const char *const etdac_calib9_groups[] = {
 	"gpio18",
 };
+
 static const char *const gcc_gp1_groups[] = {
 	"gpio8", "gpio36",
 };
+
 static const char *const gcc_gp2_groups[] = {
 	"gpio15", "gpio64",
 };
+
 static const char *const gcc_gp3_groups[] = {
 	"gpio7", "gpio65",
 };
+
 static const char *const gnss_adc0_groups[] = {
 	"gpio105", "gpio107",
 };
+
 static const char *const gnss_adc1_groups[] = {
 	"gpio106", "gpio108",
 };
+
 static const char *const gnss_l1_blanking_groups[] = {
 	"gpio41",
 };
+
 static const char *const gnss_l5_blanking_groups[] = {
 	"gpio42",
 };
+
 static const char *const gsm_tx_groups[] = {
 	"gpio48",
 };
+
 static const char *const hpi_d10_groups[] = {
 	"gpio132",
 };
+
 static const char *const hpi_d11_groups[] = {
 	"gpio131",
 };
+
 static const char *const hpi_d12_groups[] = {
 	"gpio130",
 };
+
 static const char *const hpi_d13_groups[] = {
 	"gpio129",
 };
+
 static const char *const hpi_d14_groups[] = {
 	"gpio128",
 };
+
 static const char *const hpi_d15_groups[] = {
 	"gpio127",
 };
+
 static const char *const hpi_d8_groups[] = {
 	"gpio134",
 };
+
 static const char *const hpi_d9_groups[] = {
 	"gpio133",
 };
+
 static const char *const hpi_dqs_dm1_groups[] = {
 	"gpio145",
 };
-static const char *const i2s0_data0_groups[] = {
-	"gpio37",
-};
-static const char *const i2s0_data1_groups[] = {
+
+static const char *const i2s0_data0_mira_groups[] = {
 	"gpio38",
 };
-static const char *const i2s0_sck_groups[] = {
-	"gpio36",
+
+static const char *const i2s0_data0_mirb_groups[] = {
+	"gpio20",
 };
-static const char *const i2s0_ws_groups[] = {
+
+static const char *const i2s0_data1_mira_groups[] = {
 	"gpio39",
 };
+
+static const char *const i2s0_data1_mirb_groups[] = {
+	"gpio21",
+};
+
+static const char *const i2s0_sck_mira_groups[] = {
+	"gpio36",
+};
+
+static const char *const i2s0_sck_mirb_groups[] = {
+	"gpio23",
+};
+
+static const char *const i2s0_ws_mira_groups[] = {
+	"gpio37",
+};
+
+static const char *const i2s0_ws_mirb_groups[] = {
+	"gpio22",
+};
+
 static const char *const ibi_i3c_groups[] = {
 	"gpio0", "gpio1", "gpio4", "gpio5", "gpio111", "gpio112",
 };
+
 static const char *const jitter_bist_groups[] = {
 	"gpio7",
 };
+
 static const char *const m_voc_groups[] = {
-	"gpio0", "gpio21",
+	"gpio0",
 };
+
 static const char *const mdp_vsync0_out_groups[] = {
 	"gpio27",
 };
+
 static const char *const mdp_vsync1_out_groups[] = {
 	"gpio72",
 };
+
 static const char *const mdp_vsync2_out_groups[] = {
 	"gpio72",
 };
+
 static const char *const mdp_vsync3_out_groups[] = {
 	"gpio74",
 };
+
 static const char *const mdp_vsync_e_groups[] = {
-	"gpio15",
+	"gpio18",
 };
+
 static const char *const mdp_vsync_p_groups[] = {
 	"gpio27",
 };
+
 static const char *const mdp_vsync_s_groups[] = {
 	"gpio19",
 };
-static const char *const nav_gpio0_groups[] = {
-	"gpio8",
-};
-static const char *const nav_gpio1_groups[] = {
-	"gpio9",
-};
+
 static const char *const nav_gpio2_groups[] = {
-	"gpio10",
+	"gpio147",
 };
+
 static const char *const nav_gpio3_groups[] = {
-	"gpio11",
+	"gpio148",
 };
-static const char *const opi_ce_groups[] = {
-	"gpio144",
-};
+
 static const char *const opi_clk_groups[] = {
 	"gpio143",
 };
+
+static const char *const opi_cs_n_groups[] = {
+	"gpio144",
+};
+
 static const char *const opi_d0_groups[] = {
 	"gpio142",
 };
+
 static const char *const opi_d1_groups[] = {
 	"gpio141",
 };
+
 static const char *const opi_d2_groups[] = {
 	"gpio140",
 };
+
 static const char *const opi_d3_groups[] = {
 	"gpio139",
 };
+
 static const char *const opi_d4_groups[] = {
 	"gpio138",
 };
+
 static const char *const opi_d5_groups[] = {
 	"gpio137",
 };
+
 static const char *const opi_d6_groups[] = {
 	"gpio136",
 };
+
 static const char *const opi_d7_groups[] = {
 	"gpio135",
 };
+
 static const char *const opi_dqs_dm0_groups[] = {
 	"gpio146",
 };
-static const char *const opi_reset_groups[] = {
-	"gpio147",
-};
+
 static const char *const pa_indicator_groups[] = {
-	"gpio149",
+	"gpio41",
 };
+
 static const char *const pcie0_clk_req_n_mira_groups[] = {
 	"gpio81",
 };
+
 static const char *const pcie0_clk_req_n_mirb_groups[] = {
 	"gpio38",
 };
+
 static const char *const phase_flag0_groups[] = {
 	"gpio10",
 };
+
 static const char *const phase_flag1_groups[] = {
 	"gpio11",
 };
+
 static const char *const phase_flag10_groups[] = {
 	"gpio76",
 };
+
 static const char *const phase_flag11_groups[] = {
 	"gpio77",
 };
+
 static const char *const phase_flag12_groups[] = {
 	"gpio22",
 };
+
 static const char *const phase_flag13_groups[] = {
 	"gpio3",
 };
+
 static const char *const phase_flag14_groups[] = {
 	"gpio73",
 };
+
 static const char *const phase_flag15_groups[] = {
 	"gpio75",
 };
+
 static const char *const phase_flag16_groups[] = {
 	"gpio118",
 };
+
 static const char *const phase_flag17_groups[] = {
 	"gpio116",
 };
+
 static const char *const phase_flag18_groups[] = {
 	"gpio117",
 };
+
 static const char *const phase_flag19_groups[] = {
 	"gpio119",
 };
+
 static const char *const phase_flag2_groups[] = {
 	"gpio6",
 };
+
 static const char *const phase_flag20_groups[] = {
 	"gpio120",
 };
+
 static const char *const phase_flag21_groups[] = {
 	"gpio121",
 };
+
 static const char *const phase_flag22_groups[] = {
 	"gpio122",
 };
+
 static const char *const phase_flag23_groups[] = {
 	"gpio123",
 };
+
 static const char *const phase_flag24_groups[] = {
 	"gpio124",
 };
+
 static const char *const phase_flag25_groups[] = {
 	"gpio125",
 };
+
 static const char *const phase_flag26_groups[] = {
 	"gpio126",
 };
+
 static const char *const phase_flag27_groups[] = {
 	"gpio87",
 };
+
 static const char *const phase_flag28_groups[] = {
 	"gpio88",
 };
+
 static const char *const phase_flag29_groups[] = {
 	"gpio111",
 };
+
 static const char *const phase_flag3_groups[] = {
 	"gpio31",
 };
+
 static const char *const phase_flag30_groups[] = {
 	"gpio112",
 };
+
 static const char *const phase_flag31_groups[] = {
 	"gpio113",
 };
+
 static const char *const phase_flag4_groups[] = {
 	"gpio23",
 };
+
 static const char *const phase_flag5_groups[] = {
 	"gpio24",
 };
+
 static const char *const phase_flag6_groups[] = {
 	"gpio25",
 };
+
 static const char *const phase_flag7_groups[] = {
 	"gpio26",
 };
+
 static const char *const phase_flag8_groups[] = {
 	"gpio27",
 };
+
 static const char *const phase_flag9_groups[] = {
 	"gpio30",
 };
+
 static const char *const pll_bist_sync_groups[] = {
 	"gpio17",
 };
+
 static const char *const pll_clk_aux_groups[] = {
 	"gpio28",
 };
-static const char *const pll_ref_clk_groups[] = {
-	"gpio10",
-};
+
 static const char *const pll_reset_n_groups[] = {
 	"gpio67",
 };
+
 static const char *const prng_rosc0_groups[] = {
 	"gpio57",
 };
+
 static const char *const prng_rosc1_groups[] = {
 	"gpio59",
 };
+
 static const char *const pwm_0_groups[] = {
 	"gpio34",
 };
+
 static const char *const pwm_1_groups[] = {
 	"gpio35",
 };
+
 static const char *const pwm_2_groups[] = {
-	"gpio23",
+	"gpio22",
 };
+
 static const char *const pwm_3_groups[] = {
 	"gpio12",
 };
+
 static const char *const pwm_4_groups[] = {
 	"gpio44",
 };
+
 static const char *const pwm_5_groups[] = {
 	"gpio14",
 };
+
 static const char *const pwm_6_groups[] = {
-	"gpio22",
+	"gpio23",
 };
+
 static const char *const pwm_7_groups[] = {
-	"gpio20",
+	"gpio13",
 };
+
 static const char *const pwm_8_groups[] = {
-	"gpio21",
+	"gpio15",
 };
+
 static const char *const pwm_9_groups[] = {
 	"gpio6",
 };
+
 static const char *const qdss_cti_groups[] = {
 	"gpio20", "gpio21", "gpio33", "gpio34", "gpio35", "gpio36",
 	"gpio37", "gpio38", "gpio39", "gpio42", "gpio98", "gpio99",
 };
+
 static const char *const qdss_gpio_groups[] = {
 	"gpio30", "gpio31", "gpio119", "gpio120",
 };
+
 static const char *const qdss_gpio0_groups[] = {
 	"gpio2", "gpio103",
 };
+
 static const char *const qdss_gpio1_groups[] = {
 	"gpio3", "gpio104",
 };
+
 static const char *const qdss_gpio10_groups[] = {
 	"gpio23", "gpio112",
 };
+
 static const char *const qdss_gpio11_groups[] = {
 	"gpio24", "gpio113",
 };
+
 static const char *const qdss_gpio12_groups[] = {
 	"gpio25", "gpio114",
 };
+
 static const char *const qdss_gpio13_groups[] = {
 	"gpio26", "gpio115",
 };
+
 static const char *const qdss_gpio14_groups[] = {
-	"gpio27", "gpio116",
+	"gpio88", "gpio116",
 };
+
 static const char *const qdss_gpio15_groups[] = {
 	"gpio74", "gpio117",
 };
+
 static const char *const qdss_gpio2_groups[] = {
 	"gpio8", "gpio105",
 };
+
 static const char *const qdss_gpio3_groups[] = {
 	"gpio6", "gpio106",
 };
+
 static const char *const qdss_gpio4_groups[] = {
 	"gpio7", "gpio107",
 };
+
 static const char *const qdss_gpio5_groups[] = {
 	"gpio75", "gpio108",
 };
+
 static const char *const qdss_gpio6_groups[] = {
 	"gpio9", "gpio109",
 };
+
 static const char *const qdss_gpio7_groups[] = {
 	"gpio10", "gpio110",
 };
+
 static const char *const qdss_gpio8_groups[] = {
 	"gpio11", "gpio111",
 };
+
 static const char *const qdss_gpio9_groups[] = {
 	"gpio22", "gpio118",
 };
+
 static const char *const qup0_se0_l0_groups[] = {
 	"gpio0",
 };
+
 static const char *const qup0_se0_l1_groups[] = {
 	"gpio1",
 };
+
 static const char *const qup0_se0_l2_groups[] = {
 	"gpio2",
 };
+
 static const char *const qup0_se0_l3_groups[] = {
 	"gpio3",
 };
-static const char *const qup0_se0_l4_groups[] = {
-	"gpio10",
-};
-static const char *const qup0_se0_l5_groups[] = {
-	"gpio7",
-};
+
 static const char *const qup0_se10_l0_groups[] = {
-	"gpio28",
+	"gpio2",
 };
+
 static const char *const qup0_se10_l1_groups[] = {
-	"gpio29",
+	"gpio3",
 };
+
+static const char *const qup0_se10_l2_groups[] = {
+	"gpio21",
+};
+
+static const char *const qup0_se10_l3_groups[] = {
+	"gpio20",
+};
+
 static const char *const qup0_se1_l0_groups[] = {
 	"gpio4",
 };
+
 static const char *const qup0_se1_l1_groups[] = {
 	"gpio5",
 };
+
 static const char *const qup0_se1_l2_groups[] = {
-	"gpio10",
-};
-static const char *const qup0_se1_l3_groups[] = {
 	"gpio7",
 };
-static const char *const qup0_se2_l0_groups[] = {
+
+static const char *const qup0_se1_l3_groups[] = {
+	"gpio24",
+};
+
+static const char *const qup0_se2_l0_mira_groups[] = {
 	"gpio8",
 };
-static const char *const qup0_se2_l1_groups[] = {
+
+static const char *const qup0_se2_l0_mirb_groups[] = {
+	"gpio134",
+};
+
+static const char *const qup0_se2_l1_mira_groups[] = {
 	"gpio9",
 };
-static const char *const qup0_se2_l2_groups[] = {
+
+static const char *const qup0_se2_l1_mirb_groups[] = {
+	"gpio133",
+};
+
+static const char *const qup0_se2_l2_mira_groups[] = {
 	"gpio10",
 };
-static const char *const qup0_se2_l3_groups[] = {
+
+static const char *const qup0_se2_l2_mirb_groups[] = {
+	"gpio132",
+};
+
+static const char *const qup0_se2_l3_mira_groups[] = {
 	"gpio11",
 };
-static const char *const qup0_se2_l4_groups[] = {
-	"gpio7",
+
+static const char *const qup0_se2_l3_mirb_groups[] = {
+	"gpio131",
 };
-static const char *const qup0_se3_l0_groups[] = {
+
+static const char *const qup0_se3_l0_mira_groups[] = {
 	"gpio111",
 };
-static const char *const qup0_se3_l1_groups[] = {
+
+static const char *const qup0_se3_l0_mirb_groups[] = {
+	"gpio8",
+};
+
+static const char *const qup0_se3_l1_mira_groups[] = {
 	"gpio112",
 };
-static const char *const qup0_se3_l2_groups[] = {
+
+static const char *const qup0_se3_l1_mirb_groups[] = {
+	"gpio9",
+};
+
+static const char *const qup0_se3_l2_mira_groups[] = {
 	"gpio14",
 };
-static const char *const qup0_se3_l3_groups[] = {
+
+static const char *const qup0_se3_l2_mirb_groups[] = {
+	"gpio10",
+};
+
+static const char *const qup0_se3_l3_mira_groups[] = {
 	"gpio15",
 };
+
+static const char *const qup0_se3_l3_mirb_groups[] = {
+	"gpio11",
+};
+
 static const char *const qup0_se4_l0_groups[] = {
 	"gpio16",
 };
+
 static const char *const qup0_se4_l1_groups[] = {
 	"gpio17",
 };
+
 static const char *const qup0_se4_l2_groups[] = {
 	"gpio18",
 };
+
 static const char *const qup0_se4_l3_groups[] = {
 	"gpio19",
 };
-static const char *const qup0_se5_l0_groups[] = {
+
+static const char *const qup0_se5_l0_mira_groups[] = {
 	"gpio23",
 };
-static const char *const qup0_se5_l1_groups[] = {
+
+static const char *const qup0_se5_l0_mirb_groups[] = {
+	"gpio33",
+};
+
+static const char *const qup0_se5_l1_mira_groups[] = {
 	"gpio22",
 };
-static const char *const qup0_se5_l2_groups[] = {
+
+static const char *const qup0_se5_l1_mirb_groups[] = {
+	"gpio35",
+};
+
+static const char *const qup0_se5_l2_mira_groups[] = {
 	"gpio21",
 };
-static const char *const qup0_se5_l3_groups[] = {
+
+static const char *const qup0_se5_l2_mirb_groups[] = {
+	"gpio39",
+};
+
+static const char *const qup0_se5_l3_mira_groups[] = {
 	"gpio20",
 };
+
+static const char *const qup0_se5_l3_mirb_groups[] = {
+	"gpio38",
+};
+
 static const char *const qup0_se6_l0_groups[] = {
 	"gpio28",
 };
+
 static const char *const qup0_se6_l1_groups[] = {
 	"gpio29",
 };
+
 static const char *const qup0_se6_l2_groups[] = {
 	"gpio117",
 };
+
 static const char *const qup0_se6_l3_groups[] = {
 	"gpio118",
 };
-static const char *const qup0_se7_l0_groups[] = {
+
+static const char *const qup0_se7_l0_mira_groups[] = {
 	"gpio23",
 };
-static const char *const qup0_se7_l1_groups[] = {
+
+static const char *const qup0_se7_l0_mirb_groups[] = {
+	"gpio127",
+};
+
+static const char *const qup0_se7_l1_mira_groups[] = {
 	"gpio22",
 };
-static const char *const qup0_se7_l2_groups[] = {
+
+static const char *const qup0_se7_l1_mirb_groups[] = {
+	"gpio128",
+};
+
+static const char *const qup0_se7_l2_mira_groups[] = {
 	"gpio21",
 };
-static const char *const qup0_se7_l3_groups[] = {
+
+static const char *const qup0_se7_l2_mirb_groups[] = {
+	"gpio129",
+};
+
+static const char *const qup0_se7_l3_mira_groups[] = {
 	"gpio20",
 };
+
+static const char *const qup0_se7_l3_mirb_groups[] = {
+	"gpio130",
+};
+
+static const char *const qup0_se8_l0_groups[] = {
+	"gpio72",
+};
+
+static const char *const qup0_se8_l1_groups[] = {
+	"gpio40",
+};
+
+static const char *const qup0_se8_l2_groups[] = {
+	"gpio14",
+};
+
+static const char *const qup0_se8_l3_groups[] = {
+	"gpio15",
+};
+
+static const char *const qup0_se9_l0_groups[] = {
+	"gpio28",
+};
+
+static const char *const qup0_se9_l1_groups[] = {
+	"gpio29",
+};
+
+static const char *const qup0_se9_l2_groups[] = {
+	"gpio14",
+};
+
+static const char *const qup0_se9_l3_groups[] = {
+	"gpio15",
+};
+
 static const char *const sdc1_tb_trig_groups[] = {
 	"gpio36",
 };
-static const char *const sdc2None_groups[] = {
-	"gpio80", "gpio81", "gpio82", "gpio83",
-};
+
 static const char *const sdc2_clk_groups[] = {
 	"gpio85",
 };
-static const char *const sdc2_clk_fb_groups[] = {
-	"gpio86",
-};
+
 static const char *const sdc2_cmd_groups[] = {
 	"gpio84",
 };
-static const char *const sdc2_tb_trig_groups[] = {
-	"gpio35",
+
+static const char *const sdc2_data_groups[] = {
+	"gpio80", "gpio81", "gpio82", "gpio83",
 };
+
+static const char *const sdc2_tb_trig_groups[] = {
+	"gpio87",
+};
+
 static const char *const sw_ctrl_groups[] = {
 	"gpio75",
 };
-static const char *const t2a_int_groups[] = {
-	"gpio76",
-};
-static const char *const tgu_ch0_trigout_groups[] = {
-	"gpio30",
-};
-static const char *const tgu_ch1_trigout_groups[] = {
-	"gpio31",
-};
-static const char *const tgu_ch2_trigout_groups[] = {
-	"gpio14",
-};
-static const char *const tgu_ch3_trigout_groups[] = {
-	"gpio40",
-};
+
 static const char *const tmess_prng0_groups[] = {
 	"gpio51",
 };
+
 static const char *const tmess_prng1_groups[] = {
 	"gpio52",
 };
+
 static const char *const tsense_pwm1_groups[] = {
 	"gpio35",
 };
+
 static const char *const txdac_calib0_groups[] = {
 	"gpio119",
 };
+
 static const char *const txdac_calib1_groups[] = {
 	"gpio120",
 };
+
 static const char *const txdac_calib10_groups[] = {
 	"gpio113",
 };
+
 static const char *const txdac_calib11_groups[] = {
 	"gpio114",
 };
+
 static const char *const txdac_calib12_groups[] = {
 	"gpio115",
 };
+
 static const char *const txdac_calib13_groups[] = {
 	"gpio88",
 };
+
 static const char *const txdac_calib14_groups[] = {
 	"gpio72",
 };
+
 static const char *const txdac_calib15_groups[] = {
 	"gpio73",
 };
+
 static const char *const txdac_calib16_groups[] = {
 	"gpio77",
 };
+
 static const char *const txdac_calib17_groups[] = {
 	"gpio75",
 };
+
 static const char *const txdac_calib18_groups[] = {
 	"gpio76",
 };
+
 static const char *const txdac_calib19_groups[] = {
 	"gpio136",
 };
+
 static const char *const txdac_calib2_groups[] = {
 	"gpio121",
 };
+
 static const char *const txdac_calib20_groups[] = {
 	"gpio137",
 };
+
 static const char *const txdac_calib21_groups[] = {
 	"gpio138",
 };
+
 static const char *const txdac_calib22_groups[] = {
 	"gpio87",
 };
+
 static const char *const txdac_calib23_groups[] = {
 	"gpio111",
 };
+
 static const char *const txdac_calib24_groups[] = {
 	"gpio112",
 };
+
 static const char *const txdac_calib25_groups[] = {
 	"gpio116",
 };
+
 static const char *const txdac_calib3_groups[] = {
 	"gpio122",
 };
+
 static const char *const txdac_calib4_groups[] = {
 	"gpio132",
 };
+
 static const char *const txdac_calib5_groups[] = {
 	"gpio133",
 };
+
 static const char *const txdac_calib6_groups[] = {
 	"gpio134",
 };
+
 static const char *const txdac_calib7_groups[] = {
 	"gpio135",
 };
+
 static const char *const txdac_calib8_groups[] = {
 	"gpio117",
 };
+
 static const char *const txdac_calib9_groups[] = {
 	"gpio118",
 };
+
 static const char *const uim0_clk_groups[] = {
 	"gpio71",
 };
+
 static const char *const uim0_data_groups[] = {
 	"gpio70",
 };
+
 static const char *const uim0_present_groups[] = {
 	"gpio69",
 };
+
 static const char *const uim0_reset_groups[] = {
 	"gpio68",
 };
+
 static const char *const usb2phy_ac_en_groups[] = {
-	"gpio22",
+	"gpio23",
 };
-static const char *const usb_phy_ps_groups[] = {
-	"gpio28",
-};
+
 static const char *const vfr_1_groups[] = {
-	"gpio54",
+	"gpio48",
 };
+
 static const char *const vsense_trigger_mirnat_groups[] = {
 	"gpio103",
 };
+
 static const char *const wci_uart_rxd_groups[] = {
 	"gpio74",
 };
+
 static const char *const wci_uart_txd_groups[] = {
 	"gpio73",
 };
+
 static const char *const wcn_sw_groups[] = {
-	"gpio53",
+	"gpio86",
 };
-static const char *const wcn_sw_ctrl_groups[] = {
-	"gpio52",
-};
+
 
 static const struct pinfunction vienna_functions[] = {
 	MSM_PIN_FUNCTION(gpio),
@@ -1570,6 +1941,7 @@ static const struct pinfunction vienna_functions[] = {
 	MSM_PIN_FUNCTION(ddr_pxi0),
 	MSM_PIN_FUNCTION(dll_qmspi0),
 	MSM_PIN_FUNCTION(dll_qmspi1),
+	MSM_PIN_FUNCTION(egpio),
 	MSM_PIN_FUNCTION(etdac_calib0),
 	MSM_PIN_FUNCTION(etdac_calib1),
 	MSM_PIN_FUNCTION(etdac_calib10),
@@ -1613,10 +1985,14 @@ static const struct pinfunction vienna_functions[] = {
 	MSM_PIN_FUNCTION(hpi_d8),
 	MSM_PIN_FUNCTION(hpi_d9),
 	MSM_PIN_FUNCTION(hpi_dqs_dm1),
-	MSM_PIN_FUNCTION(i2s0_data0),
-	MSM_PIN_FUNCTION(i2s0_data1),
-	MSM_PIN_FUNCTION(i2s0_sck),
-	MSM_PIN_FUNCTION(i2s0_ws),
+	MSM_PIN_FUNCTION(i2s0_data0_mira),
+	MSM_PIN_FUNCTION(i2s0_data0_mirb),
+	MSM_PIN_FUNCTION(i2s0_data1_mira),
+	MSM_PIN_FUNCTION(i2s0_data1_mirb),
+	MSM_PIN_FUNCTION(i2s0_sck_mira),
+	MSM_PIN_FUNCTION(i2s0_sck_mirb),
+	MSM_PIN_FUNCTION(i2s0_ws_mira),
+	MSM_PIN_FUNCTION(i2s0_ws_mirb),
 	MSM_PIN_FUNCTION(ibi_i3c),
 	MSM_PIN_FUNCTION(jitter_bist),
 	MSM_PIN_FUNCTION(m_voc),
@@ -1627,12 +2003,10 @@ static const struct pinfunction vienna_functions[] = {
 	MSM_PIN_FUNCTION(mdp_vsync_e),
 	MSM_PIN_FUNCTION(mdp_vsync_p),
 	MSM_PIN_FUNCTION(mdp_vsync_s),
-	MSM_PIN_FUNCTION(nav_gpio0),
-	MSM_PIN_FUNCTION(nav_gpio1),
 	MSM_PIN_FUNCTION(nav_gpio2),
 	MSM_PIN_FUNCTION(nav_gpio3),
-	MSM_PIN_FUNCTION(opi_ce),
 	MSM_PIN_FUNCTION(opi_clk),
+	MSM_PIN_FUNCTION(opi_cs_n),
 	MSM_PIN_FUNCTION(opi_d0),
 	MSM_PIN_FUNCTION(opi_d1),
 	MSM_PIN_FUNCTION(opi_d2),
@@ -1642,7 +2016,6 @@ static const struct pinfunction vienna_functions[] = {
 	MSM_PIN_FUNCTION(opi_d6),
 	MSM_PIN_FUNCTION(opi_d7),
 	MSM_PIN_FUNCTION(opi_dqs_dm0),
-	MSM_PIN_FUNCTION(opi_reset),
 	MSM_PIN_FUNCTION(pa_indicator),
 	MSM_PIN_FUNCTION(pcie0_clk_req_n_mira),
 	MSM_PIN_FUNCTION(pcie0_clk_req_n_mirb),
@@ -1680,7 +2053,6 @@ static const struct pinfunction vienna_functions[] = {
 	MSM_PIN_FUNCTION(phase_flag9),
 	MSM_PIN_FUNCTION(pll_bist_sync),
 	MSM_PIN_FUNCTION(pll_clk_aux),
-	MSM_PIN_FUNCTION(pll_ref_clk),
 	MSM_PIN_FUNCTION(pll_reset_n),
 	MSM_PIN_FUNCTION(prng_rosc0),
 	MSM_PIN_FUNCTION(prng_rosc1),
@@ -1716,51 +2088,68 @@ static const struct pinfunction vienna_functions[] = {
 	MSM_PIN_FUNCTION(qup0_se0_l1),
 	MSM_PIN_FUNCTION(qup0_se0_l2),
 	MSM_PIN_FUNCTION(qup0_se0_l3),
-	MSM_PIN_FUNCTION(qup0_se0_l4),
-	MSM_PIN_FUNCTION(qup0_se0_l5),
 	MSM_PIN_FUNCTION(qup0_se10_l0),
 	MSM_PIN_FUNCTION(qup0_se10_l1),
+	MSM_PIN_FUNCTION(qup0_se10_l2),
+	MSM_PIN_FUNCTION(qup0_se10_l3),
 	MSM_PIN_FUNCTION(qup0_se1_l0),
 	MSM_PIN_FUNCTION(qup0_se1_l1),
 	MSM_PIN_FUNCTION(qup0_se1_l2),
 	MSM_PIN_FUNCTION(qup0_se1_l3),
-	MSM_PIN_FUNCTION(qup0_se2_l0),
-	MSM_PIN_FUNCTION(qup0_se2_l1),
-	MSM_PIN_FUNCTION(qup0_se2_l2),
-	MSM_PIN_FUNCTION(qup0_se2_l3),
-	MSM_PIN_FUNCTION(qup0_se2_l4),
-	MSM_PIN_FUNCTION(qup0_se3_l0),
-	MSM_PIN_FUNCTION(qup0_se3_l1),
-	MSM_PIN_FUNCTION(qup0_se3_l2),
-	MSM_PIN_FUNCTION(qup0_se3_l3),
+	MSM_PIN_FUNCTION(qup0_se2_l0_mira),
+	MSM_PIN_FUNCTION(qup0_se2_l0_mirb),
+	MSM_PIN_FUNCTION(qup0_se2_l1_mira),
+	MSM_PIN_FUNCTION(qup0_se2_l1_mirb),
+	MSM_PIN_FUNCTION(qup0_se2_l2_mira),
+	MSM_PIN_FUNCTION(qup0_se2_l2_mirb),
+	MSM_PIN_FUNCTION(qup0_se2_l3_mira),
+	MSM_PIN_FUNCTION(qup0_se2_l3_mirb),
+	MSM_PIN_FUNCTION(qup0_se3_l0_mira),
+	MSM_PIN_FUNCTION(qup0_se3_l0_mirb),
+	MSM_PIN_FUNCTION(qup0_se3_l1_mira),
+	MSM_PIN_FUNCTION(qup0_se3_l1_mirb),
+	MSM_PIN_FUNCTION(qup0_se3_l2_mira),
+	MSM_PIN_FUNCTION(qup0_se3_l2_mirb),
+	MSM_PIN_FUNCTION(qup0_se3_l3_mira),
+	MSM_PIN_FUNCTION(qup0_se3_l3_mirb),
 	MSM_PIN_FUNCTION(qup0_se4_l0),
 	MSM_PIN_FUNCTION(qup0_se4_l1),
 	MSM_PIN_FUNCTION(qup0_se4_l2),
 	MSM_PIN_FUNCTION(qup0_se4_l3),
-	MSM_PIN_FUNCTION(qup0_se5_l0),
-	MSM_PIN_FUNCTION(qup0_se5_l1),
-	MSM_PIN_FUNCTION(qup0_se5_l2),
-	MSM_PIN_FUNCTION(qup0_se5_l3),
+	MSM_PIN_FUNCTION(qup0_se5_l0_mira),
+	MSM_PIN_FUNCTION(qup0_se5_l0_mirb),
+	MSM_PIN_FUNCTION(qup0_se5_l1_mira),
+	MSM_PIN_FUNCTION(qup0_se5_l1_mirb),
+	MSM_PIN_FUNCTION(qup0_se5_l2_mira),
+	MSM_PIN_FUNCTION(qup0_se5_l2_mirb),
+	MSM_PIN_FUNCTION(qup0_se5_l3_mira),
+	MSM_PIN_FUNCTION(qup0_se5_l3_mirb),
 	MSM_PIN_FUNCTION(qup0_se6_l0),
 	MSM_PIN_FUNCTION(qup0_se6_l1),
 	MSM_PIN_FUNCTION(qup0_se6_l2),
 	MSM_PIN_FUNCTION(qup0_se6_l3),
-	MSM_PIN_FUNCTION(qup0_se7_l0),
-	MSM_PIN_FUNCTION(qup0_se7_l1),
-	MSM_PIN_FUNCTION(qup0_se7_l2),
-	MSM_PIN_FUNCTION(qup0_se7_l3),
+	MSM_PIN_FUNCTION(qup0_se7_l0_mira),
+	MSM_PIN_FUNCTION(qup0_se7_l0_mirb),
+	MSM_PIN_FUNCTION(qup0_se7_l1_mira),
+	MSM_PIN_FUNCTION(qup0_se7_l1_mirb),
+	MSM_PIN_FUNCTION(qup0_se7_l2_mira),
+	MSM_PIN_FUNCTION(qup0_se7_l2_mirb),
+	MSM_PIN_FUNCTION(qup0_se7_l3_mira),
+	MSM_PIN_FUNCTION(qup0_se7_l3_mirb),
+	MSM_PIN_FUNCTION(qup0_se8_l0),
+	MSM_PIN_FUNCTION(qup0_se8_l1),
+	MSM_PIN_FUNCTION(qup0_se8_l2),
+	MSM_PIN_FUNCTION(qup0_se8_l3),
+	MSM_PIN_FUNCTION(qup0_se9_l0),
+	MSM_PIN_FUNCTION(qup0_se9_l1),
+	MSM_PIN_FUNCTION(qup0_se9_l2),
+	MSM_PIN_FUNCTION(qup0_se9_l3),
 	MSM_PIN_FUNCTION(sdc1_tb_trig),
-	MSM_PIN_FUNCTION(sdc2None),
 	MSM_PIN_FUNCTION(sdc2_clk),
-	MSM_PIN_FUNCTION(sdc2_clk_fb),
 	MSM_PIN_FUNCTION(sdc2_cmd),
+	MSM_PIN_FUNCTION(sdc2_data),
 	MSM_PIN_FUNCTION(sdc2_tb_trig),
 	MSM_PIN_FUNCTION(sw_ctrl),
-	MSM_PIN_FUNCTION(t2a_int),
-	MSM_PIN_FUNCTION(tgu_ch0_trigout),
-	MSM_PIN_FUNCTION(tgu_ch1_trigout),
-	MSM_PIN_FUNCTION(tgu_ch2_trigout),
-	MSM_PIN_FUNCTION(tgu_ch3_trigout),
 	MSM_PIN_FUNCTION(tmess_prng0),
 	MSM_PIN_FUNCTION(tmess_prng1),
 	MSM_PIN_FUNCTION(tsense_pwm1),
@@ -1795,13 +2184,11 @@ static const struct pinfunction vienna_functions[] = {
 	MSM_PIN_FUNCTION(uim0_present),
 	MSM_PIN_FUNCTION(uim0_reset),
 	MSM_PIN_FUNCTION(usb2phy_ac_en),
-	MSM_PIN_FUNCTION(usb_phy_ps),
 	MSM_PIN_FUNCTION(vfr_1),
 	MSM_PIN_FUNCTION(vsense_trigger_mirnat),
 	MSM_PIN_FUNCTION(wci_uart_rxd),
 	MSM_PIN_FUNCTION(wci_uart_txd),
 	MSM_PIN_FUNCTION(wcn_sw),
-	MSM_PIN_FUNCTION(wcn_sw_ctrl),
 };
 
 /* Every pin is maintained as a single group, and missing or non-existing pin
@@ -1811,311 +2198,306 @@ static const struct pinfunction vienna_functions[] = {
  */
 static const struct msm_pingroup vienna_groups[] = {
 	[0] = PINGROUP(0, qup0_se0_l0, ibi_i3c, m_voc, NA, NA, NA, NA, NA, NA,
-		       NA, NA, NA, 0, -1),
-	[1] = PINGROUP(1, qup0_se0_l1, ibi_i3c, ddr_bist_fail, NA, NA, NA, NA,
-		       NA, NA, NA, NA, NA, 0, -1),
-	[2] = PINGROUP(2, qup0_se0_l2, ddr_bist_start, NA, qdss_gpio0, NA, NA,
-		       NA, NA, NA, NA, NA, NA, 0, -1),
-	[3] = PINGROUP(3, qup0_se0_l3, ddr_bist_stop, NA, phase_flag13,
-		       qdss_gpio1, NA, NA, NA, NA, NA, NA, NA, 0, -1),
-	[4] = PINGROUP(4, qup0_se1_l0, ibi_i3c, ddr_bist_complete, NA, NA, NA,
-		       NA, NA, NA, NA, NA, NA, 0, -1),
-	[5] = PINGROUP(5, qup0_se1_l1, ibi_i3c, NA, NA, NA, NA, NA, NA, NA, NA,
 		       NA, NA, 0, -1),
-	[6] = PINGROUP(6, pwm_9, NA, phase_flag2, qdss_gpio3, etdac_calib7, NA,
-		       NA, NA, NA, NA, NA, NA, 0, -1),
-	[7] = PINGROUP(7, qup0_se1_l3, qup0_se0_l5, qup0_se2_l4, gcc_gp3,
-		       jitter_bist, qdss_gpio4, NA, NA, NA, NA, NA, NA, 0, -1),
-	[8] = PINGROUP(8, qup0_se2_l0, nav_gpio0, gcc_gp1, NA, qdss_gpio2, NA,
-		       NA, NA, NA, NA, NA, NA, 0, -1),
-	[9] = PINGROUP(9, qup0_se2_l1, nav_gpio1, NA, NA, qdss_gpio6, NA, NA,
+	[1] = PINGROUP(1, qup0_se0_l1, ibi_i3c, ddr_bist_fail, NA, NA, NA, NA,
+		       NA, NA, NA, NA, 0, -1),
+	[2] = PINGROUP(2, qup0_se0_l2, qup0_se10_l0, ddr_bist_start, NA,
+		       qdss_gpio0, NA, NA, NA, NA, NA, NA, 0, -1),
+	[3] = PINGROUP(3, qup0_se0_l3, qup0_se10_l1, ddr_bist_stop, NA,
+		       phase_flag13, qdss_gpio1, NA, NA, NA, NA, NA, 0, -1),
+	[4] = PINGROUP(4, qup0_se1_l0, ibi_i3c, ddr_bist_complete, NA, NA, NA,
 		       NA, NA, NA, NA, NA, 0, -1),
-	[10] = PINGROUP(10, qup0_se2_l2, nav_gpio2, qup0_se1_l2, qup0_se0_l4,
-			pll_ref_clk, NA, phase_flag0, qdss_gpio7, etdac_calib5,
-			NA, NA, NA, 0, -1),
-	[11] = PINGROUP(11, qup0_se2_l3, nav_gpio3, NA, phase_flag1, qdss_gpio8,
-			etdac_calib6, NA, NA, NA, NA, NA, NA, 0, -1),
-	[12] = PINGROUP(12, pwm_3, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			0, -1),
-	[13] = PINGROUP(13, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[5] = PINGROUP(5, qup0_se1_l1, ibi_i3c, NA, NA, NA, NA, NA, NA, NA, NA,
+		       NA, 0, -1),
+	[6] = PINGROUP(6, pwm_9, NA, phase_flag2, qdss_gpio3, etdac_calib7, NA,
+		       NA, NA, NA, NA, NA, 0, -1),
+	[7] = PINGROUP(7, qup0_se1_l2, gcc_gp3, jitter_bist, qdss_gpio4, NA, NA,
+		       NA, NA, NA, NA, NA, 0, -1),
+	[8] = PINGROUP(8, qup0_se2_l0_mira, qup0_se3_l0_mirb, gcc_gp1, NA,
+		       qdss_gpio2, NA, NA, NA, NA, NA, NA, 0, -1),
+	[9] = PINGROUP(9, qup0_se2_l1_mira, qup0_se3_l1_mirb, NA, NA,
+		       qdss_gpio6, NA, NA, NA, NA, NA, NA, 0, -1),
+	[10] = PINGROUP(10, qup0_se2_l2_mira, qup0_se3_l2_mirb, NA, phase_flag0,
+			qdss_gpio7, etdac_calib5, NA, NA, NA, NA, NA, 0, -1),
+	[11] = PINGROUP(11, qup0_se2_l3_mira, qup0_se3_l3_mirb, NA, phase_flag1,
+			qdss_gpio8, etdac_calib6, NA, NA, NA, NA, NA, 0, -1),
+	[12] = PINGROUP(12, pwm_3, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
 			-1),
-	[14] = PINGROUP(14, qup0_se3_l2, pwm_5, tgu_ch2_trigout, NA, NA, NA, NA,
-			NA, NA, NA, NA, NA, 0, -1),
-	[15] = PINGROUP(15, qup0_se3_l3, mdp_vsync_e, gcc_gp2, NA, NA, NA, NA,
-			NA, NA, NA, NA, NA, 0, -1),
-	[16] = PINGROUP(16, qup0_se4_l0, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[17] = PINGROUP(17, qup0_se4_l1, pll_bist_sync, NA, etdac_calib8, NA,
+	[13] = PINGROUP(13, pwm_7, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			-1),
+	[14] = PINGROUP(14, qup0_se3_l2_mira, pwm_5, qup0_se8_l2, qup0_se9_l2,
 			NA, NA, NA, NA, NA, NA, NA, 0, -1),
-	[18] = PINGROUP(18, qup0_se4_l2, NA, etdac_calib9, NA, NA, NA, NA, NA,
-			NA, NA, NA, NA, 0, -1),
-	[19] = PINGROUP(19, qup0_se4_l3, mdp_vsync_s, NA, etdac_calib18, NA, NA,
-			NA, NA, NA, NA, NA, NA, 0, -1),
-	[20] = PINGROUP(20, qup0_se5_l3, qup0_se7_l3, pwm_7, NA, qdss_cti,
-			etdac_calib10, NA, NA, NA, NA, NA, NA, 0, -1),
-	[21] = PINGROUP(21, qup0_se5_l2, qup0_se7_l2, m_voc, pwm_8, qdss_cti,
-			etdac_calib11, NA, NA, NA, NA, NA, NA, 0, -1),
-	[22] = PINGROUP(22, qup0_se5_l1, qup0_se7_l1, usb2phy_ac_en, pwm_6, NA,
-			phase_flag12, qdss_gpio9, etdac_calib12, NA, NA, NA, NA,
-			0, -1),
-	[23] = PINGROUP(23, qup0_se5_l0, qup0_se7_l0, pwm_2, NA, phase_flag4,
-			qdss_gpio10, etdac_calib13, NA, NA, NA, NA, NA, 0, -1),
-	[24] = PINGROUP(24, NA, phase_flag5, qdss_gpio11, etdac_calib14, NA, NA,
-			NA, NA, NA, NA, NA, NA, 0, -1),
-	[25] = PINGROUP(25, NA, phase_flag6, qdss_gpio12, etdac_calib15, NA, NA,
-			NA, NA, NA, NA, NA, NA, 0, -1),
+	[15] = PINGROUP(15, qup0_se3_l3_mira, pwm_8, qup0_se8_l3, gcc_gp2,
+			qup0_se9_l3, NA, NA, NA, NA, NA, NA, 0, -1),
+	[16] = PINGROUP(16, qup0_se4_l0, aoss_cti, NA, NA, NA, NA, NA, NA, NA,
+			NA, NA, 0, -1),
+	[17] = PINGROUP(17, qup0_se4_l1, aoss_cti, pll_bist_sync, NA,
+			etdac_calib8, NA, NA, NA, NA, NA, NA, 0, -1),
+	[18] = PINGROUP(18, qup0_se4_l2, aoss_cti, mdp_vsync_e, NA,
+			etdac_calib9, NA, NA, NA, NA, NA, NA, 0, -1),
+	[19] = PINGROUP(19, qup0_se4_l3, aoss_cti, mdp_vsync_s, NA,
+			etdac_calib18, NA, NA, NA, NA, NA, NA, 0, -1),
+	[20] = PINGROUP(20, qup0_se5_l3_mira, qup0_se7_l3_mira, qup0_se10_l3,
+			i2s0_data0_mirb, qdss_cti, etdac_calib10, NA, NA, NA,
+			NA, NA, 0, -1),
+	[21] = PINGROUP(21, qup0_se5_l2_mira, qup0_se7_l2_mira, qup0_se10_l2,
+			i2s0_data1_mirb, qdss_cti, etdac_calib11, NA, NA, NA,
+			NA, NA, 0, -1),
+	[22] = PINGROUP(22, qup0_se5_l1_mira, qup0_se7_l1_mira, pwm_2,
+			i2s0_ws_mirb, NA, phase_flag12, qdss_gpio9,
+			etdac_calib12, NA, NA, NA, 0, -1),
+	[23] = PINGROUP(23, qup0_se5_l0_mira, qup0_se7_l0_mira, pwm_6,
+			i2s0_sck_mirb, usb2phy_ac_en, NA, phase_flag4,
+			qdss_gpio10, etdac_calib13, NA, NA, 0, -1),
+	[24] = PINGROUP(24, qup0_se1_l3, cci_timer3, NA, phase_flag5,
+			qdss_gpio11, etdac_calib14, NA, NA, NA, NA, NA, 0, -1),
+	[25] = PINGROUP(25, cci_timer2, NA, phase_flag6, qdss_gpio12,
+			etdac_calib15, NA, NA, NA, NA, NA, NA, 0, -1),
 	[26] = PINGROUP(26, NA, phase_flag7, qdss_gpio13, etdac_calib16, NA, NA,
-			NA, NA, NA, NA, NA, NA, 0, -1),
+			NA, NA, NA, NA, NA, 0, -1),
 	[27] = PINGROUP(27, mdp_vsync_p, mdp_vsync0_out, NA, phase_flag8,
-			qdss_gpio14, etdac_calib17, NA, NA, NA, NA, NA, NA, 0,
+			etdac_calib17, NA, NA, NA, NA, NA, NA, 0, -1),
+	[28] = PINGROUP(28, qup0_se6_l0, qup0_se9_l0, pll_clk_aux, dbg_out_clk,
+			NA, NA, NA, NA, NA, NA, egpio, 0, -1),
+	[29] = PINGROUP(29, qup0_se6_l1, qup0_se9_l1, NA, NA, NA, NA, NA, NA,
+			NA, NA, egpio, 0, -1),
+	[30] = PINGROUP(30, NA, NA, phase_flag9, qdss_gpio, etdac_calib20, NA,
+			NA, NA, NA, NA, NA, 0, -1),
+	[31] = PINGROUP(31, NA, phase_flag3, qdss_gpio, etdac_calib21, NA, NA,
+			NA, NA, NA, NA, NA, 0, -1),
+	[32] = PINGROUP(32, cam_mclk, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
 			-1),
-	[28] = PINGROUP(28, qup0_se6_l0, usb_phy_ps, qup0_se10_l0, pll_clk_aux,
-			dbg_out_clk, NA, NA, NA, NA, NA, NA, NA, 0, -1),
-	[29] = PINGROUP(29, qup0_se6_l1, qup0_se10_l1, NA, NA, NA, NA, NA, NA,
-			NA, NA, NA, NA, 0, -1),
-	[30] = PINGROUP(30, tgu_ch0_trigout, NA, phase_flag9, qdss_gpio,
-			etdac_calib20, NA, NA, NA, NA, NA, NA, NA, 0, -1),
-	[31] = PINGROUP(31, tgu_ch1_trigout, NA, phase_flag3, qdss_gpio,
-			etdac_calib21, NA, NA, NA, NA, NA, NA, NA, 0, -1),
-	[32] = PINGROUP(32, cam_mclk, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[33] = PINGROUP(33, cam_mclk, NA, adsp_ext, qdss_cti, NA, NA, NA, NA,
-			NA, NA, NA, NA, 0, -1),
-	[34] = PINGROUP(34, audio_ext_mclk0, cci_timer0, audio_ref_clk, pwm_0,
+	[33] = PINGROUP(33, cam_mclk, NA, qup0_se5_l0_mirb, adsp_ext, qdss_cti,
+			NA, NA, NA, NA, NA, NA, 0, -1),
+	[34] = PINGROUP(34, cci_timer0, audio_ext_mclk0, cci_async_in0,
+			audio_ref_clk, pwm_0, qdss_cti, NA, NA, NA, NA, NA, 0,
+			-1),
+	[35] = PINGROUP(35, cci_timer1, audio_ext_mclk1, qup0_se5_l1_mirb,
+			pwm_1, qdss_cti, tsense_pwm1, NA, NA, NA, NA, NA, 0,
+			-1),
+	[36] = PINGROUP(36, cci_i2c_sda0, i2s0_sck_mira, sdc1_tb_trig, gcc_gp1,
+			qdss_cti, NA, NA, NA, NA, NA, NA, 0, -1),
+	[37] = PINGROUP(37, cci_i2c_scl0, i2s0_ws_mira, qdss_cti, NA, NA, NA,
+			NA, NA, NA, NA, NA, 0, -1),
+	[38] = PINGROUP(38, cci_i2c_sda1, i2s0_data0_mira, pcie0_clk_req_n_mirb,
+			qup0_se5_l3_mirb, qdss_cti, NA, NA, NA, NA, NA, NA, 0,
+			-1),
+	[39] = PINGROUP(39, cci_i2c_scl1, i2s0_data1_mira, qup0_se5_l2_mirb,
 			qdss_cti, NA, NA, NA, NA, NA, NA, NA, 0, -1),
-	[35] = PINGROUP(35, audio_ext_mclk1, sdc2_tb_trig, cci_timer1, pwm_1,
-			qdss_cti, tsense_pwm1, NA, NA, NA, NA, NA, NA, 0, -1),
-	[36] = PINGROUP(36, cci_i2c_sda0, i2s0_sck, sdc1_tb_trig, gcc_gp1,
-			cci_timer2, qdss_cti, NA, NA, NA, NA, NA, NA, 0, -1),
-	[37] = PINGROUP(37, cci_i2c_scl0, i2s0_data0, qdss_cti, NA, NA, NA, NA,
-			NA, NA, NA, NA, NA, 0, -1),
-	[38] = PINGROUP(38, cci_i2c_sda1, i2s0_data1, pcie0_clk_req_n_mirb,
-			qdss_cti, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
-	[39] = PINGROUP(39, cci_i2c_scl1, i2s0_ws, qdss_cti, NA, NA, NA, NA, NA,
-			NA, NA, NA, NA, 0, -1),
-	[40] = PINGROUP(40, cci_timer3, cci_async_in0, tgu_ch3_trigout,
-			etdac_calib19, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
-	[41] = PINGROUP(41, gnss_l1_blanking, NA, etdac_calib22, NA, NA, NA, NA,
-			NA, NA, NA, NA, NA, 0, -1),
+	[40] = PINGROUP(40, qup0_se8_l1, etdac_calib19, NA, NA, NA, NA, NA, NA,
+			NA, NA, egpio, 0, -1),
+	[41] = PINGROUP(41, gnss_l1_blanking, pa_indicator, NA, etdac_calib22,
+			NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[42] = PINGROUP(42, gnss_l5_blanking, qdss_cti, etdac_calib23, NA, NA,
-			NA, NA, NA, NA, NA, NA, NA, 0, -1),
+			NA, NA, NA, NA, NA, NA, 0, -1),
 	[43] = PINGROUP(43, NA, etdac_calib24, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, NA, 0, -1),
-	[44] = PINGROUP(44, NA, pwm_4, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			0, -1),
-	[45] = PINGROUP(45, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			NA, 0, -1),
+	[44] = PINGROUP(44, NA, pwm_4, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
 			-1),
+	[45] = PINGROUP(45, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[46] = PINGROUP(46, NA, etdac_calib25, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, NA, 0, -1),
-	[47] = PINGROUP(47, NA, clk_dac, aoss_cti, NA, NA, NA, NA, NA, NA, NA,
-			NA, NA, 0, -1),
-	[48] = PINGROUP(48, NA, gsm_tx, aoss_cti, NA, NA, NA, NA, NA, NA, NA,
-			NA, NA, 0, -1),
-	[49] = PINGROUP(49, NA, aoss_cti, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 			NA, 0, -1),
-	[50] = PINGROUP(50, NA, aoss_cti, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
+	[47] = PINGROUP(47, NA, clk_dac, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			-1),
+	[48] = PINGROUP(48, NA, gsm_tx, vfr_1, NA, NA, NA, NA, NA, NA, NA, NA,
+			0, -1),
+	[49] = PINGROUP(49, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+	[50] = PINGROUP(50, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[51] = PINGROUP(51, NA, tmess_prng0, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[52] = PINGROUP(52, NA, wcn_sw_ctrl, tmess_prng1, NA, NA, NA, NA, NA,
-			NA, NA, NA, NA, 0, -1),
-	[53] = PINGROUP(53, NA, wcn_sw, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 			0, -1),
-	[54] = PINGROUP(54, NA, vfr_1, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
+	[52] = PINGROUP(52, NA, tmess_prng1, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 			0, -1),
-	[55] = PINGROUP(55, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
-			-1),
-	[56] = PINGROUP(56, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
-			-1),
+	[53] = PINGROUP(53, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+	[54] = PINGROUP(54, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+	[55] = PINGROUP(55, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+	[56] = PINGROUP(56, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[57] = PINGROUP(57, NA, prng_rosc0, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[58] = PINGROUP(58, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
-			-1),
+			0, -1),
+	[58] = PINGROUP(58, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[59] = PINGROUP(59, NA, prng_rosc1, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[60] = PINGROUP(60, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
-			-1),
-	[61] = PINGROUP(61, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
-			-1),
-	[62] = PINGROUP(62, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
-			-1),
-	[63] = PINGROUP(63, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
-			-1),
-	[64] = PINGROUP(64, NA, NA, gcc_gp2, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 			0, -1),
-	[65] = PINGROUP(65, NA, NA, gcc_gp3, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			0, -1),
-	[66] = PINGROUP(66, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[60] = PINGROUP(60, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+	[61] = PINGROUP(61, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+	[62] = PINGROUP(62, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+	[63] = PINGROUP(63, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+	[64] = PINGROUP(64, NA, NA, gcc_gp2, NA, NA, NA, NA, NA, NA, NA, NA, 0,
 			-1),
+	[65] = PINGROUP(65, NA, NA, gcc_gp3, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			-1),
+	[66] = PINGROUP(66, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[67] = PINGROUP(67, NA, NA, pll_reset_n, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
+			0, -1),
 	[68] = PINGROUP(68, uim0_reset, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
+			0, -1),
 	[69] = PINGROUP(69, uim0_present, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, NA, 0, -1),
+			NA, 0, -1),
 	[70] = PINGROUP(70, uim0_data, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[71] = PINGROUP(71, uim0_clk, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[72] = PINGROUP(72, mdp_vsync2_out, mdp_vsync1_out, txdac_calib14, NA,
-			NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+			0, -1),
+	[71] = PINGROUP(71, uim0_clk, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			-1),
+	[72] = PINGROUP(72, qup0_se8_l0, mdp_vsync2_out, mdp_vsync1_out,
+			txdac_calib14, NA, NA, NA, NA, NA, NA, egpio, 0, -1),
 	[73] = PINGROUP(73, wci_uart_txd, NA, phase_flag14, txdac_calib15,
-			atest_char0, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+			atest_char0, NA, NA, NA, NA, NA, NA, 0, -1),
 	[74] = PINGROUP(74, wci_uart_rxd, mdp_vsync3_out, qdss_gpio15, NA, NA,
-			NA, NA, NA, NA, NA, NA, NA, 0, -1),
+			NA, NA, NA, NA, NA, NA, 0, -1),
 	[75] = PINGROUP(75, sw_ctrl, NA, phase_flag15, qdss_gpio5,
-			txdac_calib17, atest_char2, NA, NA, NA, NA, NA, NA, 0,
-			-1),
-	[76] = PINGROUP(76, t2a_int, NA, NA, phase_flag10, txdac_calib18,
-			atest_char3, NA, NA, NA, NA, NA, NA, 0, -1),
+			txdac_calib17, atest_char2, NA, NA, NA, NA, NA, 0, -1),
+	[76] = PINGROUP(76, NA, NA, phase_flag10, txdac_calib18, atest_char3,
+			NA, NA, NA, NA, NA, NA, 0, -1),
 	[77] = PINGROUP(77, a2t_int, NA, NA, phase_flag11, txdac_calib16,
-			atest_char_start, NA, NA, NA, NA, NA, NA, 0, -1),
-	[78] = PINGROUP(78, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			atest_char_start, NA, NA, NA, NA, NA, 0, -1),
+	[78] = PINGROUP(78, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
 			-1),
-	[79] = PINGROUP(79, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
-			-1),
-	[80] = PINGROUP(80, sdc2None, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[81] = PINGROUP(81, sdc2None, pcie0_clk_req_n_mira, NA, NA, NA, NA, NA,
-			NA, NA, NA, NA, NA, 0, -1),
-	[82] = PINGROUP(82, sdc2None, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[83] = PINGROUP(83, sdc2None, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[84] = PINGROUP(84, sdc2_cmd, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[85] = PINGROUP(85, sdc2_clk, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[86] = PINGROUP(86, sdc2_clk_fb, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[87] = PINGROUP(87, NA, phase_flag27, txdac_calib22, atest_char1, NA,
-			NA, NA, NA, NA, NA, NA, NA, 0, -1),
-	[88] = PINGROUP(88, NA, phase_flag28, txdac_calib13, NA, NA, NA, NA, NA,
+	[79] = PINGROUP(79, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+	[80] = PINGROUP(80, sdc2_data, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
+			0, -1),
+	[81] = PINGROUP(81, sdc2_data, pcie0_clk_req_n_mira, NA, NA, NA, NA, NA,
 			NA, NA, NA, NA, 0, -1),
-	[89] = PINGROUP(89, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[82] = PINGROUP(82, sdc2_data, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
+			0, -1),
+	[83] = PINGROUP(83, sdc2_data, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
+			0, -1),
+	[84] = PINGROUP(84, sdc2_cmd, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
 			-1),
-	[90] = PINGROUP(90, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[85] = PINGROUP(85, sdc2_clk, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
 			-1),
-	[91] = PINGROUP(91, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[86] = PINGROUP(86, wcn_sw, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
 			-1),
-	[92] = PINGROUP(92, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[87] = PINGROUP(87, sdc2_tb_trig, NA, phase_flag27, txdac_calib22,
+			atest_char1, NA, NA, NA, NA, NA, NA, 0, -1),
+	[88] = PINGROUP(88, NA, phase_flag28, qdss_gpio14, txdac_calib13, NA,
+			NA, NA, NA, NA, NA, NA, 0, -1),
+	[89] = PINGROUP(89, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+	[90] = PINGROUP(90, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
 			-1),
-	[93] = PINGROUP(93, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[91] = PINGROUP(91, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
 			-1),
-	[94] = PINGROUP(94, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[92] = PINGROUP(92, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
 			-1),
-	[95] = PINGROUP(95, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[93] = PINGROUP(93, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
 			-1),
-	[96] = PINGROUP(96, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[94] = PINGROUP(94, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
 			-1),
-	[97] = PINGROUP(97, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[95] = PINGROUP(95, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
 			-1),
-	[98] = PINGROUP(98, NA, qdss_cti, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[99] = PINGROUP(99, NA, qdss_cti, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			NA, 0, -1),
-	[100] = PINGROUP(100, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[96] = PINGROUP(96, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
+			-1),
+	[97] = PINGROUP(97, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
+			-1),
+	[98] = PINGROUP(98, NA, qdss_cti, NA, NA, NA, NA, NA, NA, NA, NA, egpio,
+			0, -1),
+	[99] = PINGROUP(99, NA, qdss_cti, NA, NA, NA, NA, NA, NA, NA, NA, egpio,
+			0, -1),
+	[100] = PINGROUP(100, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
 			 -1),
-	[101] = PINGROUP(101, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[101] = PINGROUP(101, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
 			 -1),
-	[102] = PINGROUP(102, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+	[102] = PINGROUP(102, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
 			 -1),
 	[103] = PINGROUP(103, NA, qdss_gpio0, NA, atest_usb00, ddr_pxi0,
-			 vsense_trigger_mirnat, NA, NA, NA, NA, NA, NA, 0, -1),
+			 vsense_trigger_mirnat, NA, NA, NA, NA, egpio, 0, -1),
 	[104] = PINGROUP(104, NA, qdss_gpio1, NA, atest_usb01, ddr_pxi0, NA, NA,
-			 NA, NA, NA, NA, NA, 0, -1),
+			 NA, NA, NA, egpio, 0, -1),
 	[105] = PINGROUP(105, NA, qdss_gpio2, gnss_adc0, atest_usb02, NA, NA,
-			 NA, NA, NA, NA, NA, NA, 0, -1),
+			 NA, NA, NA, NA, egpio, 0, -1),
 	[106] = PINGROUP(106, NA, qdss_gpio3, gnss_adc1, atest_usb03, NA, NA,
-			 NA, NA, NA, NA, NA, NA, 0, -1),
-	[107] = PINGROUP(107, NA, qdss_gpio4, gnss_adc0, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, 0, -1),
-	[108] = PINGROUP(108, NA, qdss_gpio5, gnss_adc1, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, 0, -1),
-	[109] = PINGROUP(109, NA, qdss_gpio6, atest_bbrx1, NA, NA, NA, NA, NA,
-			 NA, NA, NA, NA, 0, -1),
-	[110] = PINGROUP(110, NA, qdss_gpio7, atest_bbrx0, NA, NA, NA, NA, NA,
-			 NA, NA, NA, NA, 0, -1),
-	[111] = PINGROUP(111, qup0_se3_l0, ibi_i3c, NA, phase_flag29,
-			 qdss_gpio8, txdac_calib23, NA, NA, NA, NA, NA, NA, 0,
+			 NA, NA, NA, NA, egpio, 0, -1),
+	[107] = PINGROUP(107, NA, qdss_gpio4, gnss_adc0, dll_qmspi0, NA, NA, NA,
+			 NA, NA, NA, egpio, 0, -1),
+	[108] = PINGROUP(108, NA, qdss_gpio5, gnss_adc1, dll_qmspi1, NA, NA, NA,
+			 NA, NA, NA, egpio, 0, -1),
+	[109] = PINGROUP(109, NA, qdss_gpio6, atest_bbrx1, dll_qmspi0, NA, NA,
+			 NA, NA, NA, NA, egpio, 0, -1),
+	[110] = PINGROUP(110, NA, qdss_gpio7, atest_bbrx0, dll_qmspi1, NA, NA,
+			 NA, NA, NA, NA, egpio, 0, -1),
+	[111] = PINGROUP(111, qup0_se3_l0_mira, ibi_i3c, NA, phase_flag29,
+			 qdss_gpio8, txdac_calib23, NA, NA, NA, NA, egpio, 0,
 			 -1),
-	[112] = PINGROUP(112, qup0_se3_l1, ibi_i3c, NA, phase_flag30,
-			 qdss_gpio10, txdac_calib24, NA, NA, NA, NA, NA, NA, 0,
+	[112] = PINGROUP(112, qup0_se3_l1_mira, ibi_i3c, NA, phase_flag30,
+			 qdss_gpio10, txdac_calib24, NA, NA, NA, NA, egpio, 0,
 			 -1),
 	[113] = PINGROUP(113, NA, phase_flag31, qdss_gpio11, txdac_calib10, NA,
-			 NA, NA, NA, NA, NA, NA, NA, 0, -1),
+			 NA, NA, NA, NA, NA, egpio, 0, -1),
 	[114] = PINGROUP(114, qdss_gpio12, txdac_calib11, NA, NA, NA, NA, NA,
-			 NA, NA, NA, NA, NA, 0, -1),
+			 NA, NA, NA, egpio, 0, -1),
 	[115] = PINGROUP(115, qdss_gpio13, txdac_calib12, NA, NA, NA, NA, NA,
-			 NA, NA, NA, NA, NA, 0, -1),
+			 NA, NA, NA, egpio, 0, -1),
 	[116] = PINGROUP(116, NA, phase_flag17, qdss_gpio14, txdac_calib25, NA,
-			 NA, NA, NA, NA, NA, NA, NA, 0, -1),
+			 NA, NA, NA, NA, NA, egpio, 0, -1),
 	[117] = PINGROUP(117, qup0_se6_l2, NA, phase_flag18, qdss_gpio15,
-			 txdac_calib8, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+			 txdac_calib8, NA, NA, NA, NA, NA, egpio, 0, -1),
 	[118] = PINGROUP(118, qup0_se6_l3, NA, phase_flag16, qdss_gpio9,
-			 txdac_calib9, NA, NA, NA, NA, NA, NA, NA, 0, -1),
+			 txdac_calib9, NA, NA, NA, NA, NA, egpio, 0, -1),
 	[119] = PINGROUP(119, NA, phase_flag19, qdss_gpio, txdac_calib0, NA, NA,
-			 NA, NA, NA, NA, NA, NA, 0, -1),
+			 NA, NA, NA, NA, egpio, 0, -1),
 	[120] = PINGROUP(120, NA, phase_flag20, qdss_gpio, txdac_calib1, NA, NA,
-			 NA, NA, NA, NA, NA, NA, 0, -1),
+			 NA, NA, NA, NA, egpio, 0, -1),
 	[121] = PINGROUP(121, NA, phase_flag21, txdac_calib2, NA, NA, NA, NA,
-			 NA, NA, NA, NA, NA, 0, -1),
+			 NA, NA, NA, egpio, 0, -1),
 	[122] = PINGROUP(122, NA, phase_flag22, txdac_calib3, NA, NA, NA, NA,
-			 NA, NA, NA, NA, NA, 0, -1),
-	[123] = PINGROUP(123, NA, phase_flag23, dll_qmspi0, NA, NA, NA, NA, NA,
-			 NA, NA, NA, NA, 0, -1),
-	[124] = PINGROUP(124, NA, phase_flag24, dll_qmspi1, NA, NA, NA, NA, NA,
-			 NA, NA, NA, NA, 0, -1),
-	[125] = PINGROUP(125, NA, phase_flag25, dll_qmspi0, NA, NA, NA, NA, NA,
-			 NA, NA, NA, NA, 0, -1),
-	[126] = PINGROUP(126, NA, phase_flag26, dll_qmspi1, NA, NA, NA, NA, NA,
-			 NA, NA, NA, NA, 0, -1),
-	[127] = PINGROUP(127, hpi_d15, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			 NA, 0, -1),
-	[128] = PINGROUP(128, hpi_d14, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			 NA, 0, -1),
-	[129] = PINGROUP(129, hpi_d13, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			 NA, 0, -1),
-	[130] = PINGROUP(130, hpi_d12, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			 NA, 0, -1),
-	[131] = PINGROUP(131, hpi_d11, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			 NA, 0, -1),
-	[132] = PINGROUP(132, hpi_d10, txdac_calib4, NA, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, 0, -1),
-	[133] = PINGROUP(133, hpi_d9, txdac_calib5, NA, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, 0, -1),
-	[134] = PINGROUP(134, hpi_d8, txdac_calib6, NA, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, 0, -1),
+			 NA, NA, NA, egpio, 0, -1),
+	[123] = PINGROUP(123, NA, phase_flag23, NA, NA, NA, NA, NA, NA, NA, NA,
+			 egpio, 0, -1),
+	[124] = PINGROUP(124, NA, phase_flag24, NA, NA, NA, NA, NA, NA, NA, NA,
+			 egpio, 0, -1),
+	[125] = PINGROUP(125, NA, phase_flag25, NA, NA, NA, NA, NA, NA, NA, NA,
+			 egpio, 0, -1),
+	[126] = PINGROUP(126, NA, phase_flag26, NA, NA, NA, NA, NA, NA, NA, NA,
+			 egpio, 0, -1),
+	[127] = PINGROUP(127, hpi_d15, qup0_se7_l0_mirb, NA, NA, NA, NA, NA, NA,
+			 NA, NA, egpio, 0, -1),
+	[128] = PINGROUP(128, hpi_d14, qup0_se7_l1_mirb, NA, NA, NA, NA, NA, NA,
+			 NA, NA, egpio, 0, -1),
+	[129] = PINGROUP(129, hpi_d13, qup0_se7_l2_mirb, NA, NA, NA, NA, NA, NA,
+			 NA, NA, egpio, 0, -1),
+	[130] = PINGROUP(130, hpi_d12, qup0_se7_l3_mirb, NA, NA, NA, NA, NA, NA,
+			 NA, NA, egpio, 0, -1),
+	[131] = PINGROUP(131, hpi_d11, qup0_se2_l3_mirb, NA, NA, NA, NA, NA, NA,
+			 NA, NA, egpio, 0, -1),
+	[132] = PINGROUP(132, hpi_d10, qup0_se2_l2_mirb, txdac_calib4, NA, NA,
+			 NA, NA, NA, NA, NA, egpio, 0, -1),
+	[133] = PINGROUP(133, hpi_d9, qup0_se2_l1_mirb, txdac_calib5, NA, NA,
+			 NA, NA, NA, NA, NA, egpio, 0, -1),
+	[134] = PINGROUP(134, hpi_d8, qup0_se2_l0_mirb, txdac_calib6, NA, NA,
+			 NA, NA, NA, NA, NA, egpio, 0, -1),
 	[135] = PINGROUP(135, opi_d7, txdac_calib7, NA, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, 0, -1),
+			 NA, egpio, 0, -1),
 	[136] = PINGROUP(136, opi_d6, txdac_calib19, NA, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, 0, -1),
+			 NA, NA, 0, -1),
 	[137] = PINGROUP(137, opi_d5, txdac_calib20, NA, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, 0, -1),
+			 NA, NA, 0, -1),
 	[138] = PINGROUP(138, opi_d4, txdac_calib21, NA, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, 0, -1),
-	[139] = PINGROUP(139, opi_d3, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			 NA, 0, -1),
-	[140] = PINGROUP(140, opi_d2, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			 NA, 0, -1),
-	[141] = PINGROUP(141, opi_d1, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			 NA, 0, -1),
+			 NA, NA, 0, -1),
+	[139] = PINGROUP(139, opi_d3, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio,
+			 0, -1),
+	[140] = PINGROUP(140, opi_d2, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio,
+			 0, -1),
+	[141] = PINGROUP(141, opi_d1, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio,
+			 0, -1),
 	[142] = PINGROUP(142, opi_d0, etdac_calib0, NA, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, 0, -1),
+			 NA, egpio, 0, -1),
 	[143] = PINGROUP(143, opi_clk, etdac_calib2, NA, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, 0, -1),
-	[144] = PINGROUP(144, opi_ce, etdac_calib3, NA, NA, NA, NA, NA, NA, NA,
+			 NA, NA, 0, -1),
+	[144] = PINGROUP(144, opi_cs_n, etdac_calib3, NA, NA, NA, NA, NA, NA,
 			 NA, NA, NA, 0, -1),
 	[145] = PINGROUP(145, hpi_dqs_dm1, etdac_calib1, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, NA, 0, -1),
+			 NA, NA, egpio, 0, -1),
 	[146] = PINGROUP(146, opi_dqs_dm0, etdac_calib4, NA, NA, NA, NA, NA, NA,
-			 NA, NA, NA, NA, 0, -1),
-	[147] = PINGROUP(147, opi_reset, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-			 NA, 0, -1),
-	[148] = PINGROUP(148, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			 NA, NA, NA, 0, -1),
+	[147] = PINGROUP(147, NA, nav_gpio2, NA, NA, NA, NA, NA, NA, NA, NA, NA,
+			 0, -1),
+	[148] = PINGROUP(148, NA, nav_gpio3, NA, NA, NA, NA, NA, NA, NA, NA, NA,
+			 0, -1),
+	[149] = PINGROUP(149, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, egpio, 0,
 			 -1),
-	[149] = PINGROUP(149, NA, pa_indicator, NA, NA, NA, NA, NA, NA, NA, NA,
-			 NA, NA, 0, -1),
+	[150] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x19B004, 0, 6),
+	[151] = SDC_QDSD_PINGROUP(sdc1_clk, 0x19B000, 13, 6),
+	[152] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x19B000, 11, 3),
+	[153] = SDC_QDSD_PINGROUP(sdc1_data, 0x19B000, 9, 0),
+	[154] = SDC_QDSD_PINGROUP(sdc2_clk, 0x19C000, 14, 6),
+	[155] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x19C000, 11, 3),
+	[156] = SDC_QDSD_PINGROUP(sdc2_data, 0x19C000, 9, 0),
 };
 
 static struct pinctrl_qup vienna_qup_regs[] = {
@@ -2125,21 +2507,22 @@ static struct pinctrl_qup vienna_qup_regs[] = {
 };
 
 static const struct msm_gpio_wakeirq_map vienna_pdc_map[] = {
-	{ 0, 106 }, { 3, 80 }, { 4, 78 }, { 7, 68 }, { 8, 154 },
-	{ 13, 120 }, { 14, 116 }, { 15, 98 }, { 16, 124 }, { 18, 125 },
-	{ 20, 127 }, { 23, 82 }, { 24, 83 }, { 25, 128 }, { 27, 113 },
-	{ 30, 132 }, { 31, 133 }, { 32, 92 }, { 33, 134 }, { 34, 135 },
-	{ 36, 93 }, { 37, 100 }, { 38, 137 }, { 39, 138 }, { 40, 139 },
-	{ 42, 141 }, { 45, 142 }, { 47, 121 }, { 48, 143 }, { 49, 11 },
-	{ 52, 111 }, { 53, 109 }, { 55, 145 }, { 56, 103 }, { 58, 146 },
-	{ 62, 147 }, { 64, 77 }, { 66, 148 }, { 69, 112 }, { 74, 149 },
-	{ 76, 151 }, { 78, 152 }, { 79, 153 }, { 80, 122 }, { 81, 155 },
-	{ 84, 101 }, { 86, 157 }, { 89, 158 }, { 91, 15 }, { 93, 160 },
-	{ 98, 117 }, { 99, 162 }, { 101, 69 }, { 102, 70 }, { 103, 71 },
-	{ 107, 81 }, { 110, 73 }, { 111, 74 }, { 113, 75 }, { 114, 76 },
-	{ 117, 85 }, { 118, 99 }, { 119, 86 }, { 120, 94 }, { 121, 95 },
-	{ 123, 91 }, { 125, 97 }, { 127, 104 }, { 130, 87 }, { 131, 88 },
-	{ 135, 105 }, { 136, 102 }, { 137, 67 }, { 138, 114 }, { 139, 115 },
+	{ 0, 106 }, { 3, 80 }, { 4, 78 }, { 7, 68 }, { 8, 154 }, { 11, 119 },
+	{ 13, 120 }, { 14, 116 }, { 15, 98 }, { 16, 124 }, { 18, 125 }, { 19, 79 },
+	{ 20, 127 }, { 23, 82 }, { 24, 83 }, { 25, 128 }, { 27, 113 }, { 28, 130 },
+	{ 30, 132 }, { 31, 133 }, { 32, 92 }, { 33, 134 }, { 34, 135 }, { 35, 136 },
+	{ 36, 93 }, { 37, 100 }, { 38, 137 }, { 39, 138 }, { 40, 139 }, { 41, 140 },
+	{ 42, 141 }, { 45, 142 }, { 47, 121 }, { 48, 143 }, { 49, 144 }, { 51, 118 },
+	{ 52, 111 }, { 53, 109 }, { 55, 145 }, { 56, 103 }, { 58, 146 }, { 60, 110 },
+	{ 62, 147 }, { 64, 77 }, { 66, 148 }, { 69, 112 }, { 74, 149 }, { 75, 150 },
+	{ 76, 151 }, { 78, 152 }, { 79, 153 }, { 80, 122 }, { 81, 155 }, { 82, 156 },
+	{ 84, 101 }, { 86, 157 }, { 89, 158 }, { 91, 159 }, { 93, 160 }, { 95, 161 },
+	{ 98, 117 }, { 99, 162 }, { 101, 69 }, { 102, 70 }, { 103, 71 }, { 105, 72 },
+	{ 107, 81 }, { 110, 73 }, { 111, 74 }, { 113, 75 }, { 114, 76 }, { 116, 84 },
+	{ 117, 85 }, { 118, 99 }, { 119, 86 }, { 120, 94 }, { 121, 95 }, { 122, 96 },
+	{ 123, 91 }, { 125, 97 }, { 127, 104 }, { 130, 87 }, { 131, 88 }, { 134, 89 },
+	{ 135, 105 }, { 136, 102 }, { 137, 67 }, { 138, 114 }, { 139, 115 }, { 140, 107 },
+	{ 141, 108 }, { 142, 123 }, { 145, 90 },
 };
 
 static const struct msm_pinctrl_soc_data vienna_pinctrl = {
@@ -2154,7 +2537,7 @@ static const struct msm_pinctrl_soc_data vienna_pinctrl = {
 	.nqup_regs = ARRAY_SIZE(vienna_qup_regs),
 	.wakeirq_map = vienna_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(vienna_pdc_map),
-	.egpio_func = 12,
+	.egpio_func = 11,
 };
 
 static const struct of_device_id vienna_tlmm_of_match[] = {
