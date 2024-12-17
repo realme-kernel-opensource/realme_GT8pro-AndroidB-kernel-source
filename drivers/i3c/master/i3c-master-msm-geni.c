@@ -234,6 +234,10 @@ enum geni_i3c_od_mode {
 /* For multi descriptor, gsi irq will generate for every 64 tre's */
 #define NUM_I3C_TRE_MSGS_PER_INTR (64)
 
+#define LOW_STATIC_ADDR_MASK	GENMASK(7, 0)
+#define HIGH_DYN_ADDR_MASK	GENMASK(15, 8)
+#define MANAGER_EE_SET	BIT(16)
+
 enum geni_i3c_err_code {
 	RD_TERM,
 	NACK,
@@ -355,6 +359,8 @@ struct geni_i3c_dev {
 	struct device *wrapper_dev;
 	bool is_shared;
 	bool pm_ctrl_client;  /* set from DTSI by client for AON case */
+	u32  skip_entdaa_mask; /* skip entdaa mask flag for secure slaves */
+	bool is_probe_done; /* i3c master probe done flag */
 	bool is_aon_client_probe_done; /* aon i3c probe done flag */
 	bool hj_in_progress; /* hotjoin in progress flag */
 	bool is_i2c_xfer; /* i2c transfer flag */
@@ -414,6 +420,7 @@ static void geni_i3c_enable_ibi_ctrl(struct geni_i3c_dev *gi3c, bool enable);
 static void geni_i3c_enable_ibi_irq(struct geni_i3c_dev *gi3c, bool enable);
 static int geni_i3c_enable_naon_ibi_clks(struct geni_i3c_dev *gi3c, bool enable);
 static int qcom_geni_i3c_conf(struct geni_i3c_dev *gi3c, enum i3c_bus_phase bus_phase);
+static int geni_i3c_master_send_ccc_cmd(struct i3c_master_controller *m, struct i3c_ccc_cmd *cmd);
 
 static struct geni_i3c_dev *i3c_geni_dev[MAX_I3C_SE];
 static int i3c_nos;
@@ -1810,6 +1817,76 @@ static int qcom_geni_i3c_conf(struct geni_i3c_dev *gi3c, enum i3c_bus_phase bus_
 	return 0;
 }
 
+int geni_i3c_send_setdasa(struct i3c_master_controller *master, u8 static_addr, u8 dyn_addr)
+{
+	struct i3c_ccc_cmd_dest dest;
+	struct i3c_ccc_setda *setda;
+	struct i3c_ccc_cmd cmd;
+	int ret;
+
+	dest.addr = static_addr;
+	dest.payload.len = sizeof(*setda);
+	dest.payload.data = kzalloc(dest.payload.len, GFP_KERNEL);
+	if (!dest.payload.data)
+		return -ENOMEM;
+
+	setda = (struct i3c_ccc_setda *)dest.payload.data;
+	setda->addr = dyn_addr << 1;
+
+	cmd.rnw = 0;
+	cmd.id = I3C_CCC_SETDASA;
+	cmd.dests = &dest;
+	cmd.ndests = 1;
+	cmd.err = I3C_ERROR_UNKNOWN;
+
+	ret = geni_i3c_master_send_ccc_cmd(master, &cmd);
+
+	kfree(dest.payload.data);
+
+	return ret;
+}
+
+static void geni_i3c_bus_set_addr_slot_status(struct i3c_bus *bus, u16 addr,
+					      enum i3c_addr_slot_status status)
+{
+	int bitpos = addr * 2;
+	unsigned long *ptr;
+
+	if (addr > I2C_MAX_ADDR)
+		return;
+
+	ptr = bus->addrslots + (bitpos / BITS_PER_LONG);
+	*ptr &= ~((unsigned long)I3C_ADDR_SLOT_STATUS_MASK <<
+			(bitpos % BITS_PER_LONG));
+	*ptr |= (unsigned long)status << (bitpos % BITS_PER_LONG);
+}
+
+static int geni_i3c_do_setdasa(struct geni_i3c_dev *gi3c)
+{
+	int ret = 0;
+	struct i3c_master_controller *master = &gi3c->ctrlr;
+	u8 skip_entdaa_static_addr, skip_entdaa_assigned_addr;
+
+	skip_entdaa_static_addr = gi3c->skip_entdaa_mask & LOW_STATIC_ADDR_MASK;
+	skip_entdaa_assigned_addr =  (gi3c->skip_entdaa_mask & HIGH_DYN_ADDR_MASK) >> 8;
+	ret = geni_i3c_send_setdasa(master, skip_entdaa_static_addr, skip_entdaa_assigned_addr);
+	if (ret) {
+		I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev, "setdasa failed %d\n", ret);
+		return ret;
+	}
+
+	geni_i3c_bus_set_addr_slot_status(&master->bus, skip_entdaa_assigned_addr,
+					  I3C_ADDR_SLOT_FREE);
+
+	ret = i3c_master_add_i3c_dev_locked(master, skip_entdaa_assigned_addr);
+	if (ret) {
+		I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev, "adding i3c dev failed %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 static void geni_i3c_hotjoin(struct work_struct *work)
 {
 	int ret;
@@ -2695,6 +2772,13 @@ static int geni_i3c_master_send_ccc_cmd(struct i3c_master_controller *m, struct 
 	unsigned long long start_time;
 	int i, ret;
 
+	/* For manager EE, skip Broadcast RSTDAA for multi_ee case */
+	if ((gi3c->skip_entdaa_mask & MANAGER_EE_SET) && cmd->id == I3C_CCC_RSTDAA(true)) {
+		I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
+			    "%s: skip RSTDAA for multi_ee manager\n", __func__);
+		return 0;
+	}
+
 	start_time = geni_capture_start_time(&gi3c->se, gi3c->ipc_log_kpi, __func__,
 					     gi3c->i3c_kpi);
 
@@ -2919,6 +3003,16 @@ static int geni_i3c_master_entdaa_locked(struct geni_i3c_dev *gi3c)
 static int geni_i3c_master_do_daa(struct i3c_master_controller *m)
 {
 	struct geni_i3c_dev *gi3c = to_geni_i3c_master(m);
+
+	I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev, "%s skip_entdaa:0x%x\n",
+		    __func__, gi3c->skip_entdaa_mask);
+
+	/* As part of probe, i3c framework will perform setdasa.
+	 * We should skip setdasa as part of probe daa process.
+	 * Perform setdasa only as part of hotjoin.
+	 */
+	if (gi3c->skip_entdaa_mask)
+		return gi3c->is_probe_done ? geni_i3c_do_setdasa(gi3c) : 0;
 
 	return geni_i3c_master_entdaa_locked(gi3c);
 }
@@ -4068,6 +4162,14 @@ static int geni_i3c_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "SE being used by two EEs.\n");
 	}
 
+	if (!of_property_read_u32(pdev->dev.of_node, "qcom,use_setdasa",
+				  &gi3c->skip_entdaa_mask)) {
+		I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
+			    "use set dasa for static addr:0x%lx dyn addr:0x%lx\n",
+			    gi3c->skip_entdaa_mask & LOW_STATIC_ADDR_MASK,
+			    (gi3c->skip_entdaa_mask & HIGH_DYN_ADDR_MASK) >> 8);
+	}
+
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,pm-ctrl-client")) {
 		gi3c->pm_ctrl_client = true;
 		dev_info(&pdev->dev, "Client controls the I3C PM\n");
@@ -4183,6 +4285,7 @@ static int geni_i3c_probe(struct platform_device *pdev)
 	geni_i3c_enable_hotjoin_irq(gi3c, true);
 	device_create_file(gi3c->se.dev, &dev_attr_capture_kpi);
 
+	gi3c->is_probe_done = true;
 	I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev, "I3C probed:%d\n", ret);
 	return ret;
 
