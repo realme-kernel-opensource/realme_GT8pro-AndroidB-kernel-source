@@ -16,9 +16,9 @@ def _generate_ddk_target(module_map, target_variant, config, config_fragment, ba
         visibility = ["//visibility:public"],
     )
 
-#alias for base defconfig
-#in case of gki builds this will be common:arch/arm64/config/gki_defconfig
-#in case of NON_gki builds this will be msm-kernel:arch/arm64/config/generic_vmdefconfig
+    #alias for base defconfig
+    #in case of gki builds this will be common:arch/arm64/config/gki_defconfig
+    #in case of NON_gki builds this will be msm-kernel:arch/arm64/config/generic_vmdefconfig
     native.alias(
         name = "{}_base_config".format(target_variant),
         actual = config,
@@ -32,15 +32,16 @@ def _generate_ddk_target(module_map, target_variant, config, config_fragment, ba
     )
 
     matched_configurations = []
+    phony_configurations = []
     module_names = {}
 
-    for config, value in config_fragment.items():
-        if value not in ["y", "m"]:
-            continue
-        if module_map.get(config):
-            for obj in module_map[config]:
+    for config, modules in module_map.items():
+        for obj in modules:
+            if config_fragment.get(config) in ["y", "m"]:
                 matched_configurations.append(obj)
                 module_names[obj.name] = "{}/{}".format(target_variant, obj.name)
+            else:
+                phony_configurations.append(obj)
 
     for module in matched_configurations:
         deps = [":{}".format(module_names.get(dep)) for dep in module.deps if module_names.get(dep)]
@@ -65,6 +66,12 @@ def _generate_ddk_target(module_map, target_variant, config, config_fragment, ba
             **module.extra_args
         )
 
+    for module in phony_configurations:
+        native.alias(
+            name = "{}/{}".format(target_variant, module.name),
+            actual = ":all_headers",
+            visibility = ["//visibility:public"],
+        )
     kernel_module_group(
         name = "{}_all_modules".format(target_variant),
         srcs = module_names.values(),
@@ -73,7 +80,7 @@ def _generate_ddk_target(module_map, target_variant, config, config_fragment, ba
     kernel_modules_install(
         name = "{}_modules_install".format(target_variant),
         kernel_modules = [":{}_all_modules".format(target_variant)],
-        outs=["modules.dep"]
+        outs = ["modules.dep"],
     )
 
     return [module.name for module in matched_configurations]
