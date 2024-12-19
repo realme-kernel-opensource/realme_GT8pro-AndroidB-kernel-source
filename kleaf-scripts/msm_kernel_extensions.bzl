@@ -18,7 +18,7 @@ def define_top_level_rules():
 def define_combined_vm_image(target, variant, vm_size_ext4):
     return
 
-def define_extras(target, flavor = None, alias = None):
+def define_extras(target, kbuild_config, flavor = None, alias = None):
     return
 
 def get_build_config_fragments(target):
