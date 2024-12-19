@@ -15,7 +15,7 @@ HOST_TARGETS = ["dtc"]
 DEFAULT_SKIP_LIST = []
 MSM_EXTENSIONS = "build/msm_kernel_extensions.bzl"
 ABL_EXTENSIONS = "build/abl_extensions.bzl"
-DEFAULT_MSM_EXTENSIONS_SRC = "../soc-repo/msm_kernel_extensions.bzl"
+DEFAULT_MSM_EXTENSIONS_SRC = "../soc-repo/kleaf-scripts/msm_kernel_extensions.bzl"
 DEFAULT_ABL_EXTENSIONS_SRC = "../bootable/bootloader/edk2/abl_extensions.bzl"
 DEFAULT_OUT_DIR = "{workspace}/out/msm-kernel-{target}-{variant}"
 
