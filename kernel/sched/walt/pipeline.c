@@ -312,6 +312,10 @@ bool find_heaviest_topapp(u64 window_start)
 	for (i = 0; i < MAX_NR_PIPELINE; i++) {
 		bool reset = true;
 
+		/* update pipeline low_latency for heavy tasks */
+		if (heavy_wts[i])
+			heavy_wts[i]->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
+
 		if (!heavy_wts_to_drop[i])
 			continue;
 		for (j = 0; j < MAX_NR_PIPELINE; j++) {
@@ -327,8 +331,6 @@ bool find_heaviest_topapp(u64 window_start)
 			heavy_wts_to_drop[i]->pipeline_cpu = -1;
 		}
 
-		if (heavy_wts[i])
-			heavy_wts[i]->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
 	}
 
 	if (heavy_wts[MAX_NR_PIPELINE - 1])
