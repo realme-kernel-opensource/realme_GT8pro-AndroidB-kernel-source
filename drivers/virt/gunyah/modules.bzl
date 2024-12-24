@@ -125,7 +125,6 @@ def register_modules(registry):
         config = "CONFIG_GH_RM_DRV",
         srcs = [
             # do not sort
-            "drivers/virt/gunyah/gh_guest_pops.h",
             "drivers/virt/gunyah/gh_rm_core.c",
             "drivers/virt/gunyah/gh_rm_drv_private.h",
             "drivers/virt/gunyah/gh_rm_iface.c",
@@ -165,6 +164,20 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/virt/gunyah/gh_guest_pops",
+        out = "gh_guest_pops.ko",
+        config = "CONFIG_GH_GUEST_POPS",
+        srcs = [
+            # do not sort
+            "drivers/virt/gunyah/gh_guest_pops.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/virt/gunyah/gh_rm_drv",
         ],
     )
 
