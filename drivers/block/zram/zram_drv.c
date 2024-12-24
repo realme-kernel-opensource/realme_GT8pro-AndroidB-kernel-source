@@ -1680,16 +1680,19 @@ static inline int _zram_compress_queue(const struct qpace_request_data *zdata,
 {
 	struct page *output_buffer;
 
+	int pos;
+
 	lockdep_assert_held(&zram_comp_queue_lock);
 
 	if (zram_comp_queue_size == DESCRIPTORS_PER_RING - 1)
 		return -ENOMEM;
 
-	comp_out_queue.request_arr[comp_out_queue.arr_offset].zdata = *zdata;
-
 	output_buffer = comp_out_queue.request_arr[comp_out_queue.arr_offset].out_page;
-	qpace_queue_compress(COMPRESS_RING, input_page_addr,
+
+	pos = qpace_queue_compress(COMPRESS_RING, input_page_addr,
 			     page_to_phys(output_buffer));
+
+	comp_out_queue.request_arr[pos].zdata = *zdata;
 
 	zram_comp_queue_size++;
 	zram_ring_increment(&comp_out_queue);
@@ -1751,10 +1754,10 @@ static inline void zram_copy_queue(struct qpace_request_data *zdata,
 				   phys_addr_t output_addr,
 				   unsigned int size)
 {
-	copy_out_queue.request_arr[copy_out_queue.arr_offset].zdata = *zdata;
-
-	qpace_queue_copy(COPY_RING, compressed_input_addr,
+	int pos = qpace_queue_copy(COPY_RING, compressed_input_addr,
 			 output_addr, size);
+
+	copy_out_queue.request_arr[pos].zdata = *zdata;
 
 	zram_ring_increment(&copy_out_queue);
 }
