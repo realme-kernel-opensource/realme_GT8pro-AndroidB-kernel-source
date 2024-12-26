@@ -1203,7 +1203,7 @@ static struct ctl_table smart_freq_cluster0[] = {
 		.procname	= "legacy_freq_levels",
 		.data		= &sysctl_legacy_freq_levels_cluster0,
 		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
-		.mode		= 0200,
+		.mode		= 0644,
 		.proc_handler	= sched_smart_freq_legacy_freq_handler,
 	},
 };
@@ -1234,7 +1234,7 @@ static struct ctl_table smart_freq_cluster1[] = {
 		.procname	= "legacy_freq_levels",
 		.data		= &sysctl_legacy_freq_levels_cluster1,
 		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
-		.mode		= 0200,
+		.mode		= 0644,
 		.proc_handler	= sched_smart_freq_legacy_freq_handler,
 	},
 };
@@ -1265,7 +1265,7 @@ static struct ctl_table smart_freq_cluster2[] = {
 		.procname	= "legacy_freq_levels",
 		.data		= &sysctl_legacy_freq_levels_cluster2,
 		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
-		.mode		= 0200,
+		.mode		= 0644,
 		.proc_handler	= sched_smart_freq_legacy_freq_handler,
 	},
 };
@@ -1296,7 +1296,7 @@ static struct ctl_table smart_freq_cluster3[] = {
 		.procname	= "legacy_freq_levels",
 		.data		= &sysctl_legacy_freq_levels_cluster3,
 		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
-		.mode		= 0200,
+		.mode		= 0644,
 		.proc_handler	= sched_smart_freq_legacy_freq_handler,
 	},
 };
