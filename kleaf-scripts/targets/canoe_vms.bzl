@@ -1,7 +1,7 @@
 load(":target_variants.bzl", "vm_types", "vm_variants")
 load(":kleaf-scripts/msm_common.bzl", "get_out_dir")
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
-load("//build:msm_kernel_extensions.bzl", "define_combined_vm_image", "define_extras")
+load("//build:msm_kernel_extensions.bzl", "define_combined_vm_image", "define_extras", "get_dtb_list")
 load(":kleaf-scripts/image_opts.bzl", "vm_image_opts")
 
 target_name = "canoe-vms"
@@ -10,6 +10,9 @@ def define_canoe_vms(vm_image_opts = vm_image_opts()):
     base_target = "canoe-tuivm"
     for variant in vm_variants:
         base_tv = "{}_{}".format(base_target, variant)
+
+        dtb_list = get_dtb_list(base_target)
+        compiled_dtbs = ["//soc-repo:canoe-{}_{}_dtb_build/{}".format(vt, variant, t) for vt in vm_types for t in dtb_list]
 
         if variant == "debug-defconfig":
             base_kernel = "kernel_aarch64_qtvm_debug"
@@ -20,12 +23,16 @@ def define_canoe_vms(vm_image_opts = vm_image_opts()):
         dist_targets = (
             ["canoe-{}_{}_vm_dist".format(vt, variant) for vt in vm_types] +
             ["canoe-{}_{}_dist".format(vt, variant) for vt in vm_types] +
-            [":canoe-{}_{}_modules_install".format(vt, variant) for vt in vm_types]
+            [":canoe-{}_{}_modules_install".format(vt, variant) for vt in vm_types] +
+            ["canoe-{}_{}_merge_msm_uapi_headers".format(vt, variant) for vt in vm_types] +
+            [base_kernel] +
+            [":signing_key"] +
+            [":verity_key"]
         ) + out_dtb_list
 
         copy_to_dist_dir(
             name = "{}_{}_dist".format(target_name, variant),
-            data = dist_targets,
+            data = dist_targets + compiled_dtbs,
             dist_dir = "{}/dist".format(get_out_dir(target_name, variant)),
             flat = True,
             wipe_dist_dir = True,
