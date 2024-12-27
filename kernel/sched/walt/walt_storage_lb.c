@@ -31,7 +31,7 @@ static bool lb_ignore_cpus(int cpu, cpumask_t *dst_cpu_mask_to_avoid)
 }
 
 /*
- * target cpu slection for pushing tasks from high irq cpus.
+ * target cpu selection for pushing tasks from high irq cpus.
  * select any least loaded cpus valid for storage tasks placement.
  */
 static int find_least_util_any_cpu(int src_cpu, cpumask_t *dst_cpu_mask_to_avoid,
@@ -178,8 +178,5 @@ bool move_storage_load(struct rq *rq)
 
 	/* try to migrate task form high irq cpus */
 	ret = migrate_high_irq_cpus(&dst_cpu_mask_to_avoid);
-	if (ret)
-		return ret;
-
 	return ret;
 }

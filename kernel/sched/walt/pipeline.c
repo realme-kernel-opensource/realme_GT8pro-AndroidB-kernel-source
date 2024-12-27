@@ -115,7 +115,7 @@ void remove_special_task(void)
 	/*
 	 * Although the pipeline special task designation is removed,
 	 * if the task is not dead (i.e. this function was called from sysctl context)
-	 * the task will continue to enjoy pipeline priveleges until the next update in
+	 * the task will continue to enjoy pipeline privileges until the next update in
 	 * find_heaviest_topapp()
 	 */
 	pipeline_special_task = NULL;
@@ -135,13 +135,13 @@ cpumask_t cpus_for_pipeline = { CPU_BITS_NONE };
 
 /* always set unisolation for max cluster, for pipeline tasks */
 /*
- * Note:
- * This can be refactored later to directly use pipeline cpus
+ * TODO:
+ * This will be refactored later to directly use pipeline cpus
  * to identify the clusters to be isolated/unisolated, that way
  * we are independent of need_cpus/not_preferred configurations
  * of core control (for 2 heavy task we are dependent on the
  * configuration).
- * The call to this can be moved after pipeline cpu assignement.
+ * The call to this can be moved after pipeline cpu assignment.
  */
 static inline void pipeline_set_unisolation(bool set, int flag)
 {
@@ -302,7 +302,7 @@ bool find_heaviest_topapp(u64 window_start)
 	list_for_each_entry(wts, &grp->tasks, grp_list) {
 		struct walt_task_struct *to_be_placed_wts = wts;
 
-		/* if the task hasnt seen action recently skip it */
+		/* if the task hasn't seen action recently skip it */
 		if (wts->mark_start < window_start - (sched_ravg_window * 2))
 			continue;
 
@@ -663,7 +663,7 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 			wts->pipeline_cpu = -1;
 
 		/*
-		 * assummes that if one pipeline doesn't have preferred set,
+		 * assumes that if one pipeline doesn't have preferred set,
 		 * all pipelines too do not have it set
 		 */
 		if (wts->pipeline_cpu == -1) {

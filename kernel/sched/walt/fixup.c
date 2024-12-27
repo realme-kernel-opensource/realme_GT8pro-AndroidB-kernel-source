@@ -151,7 +151,7 @@ void account_yields(u64 wallclock)
 		/*
 		 * if update_window_start comes more than
 		 * YIELD_GRACE_PERIOD_NSEC after the YIELD_WINDOW_SIZE_NSEC then
-		 * extrapolate the threasholds based on  delta time.
+		 * extrapolate the thresholds based on  delta time.
 		 */
 
 		if (unlikely(delta > YIELD_WINDOW_SIZE_NSEC + YIELD_GRACE_PERIOD_NSEC)) {
@@ -187,7 +187,7 @@ void account_yields(u64 wallclock)
  * Sleep time prediction:
  * Mark two adjacent yieldsa
  * cy: time now (current yield)
- * py: previous yeild time stamp
+ * py: previous yield time stamp
  *
  * |-----|: useful work done during frame.
  * |*|*|*|: yields during frame

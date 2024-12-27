@@ -1141,7 +1141,7 @@ static void binder_set_priority_hook(void *data,
 		 * some other task tries to use same binder thread.
 		 *
 		 * The only gets cleared when binder transaction is initiated
-		 * and the above condition to set flasg is nto satisfied.
+		 * and the above condition to set flags is not satisfied.
 		 */
 		wts->low_latency &= ~WALT_LOW_LATENCY_BINDER_BIT;
 

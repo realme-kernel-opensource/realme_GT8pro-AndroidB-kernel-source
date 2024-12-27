@@ -508,7 +508,7 @@ extern cpumask_t cpus_for_pipeline;
 #define WALT_CPUFREQ_PIPELINE_BUSY_BIT		BIT(11)
 
 /* CPUFREQ_REASON_LOAD is unused. If reasons value is 0, this indicates
- * that no extra features were enforcd, and the frequency alligns with
+ * that no extra features were enforced, and the frequency aligns with
  * the highest raw workload executing on one of the CPUs within the
  * corresponding cluster
  */
@@ -1388,7 +1388,7 @@ enum WALT_DEBUG_FEAT {
 	}						\
 })
 
-/* the least signifcant byte is the bitmask for features and printk */
+/* the least significant byte is the bitmask for features and printk */
 #define WALT_PANIC_SENTINEL	0x4544DE00
 
 #define walt_debug_bitmask_panic(x) (1UL << x)

@@ -846,7 +846,7 @@ finish:
  * In this function we match the accumulated subtractions with the current
  * and previous windows we are operating with. Ignore any entries where
  * the window start in the load_subtraction struct does not match either
- * the curent or the previous window. This could happen whenever CPUs
+ * the current or the previous window. This could happen whenever CPUs
  * become idle or busy with interrupts disabled for an extended period.
  */
 static inline void account_load_subtractions(struct rq *rq)
@@ -1782,7 +1782,7 @@ static void rollover_cpu_window(struct rq *rq, bool full_window)
  *
  * note irqtime = irq_e - irq_s
  *
- * Similar to the explanation at update_task_demand() we have few sitautions for irqtime
+ * Similar to the explanation at update_task_demand() we have few situations for irqtime
  *
  *              ws   ms_i   is    ie
  *              |    |      |      |
@@ -2535,7 +2535,7 @@ static inline void set_bits(struct walt_task_struct *wts,
  *
  *
  * multiple boundaries between ms and wc,  which case the code accounts for bit
- * until the next_ms_boundary and fills in the interm periods and the leftover from
+ * until the next_ms_boundary and fills in the interim periods and the leftover from
  * the closest is accounted in period
  *
  *  |          ms                        |                       |         wc
@@ -2658,7 +2658,7 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 		goto out;
 	}
 
-	/* cpu already boosted, so dont extend */
+	/* cpu already boosted, so don't extend */
 	if (wrq->lrb_pipeline_start_time != 0) {
 		no_boost_reason = 6;
 		goto out;
@@ -2687,7 +2687,7 @@ static void walt_update_task_ravg(struct task_struct *p, struct rq *rq, int even
 		return;
 
 	if (unlikely(!raw_spin_is_locked(&rq->__lock))) {
-		printk_deferred("WALT-BUG CPU%d: %s task %s(%d) unlocked access for cpu=%d suspende=%d last_clk=%llu stack[%pS <== %pS <== %pS]\n",
+		printk_deferred("WALT-BUG CPU%d: %s task %s(%d) unlocked access for cpu=%d suspended=%d last_clk=%llu stack[%pS <== %pS <== %pS]\n",
 				raw_smp_processor_id(), __func__, p->comm, p->pid, rq->cpu,
 				walt_clock_suspended, sched_clock_last,
 				(void *)CALLER_ADDR0, (void *)CALLER_ADDR1, (void *)CALLER_ADDR2);
@@ -4340,7 +4340,7 @@ DEFINE_PER_CPU(u32, wakeup_ctr);
  *
  * Process a workqueue call scheduled, while running in a hard irq
  * protected context.  Handle migration and window rollover work
- * with common funtionality, and on window rollover ask core control
+ * with common functionality, and on window rollover ask core control
  * to decide if it needs to adjust the active cpus.
  */
 static void walt_irq_work(struct irq_work *irq_work)
