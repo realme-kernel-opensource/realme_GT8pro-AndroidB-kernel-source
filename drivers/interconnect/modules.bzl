@@ -11,4 +11,3 @@ def register_modules(registry):
             # do not sort
         ],
     )
-

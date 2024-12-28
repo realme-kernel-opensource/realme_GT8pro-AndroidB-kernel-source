@@ -53,7 +53,7 @@ def define_single_vm_build(
             stem = name,
             target = dtb_target,
         )
-    
+
     native.genrule(
         name = "{}_merge_msm_uapi_headers".format(name),
         srcs = [

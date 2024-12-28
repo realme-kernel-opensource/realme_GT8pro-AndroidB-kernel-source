@@ -5,8 +5,8 @@ load(":configs/sun_tuivm.bzl", "sun_tuivm_config")
 load(":configs/sun_tuivm_debug.bzl", "sun_tuivm_debug_config")
 load(":kleaf-scripts/android_build.bzl", "define_typical_android_build")
 load(":kleaf-scripts/image_opts.bzl", "boot_image_opts")
-load(":target_variants.bzl", "la_variants")
 load(":kleaf-scripts/vm_build.bzl", "define_typical_vm_build")
+load(":target_variants.bzl", "la_variants")
 
 target_name = "sun"
 
@@ -59,7 +59,6 @@ def define_sun():
     )
 
 def define_sun_tuivm():
-
     define_typical_vm_build(
         name = "sun-tuivm",
         config = sun_tuivm_config,
@@ -68,7 +67,6 @@ def define_sun_tuivm():
     )
 
 def define_sun_oemvm():
-
     define_typical_vm_build(
         name = "sun-oemvm",
         config = sun_tuivm_config,

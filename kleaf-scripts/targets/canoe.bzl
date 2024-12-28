@@ -4,8 +4,8 @@ load(":configs/canoe_perf.bzl", "canoe_perf_config")
 load(":configs/canoe_tuivm.bzl", "canoe_tuivm_config")
 load(":kleaf-scripts/android_build.bzl", "define_typical_android_build")
 load(":kleaf-scripts/image_opts.bzl", "boot_image_opts")
-load(":target_variants.bzl", "la_variants")
 load(":kleaf-scripts/vm_build.bzl", "define_typical_vm_build")
+load(":target_variants.bzl", "la_variants")
 
 target_name = "canoe"
 
@@ -59,7 +59,6 @@ def define_canoe():
     )
 
 def define_canoe_tuivm():
-
     define_typical_vm_build(
         name = "canoe-tuivm",
         config = canoe_tuivm_config,
@@ -68,11 +67,9 @@ def define_canoe_tuivm():
     )
 
 def define_canoe_oemvm():
-
     define_typical_vm_build(
         name = "canoe-oemvm",
         config = canoe_tuivm_config,
         debug_config = canoe_tuivm_config,  # TODO: canoe_tuivm_debug_config
         dtb_target = "canoe-oemvm",
     )
-

@@ -229,7 +229,8 @@ def define_single_android_build(
         "{}_dtb_build_config".format(stem),
         "{}_tar_kernel_headers".format(stem),
     ] + [
-        ":{}/{}".format(stem, module) for module in modules
+        ":{}/{}".format(stem, module)
+        for module in modules
     ]
 
     vendor_dlkm_module_unprotected_list = get_unprotected_vendor_modules_list(stem)

@@ -33,7 +33,7 @@ def define_consolidated_kernel(name = "kernel_aarch64_consolidate"):
         ],
         build_config = ":build.config.qcom.dtb",
         defconfig = "//common:arch/arm64/configs/gki_defconfig",
-        post_defconfig_fragments = [ ":arch/arm64/configs/consolidate.fragment"],
+        post_defconfig_fragments = [":arch/arm64/configs/consolidate.fragment"],
         # TODO: make this True to align with gki kernel
         strip_modules = False,
         module_implicit_outs = get_gki_modules_list("arm64") + get_kunit_modules_list("arm64"),

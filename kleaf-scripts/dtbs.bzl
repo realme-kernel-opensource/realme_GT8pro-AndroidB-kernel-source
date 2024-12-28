@@ -1,7 +1,7 @@
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("//build:msm_kernel_extensions.bzl", "get_dtb_list", "get_dtbo_list", "get_dtstree")
-load("//build/kernel/kleaf:kernel.bzl", "kernel_build", "kernel_build_config")
 load("//build/kernel/kleaf:constants.bzl", "DEFAULT_GKI_OUTS")
+load("//build/kernel/kleaf:kernel.bzl", "kernel_build", "kernel_build_config")
 
 def define_qcom_dtb_setup():
     write_file(
@@ -48,7 +48,6 @@ def define_qcom_dtbs(
     dtb_list = get_dtb_list(target)
     dtbo_list = get_dtbo_list(target)
 
-
     kernel_build(
         name = "{}_dtb_build".format(stem),
         srcs = [
@@ -62,7 +61,7 @@ def define_qcom_dtbs(
         base_kernel = ":{}_base_kernel".format(stem),
         kconfig_ext = ":kconfig.msm.generated",
         makefile = "//common:Makefile",
-        defconfig= "{}_base_config".format(stem),
+        defconfig = "{}_base_config".format(stem),
         post_defconfig_fragments = [
             ":{}_defconfig".format(stem),
         ],

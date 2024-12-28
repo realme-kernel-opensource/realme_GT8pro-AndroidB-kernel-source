@@ -104,12 +104,12 @@ def define_qc_core_kernel(name, defconfig, defconfig_fragments = None):
             # keep sorted
             ".config",
             "Image",
+            "Module.symvers",
             "System.map",
             "certs/signing_key.x509",
             "gen_init_cpio",
             "modules.builtin",
             "modules.builtin.modinfo",
-            "Module.symvers",
             "scripts/sign-file",
             "vmlinux",
             "vmlinux.symvers",

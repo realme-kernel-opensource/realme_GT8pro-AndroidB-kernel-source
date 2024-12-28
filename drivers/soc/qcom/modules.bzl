@@ -1,8 +1,8 @@
 load(":drivers/soc/qcom/dcvs/modules.bzl", register_dcvs = "register_modules")
 load(":drivers/soc/qcom/mem_buf/modules.bzl", register_mem_buf = "register_modules")
 load(":drivers/soc/qcom/memshare/modules.bzl", register_memshare = "register_modules")
-load(":drivers/soc/qcom/sps/modules.bzl", register_sps = "register_modules")
 load(":drivers/soc/qcom/qpace/modules.bzl", register_qpace = "register_modules")
+load(":drivers/soc/qcom/sps/modules.bzl", register_sps = "register_modules")
 
 def register_modules(registry):
     register_dcvs(registry)
@@ -513,13 +513,13 @@ def register_modules(registry):
         config = "CONFIG_QCOM_PD_MAPPER",
         srcs = [
             # do not sort
-	    "drivers/soc/qcom/pdr_internal.h",
+            "drivers/soc/qcom/pdr_internal.h",
             "drivers/soc/qcom/qcom_pd_mapper.c",
         ],
-	deps = [
-	    "drivers/soc/qcom/qcom_pdr_msg",
-	    "drivers/soc/qcom/qmi_helpers",
-	],
+        deps = [
+            "drivers/soc/qcom/qcom_pdr_msg",
+            "drivers/soc/qcom/qmi_helpers",
+        ],
     )
 
     registry.register(
@@ -528,12 +528,12 @@ def register_modules(registry):
         config = "CONFIG_QCOM_PDR_MSG",
         srcs = [
             # do not sort
-	    "drivers/soc/qcom/pdr_internal.h",
+            "drivers/soc/qcom/pdr_internal.h",
             "drivers/soc/qcom/qcom_pdr_msg.c",
         ],
-	deps = [
-	    "drivers/soc/qcom/qmi_helpers",
-	],
+        deps = [
+            "drivers/soc/qcom/qmi_helpers",
+        ],
     )
 
     registry.register(
@@ -558,7 +558,7 @@ def register_modules(registry):
             "drivers/soc/qcom/minidump",
             "drivers/soc/qcom/smem",
             "drivers/soc/qcom/debug_symbol",
-	    "drivers/soc/qcom/qcom_pdr_msg",
+            "drivers/soc/qcom/qcom_pdr_msg",
             "drivers/dma-buf/heaps/qcom_dma_heaps",
             "drivers/iommu/msm_dma_iommu_mapping",
             "drivers/soc/qcom/mem_buf/mem_buf_dev",

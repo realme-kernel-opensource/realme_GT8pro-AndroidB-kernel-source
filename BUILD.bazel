@@ -6,18 +6,20 @@ load(":kleaf-scripts/android_build.bzl", "define_common_android_rules")
 load(":kleaf-scripts/ddk_uapi_headers_cc_library.bzl", "ddk_uapi_headers_cc_library")
 load(":kleaf-scripts/dtbs.bzl", "define_qcom_dtb_setup")
 load(":kleaf-scripts/generic_qtvm.bzl", "define_qtvm")
-load(":kleaf-scripts/targets/canoe.bzl",
-    "define_canoe_tuivm",
+load(
+    ":kleaf-scripts/targets/canoe.bzl",
+    "define_canoe",
     "define_canoe_oemvm",
-    "define_canoe")
-load(":kleaf-scripts/targets/canoe_vms.bzl","define_canoe_vms")
-load(":kleaf-scripts/targets/sun_vms.bzl","define_sun_vms")
+    "define_canoe_tuivm",
+)
+load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
 load(
     ":kleaf-scripts/targets/sun.bzl",
     "define_sun",
-    "define_sun_tuivm",
     "define_sun_oemvm",
+    "define_sun_tuivm",
 )
+load(":kleaf-scripts/targets/sun_vms.bzl", "define_sun_vms")
 load(":kleaf-scripts/targets/vienna.bzl", "define_vienna")
 
 exports_files(["android/abi_gki_aarch64_qcom"])

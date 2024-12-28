@@ -373,7 +373,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/hwtracing/coresight/coresight",
-	    "drivers/hwtracing/coresight/coresight-csr",
-	    "drivers/soc/qcom/dcvs/qcom_scmi_client",
+            "drivers/hwtracing/coresight/coresight-csr",
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
         ],
     )

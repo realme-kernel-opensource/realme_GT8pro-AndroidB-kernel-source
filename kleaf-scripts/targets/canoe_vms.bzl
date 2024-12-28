@@ -1,8 +1,8 @@
-load(":target_variants.bzl", "vm_types", "vm_variants")
-load(":kleaf-scripts/msm_common.bzl", "get_out_dir")
-load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load("//build:msm_kernel_extensions.bzl", "define_combined_vm_image", "define_extras", "get_dtb_list")
+load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load(":kleaf-scripts/image_opts.bzl", "vm_image_opts")
+load(":kleaf-scripts/msm_common.bzl", "get_out_dir")
+load(":target_variants.bzl", "vm_types", "vm_variants")
 
 target_name = "canoe-vms"
 
@@ -48,4 +48,4 @@ def define_canoe_vms(vm_image_opts = vm_image_opts()):
         )
 
         define_extras(base_tv, kbuild_config = base_kernel, alias = "{}_{}".format(target_name, variant))
-    define_combined_vm_image(target_name, variant, vm_image_opts.vm_size_ext4)
+        define_combined_vm_image(target_name, variant, vm_image_opts.vm_size_ext4)
