@@ -51,7 +51,7 @@ canoe_perf_config = {
     "CONFIG_GH_MSGQ": "m",
     "CONFIG_GH_PANIC_NOTIFIER": "n",
     "CONFIG_GH_PROXY_SCHED": "m",
-    "CONFIG_GH_RM_BOOSTER": "n",
+    "CONFIG_GH_RM_BOOSTER": "m",
     "CONFIG_GH_RM_DRV": "m",
     "CONFIG_GH_SECURE_VM_LOADER": "m",
     "CONFIG_GH_TLMM_VM_MEM_ACCESS": "n",
