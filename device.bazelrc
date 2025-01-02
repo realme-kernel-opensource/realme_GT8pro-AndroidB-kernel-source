@@ -8,3 +8,4 @@ common --//build/kernel/kleaf:allow_ddk_unsafe_headers
 common --//build/kernel/kleaf:user_kmi_symbol_lists=//soc-repo:android/abi_gki_aarch64_qcom
 build --flag_alias=socrepo=//build/kernel/kleaf:socrepo
 build --//build/kernel/kleaf:socrepo=true
+common --//build/kernel/kleaf:user_ddk_unsafe_headers=//soc-repo:unsafe_headers_qcom_group
