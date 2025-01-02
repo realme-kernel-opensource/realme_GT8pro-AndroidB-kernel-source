@@ -77,7 +77,6 @@ sun_perf_config = {
     "CONFIG_IOMMU_IO_PGTABLE_FAST": "n",
     "CONFIG_IPC_LOGGING": "m",
     "CONFIG_IPC_LOG_MINIDUMP_BUFFERS": "16",
-    "CONFIG_LEDS_QCOM_FLASH": "m",
     "CONFIG_LEDS_QCOM_LPG": "m",
     "CONFIG_LEDS_QTI_FLASH": "m",
     "CONFIG_MAC80211": "m",
