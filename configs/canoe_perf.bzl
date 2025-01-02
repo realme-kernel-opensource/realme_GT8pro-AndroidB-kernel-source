@@ -210,7 +210,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_SPMI_ADC5_GEN3": "m",
     "CONFIG_QCOM_SPMI_TEMP_ALARM": "m",
     "CONFIG_QCOM_SPSS": "m",
-    "CONFIG_QCOM_STATS": "n",
+    "CONFIG_QCOM_STATS": "m",
     "CONFIG_QCOM_SYSMON": "m",
     "CONFIG_QCOM_SYSMON_SUBSYSTEM_STATS": "m",
     "CONFIG_QCOM_TSENS": "m",
