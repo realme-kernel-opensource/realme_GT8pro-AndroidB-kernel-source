@@ -1456,6 +1456,7 @@ static inline void walt_lockdep_assert(int cond, int cpu, struct task_struct *p)
 
 extern bool pipeline_check(struct walt_rq *wrq);
 extern void pipeline_rearrange(struct walt_rq *wrq, bool need_assign_heavy);
+extern void walt_configure_single_thread_pipeline(unsigned int val);
 extern bool enable_load_sync(int cpu);
 extern struct walt_related_thread_group *lookup_related_thread_group(unsigned int group_id);
 extern bool prev_is_sbt;
@@ -1552,6 +1553,7 @@ extern unsigned int load_sync_low_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_high_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_high_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int sysctl_pipeline_special_task_util_thres;
+extern unsigned int sysctl_single_thread_pipeline;
 extern unsigned int sysctl_pipeline_non_special_task_util_thres;
 extern unsigned int sysctl_pipeline_pin_thres_low_pct;
 extern unsigned int sysctl_pipeline_pin_thres_high_pct;
