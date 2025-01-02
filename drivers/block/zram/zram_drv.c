@@ -1693,8 +1693,14 @@ static inline int _zram_compress_queue(struct qpace_request_meta *zmeta,
 	zram_comp_queue_size++;
 	zram_ring_increment(&comp_out_queue);
 
-	/* Kick compressor wait-queue if not kicked already */
-	if (!READ_ONCE(zram_comp_queue_non_empty)) {
+	/*
+	 * Trigger compression immediately if the queue is full, queue
+	 * delayed work otherwise. Kick compressor wait-queue if not kicked
+	 * already.
+	 */
+	if (zram_comp_queue_size == DESCRIPTORS_PER_RING - 1) {
+		queue_delayed_work(comp_wq, &comp_work, 0);
+	} else if (!READ_ONCE(zram_comp_queue_non_empty)) {
 		WRITE_ONCE(zram_comp_queue_non_empty, true);
 		queue_delayed_work(comp_wq, &comp_work, QPACE_BATCHED_WORK_DELAY_JIFFIES);
 	}
