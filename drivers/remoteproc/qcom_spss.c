@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Qualcomm Technologies, Inc. SPSS Peripheral Image Loader
  *
  */
@@ -314,24 +314,33 @@ static void unmask_scsr_irqs(struct qcom_spss *spss)
 
 static bool check_status(struct qcom_spss *spss, int *ret_error)
 {
-	uint32_t status_val, err_value, rmb_err;
+	uint32_t status_val, err_value, rmb_err, err_value_spare0, err_value_spare1;
+	bool ret_val = false;
 
 	err_value =  __raw_readl(spss->err_status_spare);
+	err_value_spare1 =  __raw_readl(spss->err_status_spare-4);
+	err_value_spare0 =  __raw_readl(spss->err_status_spare-8);
 	status_val = __raw_readl(spss->irq_status);
 	rmb_err = __raw_readl(spss->err_status);
 
 	if ((rmb_err & PBL_LOG_MASK) == PBL_LOG_VALUE) {
 		dev_err(spss->dev, "PBL error detected\n");
 		*ret_error = rmb_err;
-		return true;
-	}
-
-	if ((status_val & BIT(spss->bits_arr[ERR_READY])) && err_value == SPSS_WDOG_ERR) {
+		ret_val = true;
+	} else if ((status_val & BIT(spss->bits_arr[ERR_READY])) && err_value == SPSS_WDOG_ERR) {
 		dev_err(spss->dev, "wdog bite is pending\n");
 		__raw_writel(BIT(spss->bits_arr[ERR_READY]), spss->irq_clr);
-		return true;
+		ret_val = true;
 	}
-	return false;
+
+	if (ret_val) {
+		dev_err(spss->dev, "irq_status: 0x%08x, err_ready: 0x%08lx\n",
+		status_val, BIT(spss->bits_arr[ERR_READY]));
+		dev_err(spss->dev, "PBL error status register: 0x%08x, spare0 register: 0x%08x, spare1 register: 0x%08x, spare2 register: 0x%08x\n",
+		rmb_err, err_value_spare0, err_value_spare1, err_value);
+	}
+
+	return ret_val;
 }
 
 int get_spss_image_size(phys_addr_t base_addr)
