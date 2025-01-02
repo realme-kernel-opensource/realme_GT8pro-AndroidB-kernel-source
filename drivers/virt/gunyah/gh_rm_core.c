@@ -27,7 +27,7 @@
 #include <linux/gunyah.h>
 #include <linux/vmalloc.h>
 
-#include "rsc_mgr.h"
+#include "drivers/virt/gunyah/rsc_mgr.h"
 #include "gh_rm_drv_private.h"
 
 #define GH_RM_MAX_NUM_FRAGMENTS	62
