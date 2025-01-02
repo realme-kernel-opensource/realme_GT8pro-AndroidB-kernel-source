@@ -186,6 +186,19 @@ static inline bool should_pipeline_pin_special(void)
 {
 	if (!pipeline_special_task)
 		return false;
+
+	/*
+	 * if force special pinning is enabled for a SOC:
+	 * Any special pipeline task below configured threshold will be pinned independent
+	 * of other system wide conditions.
+	 */
+	if (soc_feat(SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING)) {
+		if (pipeline_demand(heavy_wts[0]) < sysctl_pipeline_special_task_util_thres)
+			return true;
+		else
+			return false;
+	}
+
 	if (!heavy_wts[MAX_NR_PIPELINE - 1])
 		return false;
 	if (pipeline_demand(heavy_wts[0]) <= sysctl_pipeline_special_task_util_thres)
@@ -529,7 +542,8 @@ void rearrange_heavy(u64 window_start, bool force)
 	 * and furthermore remove the task's current gold pipeline_cpu, which could cause the
 	 * task to start bouncing around on the golds, and ultimately lead to suboptimal behavior.
 	 */
-	if (have_heavy_list <= 2) {
+	if ((have_heavy_list <= 2) &&
+		!(pipeline_pinning && soc_feat(SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING))) {
 		find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
 
 		if (prime_wts && !is_prime_worthy(prime_wts)) {
