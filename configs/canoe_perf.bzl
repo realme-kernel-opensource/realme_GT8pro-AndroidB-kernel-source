@@ -246,7 +246,7 @@ canoe_perf_config = {
     "CONFIG_QTI_PMIC_PON_LOG": "m",
     "CONFIG_QTI_QCOM_SCMI_CLIENT": "m",
     "CONFIG_QTI_SCMI_VENDOR_PROTOCOL": "m",
-    "CONFIG_QTI_SYS_PM_VX": "n",
+    "CONFIG_QTI_SYS_PM_VX": "m",
     "CONFIG_QTI_THERMALZONE_CONFIG_DEBUG": "m",
     "CONFIG_R8712U": "n",
     "CONFIG_REBOOT_MODE": "m",
