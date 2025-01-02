@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -25,8 +25,6 @@
 #include <linux/iio/adc/qcom-vadc-common.h>
 
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
-
-#include "drivers/thermal/thermal_core.h"
 
 static LIST_HEAD(adc_tm_device_list);
 
@@ -946,7 +944,7 @@ static const struct iio_info adc5_gen3_info = {
 int adc_tm_gen3_get_temp(struct thermal_zone_device *tz, int *temp)
 {
 	int ret;
-	struct adc5_channel_prop *prop = tz->devdata;
+	struct adc5_channel_prop *prop = thermal_zone_device_priv(tz);
 	struct adc5_chip *adc;
 	u16 adc_code_volt;
 
@@ -1033,7 +1031,7 @@ static int adc_tm5_gen3_configure(struct adc5_channel_prop *prop)
 static int adc_tm5_gen3_set_trip_temp(struct thermal_zone_device *tz,
 					int low_temp, int high_temp)
 {
-	struct adc5_channel_prop *prop = tz->devdata;
+	struct adc5_channel_prop *prop = thermal_zone_device_priv(tz);
 	struct adc5_chip *adc;
 	struct adc_tm_config tm_config;
 	int ret;
