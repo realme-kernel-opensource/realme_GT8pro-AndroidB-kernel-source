@@ -86,6 +86,7 @@ def define_single_vm_build(
             ":signing_key",
             ":verity_key",
             base_kernel,
+            ":{}_dtb_build/.config".format(name),
         ],
         dist_dir = "out/msm-kernel-{}/dist".format(name),
         flat = True,

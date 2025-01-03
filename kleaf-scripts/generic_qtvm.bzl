@@ -102,7 +102,6 @@ def define_qc_core_kernel(name, defconfig, defconfig_fragments = None):
         srcs = ["//common:kernel_aarch64_sources"],
         outs = [
             # keep sorted
-            ".config",
             "Image",
             "Module.symvers",
             "System.map",
