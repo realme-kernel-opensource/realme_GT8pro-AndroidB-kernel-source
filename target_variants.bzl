@@ -3,7 +3,7 @@ targets = [
     "canoe",
     #"gen3auto",
     "sun",
-    #"vienna",
+    "vienna",
 ]
 
 la_variants = [

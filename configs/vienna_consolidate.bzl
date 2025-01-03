@@ -7,10 +7,10 @@ vienna_consolidate_config = {
     "CONFIG_DEBUG_SPINLOCK": "y",
     "CONFIG_DETECT_HUNG_TASK": "y",
     "CONFIG_LKDTM": "m",
+    "CONFIG_TORTURE_TEST": "m",
     "CONFIG_LOCK_TORTURE_TEST": "m",
     "CONFIG_PAGE_OWNER": "y",
     "CONFIG_PAGE_POISONING": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_RUNTIME_TESTING_MENU": "y",
-    "CONFIG_TEST_USER_COPY": "m",
 }
