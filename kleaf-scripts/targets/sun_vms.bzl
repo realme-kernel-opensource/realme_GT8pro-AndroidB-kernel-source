@@ -48,5 +48,16 @@ def define_sun_vms(vm_image_opts = vm_image_opts()):
             },
         )
 
+        copy_to_dist_dir(
+            name = "{}_{}_host_dist".format(target_name, variant),
+            data = [
+                ":gen-headers_install.sh",
+                ":unifdef",
+            ],
+            dist_dir = "{}/host".format(get_out_dir(target_name, variant)),
+            flat = True,
+            log = "info",
+        )
+
         define_extras(base_tv, kbuild_config = base_kernel, alias = "{}_{}".format(target_name, variant))
         define_combined_vm_image(target_name, variant, vm_image_opts.vm_size_ext4)

@@ -33,6 +33,35 @@ define_qcom_dtb_setup()
 
 define_qtvm()
 
+cc_binary(
+    name = "unifdef",
+    srcs = ["scripts/unifdef.c"],
+    copts = [],
+)
+
+genrule(
+    name = "gen-headers_install.sh",
+    srcs = ["scripts/headers_install.sh"],
+    outs = ["generated_headers_install.sh"],
+    cmd = "sed 's+scripts/unifdef+$${LOC_UNIFDEF:-$$(dirname $$0)/unifdef}+g' $(SRCS) > $(OUTS)",
+    tools = [":unifdef"],
+)
+
+sh_binary(
+    name = "headers_install.sh",
+    srcs = [":gen-headers_install.sh"],
+    deps = [":unifdef"],
+)
+
+wireless_certs_cmd = """
+    (echo '#include "reg.h"'; \
+    echo 'const u8 shipped_regdb_certs[] = {'; \
+    echo | cat - $(SRCS) ; \
+    echo '};'; \
+    echo 'unsigned int shipped_regdb_certs_len = sizeof(shipped_regdb_certs);'; \
+    ) > $@
+"""
+
 hermetic_genrule(
     name = "net/wireless/shipped-certs",
     srcs = glob(["net/wireless/certs/*.hex"]),
