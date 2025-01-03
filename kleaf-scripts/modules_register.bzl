@@ -4,6 +4,7 @@ load(
     "//build/kernel/kleaf:kernel.bzl",
     "ddk_headers",
     "ddk_module",
+    "kernel_compile_commands",
     "kernel_module_group",
     "kernel_modules_install",
 )
@@ -81,6 +82,11 @@ def _generate_ddk_target(module_map, target_variant, config, config_fragment, ba
         name = "{}_modules_install".format(target_variant),
         kernel_modules = [":{}_all_modules".format(target_variant)],
         outs = ["modules.dep"],
+    )
+
+    kernel_compile_commands(
+        name = "{}_compile_commands".format(target_variant),
+        deps = [":{}_all_modules".format(target_variant)],
     )
 
     return [module.name for module in matched_configurations]
