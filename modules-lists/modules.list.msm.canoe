@@ -8,6 +8,7 @@ camcc-canoe.ko
 clk-dummy.ko
 clk-qcom.ko
 clk-rpmh.ko
+clk-scmi.ko
 sched-walt.ko
 sched-walt-debug.ko
 qcom_cpu_vendor_hooks.ko
