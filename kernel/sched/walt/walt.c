@@ -5151,11 +5151,20 @@ static void android_rvh_schedule(void *unused, struct task_struct *prev,
 {
 	u64 wallclock;
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(prev);
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
 	if (unlikely(walt_disabled))
 		return;
 
 	wallclock = walt_rq_clock(rq);
+
+	/*
+	 * reset mvp arrival time as we are switching to non-CFS task
+	 * If rq is already in MVP throttling state then continue with
+	 * throttling until throttling time expires.
+	 */
+	if (!walt_fair_task(next))
+		wrq->mvp_arrival_time = 0;
 
 	if (likely(prev != next)) {
 		if (!task_is_runnable(prev))
