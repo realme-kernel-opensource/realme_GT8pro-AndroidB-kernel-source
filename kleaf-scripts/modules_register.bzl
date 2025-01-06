@@ -1,6 +1,7 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load(
     "//build/kernel/kleaf:kernel.bzl",
+    "ddk_config",
     "ddk_module",
     "kernel_compile_commands",
     "kernel_module_group",
@@ -23,6 +24,13 @@ def _generate_ddk_target(
         name = "{}_defconfig".format(target_variant),
         out = "{}.config".format(target_variant),
         config = config_fragment,
+    )
+
+    ddk_config(
+        name = "{}_config".format(target_variant),
+        defconfig = ":{}_defconfig".format(target_variant),
+        kconfigs = [":kconfig.msm.generated"],
+        kernel_build = ":{}_base_kernel".format(target_variant),
     )
 
     matched_configurations = []
@@ -54,8 +62,7 @@ def _generate_ddk_target(
             ],
             includes = includes,
             kernel_build = ":{}_base_kernel".format(target_variant),
-            defconfig = ":{}_defconfig".format(target_variant),
-            kconfig = ":kconfig.msm.generated",
+            config = ":{}_config".format(target_variant),
             visibility = ["//visibility:public"],
             **module.extra_args
         )
