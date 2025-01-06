@@ -238,7 +238,8 @@ bool find_heaviest_topapp(u64 window_start)
 		return false;
 	}
 
-	if (last_rearrange_ns && (window_start < (last_rearrange_ns + 100 * MSEC_TO_NSEC)))
+	if (last_rearrange_ns && (window_start < (last_rearrange_ns +
+					(u64)sysctl_pipeline_rearrange_delay_ms[0] * MSEC_TO_NSEC)))
 		return false;
 	last_rearrange_ns = window_start;
 
@@ -450,11 +451,14 @@ static inline void swap_pipeline_with_prime_locked(struct walt_task_struct *prim
 static inline bool delay_rearrange(u64 window_start, int pipeline_type, bool force)
 {
 	static u64 last_rearrange_ns[MAX_PIPELINE_TYPES];
+	u64 next_rearrange = (sysctl_pipeline_rearrange_delay_ms[1] > 0) ?
+				((u64)sysctl_pipeline_rearrange_delay_ms[1]  * MSEC_TO_NSEC) :
+					((u64)sched_ravg_window * WINDOW_HYSTERESIS);
 
 	if (!force && last_rearrange_ns[pipeline_type] &&
-			(window_start < (last_rearrange_ns[pipeline_type] +
-			(sched_ravg_window*WINDOW_HYSTERESIS))))
+		(window_start < last_rearrange_ns[pipeline_type] + next_rearrange))
 		return true;
+
 	last_rearrange_ns[pipeline_type] = window_start;
 	return false;
 }
