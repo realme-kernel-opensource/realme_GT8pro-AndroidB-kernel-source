@@ -45,6 +45,7 @@ canoe_tuivm_config = {
     "CONFIG_QRTR_WAKEUP_MS": "500",
     "CONFIG_QTI_IOMMU_SUPPORT": "y",
     "CONFIG_SPI_MSM_GENI": "m",
+    "CONFIG_VIRTIO_MEM": "y",
     "CONFIG_VIRTIO_MMIO": "m",
     "CONFIG_VIRTIO_MMIO_SWIOTLB": "y",
     "CONFIG_VSOCKETS": "m",
@@ -52,4 +53,5 @@ canoe_tuivm_config = {
     "CONFIG_INTERCONNECT_CLK": "m",
     "CONFIG_GH_SECURE_VM_LOADER": "m",
     "CONFIG_QCOM_MDT_LOADER": "m",
+    "CONFIG_PSI": "y",
 }
