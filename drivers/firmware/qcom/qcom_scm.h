@@ -214,6 +214,7 @@ struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
 #define QCOM_SCM_QSEELOG_REGISTER		0x06
 #define QCOM_SCM_QUERY_ENCR_LOG_FEAT_ID		0x0b
 #define QCOM_SCM_REQUEST_ENCR_LOG_ID		0x0c
+#define QCOM_SCM_QUERY_LOG_STATUS		0x0F
 
 #define QCOM_SCM_SVC_SMCINVOKE			0x06
 #define QCOM_SCM_SMCINVOKE_INVOKE_LEGACY	0x00
