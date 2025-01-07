@@ -52,7 +52,7 @@ def define_canoe():
 
     define_typical_android_build(
         name = "canoe",
-        consolidate_config = canoe_perf_config | canoe_consolidate_config,
+        consolidate_config = canoe_consolidate_config,
         perf_config = canoe_perf_config,
         consolidate_build_img_opts = consolidate_build_img_opts,
         perf_build_img_opts = perf_build_img_opts,

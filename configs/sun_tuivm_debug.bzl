@@ -1,6 +1,4 @@
-load(":configs/sun_tuivm.bzl", "sun_tuivm_config")
-
-sun_tuivm_debug_config = sun_tuivm_config | {
+sun_tuivm_debug_config = {
     "CONFIG_CMDLINE_FORCE": "n",
     "CONFIG_GH_VIRTIO_DEBUG": "y",
     "CONFIG_MSM_GPI_DMA_DEBUG": "y",

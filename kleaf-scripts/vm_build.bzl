@@ -1,14 +1,12 @@
 load(
     "//build:msm_kernel_extensions.bzl",
-    "define_combined_vm_image",
     "define_extras",
     "get_dtb_list",
     "get_dtbo_list",
-    "get_dtstree",
 )
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
-load("//build/kernel/kleaf:kernel.bzl", "merged_kernel_uapi_headers")
+load("//build/kernel/kleaf:kernel.bzl", "ddk_headers", "merged_kernel_uapi_headers")
 load(":kleaf-scripts/dtbs.bzl", "define_qcom_dtbs")
 load(":kleaf-scripts/image_opts.bzl", "vm_image_opts")
 load(":qcom_modules.bzl", "registry")
@@ -45,8 +43,16 @@ def define_single_vm_build(
         name,
         config_fragment,
         base_kernel,
-        dtb_target = None):
-    modules = registry.define_modules(name, config_fragment, base_kernel)
+        dtb_target = None,
+        ddk_config_deps = None,
+        implicit_config_fragment = None):
+    modules = registry.define_modules(
+        name,
+        config_fragment,
+        base_kernel,
+        ddk_config_deps = ddk_config_deps,
+        implicit_config_fragment = implicit_config_fragment,
+    )
 
     if dtb_target:
         define_qcom_dtbs(
@@ -140,16 +146,27 @@ def define_typical_vm_build(
     if debug_kwargs == None:
         debug_kwargs = dict()
 
+    # See b/370450569#comment34
+    common_info = "{}_common_info".format(name)
+    ddk_headers(
+        name = common_info,
+        kconfigs = [":kconfig.msm.generated"],
+        defconfigs = [":{}_defconfig_defconfig".format(name)],
+    )
+
     define_vm_build(
         name = name,
         configs = {
             "debug-defconfig": {
                 "config_fragment": debug_config,
                 "base_kernel": "//soc-repo:kernel_aarch64_qtvm_debug",
+                "ddk_config_deps": [common_info],
+                "implicit_config_fragment": config,
             } | debug_kwargs,
             "defconfig": {
                 "config_fragment": config,
                 "base_kernel": "//soc-repo:kernel_aarch64_qtvm",
+                "ddk_config_deps": [common_info],
             },
         },
         **kwargs

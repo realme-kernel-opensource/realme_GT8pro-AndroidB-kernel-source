@@ -48,7 +48,7 @@ def define_vienna():
 
     define_typical_android_build(
         name = "vienna",
-        consolidate_config = vienna_perf_config | vienna_consolidate_config,
+        consolidate_config = vienna_consolidate_config,
         perf_config = vienna_perf_config,
         consolidate_build_img_opts = consolidate_build_img_opts,
         perf_build_img_opts = perf_build_img_opts,

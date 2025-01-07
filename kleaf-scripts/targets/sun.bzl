@@ -52,7 +52,7 @@ def define_sun():
 
     define_typical_android_build(
         name = "sun",
-        consolidate_config = sun_perf_config | sun_consolidate_config,
+        consolidate_config = sun_consolidate_config,
         perf_config = sun_perf_config,
         consolidate_build_img_opts = consolidate_build_img_opts,
         perf_build_img_opts = perf_build_img_opts,

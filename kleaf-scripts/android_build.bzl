@@ -5,7 +5,7 @@ load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load(
     "//build/kernel/kleaf:kernel.bzl",
-    "kernel_build",
+    "ddk_headers",
     "kernel_build_config",
     "kernel_images",
     "merged_kernel_uapi_headers",
@@ -50,9 +50,17 @@ def define_single_android_build(
         config_fragment,
         base_kernel,
         build_img_opts = None,
-        dtb_target = None):
+        dtb_target = None,
+        ddk_config_deps = None,
+        implicit_config_fragment = None):
     stem = "{}_{}".format(name, variant)
-    modules = registry.define_modules(stem, config_fragment, base_kernel)
+    modules = registry.define_modules(
+        stem,
+        config_fragment,
+        base_kernel,
+        ddk_config_deps,
+        implicit_config_fragment,
+    )
 
     hermetic_genrule(
         name = "{}_vendor_dlkm_modules_list_generated".format(stem),
@@ -334,6 +342,14 @@ def define_typical_android_build(
     if consolidate_kwargs == None:
         consolidate_kwargs = dict()
 
+    # See b/370450569#comment34
+    common_info = "{}_common_info".format(name)
+    ddk_headers(
+        name = common_info,
+        kconfigs = [":kconfig.msm.generated"],
+        defconfigs = [":{}_perf_defconfig".format(name)],
+    )
+
     define_android_build(
         name,
         configs = {
@@ -341,11 +357,14 @@ def define_typical_android_build(
                 "config_fragment": perf_config,
                 "base_kernel": "//common:kernel_aarch64",
                 "build_img_opts": perf_build_img_opts,
+                "ddk_config_deps": [common_info],
             } | perf_kwargs,
             "consolidate": {
                 "config_fragment": consolidate_config,
                 "base_kernel": "//soc-repo:kernel_aarch64_consolidate",
                 "build_img_opts": consolidate_build_img_opts,
+                "ddk_config_deps": [common_info],
+                "implicit_config_fragment": perf_config,
             } | consolidate_kwargs,
         },
         dtb_target = name,
