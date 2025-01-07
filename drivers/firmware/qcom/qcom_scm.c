@@ -2312,7 +2312,7 @@ int qcom_scm_query_encrypted_log_feature(u64 *enabled)
 	struct qcom_scm_res res;
 
 	ret = qcom_scm_call(__scm->dev, &desc, &res);
-	if (enabled)
+	if (!ret)
 		*enabled = res.result[0];
 
 	return ret;
