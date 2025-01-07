@@ -824,6 +824,28 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qcom_soc_wdt",
+        out = "qcom_soc_wdt.ko",
+        config = "CONFIG_QCOM_SOC_WATCHDOG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_soc_wdt.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_wdt_core",
+            "drivers/soc/qcom/minidump",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/debug_symbol",
+            "drivers/dma-buf/heaps/qcom_dma_heaps",
+            "drivers/iommu/msm_dma_iommu_mapping",
+            "drivers/soc/qcom/mem_buf/mem_buf_dev",
+            "drivers/soc/qcom/secure_buffer",
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom_stats",
         out = "qcom_stats.ko",
         config = "CONFIG_QCOM_STATS",

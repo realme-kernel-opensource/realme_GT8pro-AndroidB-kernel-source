@@ -15,6 +15,7 @@ qcom_cpu_vendor_hooks.ko
 cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko
+qcom_soc_wdt.ko
 debug-regulator.ko
 debugcc-canoe.ko
 dispcc-canoe.ko
