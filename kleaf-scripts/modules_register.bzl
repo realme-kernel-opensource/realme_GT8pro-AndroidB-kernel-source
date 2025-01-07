@@ -10,21 +10,11 @@ load(":kleaf-scripts/defconfig_fragment.bzl", "define_defconfig_fragment")
 def _generate_ddk_target(
         module_map,
         target_variant,
-        config,
         config_fragment,
         base_kernel):
     native.alias(
         name = "{}_base_kernel".format(target_variant),
         actual = base_kernel,
-        visibility = ["//visibility:public"],
-    )
-
-    #alias for base defconfig
-    #in case of gki builds this will be common:arch/arm64/config/gki_defconfig
-    #in case of NON_gki builds this will be msm-kernel:arch/arm64/config/generic_vmdefconfig
-    native.alias(
-        name = "{}_base_config".format(target_variant),
-        actual = config,
         visibility = ["//visibility:public"],
     )
 
@@ -115,13 +105,11 @@ def create_module_registry():
 
     def define_modules(
             target_variant,
-            config,
             config_fragment,
             base_kernel):
         return _generate_ddk_target(
             module_map,
             target_variant,
-            config,
             config_fragment,
             base_kernel,
         )

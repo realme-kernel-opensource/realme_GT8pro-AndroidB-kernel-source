@@ -1,6 +1,5 @@
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("//build:msm_kernel_extensions.bzl", "get_dtb_list", "get_dtbo_list", "get_dtstree")
-load("//build/kernel/kleaf:constants.bzl", "DEFAULT_GKI_OUTS")
 load("//build/kernel/kleaf:kernel.bzl", "kernel_build", "kernel_build_config")
 
 def define_qcom_dtb_setup():
@@ -33,14 +32,17 @@ def define_qcom_dtb_setup():
 
 def define_qcom_dtbs(
         stem,
-        target):
+        target,
+        defconfig):
     """Build a the dtbs for a target/variant.
 
     Args:
         stem: The name of the rule
         target: Configuration to use to build the DTBs
+        defconfig: defconfig for the kernel_build.
 
-    Returns: A tuple:
+    Returns:
+        A tuple:
         - the first item is the list of DTBs to be built
         - the second item is the list of DTBOs to be built
     """
@@ -61,7 +63,7 @@ def define_qcom_dtbs(
         base_kernel = ":{}_base_kernel".format(stem),
         kconfig_ext = ":kconfig.msm.generated",
         makefile = "//common:Makefile",
-        defconfig = "{}_base_config".format(stem),
+        defconfig = defconfig,
         post_defconfig_fragments = [
             ":{}_defconfig".format(stem),
         ],
