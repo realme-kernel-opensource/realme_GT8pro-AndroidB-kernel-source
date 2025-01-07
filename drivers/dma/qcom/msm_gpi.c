@@ -25,6 +25,7 @@
 #include <linux/scatterlist.h>
 #include <linux/sched/clock.h>
 #include <linux/slab.h>
+#include <linux/soc/qcom/smem.h>
 #include <linux/vmalloc.h>
 #include <linux/cacheflush.h>
 #include <linux/msm_gpi.h>
@@ -472,6 +473,10 @@ struct gpi_dev {
 	u32 klog_lvl;
 	struct dentry *dentry;
 	bool is_le_vm;
+	bool is_use_smem_region;
+	void *smem_base;
+	void *smem_max_addr;
+	dma_addr_t smem_dma_iova;
 	struct mutex qup_se_lock; /* qup SE instance lock */
 };
 
@@ -664,6 +669,13 @@ struct gpi_desc {
 #define GPI_SMMU_S1_BYPASS BIT(1)
 #define GPI_SMMU_FAST BIT(2)
 #define GPI_SMMU_ATOMIC BIT(3)
+
+#define QUP_SMEM_ID		673
+#define QUP_SMEM_MEMORY_SIZE	(58 * 1024)
+#define QUP_GSI_SMEM_MAX	(25 * 1024)
+#define TX_RX_RING_LEN		1024
+#define EVENT_RING_LEN		2048
+#define GPI_DMA_1024_BYTE_ALIGN	1024
 
 const u32 GPII_CHAN_DIR[MAX_CHANNELS_PER_GPII] = {
 	GPI_CHTYPE_DIR_OUT, GPI_CHTYPE_DIR_IN
@@ -3098,19 +3110,43 @@ static int gpi_alloc_ring(struct gpi_ring *ring,
 		  "#el:%u el_size:%u len:%u actual_len:%llu alloc_size:%lu\n",
 		  elements, el_size, (elements * el_size), len,
 		  ring->alloc_size);
-	ring->pre_aligned = dma_alloc_coherent(gpii->gpi_dev->dev,
-					       ring->alloc_size,
-					       &ring->dma_handle, GFP_KERNEL);
-	if (!ring->pre_aligned) {
+
+	if (gpii->gpi_dev->is_use_smem_region) {
+		if ((gpii->gpi_dev->smem_base + len) > gpii->gpi_dev->smem_max_addr) {
+			GPII_ERR(gpii, GPI_DBG_COMMON, "SMEM region exceeded for GPI driver\n");
+			return -ENOMEM;
+		} else if (len == TX_RX_RING_LEN || len == EVENT_RING_LEN) {
+			/*
+			 * Tx, RX Rings: Need 1KB Bytes(64 tre's).
+			 * Event Ring: Needs 2KB Bytes(128 tre's).
+			 */
+			gpii->gpi_dev->smem_base = gpii->gpi_dev->smem_base + len;
+		} else {
+			GPII_ERR(gpii, GPI_DBG_COMMON,
+				 "request for valid dma memory len=%llu\r\n", len);
+			return -ENOMEM;
+		}
+
+	} else {
+		ring->pre_aligned = dma_alloc_coherent(gpii->gpi_dev->dev, ring->alloc_size,
+						       &ring->dma_handle, GFP_KERNEL);
+	}
+
+	if (!gpii->gpi_dev->is_use_smem_region && !ring->pre_aligned) {
 		GPII_CRITIC(gpii, GPI_DBG_COMMON,
-			    "could not alloc size:%lu mem for ring\n",
-			    ring->alloc_size);
+			    "could not alloc size:%lu mem for ring\n", ring->alloc_size);
 		return -ENOMEM;
 	}
 
-	/* align the physical mem */
-	ring->phys_addr = (ring->dma_handle + (len - 1)) & ~(len - 1);
-	ring->base = ring->pre_aligned + (ring->phys_addr - ring->dma_handle);
+	/* align the physical mem, base address */
+	if (gpii->gpi_dev->is_use_smem_region) {
+		ring->phys_addr = gpii->gpi_dev->smem_dma_iova;
+		ring->base = gpii->gpi_dev->smem_base - len;
+		gpii->gpi_dev->smem_dma_iova = gpii->gpi_dev->smem_dma_iova + len;
+	} else {
+		ring->phys_addr = (ring->dma_handle + (len - 1)) & ~(len - 1);
+		ring->base = ring->pre_aligned + (ring->phys_addr - ring->dma_handle);
+	}
 	ring->rp = ring->base;
 	ring->wp = ring->base;
 	ring->len = len;
@@ -3123,9 +3159,9 @@ static int gpi_alloc_ring(struct gpi_ring *ring,
 	smp_wmb();
 
 	GPII_INFO(gpii, GPI_DBG_COMMON,
-		  "phy_pre:0x%0llx phy_alig:0x%0llx len:%u el_size:%u elements:%u\n",
+		  "phy_pre:0x%0llx phy_alig:0x%0llx len:%u el_size:%u elements:%u ring_base:%pK\n",
 		  ring->dma_handle, ring->phys_addr, ring->len, ring->el_size,
-		  ring->elements);
+		  ring->elements, ring->base);
 
 	return 0;
 }
@@ -4166,6 +4202,55 @@ static void gpi_setup_debug(struct gpi_dev *gpi_dev)
 	}
 }
 
+/* for LEVM smem changes not applicable */
+#if !IS_ENABLED(CONFIG_ARCH_QTI_VM)
+/**
+ * gpi_alloc_smem_region() - allocate smem region for gpi
+ * @gpi_dev: gpi dev handle
+ *
+ * Return: Returning success or error for failure case
+ */
+static int gpi_alloc_smem_region(struct gpi_dev *gpi_dev)
+{
+	int ret;
+	unsigned long offset;
+	void *dma_page_addr;
+
+	ret = qcom_smem_alloc(QCOM_SMEM_HOST_ANY, QUP_SMEM_ID, QUP_SMEM_MEMORY_SIZE);
+	if (ret < 0 && ret != -EEXIST) {
+		if (ret != -EPROBE_DEFER)
+			GPI_ERR(gpi_dev,
+				"unable to allocate local smem for qup ret:%d\n", ret);
+		else
+			GPI_ERR(gpi_dev,
+				"probe defer issue observed with smem ret:%d\n", ret);
+
+		return ret;
+	}
+
+	gpi_dev->smem_base = qcom_smem_get(QCOM_SMEM_HOST_ANY, QUP_SMEM_ID, NULL);
+	gpi_dev->smem_max_addr = gpi_dev->smem_base + QUP_GSI_SMEM_MAX;
+	gpi_dev->smem_base = gpi_dev->smem_base + (GPI_DMA_1024_BYTE_ALIGN -
+			     ((u64)gpi_dev->smem_base % GPI_DMA_1024_BYTE_ALIGN));
+	GPI_LOG(gpi_dev, "%s:smem phy_addr 0x%llx virt_addr:%p\n", __func__,
+		qcom_smem_virt_to_phys(gpi_dev->smem_base), gpi_dev->smem_base);
+	offset = offset_in_page(gpi_dev->smem_base);
+	dma_page_addr = page_address(vmalloc_to_page(gpi_dev->smem_base));
+	gpi_dev->smem_dma_iova = dma_map_single(gpi_dev->dev, dma_page_addr + offset,
+						QUP_GSI_SMEM_MAX, DMA_BIDIRECTIONAL);
+	GPI_LOG(gpi_dev, "%s: smem_dma_iova:0x%llx\n", __func__, gpi_dev->smem_dma_iova);
+
+	ret = dma_mapping_error(gpi_dev->dev, gpi_dev->smem_dma_iova);
+	if (ret) {
+		GPI_ERR(gpi_dev, "%s: dma mapping failed smem_dma_iova:0x%llx ret:%d\n",
+			__func__, gpi_dev->smem_dma_iova, ret);
+		return -EIO;
+	}
+
+	return 0;
+}
+#endif
+
 static int gpi_probe(struct platform_device *pdev)
 {
 	struct gpi_dev *gpi_dev;
@@ -4247,6 +4332,16 @@ static int gpi_probe(struct platform_device *pdev)
 	gpi_dev->is_le_vm = of_property_read_bool(pdev->dev.of_node, "qcom,le-vm");
 	if (gpi_dev->is_le_vm)
 		GPI_LOG(gpi_dev, "LE-VM usecase\n");
+
+/* for LEVM smem changes not applicable */
+#if !IS_ENABLED(CONFIG_ARCH_QTI_VM)
+	gpi_dev->is_use_smem_region = of_property_read_bool(gpi_dev->dev->of_node, "qcom,use-smem");
+	if (gpi_dev->is_use_smem_region) {
+		ret = gpi_alloc_smem_region(gpi_dev);
+		if (ret)
+			return ret;
+	}
+#endif
 
 	/* setup all the supported gpii */
 	INIT_LIST_HEAD(&gpi_dev->dma_device.channels);
