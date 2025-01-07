@@ -90,6 +90,48 @@ def create_module_registry():
             deps = None,
             includes = None,
             **kwargs):
+        """Register a module with the registry.
+
+        Args:
+          name: A unique name for the module.
+            For example: drivers/firmware/qcom/qcom_scm
+            Conventionally, we do not add ".ko" suffix
+          srcs: A list of source and header files to compile the module.
+            These sources are "module-private" and are not exported to dependent
+            modules.
+          out: Desired name of the ko
+            For example: qcom_scm.ko
+          config: A Kconfig symbol which needs to be enabled for this module to
+            be compiled.
+            Optional. If unspecified, the module will be built for every target.
+            For example: CONFIG_QCOM_SCM
+          conditional_srcs: A dictionary mapping Kconfig symbols to additional
+            sources which will be compiled.
+            Note that the entire module is already dependent on the `config`
+            symbol, and do need to again specify the config symbol.
+            Example:
+                conditional_srcs = {
+                    "CONFIG_QTEE_SHM_BRIDGE": {
+                        True: [
+                            # do not sort
+                            "drivers/firmware/qcom/qtee_shmbridge.c",
+                        ],
+                    },
+                },
+          deps: List of dependent modules, including optional dependencies.
+            Note that transitive dependencies do not need to be listed: If you
+            only depend on module_foo, and module_foo depends on module_bar,
+            you need only list module_foo. The initial scripts to create the
+            modules.bzl did *not* simplify the deps list and (unnecessarily)
+            included transitive dependencies.
+            Example:
+              deps = [
+                # do not sort
+                "arch/arm64/gunyah/gunyah_hypercall",
+              ]
+          includes: See ddk_module() documentation.
+          **kwargs: Additional ddk_module() arguments. See ddk_module() documentation.
+        """
         if not module_map.get(config):
             module_map[config] = []
         module_map[config].append(struct(
@@ -107,6 +149,25 @@ def create_module_registry():
             target_variant,
             config_fragment,
             base_kernel):
+        """Define register modules for a target/variant.
+
+        Creates the following rules:
+          {target_variant}_all_modules - kernel_module_group of all enabled modules
+          {target_variant}_base_kernel - alias to `base_kernel`
+          {target_variant}_config - ddk_config from the config_fragment and base_kernel
+          {target_variant}/{module_name} - ddk_module for the target/variant
+
+        Args:
+            target_variant: Base name of the target
+            config_fragment: A dictionary containg Kconfig symbols and their values.
+              Analogous to a defconfig fragment, but as a starlark dictionary.
+              See the files under configs/
+            base_kernel: A kernel_build() to base the module build.
+
+        Returns:
+            The list of all enabled modules *without* the target_variant/ prefix.
+            e.g. ["drivers/firmware/qcom/qcom_scm"]
+        """
         return _generate_ddk_target(
             module_map,
             target_variant,
