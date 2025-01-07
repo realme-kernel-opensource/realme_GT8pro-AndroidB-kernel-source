@@ -143,8 +143,11 @@ def define_typical_vm_build(
         name,
         config,
         debug_config,
+        config_kwargs = None,
         debug_kwargs = None,
         **kwargs):
+    if config_kwargs == None:
+        config_kwargs = dict()
     if debug_kwargs == None:
         debug_kwargs = dict()
 
@@ -169,7 +172,7 @@ def define_typical_vm_build(
                 "config_fragment": config,
                 "base_kernel": "//soc-repo:kernel_aarch64_qtvm",
                 "ddk_config_deps": [common_info],
-            },
+            } | config_kwargs,
         },
         **kwargs
     )

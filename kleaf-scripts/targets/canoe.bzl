@@ -56,6 +56,12 @@ def define_canoe():
         perf_config = canoe_perf_config,
         consolidate_build_img_opts = consolidate_build_img_opts,
         perf_build_img_opts = perf_build_img_opts,
+        consolidate_kwargs = {
+            "config_path": "configs/canoe_consolidate.bzl",
+        },
+        perf_kwargs = {
+            "config_path": "configs/canoe_perf.bzl",
+        },
     )
 
 def define_canoe_tuivm():
@@ -64,6 +70,12 @@ def define_canoe_tuivm():
         config = canoe_tuivm_config,
         debug_config = canoe_tuivm_debug_config,
         dtb_target = "canoe-tuivm",
+        debug_kwargs = {
+            "config_path": "configs/canoe_tuivm_debug.bzl",
+        },
+        config_kwargs = {
+            "config_path": "configs/canoe_tuivm.bzl",
+        },
     )
 
 def define_canoe_oemvm():
@@ -72,4 +84,5 @@ def define_canoe_oemvm():
         config = canoe_tuivm_config,
         debug_config = canoe_tuivm_debug_config,
         dtb_target = "canoe-oemvm",
+        # Do not set config_path because it conflicts with canoe-tuivm
     )

@@ -56,6 +56,12 @@ def define_sun():
         perf_config = sun_perf_config,
         consolidate_build_img_opts = consolidate_build_img_opts,
         perf_build_img_opts = perf_build_img_opts,
+        consolidate_kwargs = {
+            "config_path": "configs/sun_consolidate.bzl",
+        },
+        perf_kwargs = {
+            "config_path": "configs/sun_perf.bzl",
+        },
     )
 
 def define_sun_tuivm():
@@ -64,6 +70,12 @@ def define_sun_tuivm():
         config = sun_tuivm_config,
         debug_config = sun_tuivm_debug_config,
         dtb_target = "sun-tuivm",
+        debug_kwargs = {
+            "config_path": "configs/sun_tuivm_debug.bzl",
+        },
+        config_kwargs = {
+            "config_path": "configs/sun_tuivm.bzl",
+        },
     )
 
 def define_sun_oemvm():
@@ -72,4 +84,5 @@ def define_sun_oemvm():
         config = sun_tuivm_config,
         debug_config = sun_tuivm_debug_config,
         dtb_target = "sun-oemvm",
+        # Do not set config_path because it conflicts with sun-tuivm
     )
