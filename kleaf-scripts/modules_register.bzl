@@ -1,15 +1,18 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
-load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load(
     "//build/kernel/kleaf:kernel.bzl",
-    "ddk_headers",
     "ddk_module",
     "kernel_module_group",
     "kernel_modules_install",
 )
 load(":kleaf-scripts/defconfig_fragment.bzl", "define_defconfig_fragment")
 
-def _generate_ddk_target(module_map, target_variant, config, config_fragment, base_kernel):
+def _generate_ddk_target(
+        module_map,
+        target_variant,
+        config,
+        config_fragment,
+        base_kernel):
     native.alias(
         name = "{}_base_kernel".format(target_variant),
         actual = base_kernel,
@@ -88,7 +91,15 @@ def _generate_ddk_target(module_map, target_variant, config, config_fragment, ba
 def create_module_registry():
     module_map = {}
 
-    def register(name, srcs, out, config = None, conditional_srcs = None, deps = None, includes = None, **kwargs):
+    def register(
+            name,
+            srcs,
+            out,
+            config = None,
+            conditional_srcs = None,
+            deps = None,
+            includes = None,
+            **kwargs):
         if not module_map.get(config):
             module_map[config] = []
         module_map[config].append(struct(
@@ -102,8 +113,18 @@ def create_module_registry():
             extra_args = kwargs,
         ))
 
-    def define_modules(target_variant, config, config_fragment, base_kernel):
-        return _generate_ddk_target(module_map, target_variant, config, config_fragment, base_kernel)
+    def define_modules(
+            target_variant,
+            config,
+            config_fragment,
+            base_kernel):
+        return _generate_ddk_target(
+            module_map,
+            target_variant,
+            config,
+            config_fragment,
+            base_kernel,
+        )
 
     return struct(
         module_map = module_map,
