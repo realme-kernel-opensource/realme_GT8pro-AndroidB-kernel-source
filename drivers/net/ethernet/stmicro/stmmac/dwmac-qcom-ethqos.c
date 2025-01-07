@@ -1062,6 +1062,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ethqos->configure_func = ethqos_configure_5gbaser;
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10GBASER:
 		ethqos->configure_func = ethqos_configure_usxgmii;
 		break;
 	default:
