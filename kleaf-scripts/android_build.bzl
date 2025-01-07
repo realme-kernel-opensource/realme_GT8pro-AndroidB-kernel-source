@@ -48,8 +48,7 @@ def define_single_android_build(
         config_fragment,
         base_kernel,
         dtb_target = None,
-        build_img_opts = None,
-        first_stage_modules = None):
+        build_img_opts = None):
     stem = "{}_{}".format(name, variant)
     modules = registry.define_modules(stem, config_fragment, base_kernel)
 
