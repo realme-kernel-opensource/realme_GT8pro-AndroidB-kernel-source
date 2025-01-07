@@ -148,7 +148,7 @@ class BazelBuilder:
                     re.compile(r"//{}:{}_{}_{}_dist".format(self.kernel_dir, t, v, s))
                     for s in self.skip_list
                 ]
-                query = 'filter("{}_{}.*_dist$", attr(generator_function, define_{}, {}/...))'.format(
+                query = 'filter("{}_{}(.*_dist)?$", attr(generator_function, define_{}, {}/...))'.format(
                     t, v, t.replace("-", "_"), self.kernel_dir
                 )
 
@@ -196,6 +196,7 @@ class BazelBuilder:
                 targets.append(
                     Target(self.workspace, t, real_variant, label, self.out_dir)
                 )
+                logging.debug("Adding target %s", label)
 
         # Sort build targets by label string length to guarantee the base target goes
         # first when copying to output directory
