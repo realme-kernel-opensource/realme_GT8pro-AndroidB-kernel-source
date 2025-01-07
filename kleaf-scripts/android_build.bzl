@@ -52,7 +52,8 @@ def define_single_android_build(
         build_img_opts = None,
         dtb_target = None,
         ddk_config_deps = None,
-        implicit_config_fragment = None):
+        implicit_config_fragment = None,
+        config_path = None):
     stem = "{}_{}".format(name, variant)
     modules = registry.define_modules(
         stem,
@@ -60,6 +61,7 @@ def define_single_android_build(
         base_kernel,
         ddk_config_deps,
         implicit_config_fragment,
+        config_path = config_path,
     )
 
     hermetic_genrule(

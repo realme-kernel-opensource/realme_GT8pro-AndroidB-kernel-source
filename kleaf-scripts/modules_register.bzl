@@ -7,7 +7,11 @@ load(
     "kernel_module_group",
     "kernel_modules_install",
 )
-load(":kleaf-scripts/defconfig_fragment.bzl", "define_defconfig_fragment")
+load(
+    ":kleaf-scripts/defconfig_fragment.bzl",
+    "define_defconfig_fragment",
+    "fragment_menuconfig",
+)
 
 def _generate_ddk_target(
         module_map,
@@ -15,7 +19,8 @@ def _generate_ddk_target(
         config_fragment,
         base_kernel,
         ddk_config_deps,
-        implicit_config_fragment):
+        implicit_config_fragment,
+        config_path):
     native.alias(
         name = "{}_base_kernel".format(target_variant),
         actual = base_kernel,
@@ -38,6 +43,13 @@ def _generate_ddk_target(
         kernel_build = ":{}_base_kernel".format(target_variant),
         deps = ddk_config_deps,
     )
+
+    if config_path:
+        fragment_menuconfig(
+            name = "{}_menuconfig".format(target_variant),
+            ddk_config = ":{}_config".format(target_variant),
+            dest = config_path,
+        )
 
     if implicit_config_fragment:
         # config_fragment should come last so it takes priority
@@ -181,7 +193,8 @@ def create_module_registry():
             config_fragment,
             base_kernel,
             ddk_config_deps = None,
-            implicit_config_fragment = None):
+            implicit_config_fragment = None,
+            config_path = None):
         """Define register modules for a target/variant.
 
         Creates the following rules:
@@ -208,6 +221,9 @@ def create_module_registry():
             ddk_config_deps: Additional dependencies to pass to ddk_config().
             implicit_config_fragment: Additional Kconfig symbols to select
               from the module dictionary. See note above.
+            config_path: Path to the file which declares config_fragment.
+              Optional. If set, an executable {target_variant}_menuconfig is created
+              which can run menuconfig and update the config_path file.
 
         Returns:
             The list of all enabled modules *without* the target_variant/ prefix.
@@ -220,6 +236,7 @@ def create_module_registry():
             base_kernel,
             ddk_config_deps,
             implicit_config_fragment,
+            config_path,
         )
 
     return struct(

@@ -45,13 +45,15 @@ def define_single_vm_build(
         base_kernel,
         dtb_target = None,
         ddk_config_deps = None,
-        implicit_config_fragment = None):
+        implicit_config_fragment = None,
+        config_path = None):
     modules = registry.define_modules(
         name,
         config_fragment,
         base_kernel,
         ddk_config_deps = ddk_config_deps,
         implicit_config_fragment = implicit_config_fragment,
+        config_path = config_path,
     )
 
     if dtb_target:
