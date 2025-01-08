@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
  #define pr_fmt(fmt) "cpu_mpam: " fmt
 
@@ -588,6 +588,15 @@ static void cpu_mpam_configfs_remove(void)
 	unregister_trace_android_vh_mpam_set(cpu_mpam_switch_task, NULL);
 }
 
+static inline bool is_mpam_available(void)
+{
+	u64 pfr0 = read_sysreg_s(SYS_ID_AA64PFR0_EL1);
+	u64 pfr1 = read_sysreg_s(SYS_ID_AA64PFR1_EL1);
+
+	return ((pfr0 >> ID_AA64PFR0_EL1_MPAM_SHIFT) & 0xfUL) > 0 ||
+		((pfr1 >> ID_AA64PFR1_EL1_MPAM_frac_SHIFT) & 0xfUL) > 0;
+}
+
 static int cpu_mpam_probe(struct platform_device *pdev)
 {
 	int i = 0, ret = 0;
@@ -597,6 +606,11 @@ static int cpu_mpam_probe(struct platform_device *pdev)
 	const char *msc_name_dt;
 	struct mpam_ver_ret mpam_version;
 	struct mpam_read_cache_portion mpam_param;
+
+	if (!is_mpam_available()) {
+		dev_err(&pdev->dev, "MPAM feature is not available\n");
+		return -ENODEV;
+	}
 
 	ret = qcom_mpam_get_version(&mpam_version);
 	if (ret || mpam_version.version < 0x10000) {
