@@ -138,3 +138,39 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/interconnect/qcom/qnoc-vienna",
+        out = "qnoc-vienna.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_VIENNA",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/icc-rpmh.h",
+            "drivers/interconnect/qcom/qnoc-qos.h",
+            "drivers/interconnect/qcom/vienna.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos",
+            "drivers/interconnect/qcom/icc-rpmh",
+            "drivers/interconnect/qcom/icc-debug",
+            "drivers/interconnect/qcom/icc-bcm-voter",
+            "drivers/soc/qcom/socinfo",
+            "drivers/soc/qcom/qcom_rpmh",
+            "drivers/soc/qcom/cmd-db",
+            "drivers/soc/qcom/crm-v2",
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/soc/qcom/minidump",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/debug_symbol",
+            "drivers/dma-buf/heaps/qcom_dma_heaps",
+            "drivers/iommu/msm_dma_iommu_mapping",
+            "drivers/soc/qcom/mem_buf/mem_buf_dev",
+            "drivers/soc/qcom/secure_buffer",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
