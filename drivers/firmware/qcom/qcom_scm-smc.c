@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2015,2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cleanup.h>
@@ -85,22 +85,31 @@ static void fill_wq_wake_ack_args(struct arm_smccc_args *wake_ack, u32 smc_call_
 	wake_ack->args[2] = smc_call_ctx;
 }
 
-static void fill_get_wq_ctx_args(struct arm_smccc_args *get_wq_ctx)
+static void fill_get_wq_ctx_args(struct arm_smccc_args *get_wq_ctx, bool multi_smc)
 {
+	unsigned int type;
 	memset(get_wq_ctx->args, 0, ARRAY_SIZE(get_wq_ctx->args));
 
-	get_wq_ctx->args[0] = ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL,
+	/*
+	 * If Multi SMC call support is available, we expect the firmware
+	 * to support FAST SMC call for QCOM_SCM_WAITQ_GET_WQ_CTX, so
+	 * use it. If we use the standard call, we may sleep while
+	 * getting the waitQ context which leads to deadlock.
+	 */
+	type = multi_smc ? ARM_SMCCC_FAST_CALL : ARM_SMCCC_STD_CALL;
+
+	get_wq_ctx->args[0] = ARM_SMCCC_CALL_VAL(type,
 			 ARM_SMCCC_SMC_64, ARM_SMCCC_OWNER_SIP,
 			 SCM_SMC_FNID(QCOM_SCM_SVC_WAITQ, QCOM_SCM_WAITQ_GET_WQ_CTX));
 }
 
-int scm_get_wq_ctx(u32 *wq_ctx, u32 *flags, u32 *more_pending)
+int scm_get_wq_ctx(u32 *wq_ctx, u32 *flags, u32 *more_pending, bool multi_smc)
 {
 	int ret;
 	struct arm_smccc_res get_wq_res;
 	struct arm_smccc_args get_wq_ctx = {0};
 
-	fill_get_wq_ctx_args(&get_wq_ctx);
+	fill_get_wq_ctx_args(&get_wq_ctx, multi_smc);
 
 	/* Guaranteed to return only success or error, no WAITQ_* */
 	__scm_smc_do_quirk(&get_wq_ctx, &get_wq_res);
