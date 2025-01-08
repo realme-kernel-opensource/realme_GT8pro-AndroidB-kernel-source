@@ -16,6 +16,10 @@ def register_modules(registry):
             "drivers/firmware/qcom/qcom_scm.h",
             "drivers/firmware/qcom/qtee_shmbridge_internal.h",
         ],
+        hdrs = [
+            "include/linux/firmware/qcom/qcom_scm.h",
+        ],
+        includes = ["include/linux"],
         conditional_srcs = {
             "CONFIG_QTEE_SHM_BRIDGE": {
                 True: [
@@ -28,12 +32,6 @@ def register_modules(registry):
             # do not sort
             "drivers/firmware/qcom/qcom_tzmem",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
-            "drivers/virt/gunyah/gh_msgq",
-            "drivers/virt/gunyah/gh_dbl",
-            "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
 
@@ -45,15 +43,5 @@ def register_modules(registry):
             # do not sort
             "drivers/firmware/qcom/qcom_tzmem.c",
             "drivers/firmware/qcom/qcom_tzmem.h",
-        ],
-        deps = [
-            # do not sort
-            "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
-            "drivers/virt/gunyah/gh_msgq",
-            "drivers/virt/gunyah/gh_dbl",
-            "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
