@@ -21,3 +21,14 @@ def define_common_upstream_files():
             src = "//common:{}".format(file),
             out = file,
         )
+
+    # TODO: Use hermetic_genrule when prebuilt `patch` tool is available.
+    native.genrule(
+        name = "patched-drivers/regulator/qti_fixed_regulator.c",
+        srcs = [
+            "//common:drivers/regulator/fixed.c",
+            ":drivers/regulator/fixed.diff",
+        ],
+        outs = ["drivers/regulator/qti_fixed_regulator.c"],
+        cmd = "patch --follow-symlinks -o $@ -i $(execpath :drivers/regulator/fixed.diff) $(execpath //common:drivers/regulator/fixed.c)",
+    )
