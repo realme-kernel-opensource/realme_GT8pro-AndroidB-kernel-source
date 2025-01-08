@@ -487,6 +487,7 @@
 
 /* below definitions are only for HAP530_HV */
 #define HAP530_MMAP_NUM_BYTES			8192
+#define VMAX_HDRM_MV_DEFAULT			1500
 
 #define is_between(val, min, max)	\
 	(((min) <= (max)) && ((min) <= (val)) && ((val) <= (max)))
@@ -599,6 +600,7 @@ enum wa_flags {
 	VISENSE_RECOVERY_EN = BIT(7),
 	IGNORE_SWR_IN_SPMI_PLAY = BIT(8),
 	DISCHARGE_VNDRV_LDO = BIT(9),
+	RESTORE_VMAX_HDRM_1P5V = BIT(10),
 };
 
 static const char * const src_str[] = {
@@ -3410,6 +3412,13 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 	}
 
 restore:
+	/* Restore Vmax headroom to 1.5V after SPMI play is done */
+	if (chip->wa_flags & RESTORE_VMAX_HDRM_1P5V) {
+		rc = haptics_set_vmax_headroom_mv(chip, VMAX_HDRM_MV_DEFAULT);
+		if (rc)
+			return rc;
+	}
+
 	/* Restore SWR play mode after SPMI play is done or any faults */
 	if (chip->wa_flags & IGNORE_SWR_IN_SPMI_PLAY)
 		haptics_ignore_swr_play(chip, false);
@@ -3970,7 +3979,8 @@ static int haptics_config_wa(struct haptics_chip *chip)
 		break;
 	case HAP530_HV:
 		chip->wa_flags |= EN_RUNTIME_PM | VISENSE_RECOVERY_EN |
-			IGNORE_SWR_IN_SPMI_PLAY | DISCHARGE_VNDRV_LDO;
+			IGNORE_SWR_IN_SPMI_PLAY | DISCHARGE_VNDRV_LDO |
+			RESTORE_VMAX_HDRM_1P5V;
 		break;
 	default:
 		dev_err(chip->dev, "HW type %d does not match\n",
@@ -4067,6 +4077,12 @@ static int haptics_hw_init(struct haptics_chip *chip)
 	rc = haptics_init_vmax_config(chip);
 	if (rc < 0)
 		return rc;
+
+	if (chip->wa_flags & RESTORE_VMAX_HDRM_1P5V) {
+		rc = haptics_set_vmax_headroom_mv(chip, VMAX_HDRM_MV_DEFAULT);
+		if (rc)
+			return rc;
+	}
 
 	rc = haptics_init_drive_config(chip);
 	if (rc < 0)
@@ -5982,6 +5998,9 @@ static int haptics_start_lra_calibrate(struct haptics_chip *chip)
 	}
 
 unlock:
+	if (chip->wa_flags & RESTORE_VMAX_HDRM_1P5V)
+		haptics_set_vmax_headroom_mv(chip, VMAX_HDRM_MV_DEFAULT);
+
 	haptics_clear_fault(chip);
 	chip->play.in_calibration = false;
 	mutex_unlock(&chip->play.lock);
@@ -6203,8 +6222,22 @@ static int haptics_lpass_ssr_notifier(struct notifier_block *nb, unsigned long e
 	if (!(chip->wa_flags & VISENSE_RECOVERY_EN))
 		return NOTIFY_DONE;
 
+	if (!is_swr_play_enabled(chip)) {
+		dev_dbg(chip->dev, "ignore VISENSE recovery if not in SWR play\n");
+		return NOTIFY_DONE;
+	}
+
 	switch (event) {
 	case QCOM_SSR_BEFORE_SHUTDOWN:
+		/*
+		 * Enable HAPTICS_EN to keep haptics module clock on during ADSP
+		 * SSR. It's needed for keeping haptics SPMI and SWR data port in
+		 * correct state, and it could be disabled after ADSP SSR.
+		 */
+		rc = haptics_runtime_resume_get(chip);
+		if (rc < 0)
+			return rc;
+
 		val = 0;
 		rc = haptics_write(chip, chip->cfg_addr_base, HAP_CFG_SWR_ACCESS_REG,  &val, 1);
 		if (rc < 0)
@@ -6222,6 +6255,7 @@ static int haptics_lpass_ssr_notifier(struct notifier_block *nb, unsigned long e
 		if (rc < 0)
 			return rc;
 
+		haptics_runtime_autosuspend_put(chip);
 		dev_dbg(chip->dev, "QCOM_SSR_BEFORE_POWERUP is handled\n");
 		break;
 	default:
