@@ -1,6 +1,7 @@
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("//build:msm_kernel_extensions.bzl", "get_gki_ramdisk_prebuilt_binary", "get_vendor_ramdisk_binaries")
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
+load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load(
     "//build/kernel/kleaf:kernel.bzl",
     "kernel_build",
@@ -54,11 +55,11 @@ def define_single_android_build(
     config = "//common:arch/arm64/configs/gki_defconfig"
     modules = registry.define_modules(stem, config, config_fragment, base_kernel)
 
-    native.genrule(
+    hermetic_genrule(
         name = "{}_vendor_dlkm_modules_list_generated".format(stem),
         srcs = [],
         outs = ["modules.list.vendor_dlkm.{}".format(stem)],
-        cmd_bash = """
+        cmd = """
           touch "$@"
           for module in {mod_list}; do
             basename "$$module".ko >> "$@"
@@ -95,10 +96,10 @@ def define_single_android_build(
         board_cmdline_extras = " ".join(build_img_opts.board_kernel_cmdline_extras)
 
         if board_cmdline_extras:
-            native.genrule(
+            hermetic_genrule(
                 name = "{}_extra_cmdline".format(stem),
                 outs = ["board_extra_cmdline_{}".format(stem)],
-                cmd_bash = """
+                cmd = """
                     echo {} > "$@"
                 """.format(board_cmdline_extras),
             )
@@ -106,10 +107,10 @@ def define_single_android_build(
         board_bc_extras = " ".join(build_img_opts.board_bootconfig_extras)
 
         if board_bc_extras:
-            native.genrule(
+            hermetic_genrule(
                 name = "{}_extra_bootconfig".format(stem),
                 outs = ["board_extra_bootconfig_{}".format(stem)],
-                cmd_bash = """
+                cmd = """
                     echo {} > "$@"
                 """.format(board_bc_extras),
             )
@@ -173,7 +174,7 @@ def define_single_android_build(
         out = "super_unsparsed.img",
     )
 
-    native.genrule(
+    hermetic_genrule(
         name = "{}_merge_msm_uapi_headers".format(stem),
         srcs = [
             # do not sort
@@ -181,14 +182,14 @@ def define_single_android_build(
             "msm_uapi_headers",
         ],
         outs = ["{}_kernel-uapi-headers.tar.gz".format(stem)],
-        cmd_bash = """
-                    mkdir -p intermediate_dir
-                    for file in $(SRCS)
-                    do
-                    tar xf $$file -C intermediate_dir
-                    done
-                    tar czf $(OUTS) -C intermediate_dir usr/
-                    rm -rf intermediate_dir
+        cmd = """
+            mkdir -p intermediate_dir
+            for file in $(SRCS)
+            do
+            tar xf $$file -C intermediate_dir
+            done
+            tar czf $(OUTS) -C intermediate_dir usr/
+            rm -rf intermediate_dir
         """,
     )
 
@@ -197,7 +198,7 @@ def define_single_android_build(
         kernel_build = ":{}_dtb_build".format(stem),
     )
 
-    native.genrule(
+    hermetic_genrule(
         name = "{}_tar_kernel_headers".format(stem),
         srcs = [
             # do not sort
@@ -205,14 +206,14 @@ def define_single_android_build(
             "//common:all_headers",
         ],
         outs = ["{}_kernel-headers.tar.gz".format(stem)],
-        cmd_bash = """
-                    mkdir -p kernel-headers
-                    for file in $(SRCS)
-                    do
-                    cp -r --parents $$file kernel-headers
-                    done
-                    tar czf $(OUTS) kernel-headers
-                    rm -rf kernel-headers
+        cmd = """
+            mkdir -p kernel-headers
+            for file in $(SRCS)
+            do
+            cp -D $$file kernel-headers
+            done
+            tar czf $(OUTS) kernel-headers
+            rm -rf kernel-headers
         """,
     )
 

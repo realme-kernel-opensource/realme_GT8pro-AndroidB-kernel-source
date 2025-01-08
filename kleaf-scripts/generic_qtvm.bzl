@@ -1,7 +1,4 @@
-load(
-    "//build:msm_kernel_extensions.bzl",
-    "define_extras",
-)
+load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load(
     "//build/kernel/kleaf:kernel.bzl",
     "kernel_build",
@@ -10,29 +7,29 @@ load(
 load(":kleaf-scripts/image_opts.bzl", "vm_image_opts")
 
 def define_qc_core_header_config(name):
-    native.genrule(
+    hermetic_genrule(
         name = name,
         outs = ["build.config.qc_core.header"],
-        cmd_bash = "echo \"KERNEL_DIR=common\" > $@",
+        cmd = "echo \"KERNEL_DIR=common\" > $@",
     )
-    native.genrule(
+    hermetic_genrule(
         name = "signing_key",
         srcs = ["//soc-repo:certs/qcom_x509.genkey"],
         outs = ["signing_key.pem"],
         tools = ["//prebuilts/build-tools:linux-x86/bin/openssl"],
-        cmd_bash = """
+        cmd = """
           $(location //prebuilts/build-tools:linux-x86/bin/openssl) req -new -nodes -utf8 -sha256 -days 36500 \
             -batch -x509 -config $(location //soc-repo:certs/qcom_x509.genkey) \
             -outform PEM -out "$@" -keyout "$@"
         """,
     )
 
-    native.genrule(
+    hermetic_genrule(
         name = "verity_key",
         srcs = ["//soc-repo:certs/qcom_x509.genkey"],
         outs = ["verity_cert.pem", "verity_key.pem"],
         tools = ["//prebuilts/build-tools:linux-x86/bin/openssl"],
-        cmd_bash = """
+        cmd = """
           $(location //prebuilts/build-tools:linux-x86/bin/openssl) req -new -nodes -utf8 -newkey rsa:1024 -days 36500 \
             -batch -x509 -config $(location //soc-repo:certs/qcom_x509.genkey) \
             -outform PEM -out $(location verity_cert.pem) -keyout $(location verity_key.pem)
@@ -44,11 +41,11 @@ def _gen_qc_core_build_config(name, defconfig):
     rule_name = "build.config." + name
     out_file_name = rule_name + ".generated"
     vm_opts = vm_image_opts()
-    native.genrule(
+    hermetic_genrule(
         name = rule_name,
         srcs = [defconfig],
         outs = [out_file_name],
-        cmd_bash = """
+        cmd = """
         cat << 'EOF' > $@
 # No modules
 KERNEL_DIR="common"
