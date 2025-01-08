@@ -25,3 +25,16 @@ smem.ko
 socinfo.ko
 qcom_hwspinlock.ko
 qcom-ipcc.ko
+llcc-qcom.ko
+qcom_llcc_pmu.ko
+qcom-pmu-lib.ko
+kryo_arm64_edac.ko
+qcom_wdt_core.ko
+gh_virt_wdt.ko
+qcom-dload-mode.ko
+gunyah.ko
+gunyah_hypercall.ko
+gunyah_vcpu.ko
+gunyah_platform_hooks.ko
+gunyah_rsc_mgr.ko
+qcom_edac.ko
