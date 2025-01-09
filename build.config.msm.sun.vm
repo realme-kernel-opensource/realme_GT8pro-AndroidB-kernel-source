@@ -6,8 +6,8 @@
 ################################################################################
 ## Variant setup
 MSM_ARCH=sun_tuivm
-VARIANTS=(defconfig debug_defconfig)
-[ -z "${VARIANT}" ] && VARIANT=debug_defconfig
+VARIANTS=(defconfig debug-defconfig)
+[ -z "${VARIANT}" ] && VARIANT=debug-defconfig
 
 if [ -e "${ROOT_DIR}/msm-kernel" -a "${KERNEL_DIR}" = "common" ]; then
 	KERNEL_DIR="msm-kernel"
