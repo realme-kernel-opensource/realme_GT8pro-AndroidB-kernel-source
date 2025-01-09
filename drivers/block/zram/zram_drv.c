@@ -1568,11 +1568,10 @@ struct zram_comp_queue_overflow_list_entry {
 	phys_addr_t input_page_addr;
 };
 
-static DECLARE_RWSEM(zram_comp_queue_producer_consmuer_sync_lock);
+static DEFINE_SPINLOCK(zram_comp_queue_lock);
 static bool zram_comp_queue_non_empty;
 static int zram_comp_queue_size;
 
-static DEFINE_SPINLOCK(zram_comp_queue_lock);
 static struct qpace_request comp_out_arr[DESCRIPTORS_PER_RING];
 static struct qpace_request_queue comp_out_queue = {
 	.request_arr = comp_out_arr,
@@ -1676,19 +1675,14 @@ static inline void zram_ring_increment(struct qpace_request_queue *queue)
 }
 
 static inline int _zram_compress_queue(struct qpace_request_meta *zmeta,
-				       phys_addr_t input_page_addr,
-				       bool need_lock)
+				       phys_addr_t input_page_addr)
 {
 	struct page *output_buffer;
-	int ret = 0;
 
-	if (need_lock) {
-		spin_lock(&zram_comp_queue_lock);
-		if (zram_comp_queue_size == DESCRIPTORS_PER_RING - 1) {
-			ret = -ENOMEM;
-			goto unlock;
-		}
-	}
+	lockdep_assert_held(&zram_comp_queue_lock);
+
+	if (zram_comp_queue_size == DESCRIPTORS_PER_RING - 1)
+		return -ENOMEM;
 
 	comp_out_queue.request_arr[comp_out_queue.arr_offset].zmeta = *zmeta;
 
@@ -1705,11 +1699,7 @@ static inline int _zram_compress_queue(struct qpace_request_meta *zmeta,
 		queue_delayed_work(comp_wq, &comp_work, QPACE_BATCHED_WORK_DELAY_JIFFIES);
 	}
 
-unlock:
-	if (need_lock)
-		spin_unlock(&zram_comp_queue_lock);
-
-	return ret;
+	return 0;
 }
 
 static int _zram_comp_queue_overflow_list_insert(struct qpace_request_meta *zmeta,
@@ -1736,16 +1726,12 @@ static inline int zram_compress_queue(struct qpace_request_meta *zmeta,
 				      phys_addr_t input_page_addr)
 {
 	int queue_ret;
-	int locked = down_read_trylock(&zram_comp_queue_producer_consmuer_sync_lock);
 
 	pr_debug("%s: queueing page\n", __func__);
 
-	if (!locked)
-		return _zram_comp_queue_overflow_list_insert(zmeta, input_page_addr);
-
-	queue_ret = _zram_compress_queue(zmeta, input_page_addr, true);
-
-	up_read(&zram_comp_queue_producer_consmuer_sync_lock);
+	spin_lock(&zram_comp_queue_lock);
+	queue_ret = _zram_compress_queue(zmeta, input_page_addr);
+	spin_unlock(&zram_comp_queue_lock);
 
 	if (queue_ret)
 		return _zram_comp_queue_overflow_list_insert(zmeta, input_page_addr);
@@ -1753,12 +1739,12 @@ static inline int zram_compress_queue(struct qpace_request_meta *zmeta,
 	return 0;
 }
 
-static inline void zram_copy_queue(struct qpace_request_meta zmeta,
+static inline void zram_copy_queue(struct qpace_request_meta *zmeta,
 				   phys_addr_t compressed_input_addr,
 				   phys_addr_t output_addr,
 				   unsigned int size)
 {
-	copy_out_queue.request_arr[copy_out_queue.arr_offset].zmeta = zmeta;
+	copy_out_queue.request_arr[copy_out_queue.arr_offset].zmeta = *zmeta;
 
 	qpace_queue_copy(COPY_RING, compressed_input_addr,
 			 output_addr, size);
@@ -1840,7 +1826,7 @@ static void zram_compress_success_handler(struct qpace_event_descriptor *ed, int
 				  0 /* Empty ZRAM flags */);
 	} else {
 		zs_unmap_object(zmeta->zram->mem_pool, handle);
-		zram_copy_queue(*zmeta, comp_source, virt_to_phys(dst), comp_len);
+		zram_copy_queue(zmeta, comp_source, virt_to_phys(dst), comp_len);
 	}
 
 }
@@ -1875,11 +1861,18 @@ static void zram_copy_failure_handler(struct qpace_event_descriptor *ed, int ed_
 static void zram_qpace_work_fn(struct work_struct *work)
 {
 	bool triggered_compress, triggered_copy;
+	int n_entries_consumed;
 
-	down_write(&zram_comp_queue_producer_consmuer_sync_lock);
 	pr_debug("kthread: about to kick off compression\n");
 
+	/*
+	 * Triggering a ring is not atomic, and must be syncrhonized with
+	 * adding items to a ring.
+	 */
+	spin_lock(&zram_comp_queue_lock);
 	triggered_compress = qpace_trigger_tr(COMPRESS_RING);
+	spin_unlock(&zram_comp_queue_lock);
+
 	if (!triggered_compress) {
 		pr_debug("Nothing to compress!\n");
 		return;
@@ -1888,18 +1881,26 @@ static void zram_qpace_work_fn(struct work_struct *work)
 	qpace_wait_for_tr_consumption(COMPRESS_RING, false);
 
 	pr_debug("compression done\n");
-	qpace_consume_er(COMPRESS_RING, zram_compress_success_handler,
-			 zram_compress_failure_handler);
+	n_entries_consumed = qpace_consume_er(COMPRESS_RING,
+					      zram_compress_success_handler,
+					      zram_compress_failure_handler);
 
-	/* We've consumed the whole compression ring, mark it as empty */
-	zram_comp_queue_size = 0;
+	/*
+	 * Protects zram_comp_queue_size and the compression queue itself, if
+	 * we end up placing items into the queue from the overflow list.
+	 * Grabbing this lock also prevents starvation for the requests coming
+	 * from the overflow list, by preventing new submissions going to the
+	 * now-empty compression queue until we fully empty the overflow list.
+	 */
+	spin_lock(&zram_comp_queue_lock);
 
-	/* At this point, we've freed up the compression ring */
+	zram_comp_queue_size -= n_entries_consumed;
 
 	/*
 	 * Check overlow list. Grab its contents and queue it up, kick off
 	 * workqueue item. Oldest submissions are at the tail of the list.
 	 */
+	spin_lock(&zram_comp_queue_overflow_list_lock);
 	if (!list_empty(&zram_comp_queue_overflow_list)) {
 		struct zram_comp_queue_overflow_list_entry *comp_req, *tmp;
 
@@ -1910,17 +1911,19 @@ static void zram_qpace_work_fn(struct work_struct *work)
 				break;
 
 			list_del(&comp_req->list_node);
-			_zram_compress_queue(&comp_req->zmeta, comp_req->input_page_addr, false);
+			_zram_compress_queue(&comp_req->zmeta, comp_req->input_page_addr);
 			kfree(comp_req);
 		}
 
 		queue_delayed_work(comp_wq, &comp_work, 0);
 	} else {
-		/* Let submitters wake is up again */
+		/* Let submitters wake us up again */
 		WRITE_ONCE(zram_comp_queue_non_empty, false);
 		pr_debug("reinited our own completion\n");
 	}
-	up_write(&zram_comp_queue_producer_consmuer_sync_lock);
+	spin_unlock(&zram_comp_queue_overflow_list_lock);
+
+	spin_unlock(&zram_comp_queue_lock);
 
 	/* At this point, we've freed up the compression ring */
 	pr_debug("Triggering copy\n");
