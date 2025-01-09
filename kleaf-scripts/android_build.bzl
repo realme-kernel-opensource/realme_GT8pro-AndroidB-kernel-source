@@ -279,18 +279,11 @@ def define_single_android_build(
 def define_android_build(
         name,
         configs,
-        consolidate_build_img_opts,
-        perf_build_img_opts,
         **kwargs):
     for (variant, options) in configs.items():
-        if variant == "perf":
-            build_img_opts = perf_build_img_opts
-        else:
-            build_img_opts = consolidate_build_img_opts
         define_single_android_build(
             name = name,
             variant = variant,
-            build_img_opts = build_img_opts,
             **(options | kwargs)
         )
 
@@ -333,14 +326,14 @@ def define_typical_android_build(
             "perf": {
                 "config_fragment": perf_config,
                 "base_kernel": "//common:kernel_aarch64",
+                "build_img_opts": perf_build_img_opts,
             } | perf_kwargs,
             "consolidate": {
                 "config_fragment": consolidate_config,
                 "base_kernel": "//soc-repo:kernel_aarch64_consolidate",
+                "build_img_opts": consolidate_build_img_opts,
             } | consolidate_kwargs,
         },
         dtb_target = name,
-        consolidate_build_img_opts = consolidate_build_img_opts,
-        perf_build_img_opts = perf_build_img_opts,
         **kwargs
     )
