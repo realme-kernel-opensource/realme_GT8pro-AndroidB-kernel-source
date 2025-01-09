@@ -198,18 +198,6 @@ void walt_config(void)
 				&pipeline_sync_cpus, &cpu_array[0][3]);
 		}
 
-		sysctl_cluster23_load_sync[0]	= 350;
-		sysctl_cluster23_load_sync[1]	= 100;
-		sysctl_cluster23_load_sync[2]	= 100;
-		sysctl_cluster32_load_sync[0]	= 512;
-		sysctl_cluster32_load_sync[1]	= 90;
-		sysctl_cluster32_load_sync[2]	= 90;
-		load_sync_util_thres[2][3]	= sysctl_cluster23_load_sync[0];
-		load_sync_low_pct[2][3]		= sysctl_cluster23_load_sync[1];
-		load_sync_high_pct[2][3]	= sysctl_cluster23_load_sync[2];
-		load_sync_util_thres[3][2]	= sysctl_cluster32_load_sync[0];
-		load_sync_low_pct[3][2]		= sysctl_cluster32_load_sync[1];
-		load_sync_high_pct[3][2]	= sysctl_cluster32_load_sync[2];
 	} else if (!strcmp(name, "TUNA")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
@@ -226,24 +214,6 @@ void walt_config(void)
 				&pipeline_sync_cpus, &cpu_array[0][2]);
 			cpumask_or(&pipeline_sync_cpus,
 				&pipeline_sync_cpus, &cpu_array[0][3]);
-			sysctl_cluster23_load_sync[0]	= 350;
-			sysctl_cluster23_load_sync[1]	= 100;
-			sysctl_cluster23_load_sync[2]	= 100;
-			sysctl_cluster32_load_sync[0]	= 512;
-			sysctl_cluster32_load_sync[1]	= 90;
-			sysctl_cluster32_load_sync[2]	= 90;
-			load_sync_util_thres[2][3]	= sysctl_cluster23_load_sync[0];
-			load_sync_low_pct[2][3]		= sysctl_cluster23_load_sync[1];
-			load_sync_high_pct[2][3]	= sysctl_cluster23_load_sync[2];
-			load_sync_util_thres[3][2]	= sysctl_cluster32_load_sync[0];
-			load_sync_low_pct[3][2]		= sysctl_cluster32_load_sync[1];
-			load_sync_high_pct[3][2]	= sysctl_cluster32_load_sync[2];
-
-			/* T + G */
-			cpumask_or(&asym_cap_sibling_cpus,
-					&asym_cap_sibling_cpus, &cpu_array[0][1]);
-			cpumask_or(&asym_cap_sibling_cpus,
-					&asym_cap_sibling_cpus, &cpu_array[0][2]);
 		}
 
 	}
