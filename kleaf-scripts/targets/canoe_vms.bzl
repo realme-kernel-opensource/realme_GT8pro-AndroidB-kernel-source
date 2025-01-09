@@ -27,7 +27,8 @@ def define_canoe_vms(vm_image_opts = vm_image_opts()):
             ["canoe-{}_{}_merge_msm_uapi_headers".format(vt, variant) for vt in vm_types] +
             [base_kernel] +
             [":signing_key"] +
-            [":verity_key"]
+            [":verity_key"] +
+            [":canoe-{}_{}_dtb_build".format(vt, variant) for vt in vm_types]
         ) + out_dtb_list
 
         copy_to_dist_dir(
