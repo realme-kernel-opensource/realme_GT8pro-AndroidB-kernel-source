@@ -161,6 +161,8 @@ struct walt_task_struct {
 	u8				yield_state;
 	u16				busy_bitmap;
 	u32				period_contrib_run;
+	u64				yield_ts;
+	u64				yield_total_sleep_usec;
 };
 
 #define wts_to_ts(wts) ({ \

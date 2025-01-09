@@ -231,6 +231,7 @@ struct walt_sched_cluster {
 	unsigned long		util_to_cost[1024];
 	u64			found_ts;
 	struct smart_freq_cluster_info *smart_freq_info;
+	int8_t			sibling_cluster;
 };
 
 struct walt_rq {
@@ -1486,9 +1487,17 @@ extern unsigned int sysctl_ipc_freq_levels_cluster0[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster1[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster3[SMART_FMAX_IPC_MAX];
+extern unsigned int sysctl_legacy_freq_levels_cluster0[LEGACY_SMART_FREQ*2];
+extern unsigned int sysctl_legacy_freq_levels_cluster1[LEGACY_SMART_FREQ*2];
+extern unsigned int sysctl_legacy_freq_levels_cluster2[LEGACY_SMART_FREQ*2];
+extern unsigned int sysctl_legacy_freq_levels_cluster3[LEGACY_SMART_FREQ*2];
 extern int sched_smart_freq_ipc_handler(const struct ctl_table *table, int write,
 				      void __user *buffer, size_t *lenp,
 				      loff_t *ppos);
+
+extern int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int write,
+				void __user *buffer, size_t *lenp,
+				loff_t *ppos);
 
 extern u8 smart_freq_legacy_reason_hyst_ms[LEGACY_SMART_FREQ][WALT_NR_CPUS];
 extern void update_smart_freq_legacy_reason_hyst_time(struct walt_sched_cluster *cluster);
@@ -1500,7 +1509,13 @@ extern bool move_storage_load(struct rq *rq);
 #define MAX_YIELD_CNT_PER_TASK_THR		25
 #define	YIELD_INDUCED_SLEEP			BIT(7)
 #define YIELD_CNT_MASK				0x7F
-#define MAX_YIELD_CNT_GLOBAL_THR		8000
+/*
+ * Threshold count under pipeline is more aggressive than normal threshold count as
+ * under pipeline condition tasks/threads yield for very short interval within a
+ * frame and thus doesn't hit higher threshold count.
+ */
+#define MAX_YIELD_CNT_GLOBAL_THR_DEFAULT	8000
+#define MAX_YIELD_CNT_GLOBAL_THR_PIPELINE	1000
 #define YIELD_WINDOW_SIZE_USEC			(16ULL * USEC_PER_MSEC)
 #define YIELD_WINDOW_SIZE_NSEC			(YIELD_WINDOW_SIZE_USEC * NSEC_PER_USEC)
 #define	YIELD_GRACE_PERIOD_NSEC			(4ULL * NSEC_PER_MSEC)
@@ -1508,6 +1523,13 @@ extern bool move_storage_load(struct rq *rq);
 #define YIELD_SLEEP_TIME_USEC			250
 #define MAX_YIELD_SLEEP_CNT_GLOBAL_THR		(YIELD_WINDOW_SIZE_USEC /		\
 								YIELD_SLEEP_TIME_USEC / 2)
+/* yield boundary*/
+#define MIN_FRAME_YIELD_INTERVAL_NSEC		(1000ULL * NSEC_PER_USEC)
+#define YIELD_SLEEP_HEADROOM			300000ULL
+#define FRAME120_WINDOW_NSEC			8333333
+#define FRAME90_WINDOW_NSEC			11111111
+#define FRAME60_WINDOW_NSEC			16666667
+
 extern u8 contiguous_yielding_windows;
 #define NUM_PIPELINE_BUSY_THRES 3
 extern unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
@@ -1538,4 +1560,5 @@ extern unsigned int sysctl_pipeline_pin_thres_low_pct;
 extern unsigned int sysctl_pipeline_pin_thres_high_pct;
 DECLARE_PER_CPU(unsigned int, walt_yield_to_sleep);
 extern unsigned int walt_sched_yield_counter;
+void account_yields(u64 window_start);
 #endif /* _WALT_H */

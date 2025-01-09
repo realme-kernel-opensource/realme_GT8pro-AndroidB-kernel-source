@@ -109,11 +109,14 @@ void walt_config(void)
 	sysctl_pipeline_pin_thres_low_pct = 50;
 	sysctl_pipeline_pin_thres_high_pct = 60;
 
+	/* Initialize smart freq configurations */
+	smart_freq_init(name);
+
 	/* return if socinfo is not available */
 	if (!name)
 		return;
 
-	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP")) {
+	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP") || !strcmp(name, "CANOE")) {
 		sysctl_sched_suppress_region2		= 1;
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
@@ -243,6 +246,4 @@ void walt_config(void)
 		}
 
 	}
-
-	smart_freq_init(name);
 }
