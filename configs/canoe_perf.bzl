@@ -20,6 +20,7 @@ canoe_perf_config = {
     "CONFIG_CFG80211_WEXT": "n",
     "CONFIG_CHR_DEV_SG": "m",
     "CONFIG_COMMON_CLK_QCOM": "m",
+    "CONFIG_COMMON_CLK_SCMI": "m",
     "CONFIG_CORESIGHT": "m",
     "CONFIG_CORESIGHT_CSR": "m",
     "CONFIG_CORESIGHT_CTI": "m",
