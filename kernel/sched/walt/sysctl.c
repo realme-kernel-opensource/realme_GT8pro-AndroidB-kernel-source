@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kmemleak.h>
@@ -1880,7 +1880,7 @@ static struct ctl_table walt_table[] = {
 		.procname	= "mpam_part_id",
 		.data		= (int *) MPAM_PART_ID,
 		.maxlen		= sizeof(unsigned int) * 2,
-		.mode		= 0644,
+		.mode		= 0444,
 		.proc_handler	= sched_task_handler,
 	},
 	{
