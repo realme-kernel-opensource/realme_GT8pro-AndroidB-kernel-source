@@ -49,6 +49,15 @@ config QCOM_COMMAND_DB
 	  resource on a RPM-hardened platform must use this database to get
 	  SoC specific identifier and information for the shared resources.
 
+config QCOM_CPUSS_SLEEP_STATS_V4
+	tristate "Qualcomm Technologies, Inc. (QTI) CPUSS sleep stats v4 driver"
+	depends on DEBUG_FS
+	help
+	 Qualcomm Technologies, Inc. (QTI) CPUSS sleep stats v4 driver to
+	 get hardware LPM counts and residency for particular cluster low
+	 power modes. This driver creates debugfs entry which provide
+	 provision to read those counters.
+
 config QCOM_CRM
 	tristate "Qualcomm Technologies, Inc. (QTI) CRM driver"
 	depends on QCOM_RPMH && (ARCH_QCOM || COMPILE_TEST)
