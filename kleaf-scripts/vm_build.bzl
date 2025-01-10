@@ -7,6 +7,7 @@ load(
     "get_dtstree",
 )
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
+load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load("//build/kernel/kleaf:kernel.bzl", "merged_kernel_uapi_headers")
 load(":kleaf-scripts/dtbs.bzl", "define_qcom_dtbs")
 load(":kleaf-scripts/image_opts.bzl", "vm_image_opts")
@@ -22,12 +23,12 @@ def define_make_vm_dtb_img(target, dtb_list, page_size):
       set -x
     """.format(page_size = page_size)
 
-    native.genrule(
+    hermetic_genrule(
         name = "{}_vm_dtb_img".format(target),
         srcs = compiled_dtbs,
         outs = ["{}-dtb.img".format(target)],
         tools = ["//prebuilts/kernel-build-tools:linux-x86/bin/mkdtboimg"],
-        cmd_bash = dtb_cmd,
+        cmd = dtb_cmd,
     )
 
     copy_to_dist_dir(
@@ -54,7 +55,7 @@ def define_single_vm_build(
             defconfig = "//soc-repo:arch/arm64/configs/generic_vm_defconfig",
         )
 
-    native.genrule(
+    hermetic_genrule(
         name = "{}_merge_msm_uapi_headers".format(name),
         srcs = [
             # do not sort
@@ -62,7 +63,7 @@ def define_single_vm_build(
             "msm_uapi_headers",
         ],
         outs = ["{}_kernel-uapi-headers.tar.gz".format(name)],
-        cmd_bash = """
+        cmd = """
                     mkdir -p intermediate_dir
                     for file in $(SRCS)
                     do

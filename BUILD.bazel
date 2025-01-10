@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
 load("//build:msm_kernel_extensions.bzl", "define_top_level_rules")
+load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load("//build/kernel/kleaf:kernel.bzl", "ddk_headers", "ddk_uapi_headers")
 load(":kleaf-scripts/android_build.bzl", "define_common_android_rules")
 load(":kleaf-scripts/ddk_uapi_headers_cc_library.bzl", "ddk_uapi_headers_cc_library")
@@ -32,20 +33,18 @@ define_qcom_dtb_setup()
 
 define_qtvm()
 
-wireless_certs_cmd = """
-    (echo '#include "reg.h"'; \
-    echo 'const u8 shipped_regdb_certs[] = {'; \
-    echo | cat - $(SRCS) ; \
-    echo '};'; \
-    echo 'unsigned int shipped_regdb_certs_len = sizeof(shipped_regdb_certs);'; \
-    ) > $@
-"""
-
-genrule(
+hermetic_genrule(
     name = "net/wireless/shipped-certs",
     srcs = glob(["net/wireless/certs/*.hex"]),
     outs = ["net/wireless/shipped-certs.c"],
-    cmd = wireless_certs_cmd,
+    cmd = """
+        (echo '#include "reg.h"'; \
+        echo 'const u8 shipped_regdb_certs[] = {'; \
+        echo | cat - $(SRCS) ; \
+        echo '};'; \
+        echo 'unsigned int shipped_regdb_certs_len = sizeof(shipped_regdb_certs);'; \
+        ) > $@
+        """,
 )
 
 filegroup(
@@ -116,7 +115,7 @@ ddk_uapi_headers_cc_library(
     header_archive = ":msm_uapi_headers",
 )
 
-genrule(
+hermetic_genrule(
     name = "kconfig.msm.generated",
     srcs = glob(["**/Kconfig*"]),
     outs = ["Kconfig.ext"],

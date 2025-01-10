@@ -1,4 +1,5 @@
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
+load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load(":kleaf-scripts/msm_common.bzl", "get_out_dir")
 
 def define_dtc_dist(target, msm_target, variant):
@@ -38,7 +39,7 @@ def define_dtc_dist(target, msm_target, variant):
       tar -czf "$@" bin lib include
     """
 
-    native.genrule(
+    hermetic_genrule(
         name = "{}_dtc_tarball".format(target),
         srcs = dtc_bin_targets + dtc_lib_targets + dtc_inc_targets,
         outs = ["{}_dtc.tar.gz".format(target)],
