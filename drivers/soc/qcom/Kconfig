@@ -27,6 +27,14 @@ config SPS_SUPPORT_NDP_BAM
 	  to do the actual data transfer themselves, instead of the
 	  BAM.
 
+config QCE_OPTIMIZED_BAM
+	bool "Optimized BAM Driver"
+	help
+	  Crypto 6 makes use of an optimized BAM interface.
+	  Optimized BAM offers some enhancements, however it changes
+	  some register offsets and tweaks some inner workings of the
+	  crypto BAM.
+
 config QCOM_AOSS_QMP
 	tristate "Qualcomm AOSS Driver"
 	depends on ARCH_QCOM || COMPILE_TEST
