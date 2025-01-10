@@ -287,9 +287,12 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/clk/qcom/clk-rpmh.c",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/clk-debug.h",
         ],
         deps = [
             # do not sort
+            "drivers/clk/qcom/clk-qcom",
             "drivers/soc/qcom/qcom_rpmh",
             "drivers/soc/qcom/cmd-db",
             "drivers/soc/qcom/crm-v2",
