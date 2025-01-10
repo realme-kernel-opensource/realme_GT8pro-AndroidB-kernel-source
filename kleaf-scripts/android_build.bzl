@@ -48,11 +48,9 @@ def define_single_android_build(
         config_fragment,
         base_kernel,
         dtb_target = None,
-        build_img_opts = None,
-        first_stage_modules = None):
+        build_img_opts = None):
     stem = "{}_{}".format(name, variant)
-    config = "//common:arch/arm64/configs/gki_defconfig"
-    modules = registry.define_modules(stem, config, config_fragment, base_kernel)
+    modules = registry.define_modules(stem, config_fragment, base_kernel)
 
     native.genrule(
         name = "{}_vendor_dlkm_modules_list_generated".format(stem),
@@ -70,6 +68,7 @@ def define_single_android_build(
         dtb_list, dtbo_list = define_qcom_dtbs(
             stem = stem,
             target = dtb_target,
+            defconfig = "//common:arch/arm64/configs/gki_defconfig",
         )
     else:
         dtb_list = None

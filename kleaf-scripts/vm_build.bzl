@@ -45,13 +45,13 @@ def define_single_vm_build(
         config_fragment,
         base_kernel,
         dtb_target = None):
-    config = "//soc-repo:arch/arm64/configs/generic_vm_defconfig"
-    modules = registry.define_modules(name, config, config_fragment, base_kernel)
+    modules = registry.define_modules(name, config_fragment, base_kernel)
 
     if dtb_target:
         define_qcom_dtbs(
             stem = name,
             target = dtb_target,
+            defconfig = "//soc-repo:arch/arm64/configs/generic_vm_defconfig",
         )
 
     native.genrule(
