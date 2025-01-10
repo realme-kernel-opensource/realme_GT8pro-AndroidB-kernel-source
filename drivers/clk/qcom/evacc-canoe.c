@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -319,19 +319,6 @@ static struct clk_branch eva_cc_mvs0c_shift_clk = {
 	},
 };
 
-static struct gdsc eva_cc_mvs0_gdsc = {
-	.gdscr = 0x8068,
-	.en_rest_wait_val = 0x2,
-	.en_few_wait_val = 0x2,
-	.clk_dis_wait_val = 0x6,
-	.pd = {
-		.name = "eva_cc_mvs0_gdsc",
-	},
-	.pwrsts = PWRSTS_OFF_ON,
-	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_TRIGGER,
-	.supply = "vdd_mm",
-};
-
 static struct gdsc eva_cc_mvs0c_gdsc = {
 	.gdscr = 0x8034,
 	.en_rest_wait_val = 0x2,
@@ -342,7 +329,21 @@ static struct gdsc eva_cc_mvs0c_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_mm",
+	.supply = "vdd_mm_mxc_voter",
+};
+
+static struct gdsc eva_cc_mvs0_gdsc = {
+	.gdscr = 0x8068,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x6,
+	.pd = {
+		.name = "eva_cc_mvs0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_TRIGGER,
+	.parent = &eva_cc_mvs0c_gdsc.pd,
+	.supply = "vdd_mm_mxc_voter",
 };
 
 static struct clk_regmap *eva_cc_canoe_clocks[] = {
