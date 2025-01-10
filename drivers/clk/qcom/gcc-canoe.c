@@ -22,6 +22,7 @@
 #include "clk-regmap-divider.h"
 #include "clk-regmap-mux.h"
 #include "common.h"
+#include "gdsc.h"
 #include "reset.h"
 #include "vdd-level.h"
 
@@ -4003,6 +4004,41 @@ static const struct clk_rcg_dfs_data gcc_dfs_clocks[] = {
 	DEFINE_RCG_DFS(gcc_qupv3_wrap4_s4_clk_src),
 };
 
+static struct gdsc gcc_pcie_0_gdsc = {
+	.gdscr = 0x6b004,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.collapse_ctrl = 0x5214c,
+	.collapse_mask = BIT(0),
+	.pd = {
+		.name = "gcc_pcie_0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
+	.supply = "vdd_cx",
+};
+
+static struct gdsc gcc_pcie_0_phy_gdsc = {
+	.gdscr = 0x6c000,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x2,
+	.collapse_ctrl = 0x5214c,
+	.collapse_mask = BIT(2),
+	.pd = {
+		.name = "gcc_pcie_0_phy_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
+	.supply = "vdd_mx",
+};
+
+static struct gdsc *gcc_canoe_gdscs[] = {
+	[GCC_PCIE_0_GDSC] = &gcc_pcie_0_gdsc,
+	[GCC_PCIE_0_PHY_GDSC] = &gcc_pcie_0_phy_gdsc,
+};
+
 static const struct regmap_config gcc_canoe_regmap_config = {
 	.reg_bits = 32,
 	.reg_stride = 4,
@@ -4019,6 +4055,8 @@ static const struct qcom_cc_desc gcc_canoe_desc = {
 	.num_resets = ARRAY_SIZE(gcc_canoe_resets),
 	.clk_regulators = gcc_canoe_regulators,
 	.num_clk_regulators = ARRAY_SIZE(gcc_canoe_regulators),
+	.gdscs = gcc_canoe_gdscs,
+	.num_gdscs = ARRAY_SIZE(gcc_canoe_gdscs),
 };
 
 static const struct of_device_id gcc_canoe_match_table[] = {
