@@ -80,6 +80,17 @@ def define_single_vm_build(
     )
 
     copy_to_dist_dir(
+        name = "{}_host_dist".format(name),
+        data = [
+            ":gen-headers_install.sh",
+            ":unifdef",
+        ],
+        dist_dir = "out/msm-kernel-{}/host".format(name),
+        flat = True,
+        log = "info",
+    )
+
+    copy_to_dist_dir(
         name = "{}_dist".format(name),
         data = [
             ":{}_modules_install".format(name),

@@ -11,7 +11,7 @@ import re
 import sys
 import subprocess
 
-HOST_TARGETS = ["dtc"]
+HOST_TARGETS = ["dtc", "host"]
 DEFAULT_SKIP_LIST = []
 MSM_EXTENSIONS = "build/msm_kernel_extensions.bzl"
 ABL_EXTENSIONS = "build/abl_extensions.bzl"
