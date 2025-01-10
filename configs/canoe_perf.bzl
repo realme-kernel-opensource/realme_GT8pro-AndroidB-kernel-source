@@ -167,6 +167,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_LLCC_PERFMON": "m",
     "CONFIG_QCOM_LLCC_PMU": "m",
     "CONFIG_QCOM_LOGBUF_BOOTLOG": "m",
+    "CONFIG_QCOM_LOGBUF_VENDOR_HOOKS": "m",
     "CONFIG_QCOM_MDT_LOADER": "m",
     "CONFIG_QCOM_MEMLAT": "m",
     "CONFIG_QCOM_MEMORY_DUMP_V2": "m",
