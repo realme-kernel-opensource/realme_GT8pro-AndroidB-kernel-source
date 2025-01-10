@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/align.h>
@@ -1149,7 +1149,8 @@ static void md_dma_buf_info(char *m, size_t dump_size)
 	struct dma_buf_priv dma_buf_priv;
 	struct priv_buf buf;
 
-	if (!in_task() || in_atomic())
+	/* Bail if we're not in task context or in an atomic context */
+	if (!in_task() || !preemptible())
 		return;
 
 	buf.buf = m;
