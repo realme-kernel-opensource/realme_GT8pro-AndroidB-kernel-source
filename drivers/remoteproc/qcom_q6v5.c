@@ -168,7 +168,7 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 		qcom_notify_early_ssr_clients(q6v5->ssr_subdev);
 
 	if (q6v5->rproc->recovery_disabled)
-		schedule_work(&q6v5->crash_handler);
+		queue_work(system_unbound_wq, &q6v5->crash_handler);
 	else
 		rproc_report_crash(q6v5->rproc, RPROC_WATCHDOG);
 
@@ -213,7 +213,7 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 		qcom_notify_early_ssr_clients(q6v5->ssr_subdev);
 
 	if (q6v5->rproc->recovery_disabled)
-		schedule_work(&q6v5->crash_handler);
+		queue_work(system_unbound_wq, &q6v5->crash_handler);
 	else
 		rproc_report_crash(q6v5->rproc, RPROC_FATAL_ERROR);
 
