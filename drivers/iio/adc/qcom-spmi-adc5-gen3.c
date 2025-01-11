@@ -1582,7 +1582,7 @@ static const struct adc5_channels adc5_gen4_chans_pmic[ADC5_MAX_CHANNEL] = {
 	[ADC5_GEN4_IIN]			= ADC5_CHAN_CUR("iin", 10,
 						SCALE_HW_CALIB_CUR)
 	[ADC5_GEN4_ICHG_FB]		= ADC5_CHAN_CUR("ichg_fb", 15,
-						SCALE_HW_CALIB_CUR)
+						SCALE_HW_CALIB_CUR_RAW)
 	[ADC5_GEN4_DIE_TEMP]		= ADC5_CHAN_TEMP("die_temp", 0,
 						SCALE_HW_CALIB_PMIC_THERM_PM7)
 	[ADC5_GEN4_TEMP_ALARM_LITE]	= ADC5_CHAN_TEMP("die_temp_lite", 0,
