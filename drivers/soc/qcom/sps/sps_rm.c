@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011-2015, 2017-2019, 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 /* Resource management for the SPS device driver. */
 
@@ -17,7 +17,7 @@
 #include "sps_core.h"
 
 /* Max BAM FIFO sizes */
-#define SPSRM_MAX_DESC_FIFO_SIZE    0xffff
+#define SPSRM_MAX_DESC_FIFO_SIZE    0x10000
 #define SPSRM_MAX_DATA_FIFO_SIZE    0xffff
 
 /* Connection control struct pointer */

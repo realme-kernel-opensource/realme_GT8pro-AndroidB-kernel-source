@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011-2019, 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 /* Bus-Access-Manager (BAM) Hardware manager. */
 
@@ -654,6 +654,37 @@ static u32 bam_regmap[][BAM_MAX_REGS] = {
 			[IRQ_SRCS_MSK_EE] = 0x3004,
 			[IRQ_SRCS_UNMASKED_EE] = 0x3008,
 			[PIPE_ATTR_EE] = 0x300c,
+#ifdef CONFIG_QCE_OPTIMIZED_BAM
+			[P_CTRL] = 0xC000,
+			[P_RST] = 0xC004,
+			[P_HALT] = 0xC008,
+			[P_IRQ_STTS] = 0xC010,
+			[P_IRQ_CLR] = 0xC014,
+			[P_IRQ_EN] = 0xC018,
+			[P_TIMER] = 0xC01C,
+			[P_TIMER_CTRL] = 0xC020,
+			[P_PRDCR_SDBND] = 0xC024,
+			[P_CNSMR_SDBND] = 0xC028,
+			[P_EVNT_DEST_ADDR] = 0xC82C,
+			[P_EVNT_DEST_ADDR_MSB] = 0xC934,
+			[P_EVNT_REG] = 0xC818,
+			[P_SW_OFSTS] = 0xC800,
+			[P_DATA_FIFO_ADDR] = 0xC824,
+			[P_DATA_FIFO_ADDR_MSB] = 0xC924,
+			[P_DESC_FIFO_ADDR] = 0xC81C,
+			[P_DESC_FIFO_ADDR_MSB] = 0xC914,
+			[P_EVNT_GEN_TRSHLD] = 0xC828,
+			[P_FIFO_SIZES] = 0xC820,
+			[P_RETR_CNTXT] = 0xC834,
+			[P_SI_CNTXT] = 0xC838,
+			[P_DF_CNTXT] = 0xC830,
+			[P_AU_PSM_CNTXT_1] = 0xC804,
+			[P_PSM_CNTXT_2] = 0xC808,
+			[P_PSM_CNTXT_3] = 0xC80C,
+			[P_PSM_CNTXT_3_MSB] = 0xC904,
+			[P_PSM_CNTXT_4] = 0xC810,
+			[P_PSM_CNTXT_5] = 0xC814,
+#else
 			[P_CTRL] = 0x13000,
 			[P_RST] = 0x13004,
 			[P_HALT] = 0x13008,
@@ -683,6 +714,7 @@ static u32 bam_regmap[][BAM_MAX_REGS] = {
 			[P_PSM_CNTXT_3_MSB] = 0x13904,
 			[P_PSM_CNTXT_4] = 0x13810,
 			[P_PSM_CNTXT_5] = 0x13814,
+#endif
 			[P_TRUST_REG] = 0x2020,
 	},
 };
@@ -1087,10 +1119,12 @@ int bam_check(void *base, u32 *version, u32 ee, u32 *num_pipes)
 	else
 		enabled = bam_get_pipe_attr(base, ee, true);
 
+#ifndef CONFIG_QCE_OPTIMIZED_BAM
 	if (!enabled) {
 		SPS_ERR(dev, "sps: bam 0x%pK(va) is not enabled\n", dev->base);
 		return -ENODEV;
 	}
+#endif
 
 	ver = bam_read_reg(base, REVISION, 0) & BAM_REVISION;
 
