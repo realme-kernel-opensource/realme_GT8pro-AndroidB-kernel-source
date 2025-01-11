@@ -4805,6 +4805,16 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 
 	walt_lockdep_assert_rq(rq, p);
 
+	if ((p->se.sched_delayed && wts->prev_on_rq == 1)) {
+		WALT_BUG(WALT_BUG_UPSTREAM, p,
+			"missed the delayed dequeue: task_cpu=%d deq_cpu=%d\n",
+			task_cpu(p), cpu_of(rq));
+	}
+
+	/* Ignoring dequeue as previous delayed dequeue was already accounted */
+	if (p->se.sched_delayed && wts->prev_on_rq == 2)
+		return;
+
 	/*
 	 * a task can be enqueued before walt is started, and dequeued after.
 	 * therefore the check to ensure that prev_on_rq_cpu is needed to prevent
