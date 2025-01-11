@@ -2099,6 +2099,7 @@
   led_classdev_flash_register_ext
   led_classdev_flash_unregister
   led_classdev_unregister
+  led_get_default_pattern
   led_mc_calc_color_components
   led_set_brightness
   led_set_brightness_sync
