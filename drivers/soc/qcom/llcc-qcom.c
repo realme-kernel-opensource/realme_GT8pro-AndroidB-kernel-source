@@ -712,6 +712,15 @@ static const struct llcc_slice_config canoe_data[] = {
 							  0, 0},
 };
 
+static const struct llcc_slice_config vienna_data[] = {
+	{LLCC_MMUHWT,           18,  32, 3, 1, 3, 0, 0, 0,
+								0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+								0, 0, 0, 0},
+	{LLCC_PARTIALWRITES,    29,  32, 3, 1, 3, 0, 0, 0,
+								0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0,
+								0, 0, 0, 0},
+};
+
 static const struct llcc_edac_reg_offset llcc_v1_edac_reg_offset = {
 	.trp_ecc_error_status0 = 0x20344,
 	.trp_ecc_error_status1 = 0x20348,
@@ -1038,6 +1047,16 @@ static const struct qcom_llcc_config canoe_cfg[] = {
 	},
 };
 
+static const struct qcom_llcc_config vienna_cfg[] = {
+	{
+		.sct_data       = vienna_data,
+		.size           = ARRAY_SIZE(vienna_data),
+		.need_llcc_cfg  = true,
+		.reg_offset = llcc_v6_reg_offset,
+		.edac_reg_offset = &llcc_v6_edac_reg_offset,
+	},
+};
+
 static const struct qcom_sct_config qdu1000_cfgs = {
 	.llcc_config	= qdu1000_cfg,
 	.num_config	= ARRAY_SIZE(qdu1000_cfg),
@@ -1131,6 +1150,11 @@ static const struct qcom_sct_config sun_cfgs = {
 static const struct qcom_sct_config canoe_cfgs = {
 	.llcc_config    = canoe_cfg,
 	.num_config = ARRAY_SIZE(canoe_cfg),
+};
+
+static const struct qcom_sct_config vienna_cfgs = {
+	.llcc_config    = vienna_cfg,
+	.num_config = ARRAY_SIZE(vienna_cfg),
 };
 
 static struct llcc_drv_data *drv_data = (void *) -EPROBE_DEFER;
@@ -1938,10 +1962,15 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 		}
 	}
 
-	drv_data->bcast_regmap = qcom_llcc_init_mmio(pdev, i, "llcc_broadcast_or_base");
-	if (IS_ERR(drv_data->bcast_regmap)) {
-		ret = PTR_ERR(drv_data->bcast_regmap);
-		goto err;
+	/*For Single channel there is no BCAST region. hence use regmap0 for register access */
+	if (num_banks == 1) {
+		drv_data->bcast_regmap = drv_data->regmaps[0];
+	} else {
+		drv_data->bcast_regmap = qcom_llcc_init_mmio(pdev, i, "llcc_broadcast_or_base");
+		if (IS_ERR(drv_data->bcast_regmap)) {
+			ret = PTR_ERR(drv_data->bcast_regmap);
+			goto err;
+		}
 	}
 
 	/* Extract version of the IP */
@@ -2039,6 +2068,7 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,pineapple-llcc", .data = &pineapple_cfgs },
 	{ .compatible = "qcom,sun-llcc", .data = &sun_cfgs },
 	{ .compatible = "qcom,canoe-llcc", .data = &canoe_cfgs },
+	{ .compatible = "qcom,vienna-llcc", .data = &vienna_cfgs },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_llcc_of_match);
