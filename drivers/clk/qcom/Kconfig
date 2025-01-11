@@ -424,4 +424,22 @@ config SM_SCC_8150
 	  the sensor processor.  However, on some systems it is instead owned
 	  by the application processor.
 
+config SDW_GCC_VIENNA
+	tristate "VIENNA Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc.
+	  VIENNA devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, SD/eMMC, etc.
+
+config SDW_GPUCC_VIENNA
+	tristate "VIENNA Graphics Clock Controller"
+	select SDW_GCC_VIENNA
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc.
+	  VIENNA devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
 endif
