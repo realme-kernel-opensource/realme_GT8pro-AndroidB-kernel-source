@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config QCOM_POWER_TELEMETRY_FRAMEWORK
+	tristate "Qualcomm Technologies, Inc. Power Telemetry Hardware Framework"
+	depends on POWERCAP
+	help
+	  This enables Qualcomm Technologies, Inc. power telemetry framework.
+	  It provides a framework support to register for different power
+	  capable device channels. Based on devicetree power-zones hierarchy,
+	  it binds different channels to power-zone node (aka qptm). Each
+	  qptm node registers with powercap framework as powercap zones.
+
