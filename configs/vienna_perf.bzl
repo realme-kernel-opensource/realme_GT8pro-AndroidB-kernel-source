@@ -76,6 +76,8 @@ vienna_perf_config = {
     "CONFIG_REGULATOR_STUB": "m",
     "CONFIG_RPMSG_QCOM_GLINK": "m",
     "CONFIG_RPMSG_QCOM_GLINK_SMEM": "m",
+    "CONFIG_SDW_GCC_VIENNA": "m",
+    "CONFIG_SDW_GPUCC_VIENNA": "m",
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_VIRT_DRIVERS": "y",
 }

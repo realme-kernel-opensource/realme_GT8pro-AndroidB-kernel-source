@@ -46,3 +46,5 @@ qcom_edac.ko
 qcom_aoss.ko
 msm_qmp.ko
 qrtr.ko
+gcc-vienna.ko
+gpucc-vienna.ko
