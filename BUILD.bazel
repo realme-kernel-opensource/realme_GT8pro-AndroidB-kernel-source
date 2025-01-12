@@ -8,6 +8,7 @@ load(":kleaf-scripts/android_build.bzl", "define_common_android_rules")
 load(":kleaf-scripts/ddk_uapi_headers_cc_library.bzl", "ddk_uapi_headers_cc_library")
 load(":kleaf-scripts/dtbs.bzl", "define_qcom_dtb_setup")
 load(":kleaf-scripts/generic_qtvm.bzl", "define_qtvm")
+load(":kleaf-scripts/targets/autogvm.bzl", "define_autogvm")
 load(
     ":kleaf-scripts/targets/canoe.bzl",
     "define_canoe",
@@ -250,6 +251,8 @@ filegroup(
 define_canoe()
 
 define_sun()
+
+define_autogvm()
 
 define_sun_tuivm()
 
