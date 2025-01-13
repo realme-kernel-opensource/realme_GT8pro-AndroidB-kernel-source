@@ -6,6 +6,7 @@ canoe_tuivm_config = {
     "CONFIG_GH_ARM64_DRV": "m",
     "CONFIG_GH_CTRL": "m",
     "CONFIG_GH_DBL": "m",
+    "CONFIG_GH_GUEST_POPS": "m",
     "CONFIG_GH_IRQ_LEND": "m",
     "CONFIG_GH_MEM_NOTIFIER": "m",
     "CONFIG_GH_MSGQ": "m",

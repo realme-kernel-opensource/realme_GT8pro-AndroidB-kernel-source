@@ -224,7 +224,7 @@ static void gh_guest_pops_exit_poff(void)
 	input_free_device(gh_vm_poff_input);
 }
 
-int gh_guest_pops_init(void)
+static int __init gh_guest_pops_init(void)
 {
 	int ret;
 
@@ -250,11 +250,13 @@ int gh_guest_pops_init(void)
 
 	return 0;
 }
+module_init(gh_guest_pops_init);
 
-void gh_guest_pops_remove(void)
+static void __exit gh_guest_pops_remove(void)
 {
 	gh_guest_pops_exit_poff();
 	gh_guest_sysfs_cleanup();
 }
+module_exit(gh_guest_pops_remove);
 
 MODULE_LICENSE("GPL");
