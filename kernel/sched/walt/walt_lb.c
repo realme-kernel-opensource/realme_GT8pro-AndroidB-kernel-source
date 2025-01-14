@@ -20,6 +20,12 @@ void walt_detach_task(struct task_struct *p, struct rq *src_rq,
 			     struct rq *dst_rq)
 {
 	//TODO can we just replace with detach_task in fair.c??
+
+	if (p->se.sched_delayed)
+		WALT_BUG(WALT_BUG_WALT, p,
+			"Dequeuing when task is delayed: src_cpu=%d dst_cpu=%d\n",
+			cpu_of(src_rq), cpu_of(dst_rq));
+
 	deactivate_task(src_rq, p, 0);
 	set_task_cpu(p, dst_rq->cpu);
 }
