@@ -253,6 +253,7 @@ void walt_task_dump(struct task_struct *p)
 	SCHED_PRINT(wts->grp);
 	SCHED_PRINT(p->on_cpu);
 	SCHED_PRINT(p->on_rq);
+	SCHED_PRINT(p->se.sched_delayed);
 }
 
 void walt_rq_dump(int cpu)
@@ -4843,7 +4844,7 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 
 	/* catch double deq */
 	if (wts->prev_on_rq == 2) {
-		WALT_BUG(WALT_BUG_UPSTREAM, p, "double dequeue detected: task_cpu=%d new_cpu=%d\n",
+		WALT_BUG(WALT_BUG_UPSTREAM, p, "double dequeue detected: task_cpu=%d deq_cpu=%d\n",
 			 task_cpu(p), cpu_of(rq));
 		double_dequeue = true;
 	}
