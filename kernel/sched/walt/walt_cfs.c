@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/seq_file.h>
@@ -1360,7 +1360,8 @@ void walt_cfs_dequeue_task(struct rq *rq, struct task_struct *p)
 void walt_cfs_tick(struct rq *rq)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(rq->curr);
+	struct walt_task_struct *wts =
+		(struct walt_task_struct *)android_task_vendor_data(rq->curr);
 	bool skip_mvp;
 
 	if (unlikely(walt_disabled))
@@ -1397,7 +1398,8 @@ static void walt_cfs_check_preempt_wakeup_fair(void *unused, struct rq *rq, stru
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts_p = (struct walt_task_struct *)android_task_vendor_data(p);
 	struct task_struct *c = rq->curr;
-	struct walt_task_struct *wts_c = (struct walt_task_struct *)android_task_vendor_data(rq->curr);
+	struct walt_task_struct *wts_c =
+		(struct walt_task_struct *)android_task_vendor_data(rq->curr);
 	bool resched = false, skip_mvp;
 	bool p_is_mvp, curr_is_mvp;
 
@@ -1545,6 +1547,7 @@ void walt_cfs_init(void)
 	register_trace_android_vh_binder_set_priority(binder_set_priority_hook, NULL);
 	register_trace_android_vh_binder_restore_priority(binder_restore_priority_hook, NULL);
 
-	register_trace_android_rvh_check_preempt_wakeup_fair(walt_cfs_check_preempt_wakeup_fair, NULL);
+	register_trace_android_rvh_check_preempt_wakeup_fair(walt_cfs_check_preempt_wakeup_fair,
+			NULL);
 	register_trace_android_rvh_replace_next_task_fair(walt_cfs_replace_next_task_fair, NULL);
 }

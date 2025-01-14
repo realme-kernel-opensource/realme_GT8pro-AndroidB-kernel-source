@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <trace/hooks/sched.h>
@@ -293,7 +293,8 @@ static inline bool need_active_lb(struct task_struct *p, int dst_cpu,
 	return true;
 }
 
-static int walt_lb_pull_tasks(int dst_cpu, int src_cpu, struct task_struct **pulled_task_struct)
+static int walt_lb_pull_tasks(int dst_cpu, int src_cpu,
+		struct task_struct **pulled_task_struct)
 {
 	struct rq *dst_rq = cpu_rq(dst_cpu);
 	struct rq *src_rq = cpu_rq(src_cpu);

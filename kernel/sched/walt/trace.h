@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #undef TRACE_SYSTEM
@@ -1369,7 +1369,7 @@ TRACE_EVENT(sched_enq_deq_task,
 		__entry->cpus_allowed	= cpus_allowed;
 		__entry->demand		= task_load(p);
 		__entry->pred_demand_scaled	=
-			((struct walt_task_struct *)android_task_vendor_data(p))->pred_demand_scaled;
+		      ((struct walt_task_struct *)android_task_vendor_data(p))->pred_demand_scaled;
 		__entry->compat_thread	= is_compat_thread(task_thread_info(p));
 		__entry->mvp		= mvp;
 		__entry->misfit		=

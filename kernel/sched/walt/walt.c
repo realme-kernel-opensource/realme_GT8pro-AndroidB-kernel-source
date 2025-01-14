@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/syscore_ops.h>
@@ -5206,9 +5206,11 @@ static void rebuild_sd_workfn(struct work_struct *work)
 	complete(&rebuild_domains_completion);
 }
 
-static void android_vh_dup_task_struct(void *unused, struct task_struct *tsk, struct task_struct *orig)
+static void android_vh_dup_task_struct(void *unused, struct task_struct *tsk,
+		struct task_struct *orig)
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(tsk);
+
 	memset(wts, 0, sizeof(struct walt_task_struct));
 }
 
