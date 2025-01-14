@@ -5446,6 +5446,8 @@ static int walt_init_stop_handler(void *data)
 
 	create_default_coloc_group();
 
+	walt_disabled = false;
+
 	for_each_possible_cpu(cpu) {
 		raw_spin_unlock(&cpu_rq(cpu)->__lock);
 	}
