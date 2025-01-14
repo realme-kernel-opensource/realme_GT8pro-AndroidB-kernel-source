@@ -4719,6 +4719,19 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 
 	walt_lockdep_assert_rq(rq, p);
 
+	/*
+	 * When a task with delayed dequeue changes in its scheduling attributes (ex. priority,
+	 * affinity, scheduling class, cgroup etc.), it is dequeued and re-enqueued. WALT
+	 * ignores the dequeue since it follows the delayed dequeue, but the re-enqueue
+	 * from the attribute change should also be skipped.
+	 *
+	 * The ENQUEUE_DELAYED flag indicates that a sched_delayed task is genuinely
+	 * waking up. Therefore, ensure that tasks in a sched_delayed state are not
+	 * prematurely accounted for in WALT unless ENQUEUE_DELAYED is set.
+	 */
+	if (p->se.sched_delayed && !(flags & ENQUEUE_DELAYED))
+		return;
+
 	if (flags & ENQUEUE_WAKEUP)
 		per_cpu(wakeup_ctr, cpu_of(rq)) += 1;
 
