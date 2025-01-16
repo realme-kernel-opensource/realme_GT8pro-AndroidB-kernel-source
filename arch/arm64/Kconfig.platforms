@@ -51,4 +51,13 @@ config ARCH_VIENNA
 	  If you do not wish to build a kernel that runs on this
 	  chipset or if you are unsure, say 'N' here.
 
+config ARCH_YUPIK
+	bool "Enable Support for Qualcomm Technologies, Inc. YUPIK"
+	depends on ARCH_QCOM
+	help
+	  This enables support for the Qualcomm Technologies,
+	  Inc.'s YUPIK chipset. If you do not wish to build a
+	  kernel that runs on this chipset or if you are unsure,
+	  say 'N' here.
+
 endmenu # "Platform selection"
