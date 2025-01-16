@@ -39,3 +39,13 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/leds/trigger/ledtrig-pattern",
+        out = "ledtrig-pattern.ko",
+        config = "CONFIG_LEDS_TRIGGER_PATTERN",
+        srcs = [
+            # do not sort
+            "drivers/leds/trigger/ledtrig-pattern.c",
+        ],
+    )

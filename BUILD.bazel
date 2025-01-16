@@ -3,6 +3,7 @@
 load("//build:msm_kernel_extensions.bzl", "define_top_level_rules")
 load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load("//build/kernel/kleaf:kernel.bzl", "ddk_headers", "ddk_uapi_headers")
+load(":common_sources.bzl", "define_common_upstream_files")
 load(":kleaf-scripts/android_build.bzl", "define_common_android_rules")
 load(":kleaf-scripts/ddk_uapi_headers_cc_library.bzl", "ddk_uapi_headers_cc_library")
 load(":kleaf-scripts/dtbs.bzl", "define_qcom_dtb_setup")
@@ -28,6 +29,8 @@ exports_files(["android/abi_gki_aarch64_qcom"])
 define_top_level_rules()
 
 define_common_android_rules()
+
+define_common_upstream_files()
 
 define_qcom_dtb_setup()
 
