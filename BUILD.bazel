@@ -16,6 +16,7 @@ load(
     "define_canoe_tuivm",
 )
 load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
+load(":kleaf-scripts/targets/lahaina.bzl", "define_lahaina")
 load(
     ":kleaf-scripts/targets/sun.bzl",
     "define_sun",
@@ -268,3 +269,5 @@ define_canoe_oemvm()
 define_canoe_vms()
 
 define_vienna()
+
+define_lahaina()
