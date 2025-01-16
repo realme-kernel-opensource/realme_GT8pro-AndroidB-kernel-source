@@ -125,6 +125,21 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-yupik",
+        out = "pinctrl-yupik.ko",
+        config = "CONFIG_PINCTRL_YUPIK",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+            "drivers/pinctrl/qcom/pinctrl-yupik.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+        ],
+    )
+
+    registry.register(
         name = "drivers/pinctrl/qcom/pinctrl-lemans",
         out = "pinctrl-lemans.ko",
         config = "CONFIG_PINCTRL_LEMANS",
