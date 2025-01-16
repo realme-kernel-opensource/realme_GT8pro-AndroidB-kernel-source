@@ -1,5 +1,5 @@
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("//build:msm_kernel_extensions.bzl", "get_gki_ramdisk_prebuilt_binary", "get_vendor_ramdisk_binaries")
+load("//build:msm_kernel_extensions.bzl", "define_extras", "get_gki_ramdisk_prebuilt_binary", "get_vendor_ramdisk_binaries")
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load(
@@ -275,6 +275,8 @@ def define_single_android_build(
     define_abl_dist(stem, name, variant)
 
     define_dtc_dist(stem, name, variant)
+
+    define_extras(stem, kbuild_config = base_kernel)
 
 def define_android_build(
         name,
