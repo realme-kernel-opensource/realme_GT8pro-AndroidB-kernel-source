@@ -24,6 +24,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/dma-buf/heaps/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/dma/qcom/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/edac/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/firmware/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/gpu/drm/msm/Kconfig"
