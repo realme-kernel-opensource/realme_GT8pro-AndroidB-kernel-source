@@ -5,7 +5,7 @@
  * Copyright (C) 2016 Linaro Ltd
  * Copyright (C) 2014 Sony Mobile Communications AB
  * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -1445,7 +1445,7 @@ static void rproc_recovery_set(struct rproc *rproc)
 	adsp->subsys_recovery_disabled = rproc->recovery_disabled;
 }
 
-void qcom_rproc_update_recovery_status(struct rproc *rproc, bool enable)
+void qcom_rproc_update_recovery_status(struct rproc *rproc, bool enable, bool locked)
 {
 	struct qcom_adsp *adsp;
 
@@ -1453,7 +1453,8 @@ void qcom_rproc_update_recovery_status(struct rproc *rproc, bool enable)
 		return;
 
 	adsp = (struct qcom_adsp *)rproc->priv;
-	mutex_lock(&rproc->lock);
+	if (locked)
+		mutex_lock(&rproc->lock);
 	if (enable) {
 		/* Save recovery flag */
 		adsp->subsys_recovery_disabled = rproc->recovery_disabled;
@@ -1464,7 +1465,9 @@ void qcom_rproc_update_recovery_status(struct rproc *rproc, bool enable)
 		rproc->recovery_disabled = adsp->subsys_recovery_disabled;
 		pr_info("qcom rproc: %s: recovery disabled by kernel client\n", rproc->name);
 	}
-	mutex_unlock(&rproc->lock);
+
+	if (locked)
+		mutex_unlock(&rproc->lock);
 }
 EXPORT_SYMBOL_GPL(qcom_rproc_update_recovery_status);
 
