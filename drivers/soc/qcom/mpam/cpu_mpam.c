@@ -72,7 +72,7 @@ static void cpu_mpam_partition_transfer(int old, int new)
 
 	rcu_read_lock();
 	for_each_process_thread(p, t) {
-		wts = (struct walt_task_struct *) t->android_vendor_data1;
+		wts = (struct walt_task_struct *)android_task_vendor_data(t);
 		if (wts->mpam_part_id == old)
 			wts->mpam_part_id = new;
 	}
@@ -245,7 +245,7 @@ static ssize_t cpu_mpam_tasks_show(struct config_item *item, char *page)
 	part_id = get_part_id(item);
 	rcu_read_lock();
 	for_each_process_thread(p, t) {
-		wts = (struct walt_task_struct *) t->android_vendor_data1;
+		wts = (struct walt_task_struct *)android_task_vendor_data(t);
 		if (wts->mpam_part_id == part_id)
 			len += scnprintf(page + len, PAGE_SIZE - len, "%d ", t->pid);
 	}
@@ -279,7 +279,7 @@ static ssize_t cpu_mpam_tasks_store(struct config_item *item,
 			continue;
 		}
 
-		wts = (struct walt_task_struct *) p->android_vendor_data1;
+		wts = (struct walt_task_struct *)android_task_vendor_data(p);
 		wts->mpam_part_id = part_id;
 	}
 
@@ -544,7 +544,7 @@ static void cpu_mpam_switch_task(void *unused, struct task_struct *prev,
 {
 	struct walt_task_struct *wts;
 
-	wts = (struct walt_task_struct *) next->android_vendor_data1;
+	wts = (struct walt_task_struct *)android_task_vendor_data(next);
 	cpu_mpam_write_partid(wts->mpam_part_id);
 }
 

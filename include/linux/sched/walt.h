@@ -10,6 +10,7 @@
 #include <linux/types.h>
 #include <linux/spinlock_types.h>
 #include <linux/cpumask.h>
+#include <linux/sched/task.h>
 
 enum pause_client {
 	PAUSE_CORE_CTL	= 0x01,
@@ -167,19 +168,20 @@ struct walt_task_struct {
 
 #define wts_to_ts(wts) ({ \
 		void *__mptr = (void *)(wts); \
+		(u64 *)wts == &vendor_data_pad[0] ? &init_task :\
 		((struct task_struct *)(__mptr - \
-			offsetof(struct task_struct, android_vendor_data1))); })
+			sizeof(struct task_struct))); })
 
 static inline bool sched_get_wake_up_idle(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	return wts->wake_up_idle;
 }
 
 static inline int sched_set_wake_up_idle(struct task_struct *p, bool wake_up_idle)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
 	wts->wake_up_idle = wake_up_idle;
 	return 0;
@@ -187,7 +189,7 @@ static inline int sched_set_wake_up_idle(struct task_struct *p, bool wake_up_idl
 
 static inline void set_wake_up_idle(bool wake_up_idle)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) current->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(current);
 
 	wts->wake_up_idle = wake_up_idle;
 }

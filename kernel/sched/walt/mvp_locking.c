@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <trace/hooks/dtask.h>
@@ -12,7 +12,7 @@ static void android_vh_alter_mutex_list_add(void *unused, struct mutex *lock,
 				bool *already_on_list)
 {
 	struct walt_task_struct *wts_waiter =
-		(struct walt_task_struct *)current->android_vendor_data1;
+		(struct walt_task_struct *)android_task_vendor_data(current);
 	struct mutex_waiter *pos = NULL;
 	struct mutex_waiter *n = NULL;
 	struct list_head *head = list;
@@ -29,7 +29,7 @@ static void android_vh_alter_mutex_list_add(void *unused, struct mutex *lock,
 
 	list_for_each_entry_safe(pos, n, head, list) {
 		wts = (struct walt_task_struct *)
-			((struct task_struct *)(pos->task)->android_vendor_data1);
+			android_task_vendor_data((struct task_struct *)(pos->task));
 		if (!is_mvp(wts)) {
 			list_add(&waiter->list, pos->list.prev);
 			*already_on_list = true;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "walt.h"
@@ -253,8 +253,8 @@ bool find_heaviest_topapp(u64 window_start)
 
 	/* Assign user specified one (if exists) to slot 0*/
 	if (pipeline_special_task) {
-		heavy_wts[0] = (struct walt_task_struct *)
-					pipeline_special_task->android_vendor_data1;
+		heavy_wts[0] = (struct walt_task_struct *)android_task_vendor_data(
+				pipeline_special_task);
 		start = 1;
 	} else {
 		start = 0;
@@ -741,7 +741,7 @@ bool enable_load_sync(int cpu)
  */
 int pipeline_fits_smaller_cpus(struct task_struct *p)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	unsigned int pipeline_cpu = wts->pipeline_cpu;
 
 	if (pipeline_cpu == -1)

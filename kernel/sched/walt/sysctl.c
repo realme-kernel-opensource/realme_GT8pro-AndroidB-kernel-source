@@ -426,7 +426,7 @@ static int sched_task_handler(const struct ctl_table *table, int write,
 			ret = -ENOENT;
 			goto unlock_mutex;
 		}
-		wts = (struct walt_task_struct *) task->android_vendor_data1;
+		wts = (struct walt_task_struct *)android_task_vendor_data(task);
 		pid_and_val[0] = sysctl_task_read_pid;
 		param = (unsigned long)table->data;
 		switch (param) {
@@ -487,7 +487,7 @@ static int sched_task_handler(const struct ctl_table *table, int write,
 		ret = -ENOENT;
 		goto unlock_mutex;
 	}
-	wts = (struct walt_task_struct *) task->android_vendor_data1;
+	wts = (struct walt_task_struct *)android_task_vendor_data(task);
 	param = (unsigned long)table->data;
 	val = pid_and_val[1];
 	if (param != LOAD_BOOST && val < 0) {

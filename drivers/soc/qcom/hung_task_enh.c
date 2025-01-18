@@ -51,7 +51,7 @@ static struct hung_task_enh_data hung_task_enh;
 void qcom_before_check_tasks(void *ignore, struct task_struct *t, unsigned long timeout,
 							bool *need_check)
 {
-	struct walt_task_struct *wts = (struct walt_task_struct *) t->android_vendor_data1;
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(t);
 
 	if ((hung_task_enh.global_detect_mode == HUNG_TASK_MODE_ALLOWLIST &&
 			wts->hung_detect_status != TASK_IN_ALLOWLIST) ||
@@ -121,7 +121,7 @@ static int hung_task_handler(const struct ctl_table *table, int write,
 			ret = -ENOENT;
 			goto unlock_mutex;
 		}
-		wts = (struct walt_task_struct *) task->android_vendor_data1;
+		wts = (struct walt_task_struct *)android_task_vendor_data(task);
 		pid_and_val[0] = hung_task_enh.read_pid;
 		pid_and_val[1] = wts->hung_detect_status;
 		ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
@@ -143,7 +143,7 @@ static int hung_task_handler(const struct ctl_table *table, int write,
 		goto unlock_mutex;
 	}
 
-	wts = (struct walt_task_struct *) task->android_vendor_data1;
+	wts = (struct walt_task_struct *)android_task_vendor_data(task);
 	if (pid_and_val[1] == 1) {
 		if (hung_task_enh.global_detect_mode == HUNG_TASK_MODE_ALLOWLIST)
 			wts->hung_detect_status = TASK_IN_ALLOWLIST;

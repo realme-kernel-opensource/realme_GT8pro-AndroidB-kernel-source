@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #undef TRACE_SYSTEM
@@ -1149,7 +1149,7 @@ TRACE_EVENT(sched_select_task_rt,
 		__entry->new_cpu		= new_cpu;
 		__entry->reduce_mask		=
 		cpumask_bits(&(((struct walt_task_struct *)
-				p->android_vendor_data1)->reduce_mask))[0];
+				android_task_vendor_data(p))->reduce_mask))[0];
 		if (!lowest_mask)
 			__entry->lowest_mask	= 0;
 		else
@@ -1183,7 +1183,7 @@ TRACE_EVENT(sched_rt_find_lowest_rq,
 		__entry->best_cpu		= best_cpu;
 		__entry->reduce_mask		=
 		cpumask_bits(&(((struct walt_task_struct *)
-				p->android_vendor_data1)->reduce_mask))[0];
+				android_task_vendor_data(p))->reduce_mask))[0];
 		if (!lowest_mask)
 			__entry->lowest_mask	= 0;
 		else
@@ -1249,17 +1249,17 @@ TRACE_EVENT(sched_task_util,
 		__entry->rtg_skip_min		= walt_get_rtg_status(p);
 		__entry->start_cpu		= start_cpu;
 		__entry->unfilter		=
-			((struct walt_task_struct *) p->android_vendor_data1)->unfilter;
+			((struct walt_task_struct *)android_task_vendor_data(p))->unfilter;
 		__entry->cpus_allowed		= cpumask_bits(p->cpus_ptr)[0];
 		__entry->task_boost		= per_task_boost(p);
 		__entry->low_latency		= walt_low_latency_task(p);
 		__entry->iowaited		=
-			((struct walt_task_struct *) p->android_vendor_data1)->iowaited;
+			((struct walt_task_struct *)android_task_vendor_data(p))->iowaited;
 		__entry->load_boost		=
-			((struct walt_task_struct *) p->android_vendor_data1)->load_boost;
+			((struct walt_task_struct *)android_task_vendor_data(p))->load_boost;
 		__entry->sync_state		= !is_state1();
 		__entry->pipeline_cpu		=
-			((struct walt_task_struct *) p->android_vendor_data1)->pipeline_cpu;
+			((struct walt_task_struct *)android_task_vendor_data(p))->pipeline_cpu;
 		__entry->yield_cnt		= yield_cnt;
 	),
 
@@ -1369,11 +1369,11 @@ TRACE_EVENT(sched_enq_deq_task,
 		__entry->cpus_allowed	= cpus_allowed;
 		__entry->demand		= task_load(p);
 		__entry->pred_demand_scaled	=
-			((struct walt_task_struct *) p->android_vendor_data1)->pred_demand_scaled;
+		      ((struct walt_task_struct *)android_task_vendor_data(p))->pred_demand_scaled;
 		__entry->compat_thread	= is_compat_thread(task_thread_info(p));
 		__entry->mvp		= mvp;
 		__entry->misfit		=
-			((struct walt_task_struct *) p->android_vendor_data1)->misfit;
+			((struct walt_task_struct *)android_task_vendor_data(p))->misfit;
 	),
 
 	TP_printk("cpu=%d %s comm=%s pid=%d prio=%d nr_running=%u rt_nr_running=%u affine=%x demand=%u pred_demand_scaled=%u is_compat_t=%d mvp=%d misfit=%d",
