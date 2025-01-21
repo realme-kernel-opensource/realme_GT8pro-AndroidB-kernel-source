@@ -1283,13 +1283,12 @@ TRACE_EVENT(sched_find_best_target,
 		 unsigned long min_util, int start_cpu,
 		 unsigned long candidates,
 		 int most_spare_cap,
-		 int order_index, int end_index,
-		 int skip, bool running,
+		 int order_index, int end_index, int skip,
 		 int most_spare_rq_cpu, unsigned int cpu_rq_runnable_cnt),
 
 	TP_ARGS(tsk, min_util, start_cpu, candidates,
 		most_spare_cap,
-		order_index, end_index, skip, running,
+		order_index, end_index, skip,
 		most_spare_rq_cpu, cpu_rq_runnable_cnt),
 
 	TP_STRUCT__entry(
@@ -1317,7 +1316,7 @@ TRACE_EVENT(sched_find_best_target,
 		__entry->order_index	= order_index;
 		__entry->end_index	= end_index;
 		__entry->skip		= skip;
-		__entry->running	= running;
+		__entry->running	= task_is_runnable(tsk);
 		__entry->most_spare_rq_cpu	= most_spare_rq_cpu;
 		__entry->cpu_rq_runnable_cnt	= cpu_rq_runnable_cnt;
 		),

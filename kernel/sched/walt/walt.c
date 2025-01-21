@@ -1164,8 +1164,14 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 	struct walt_rq *src_wrq = &per_cpu(walt_rq, cpu_of(src_rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
-	if (!p->on_rq && READ_ONCE(p->__state) != TASK_WAKING)
+	if (!p->on_rq && READ_ONCE(p->__state) != TASK_WAKING) {
+		WALT_BUG(WALT_BUG_WALT, p,
+				"CPU%d: %s task %s(%d)'s state=0x%x src_rq=%d p->on_rq=%d",
+				raw_smp_processor_id(), __func__, p->comm, p->pid,
+				READ_ONCE(p->__state), src_rq->cpu, p->on_rq);
+
 		return;
+	}
 
 	pstate = READ_ONCE(p->__state);
 
@@ -5439,6 +5445,8 @@ static int walt_init_stop_handler(void *data)
 	atomic64_set(&walt_irq_work_lastq_ws, tick_sched_clock);
 
 	create_default_coloc_group();
+
+	walt_disabled = false;
 
 	for_each_possible_cpu(cpu) {
 		raw_spin_unlock(&cpu_rq(cpu)->__lock);
