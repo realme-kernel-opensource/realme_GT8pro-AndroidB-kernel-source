@@ -34,6 +34,9 @@ static void __iomem *qpace_gen_core_regs;
 #define QPACE_WRITE_GEN_CORE_REG(offset, val) writel(val, qpace_gen_core_regs + offset)
 
 static void __iomem *qpace_comp_core_regs;
+#define QPACE_READ_COMP_CORE_REG(offset) readl(qpace_comp_core_regs + offset)
+#define QPACE_WRITE_COMP_CORE_REG(offset, val) writel(val, qpace_comp_core_regs + offset)
+
 static void __iomem *qpace_decomp_core_regs;
 static void __iomem *qpace_copy_core_regs;
 
@@ -940,6 +943,16 @@ static int qpace_init(void)
 	reg_val = QPACE_READ_GEN_REG(QPACE_CORE_QNS4_CFG_OFFSET);
 	reg_val |= FIELD_PREP(CORE_QNS4_CFG_TRTYPE, 0x1);
 	QPACE_WRITE_GEN_REG(QPACE_CORE_QNS4_CFG_OFFSET, reg_val);
+
+	/*
+	 * Make all compression engiens as bulk, to trade start-up latency with
+	 * power savings.
+	 */
+	reg_val = QPACE_READ_COMP_CORE_REG(QPACE_COMP_CORE_BULK_MODE_OFFSET);
+	reg_val |= COMP_CORE_BULK_MODE_CORE_0 | COMP_CORE_BULK_MODE_CORE_1 |
+		   COMP_CORE_BULK_MODE_CORE_2 | COMP_CORE_BULK_MODE_CORE_3 |
+		   COMP_CORE_BULK_MODE_CORE_4;
+	QPACE_WRITE_COMP_CORE_REG(QPACE_COMP_CORE_BULK_MODE_OFFSET, reg_val);
 
 	program_urg_command_contexts();
 
