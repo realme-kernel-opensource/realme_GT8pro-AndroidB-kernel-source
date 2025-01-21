@@ -48,6 +48,7 @@
 #define BCL_GEN3_MAJOR_REV    4
 #define BCL_PARAM_HAS_ADC      BIT(0)
 #define BCL_PARAM_HAS_IBAT_ADC BIT(2)
+#define ADC_CMN_BG_ADC_DVDD_SPARE1 0x3050
 
 #define BCL_IRQ_L0       0x1
 #define BCL_IRQ_L1       0x2
@@ -75,7 +76,7 @@
 #define BCL_IBAT_THRESH_SCALING_REV5_UA   156255 /* 610.37uA * 256 */
 #define BCL_VBAT_TRIP_CNT     3
 
-#define MAX_PERPH_COUNT       2
+#define MAX_PERPH_COUNT       3
 #define IPC_LOGPAGES          2
 
 #define BCL_IPC(dev, msg, args...)      do { \
@@ -98,6 +99,13 @@ enum bcl_dev_type {
 	BCL_2S_IBAT_LVL0,
 	BCL_2S_IBAT_LVL1,
 	BCL_TYPE_MAX,
+};
+
+enum bcl_monitor_type {
+	BCL_MON_DEFAULT,
+	BCL_MON_VBAT_ONLY,
+	BCL_MON_IBAT_ONLY,
+	BCL_MON_MAX,
 };
 
 static char bcl_int_names[BCL_TYPE_MAX][25] = {
@@ -150,6 +158,7 @@ struct bcl_device {
 	uint8_t				bcl_param_1;
 	uint8_t				bcl_type;
 	void				*ipc_log;
+	int				bcl_monitor_type;
 	bool				ibat_ccm_enabled;
 	bool				ibat_use_qg_adc;
 	bool				no_bit_shift;
@@ -722,6 +731,13 @@ static int bcl_get_devicetree_data(struct platform_device *pdev,
 	ret = bcl_get_ibat_ext_range_factor(pdev,
 					&bcl_perph->ibat_ext_range_factor);
 
+	if (of_property_read_bool(dev_node, "qcom,bcl-mon-vbat-only"))
+		bcl_perph->bcl_monitor_type = BCL_MON_VBAT_ONLY;
+	else if (of_property_read_bool(dev_node, "qcom,bcl-mon-ibat-only"))
+		bcl_perph->bcl_monitor_type = BCL_MON_IBAT_ONLY;
+	else
+		bcl_perph->bcl_monitor_type = BCL_MON_DEFAULT;
+
 	return ret;
 }
 
@@ -920,7 +936,7 @@ static void bcl_probe_lvls(struct platform_device *pdev,
 	bcl_lvl_init(pdev, BCL_LVL2, BCL_IRQ_L2, bcl_perph);
 }
 
-static int bcl_version_init(struct bcl_device *bcl_perph)
+static int bcl_version_init_and_check(struct bcl_device *bcl_perph)
 {
 	int ret = 0;
 	unsigned int val = 0;
@@ -946,6 +962,26 @@ static int bcl_version_init(struct bcl_device *bcl_perph)
 	} else {
 		bcl_perph->bcl_param_1 = 0;
 		bcl_perph->bcl_type = 0;
+	}
+
+	if ((bcl_perph->bcl_monitor_type == BCL_MON_VBAT_ONLY) ||
+			(bcl_perph->bcl_monitor_type == BCL_MON_IBAT_ONLY)) {
+		ret = regmap_read(bcl_perph->regmap, ADC_CMN_BG_ADC_DVDD_SPARE1, &val);
+		if (ret < 0) {
+			pr_err("Error read reg ADC_CMN_BG_ADC_DVDD_SPARE1, err:%d\n", ret);
+			return ret;
+		}
+
+		if ((val != 0x71) && (val != 0xF1)) {
+			if (bcl_perph->bcl_monitor_type == BCL_MON_VBAT_ONLY) {
+				bcl_perph->bcl_monitor_type = BCL_MON_DEFAULT;
+				return 0;
+			} else if (bcl_perph->bcl_monitor_type == BCL_MON_IBAT_ONLY) {
+				pr_debug("BCL monitor Ibat only is not required, value:%d\n",
+					val);
+				return -ENODEV;
+			}
+		}
 	}
 
 	return 0;
@@ -997,13 +1033,28 @@ static int bcl_probe(struct platform_device *pdev)
 		bcl_device_ct--;
 		return err;
 	}
-	err = bcl_version_init(bcl_perph);
+	err = bcl_version_init_and_check(bcl_perph);
 	if (err) {
 		bcl_device_ct--;
 		return err;
 	}
-	bcl_probe_vbat(pdev, bcl_perph);
-	bcl_probe_ibat(pdev, bcl_perph);
+
+	switch (bcl_perph->bcl_monitor_type) {
+	case BCL_MON_DEFAULT:
+		bcl_probe_vbat(pdev, bcl_perph);
+		bcl_probe_ibat(pdev, bcl_perph);
+		break;
+	case BCL_MON_VBAT_ONLY:
+		bcl_probe_vbat(pdev, bcl_perph);
+		break;
+	case BCL_MON_IBAT_ONLY:
+		bcl_probe_ibat(pdev, bcl_perph);
+		break;
+	default:
+		bcl_device_ct--;
+		return -EINVAL;
+	}
+
 	bcl_probe_lvls(pdev, bcl_perph);
 	bcl_configure_bcl_peripheral(bcl_perph);
 
