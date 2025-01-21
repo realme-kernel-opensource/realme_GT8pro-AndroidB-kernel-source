@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/cpu.h>
 #include <linux/cpumask.h>
@@ -120,6 +120,9 @@ static void migrate_tasks(struct rq *dead_rq, struct rq_flags *rf)
 			break;
 
 		next = pick_task(rq);
+
+		if (walt_is_idle_task(next))
+			break;
 
 		/*
 		 * Argh ... no iterator for tasks, we need to remove the

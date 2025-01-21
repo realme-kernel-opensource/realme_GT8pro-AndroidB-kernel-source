@@ -20,6 +20,12 @@ void walt_detach_task(struct task_struct *p, struct rq *src_rq,
 			     struct rq *dst_rq)
 {
 	//TODO can we just replace with detach_task in fair.c??
+
+	if (p->se.sched_delayed)
+		WALT_BUG(WALT_BUG_WALT, p,
+			"Dequeuing when task is delayed: src_cpu=%d dst_cpu=%d\n",
+			cpu_of(src_rq), cpu_of(dst_rq));
+
 	deactivate_task(src_rq, p, 0);
 	set_task_cpu(p, dst_rq->cpu);
 }
@@ -238,6 +244,9 @@ static inline bool _walt_can_migrate_task(struct task_struct *p, int dst_cpu,
 	struct walt_rq *wrq = &per_cpu(walt_rq, task_cpu(p));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
+	if (p->se.sched_delayed)
+		return false;
+
 	/* Don't detach task if it is under active migration */
 	if (wrq->push_task == p)
 		return false;
@@ -380,10 +389,10 @@ static int walt_lb_pull_tasks(int dst_cpu, int src_cpu,
 	}
 
 	list_for_each_entry_reverse(p, &src_rq->cfs_tasks, se.group_node) {
-
 		if (task_on_cpu(src_rq, p)) {
-			if (cpumask_test_cpu(dst_cpu, p->cpus_ptr)
-				&& need_active_lb(p, dst_cpu, src_cpu)) {
+			if (cpumask_test_cpu(dst_cpu, p->cpus_ptr) &&
+					!p->se.sched_delayed &&
+					need_active_lb(p, dst_cpu, src_cpu)) {
 				bool success;
 
 				active_balance = true;
@@ -730,6 +739,13 @@ void walt_lb_tick(struct rq *rq)
 		goto out_unlock;
 
 	raw_spin_lock(&rq->__lock);
+
+	/* Confirm task is still running */
+	if (READ_ONCE(p->__state) != TASK_RUNNING) {
+		raw_spin_unlock(&rq->__lock);
+		goto out_unlock;
+	}
+
 	if (rq->active_balance) {
 		raw_spin_unlock(&rq->__lock);
 		goto out_unlock;
@@ -1152,11 +1168,16 @@ void sched_walt_oscillate(unsigned int busy_cpu)
 	raw_spin_lock_irqsave(&src_rq->__lock, flags);
 
 	p = src_rq->curr;
+	if (READ_ONCE(p->__state) != TASK_RUNNING) {
+		no_oscillate_reason = 100;
+		goto unlock;
+	}
+
 	if (cpumask_test_cpu(dst_cpu, p->cpus_ptr)) {
 		bool success;
 
 		if (src_rq->active_balance) {
-			no_oscillate_reason = 100;
+			no_oscillate_reason = 101;
 			goto unlock;
 		}
 
@@ -1180,7 +1201,7 @@ void sched_walt_oscillate(unsigned int busy_cpu)
 				src_rq, &src_rq->active_balance_work);
 
 		if (!success) {
-			no_oscillate_reason = 101;
+			no_oscillate_reason = 102;
 			clear_reserved(dst_cpu);
 			goto out_fail;
 		} else {

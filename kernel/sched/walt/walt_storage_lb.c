@@ -72,6 +72,8 @@ static bool move_task(int src_cpu, int dst_cpu, cpumask_t *dst_cpu_mask_to_avoid
 	raw_spin_lock_irqsave(&src_rq->__lock, flags);
 
 	list_for_each_entry_reverse(p, &src_rq->cfs_tasks, se.group_node) {
+		if (p->se.sched_delayed)
+			continue;
 
 		if (!walt_fair_task(p))
 			continue;

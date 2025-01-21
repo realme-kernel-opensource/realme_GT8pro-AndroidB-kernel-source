@@ -253,6 +253,7 @@ void walt_task_dump(struct task_struct *p)
 	SCHED_PRINT(wts->grp);
 	SCHED_PRINT(p->on_cpu);
 	SCHED_PRINT(p->on_rq);
+	SCHED_PRINT(p->se.sched_delayed);
 }
 
 void walt_rq_dump(int cpu)
@@ -1470,7 +1471,7 @@ static void update_task_pred_demand(struct rq *rq, struct task_struct *p, int ev
 	 * related groups
 	 */
 	if (event == TASK_UPDATE) {
-		if (!p->on_rq && !SCHED_FREQ_ACCOUNT_WAIT_TIME)
+		if (!task_is_runnable(p) && !SCHED_FREQ_ACCOUNT_WAIT_TIME)
 			return;
 	}
 
@@ -1481,7 +1482,7 @@ static void update_task_pred_demand(struct rq *rq, struct task_struct *p, int ev
 	new_pred_demand_scaled = get_pred_busy(p, busy_to_bucket(curr_window_scaled),
 			     curr_window_scaled, wts->bucket_bitmask);
 
-	if (task_on_rq_queued(p))
+	if (task_on_rq_queued(p) && task_is_runnable(p))
 		fixup_walt_sched_stats_common(rq, p,
 				wts->demand_scaled,
 				new_pred_demand_scaled);
@@ -1685,7 +1686,7 @@ static int account_busy_for_cpu_time(struct rq *rq, struct task_struct *p,
 		if (rq->curr == p)
 			return 1;
 
-		return p->on_rq ? SCHED_FREQ_ACCOUNT_WAIT_TIME : 0;
+		return task_is_runnable(p) ? SCHED_FREQ_ACCOUNT_WAIT_TIME : 0;
 	}
 
 	/* TASK_MIGRATE, PICK_NEXT_TASK left */
@@ -2100,7 +2101,7 @@ account_busy_for_task_demand(struct rq *rq, struct task_struct *p, int event)
 		if (rq->curr == p)
 			return 1;
 
-		return p->on_rq ? SCHED_ACCOUNT_WAIT_TIME : 0;
+		return task_is_runnable(p) ? SCHED_ACCOUNT_WAIT_TIME : 0;
 	}
 
 	return 1;
@@ -2139,7 +2140,7 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 	 * no longer matches the criteria) and is already enqueued on the cpu, ensure to
 	 * close the prod-sum accounts for this task before the next update takes place.
 	 */
-	if (task_on_rq_queued(p)) {
+	if (task_on_rq_queued(p) && task_is_runnable(p)) {
 		if (is_prev_trailblazer != walt_flag_test(p, WALT_TRAILBLAZER_BIT))
 			sched_update_nr_prod(rq->cpu, 0);
 		if (is_prev_trailblazer && !walt_flag_test(p, WALT_TRAILBLAZER_BIT))
@@ -2242,7 +2243,7 @@ static void update_history(struct rq *rq, struct task_struct *p,
 	 * average. So add the task demand separately to cumulative window
 	 * demand.
 	 */
-	if (task_on_rq_queued(p))
+	if (task_on_rq_queued(p) && task_is_runnable(p))
 		fixup_walt_sched_stats_common(rq, p,
 					      demand_scaled, pred_demand_scaled);
 
@@ -2577,7 +2578,7 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 	running = account_busy_for_cpu_time(rq, p, 0, event);
 
 	/* task woke up or utra happened while its asleep, clear old boosts */
-	if (p->on_rq == 0)
+	if (!task_is_runnable(p))
 		walt_flag_set(p, WALT_LRB_PIPELINE_BIT, 0);
 
 	next_ms_boundary = ((wts->mark_start + (NSEC_PER_MSEC - 1)) / NSEC_PER_MSEC) *
@@ -2625,7 +2626,7 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 	 * task is not on_rq - if it is in the process of waking up, boost will be applied on the
 	 * right cpu at PICK event
 	 */
-	if (p->on_rq == 0) {
+	if (!task_is_runnable(p)) {
 		no_boost_reason = 2;
 		goto out;
 	}
@@ -4719,6 +4720,19 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 
 	walt_lockdep_assert_rq(rq, p);
 
+	/*
+	 * When a task with delayed dequeue changes in its scheduling attributes (ex. priority,
+	 * affinity, scheduling class, cgroup etc.), it is dequeued and re-enqueued. WALT
+	 * ignores the dequeue since it follows the delayed dequeue, but the re-enqueue
+	 * from the attribute change should also be skipped.
+	 *
+	 * The ENQUEUE_DELAYED flag indicates that a sched_delayed task is genuinely
+	 * waking up. Therefore, ensure that tasks in a sched_delayed state are not
+	 * prematurely accounted for in WALT unless ENQUEUE_DELAYED is set.
+	 */
+	if (p->se.sched_delayed && !(flags & ENQUEUE_DELAYED))
+		return;
+
 	if (flags & ENQUEUE_WAKEUP)
 		per_cpu(wakeup_ctr, cpu_of(rq)) += 1;
 
@@ -4805,6 +4819,16 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 
 	walt_lockdep_assert_rq(rq, p);
 
+	if ((p->se.sched_delayed && wts->prev_on_rq == 1)) {
+		WALT_BUG(WALT_BUG_UPSTREAM, p,
+			"missed the delayed dequeue: task_cpu=%d deq_cpu=%d\n",
+			task_cpu(p), cpu_of(rq));
+	}
+
+	/* Ignoring dequeue as previous delayed dequeue was already accounted */
+	if (p->se.sched_delayed && wts->prev_on_rq == 2)
+		return;
+
 	/*
 	 * a task can be enqueued before walt is started, and dequeued after.
 	 * therefore the check to ensure that prev_on_rq_cpu is needed to prevent
@@ -4820,7 +4844,7 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 
 	/* catch double deq */
 	if (wts->prev_on_rq == 2) {
-		WALT_BUG(WALT_BUG_UPSTREAM, p, "double dequeue detected: task_cpu=%d new_cpu=%d\n",
+		WALT_BUG(WALT_BUG_UPSTREAM, p, "double dequeue detected: task_cpu=%d deq_cpu=%d\n",
 			 task_cpu(p), cpu_of(rq));
 		double_dequeue = true;
 	}
@@ -5129,7 +5153,7 @@ static void android_rvh_schedule(void *unused, struct task_struct *prev,
 	wallclock = walt_rq_clock(rq);
 
 	if (likely(prev != next)) {
-		if (!prev->on_rq)
+		if (!task_is_runnable(prev))
 			wts->last_sleep_ts = wallclock;
 		walt_update_task_ravg(prev, rq, PUT_PREV_TASK, wallclock, 0);
 		walt_update_task_ravg(next, rq, PICK_NEXT_TASK, wallclock, 0);

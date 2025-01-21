@@ -582,7 +582,7 @@ out:
 
 	trace_sched_find_best_target(p, min_task_util, start_cpu, cpumask_bits(candidates)[0],
 			     most_spare_cap_cpu, order_index, end_index,
-			     fbt_env->skip_cpu, task_on_rq_queued(p), least_nr_cpu,
+			     fbt_env->skip_cpu, task_is_runnable(p), least_nr_cpu,
 			     cpu_rq_runnable_cnt);
 }
 
@@ -591,7 +591,7 @@ cpu_util_next_walt(int cpu, struct task_struct *p, int dst_cpu)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
 	unsigned long util = wrq->walt_stats.cumulative_runnable_avg_scaled;
-	bool queued = task_on_rq_queued(p);
+	bool queued = task_is_runnable(p);
 
 	/*
 	 * When task is queued,
