@@ -2746,6 +2746,10 @@
   poll_state_synchronize_srcu
   posix_clock_register
   posix_clock_unregister
+  powercap_register_control_type
+  powercap_register_zone
+  powercap_unregister_control_type
+  powercap_unregister_zone
   power_supply_changed
   power_supply_get_by_name
   power_supply_get_drvdata
