@@ -78,15 +78,17 @@ out:
 	return ret;
 }
 
-int remove_heavy(struct walt_task_struct *wts)
+void remove_heavy(struct walt_task_struct *wts)
 {
-	int i, j, ret = 0;
+	int i, j;
 	unsigned long flags;
 
 	if (unlikely(walt_disabled))
-		return -EAGAIN;
+		return;
 
 	raw_spin_lock_irqsave(&heavy_lock, flags);
+	if (!(wts->low_latency & WALT_LOW_LATENCY_HEAVY_BIT))
+		goto out;
 
 	for (i = 0; i < MAX_NR_PIPELINE; i++) {
 		if (wts == heavy_wts[i]) {
@@ -103,7 +105,6 @@ int remove_heavy(struct walt_task_struct *wts)
 	}
 out:
 	raw_spin_unlock_irqrestore(&heavy_lock, flags);
-	return ret;
 }
 
 void remove_special_task(void)
