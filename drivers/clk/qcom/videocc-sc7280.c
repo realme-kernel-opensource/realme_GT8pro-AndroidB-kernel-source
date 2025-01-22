@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
 #include <dt-bindings/clock/qcom,videocc-sc7280.h>
@@ -17,6 +18,14 @@
 #include "common.h"
 #include "reset.h"
 #include "gdsc.h"
+#include "reset.h"
+#include "vdd-level.h"
+
+static DEFINE_VDD_REGULATORS(vdd_cx, VDD_HIGH + 1, 1, vdd_corner);
+
+static struct clk_vdd_class *video_cc_sc7280_regulators[] = {
+	&vdd_cx,
+};
 
 enum {
 	P_BI_TCXO,
@@ -54,6 +63,15 @@ static struct clk_alpha_pll video_pll0 = {
 			.num_parents = 1,
 			.ops = &clk_alpha_pll_lucid_ops,
 		},
+		.vdd_data = {
+			.vdd_class = &vdd_cx,
+			.num_rate_max = VDD_NUM,
+			.rate_max = (unsigned long[VDD_NUM]) {
+				[VDD_MIN] = 615000000,
+				[VDD_LOW] = 1066000000,
+				[VDD_LOW_L1] = 1600000000,
+				[VDD_NOMINAL] = 2000000000},
+		},
 	},
 };
 
@@ -90,12 +108,23 @@ static struct clk_rcg2 video_cc_iris_clk_src = {
 	.hid_width = 5,
 	.parent_map = video_cc_parent_map_0,
 	.freq_tbl = ftbl_video_cc_iris_clk_src,
+	.enable_safe_config = true,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "video_cc_iris_clk_src",
 		.parent_data = video_cc_parent_data_0,
 		.num_parents = ARRAY_SIZE(video_cc_parent_data_0),
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_shared_ops,
+		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_class = &vdd_cx,
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER] = 133333333,
+			[VDD_LOW] = 240000000,
+			[VDD_LOW_L1] = 335000000,
+			[VDD_NOMINAL] = 424000000,
+			[VDD_HIGH] = 460000000},
 	},
 };
 
@@ -115,6 +144,12 @@ static struct clk_rcg2 video_cc_sleep_clk_src = {
 		.parent_data = video_cc_parent_data_1,
 		.num_parents = ARRAY_SIZE(video_cc_parent_data_1),
 		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_class = &vdd_cx,
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER] = 32000},
 	},
 };
 
@@ -273,6 +308,13 @@ static struct gdsc *video_cc_sc7280_gdscs[] = {
 	[MVSC_GDSC] = &mvsc_gdsc,
 };
 
+static const struct qcom_reset_map video_cc_sc7280_resets[] = {
+	[VCODEC_VIDEO_CC_INTERFACE_AHB_BCR] = { 0x5000 },
+	[VCODEC_VIDEO_CC_INTERFACE_BCR] = { 0x8000 },
+	[VCODEC_VIDEO_CC_MVS0_BCR] = { 0x3000 },
+	[VCODEC_VIDEO_CC_MVSC_BCR] = { 0x2000 },
+};
+
 static const struct regmap_config video_cc_sc7280_regmap_config = {
 	.reg_bits = 32,
 	.reg_stride = 4,
@@ -281,10 +323,14 @@ static const struct regmap_config video_cc_sc7280_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc video_cc_sc7280_desc = {
+static struct qcom_cc_desc video_cc_sc7280_desc = {
 	.config = &video_cc_sc7280_regmap_config,
 	.clks = video_cc_sc7280_clocks,
 	.num_clks = ARRAY_SIZE(video_cc_sc7280_clocks),
+	.resets = video_cc_sc7280_resets,
+	.num_resets = ARRAY_SIZE(video_cc_sc7280_resets),
+	.clk_regulators = video_cc_sc7280_regulators,
+	.num_clk_regulators = ARRAY_SIZE(video_cc_sc7280_regulators),
 	.gdscs = video_cc_sc7280_gdscs,
 	.num_gdscs = ARRAY_SIZE(video_cc_sc7280_gdscs),
 };
@@ -298,14 +344,44 @@ MODULE_DEVICE_TABLE(of, video_cc_sc7280_match_table);
 static int video_cc_sc7280_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
+	int ret;
 
 	regmap = qcom_cc_map(pdev, &video_cc_sc7280_desc);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
+	ret = qcom_cc_runtime_init(pdev, &video_cc_sc7280_desc);
+	if (ret)
+		return ret;
+
+	ret = pm_runtime_get_sync(&pdev->dev);
+	if (ret)
+		return ret;
+
+	/* Keep some clocks always-on */
+	qcom_branch_set_clk_en(regmap, 0x7018); /* VIDEO_CC_XO_CLK */
+
 	clk_lucid_pll_configure(&video_pll0, regmap, &video_pll0_config);
 
-	return qcom_cc_really_probe(&pdev->dev, &video_cc_sc7280_desc, regmap);
+	video_cc_sc7280_desc.gdscs = NULL;
+	video_cc_sc7280_desc.num_gdscs = 0;
+
+	ret = qcom_cc_really_probe(&pdev->dev, &video_cc_sc7280_desc, regmap);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to register VIDEO CC clocks ret=%d\n", ret);
+		return ret;
+	}
+
+	pm_runtime_put_sync(&pdev->dev);
+
+	dev_info(&pdev->dev, "Registered VIDEO CC clocks\n");
+
+	return ret;
+}
+
+static void video_cc_sc7280_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &video_cc_sc7280_desc);
 }
 
 static struct platform_driver video_cc_sc7280_driver = {
@@ -313,6 +389,7 @@ static struct platform_driver video_cc_sc7280_driver = {
 	.driver = {
 		.name = "video_cc-sc7280",
 		.of_match_table = video_cc_sc7280_match_table,
+		.sync_state = video_cc_sc7280_sync_state,
 	},
 };
 
