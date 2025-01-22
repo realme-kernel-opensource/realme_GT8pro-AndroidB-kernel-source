@@ -8,3 +8,15 @@ def register_modules(registry):
             "drivers/edac/qcom_edac.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/edac/kryo_arm64_edac",
+        out = "kryo_arm64_edac.ko",
+        config = "CONFIG_EDAC_KRYO_ARM64",
+        srcs = [
+            # do not sort
+            "drivers/edac/edac_device.h",
+            "drivers/edac/edac_mc.h",
+            "drivers/edac/kryo_arm64_edac.c",
+        ],
+    )
