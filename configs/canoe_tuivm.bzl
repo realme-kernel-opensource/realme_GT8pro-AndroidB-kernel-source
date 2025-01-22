@@ -25,6 +25,7 @@ canoe_tuivm_config = {
     "CONFIG_MSM_GPI_DMA": "y",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_CANOE": "m",
+    "CONFIG_PM_AUTOSLEEP": "y",
     "CONFIG_QCOM_DMABUF_HEAPS": "m",
     "CONFIG_QCOM_DMABUF_HEAPS_TVM_CARVEOUT": "y",
     "CONFIG_QCOM_FORCE_WDOG_BITE_ON_PANIC": "y",
