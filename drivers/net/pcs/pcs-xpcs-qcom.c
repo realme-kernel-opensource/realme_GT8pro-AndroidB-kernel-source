@@ -527,6 +527,7 @@ void qcom_xpcs_link_up(struct phylink_pcs *pcs, unsigned int mode,
 
 	switch (interface) {
 	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10GBASER:
 		qcom_xpcs_link_up_usxgmii(qxpcs, speed);
 		break;
 	default:
