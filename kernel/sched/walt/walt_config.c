@@ -216,5 +216,21 @@ void walt_config(void)
 				&pipeline_sync_cpus, &cpu_array[0][3]);
 		}
 
+		/*
+		 * Trailblazer settings
+		 */
+		trailblazer_floor_freq[0] = 1000000;
+		trailblazer_floor_freq[1] = 1000000;
+		trailblazer_floor_freq[2] = 1000000;
+		debugfs_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+
+	} else if (!strcmp(name, "KERA")) {
+		/*
+		 * Trailblazer settings
+		 */
+		trailblazer_floor_freq[0] = 1000000;
+		trailblazer_floor_freq[1] = 1000000;
+		debugfs_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+
 	}
 }
