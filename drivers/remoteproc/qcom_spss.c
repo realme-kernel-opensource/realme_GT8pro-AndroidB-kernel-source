@@ -382,7 +382,7 @@ static int manage_unused_pil_region_memory(struct qcom_spss *spss)
 	spss_regs_base_addr = (SP_SCSR_MB0_SP2CL_GP0_ADDR & SPSS_BASE_ADDR_MASK);
 
 	spss_image_size = get_spss_image_size(spss_regs_base_addr);
-	if (spss_image_size < 0) {
+	if (spss_image_size <= 0) {
 		dev_err(spss->dev, "failed to get pil_size.\n");
 		return -EFAULT;
 	}
