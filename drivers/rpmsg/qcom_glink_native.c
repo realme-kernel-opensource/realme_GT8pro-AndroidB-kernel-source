@@ -332,7 +332,9 @@ static void qcom_glink_channel_release(struct kref *ref)
 
 	spin_lock_irqsave(&channel->recv_lock, flags);
 	list_for_each_entry_safe(intent, tmp, &channel->rx_queue, node) {
+		spin_lock(&channel->intent_lock);
 		idr_remove(&channel->liids, intent->id);
+		spin_unlock(&channel->intent_lock);
 		if (!intent->size)
 			intent->data = NULL;
 		kfree(intent->data);
@@ -350,6 +352,8 @@ static void qcom_glink_channel_release(struct kref *ref)
 	}
 
 	idr_for_each_entry(&channel->liids, tmp, iid) {
+		if (!tmp->size)
+			tmp->data = NULL;
 		kfree(tmp->data);
 		kfree(tmp);
 	}
