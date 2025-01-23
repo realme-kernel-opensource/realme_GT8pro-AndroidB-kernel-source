@@ -304,6 +304,7 @@ canoe_perf_config = {
     "CONFIG_RTC_DRV_PM8XXX": "m",
     "CONFIG_RTL8723BS": "n",
     "CONFIG_SCHED_WALT": "m",
+    "CONFIG_SCHED_WALT_STATS": "n",
     "CONFIG_SCHED_WALT_DEBUG": "n",
     "CONFIG_SCSI_UFS_CRYPTO_QTI": "m",
     "CONFIG_SCSI_UFS_QCOM": "m",

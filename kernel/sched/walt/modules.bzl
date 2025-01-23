@@ -48,7 +48,15 @@ def register_modules(registry):
             "kernel/sched/walt/trace.h",
             "kernel/sched/walt/walt.h",
             "kernel/sched/walt/voter.h",
+            "kernel/sched/walt/sysctl_walt_stats.h",
         ],
+        conditional_srcs = {
+            "CONFIG_SCHED_WALT_STATS": {
+                True: [
+                    "kernel/sched/walt/sysctl_walt_stats.c",
+                ],
+            },
+        },
         deps = [
             # do not sort
             "drivers/soc/qcom/socinfo",

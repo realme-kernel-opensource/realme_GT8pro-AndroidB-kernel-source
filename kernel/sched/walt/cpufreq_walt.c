@@ -15,6 +15,7 @@
 
 #include "walt.h"
 #include "trace.h"
+#include "sysctl_walt_stats.h"
 
 DEFINE_PER_CPU(struct waltgov_callback *, waltgov_cb_data);
 DEFINE_PER_CPU(struct waltgov_cpu, waltgov_cpu);
@@ -67,6 +68,7 @@ static void __waltgov_update_next_freq(struct waltgov_policy *wg_policy,
 	wg_policy->cached_raw_freq = raw_freq;
 	wg_policy->next_freq = next_freq;
 	wg_policy->last_freq_update_time = time;
+	rollover_freq_ns_stats(0);
 }
 
 static bool waltgov_update_next_freq(struct waltgov_policy *wg_policy, u64 time,
@@ -426,6 +428,8 @@ out:
 
 	post_update_cleanups(wg_policy);
 
+	assign_reasons_counter(wg_policy);
+
 	return final_freq;
 }
 
@@ -632,6 +636,8 @@ static void waltgov_update_freq(struct waltgov_callback *cb, u64 time,
 
 		if (!next_f)
 			goto out;
+
+		update_min_max_freq_ns(wg_policy, time);
 
 		if (wg_policy->policy->fast_switch_enabled)
 			waltgov_fast_switch(wg_policy, time, next_f);
