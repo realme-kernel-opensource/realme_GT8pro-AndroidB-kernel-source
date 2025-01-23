@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -17,8 +17,8 @@
 
 #include <asm/cputype.h>
 
-#include "edac_mc.h"
-#include "edac_device.h"
+#include "drivers/edac/edac_mc.h"
+#include "drivers/edac/edac_device.h"
 
 #ifdef CONFIG_EDAC_KRYO_ARM64_PANIC_ON_UE
 #define ARM64_ERP_PANIC_ON_UE 1
