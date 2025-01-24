@@ -30,6 +30,21 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "net/qrtr/qrtr-genpool",
+        out = "qrtr-genpool.ko",
+        config = "CONFIG_QRTR_GENPOOL",
+        srcs = [
+            # do not sort
+            "net/qrtr/genpool.c",
+            "net/qrtr/qrtr.h",
+        ],
+        deps = [
+            # do not sort
+            "net/qrtr/qrtr",
+        ],
+    )
+
+    registry.register(
         name = "net/qrtr/qrtr",
         out = "qrtr.ko",
         config = "CONFIG_QRTR",
