@@ -46,7 +46,9 @@
 #define HAP_CFG_V3				0x3
 #define HAP_CFG_V4				0x4
 #define HAP_CFG_V5				0x5
+#define HAP_CFG_V5_1				0x0501
 #define MAJOR_REV(rev)				((rev) >> 8)
+#define MINOR_REV(rev)				((rev) & 0xFF)
 
 #define HAP_CFG_REV_LSB_MASK			GENMASK(7, 0)
 #define HAP_CFG_STATUS_DATA_MSB_REG		0x09
@@ -175,6 +177,7 @@
 #define DRV_DUTY_62P5_PCT			2
 #define DRV_DUTY_SHIFT				3
 #define BRK_DUTY_MASK				GENMASK(2, 0)
+#define BRK_DUTY_62P5_PCT			5
 #define BRK_DUTY_75_PCT			6
 
 #define HAP_CFG_ADT_DRV_DUTY_CFG_REG		0x61
@@ -187,6 +190,7 @@
 #define AUTORES_EN_DLY(cycles)			((cycles) * 2)
 #define AUTORES_EN_DLY_6_CYCLES			AUTORES_EN_DLY(6)
 #define AUTORES_EN_DLY_7_CYCLES			AUTORES_EN_DLY(7)
+#define AUTORES_EN_DLY_10_CYCLES		AUTORES_EN_DLY(10)
 #define AUTORES_EN_DLY_SHIFT			2
 #define AUTORES_ERR_WINDOW_MASK			GENMASK(1, 0)
 #define AUTORES_ERR_WINDOW_12P5_PERCENT		0x0
@@ -293,6 +297,15 @@
 
 #define HAP_CFG_ISENSE_PEAK_LSB_REG		0xCA
 #define HAP_CFG_ISENSE_PEAK_MSB_MASK		GENMASK(4, 0)
+
+/* For HAP530_HV V2 only */
+#define HAP_CFG_HV_VMAX_CLAMP_REG		0xA2
+#define HV_VMAX_CLAMP_MASK			GENMASK(6, 0)
+#define EN_HV_VMAX_CLAMP_BIT			BIT(7)
+
+#define HAP_CFG_HV_TIMER_REG			0xA3
+#define DRIVE_SAFETY_TIMEOUT_MASK		GENMASK(7, 4)
+#define BRAKE_SAFETY_TIMEOUT_MASK		GENMASK(3, 0)
 
 /* version register definitions for HAPTICS_PATTERN module */
 #define HAP_PTN_REVISION1_REG			0x00
@@ -669,6 +682,13 @@ struct brake_cfg {
 	bool			disabled;
 };
 
+struct hv_clamp_cfg {
+	u32	vmax_clamp_mv;
+	u8	ovrdrv_half_cycles;
+	u8	ovrbrk_half_cycles;
+	bool	enable;
+};
+
 struct haptics_effect {
 	struct pattern_cfg	*pattern;
 	struct fifo_cfg		*fifo;
@@ -737,6 +757,7 @@ struct haptics_play_info {
 };
 
 struct haptics_hw_config {
+	struct hv_clamp_cfg	clamp;
 	struct brake_cfg	brake;
 	u32			vmax_mv;
 	u32			t_lra_us;
@@ -747,12 +768,14 @@ struct haptics_hw_config {
 	u32			lra_measured_mohms;
 	u32			preload_effect;
 	u32			fifo_empty_thresh;
+	u32			over_drive_mv;
 	u16			rc_clk_cal_count;
 	enum drv_sig_shape	drv_wf;
 	bool			is_erm;
 	bool			measure_lra_impedance;
 	bool			sw_cmd_freq_det;
 	bool			hbst_ovp_trim;
+	bool			freq_det_in_play;
 };
 
 struct custom_fifo_data {
@@ -1677,6 +1700,31 @@ static int haptics_set_vmax_mv(struct haptics_chip *chip, u32 vmax_mv)
 unlock:
 	mutex_unlock(&chip->vmax_lock);
 	return rc;
+}
+
+static int haptics_set_vmax_clamp(struct haptics_chip *chip, struct hv_clamp_cfg *clamp)
+{
+	u8 val, vmax_clamp_100mv = clamp->vmax_clamp_mv / 100;
+	int rc;
+
+	/* Only enable HV vmax clamp for haptics HAP530_HV V2 */
+	if (chip->cfg_revision < HAP_CFG_V5_1) {
+		dev_dbg(chip->dev, "Haptics version V%d.%d vmax clamp is not supported.\n",
+				MAJOR_REV(chip->cfg_revision), MINOR_REV(chip->cfg_revision));
+		return 0;
+	}
+
+	val = FIELD_PREP(BRAKE_SAFETY_TIMEOUT_MASK, (clamp->ovrbrk_half_cycles - 1));
+	val |= FIELD_PREP(DRIVE_SAFETY_TIMEOUT_MASK, (clamp->ovrdrv_half_cycles - 1));
+	rc = haptics_write(chip, chip->cfg_addr_base, HAP_CFG_HV_TIMER_REG, &val, 1);
+	if (rc < 0) {
+		dev_err(chip->dev, "config HV timer failed, rc=%d\n", rc);
+		return rc;
+	}
+
+	val = FIELD_PREP(HV_VMAX_CLAMP_MASK, vmax_clamp_100mv);
+	val |= FIELD_PREP(EN_HV_VMAX_CLAMP_BIT, clamp->enable);
+	return haptics_write(chip, chip->cfg_addr_base, HAP_CFG_HV_VMAX_CLAMP_REG, &val, 1);
 }
 
 static int haptics_enable_autores(struct haptics_chip *chip, bool en)
@@ -2606,10 +2654,59 @@ static int haptics_set_fifo(struct haptics_chip *chip, struct fifo_cfg *fifo)
 	return 0;
 }
 
+static int haptics_autores_config(struct haptics_chip *chip, bool autores_en)
+{
+	u8 mask, val = autores_en ? AUTORES_EN_BIT : 0;
+	int rc;
+
+	if (chip->hw_type >= HAP530_HV)
+		val |= AUTORES_EN_DLY_10_CYCLES << AUTORES_EN_DLY_SHIFT |
+			AUTORES_ERR_WINDOW_25_PERCENT;
+	else if (chip->hw_type >= HAP525_HV)
+		val |= AUTORES_EN_DLY_7_CYCLES << AUTORES_EN_DLY_SHIFT |
+			AUTORES_ERR_WINDOW_25_PERCENT;
+	else
+		val |= AUTORES_EN_DLY_6_CYCLES << AUTORES_EN_DLY_SHIFT |
+			AUTORES_ERR_WINDOW_50_PERCENT;
+
+	rc = haptics_masked_write(chip, chip->cfg_addr_base,
+			HAP_CFG_AUTORES_CFG_REG, AUTORES_EN_BIT |
+			AUTORES_EN_DLY_MASK(chip) | AUTORES_ERR_WINDOW_MASK,
+			val);
+	if (rc < 0)
+		return rc;
+
+	if (chip->hw_type >= HAP530_HV) {
+		mask = ADT_DRV_DUTY_EN_BIT | ADT_BRK_DUTY_EN_BIT |
+			DRV_DUTY_MASK | BRK_DUTY_MASK;
+		val = DRV_DUTY_62P5_PCT << DRV_DUTY_SHIFT | BRK_DUTY_62P5_PCT |
+			ADT_DRV_DUTY_EN_BIT | ADT_BRK_DUTY_EN_BIT;
+	} else if (chip->hw_type >= HAP525_HV) {
+		mask = ADT_DRV_DUTY_EN_BIT | ADT_BRK_DUTY_EN_BIT |
+			DRV_DUTY_MASK | BRK_DUTY_MASK;
+		val = DRV_DUTY_62P5_PCT << DRV_DUTY_SHIFT | BRK_DUTY_75_PCT;
+	} else {
+		mask = ADT_DRV_DUTY_EN_BIT;
+		val = 0;
+	}
+
+	rc = haptics_masked_write(chip, chip->cfg_addr_base,
+			HAP_CFG_DRV_DUTY_CFG_REG, mask, val);
+	if (rc < 0)
+		return rc;
+
+	if (chip->hw_type >= HAP530_HV) {
+		val = mask = EN_HW_RECOVERY_BIT | SW_ERR_DRV_FREQ_BIT;
+		rc = haptics_masked_write(chip, chip->cfg_addr_base,
+				HAP_CFG_AUTORES_ERR_RECOVERY_REG, mask, val);
+	}
+	return rc;
+}
+
 static int haptics_load_constant_effect(struct haptics_chip *chip, u8 amplitude)
 {
 	struct haptics_play_info *play = &chip->play;
-	u32 hdrm_mv, vmax_mv = chip->config.vmax_mv;
+	u32 hdrm_mv, vmax_clamp_mv, vmax_mv = chip->config.vmax_mv;
 	int rc = 0;
 
 	mutex_lock(&chip->play.lock);
@@ -2631,10 +2728,24 @@ static int haptics_load_constant_effect(struct haptics_chip *chip, u8 amplitude)
 		vmax_mv = chip->hpwr_voltage_mv - hdrm_mv;
 	}
 
+	vmax_clamp_mv = vmax_mv;
+	if ((chip->config.over_drive_mv > vmax_mv) &&
+	   (chip->cfg_revision >= HAP_CFG_V5_1))
+		vmax_mv = chip->config.over_drive_mv;
+
 	/* configure VMAX in case it was changed in previous effect playing */
 	rc = haptics_set_vmax_mv(chip, vmax_mv);
 	if (rc < 0)
 		goto unlock;
+
+	if (chip->config.clamp.enable) {
+		chip->config.clamp.vmax_clamp_mv = vmax_clamp_mv;
+		rc = haptics_set_vmax_clamp(chip, &chip->config.clamp);
+		if (rc < 0) {
+			dev_err(chip->dev, "Set haptics Vmax clamp failed, rc=%d\n", rc);
+			goto unlock;
+		}
+	}
 
 	/* Config brake settings if it's necessary */
 	play->brake = &chip->config.brake;
@@ -2642,6 +2753,16 @@ static int haptics_load_constant_effect(struct haptics_chip *chip, u8 amplitude)
 		rc = haptics_set_brake(chip, play->brake);
 		if (rc < 0)
 			goto unlock;
+	}
+
+	/* Config for LRA frequency detection during DIRECT_PLAY */
+	if (chip->config.freq_det_in_play) {
+		rc = haptics_autores_config(chip, true);
+		if (rc < 0) {
+			dev_err(chip->dev, "config frequency detection in DIRECT_PLAY failed, rc=%d\n",
+				rc);
+			goto unlock;
+		}
 	}
 
 	rc = haptics_set_direct_play(chip, amplitude);
@@ -3366,9 +3487,11 @@ static int haptics_measure_visense_lra_impedance(struct haptics_chip *chip, int 
 	return 0;
 }
 
+#define FREQUENCY_DETECT_STABLE_US		150000
 static int haptics_erase(struct input_dev *dev, int effect_id)
 {
 	struct haptics_chip *chip = input_get_drvdata(dev);
+	struct hv_clamp_cfg clamp_cfg = {0, 0, 0, false};
 	struct haptics_play_info *play = &chip->play;
 	ktime_t pattern_run_time;
 	int rc;
@@ -3393,6 +3516,15 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 			goto restore;
 		}
 	} else {
+		if ((play->pattern_src == DIRECT_PLAY) &&
+		    (pattern_run_time >= FREQUENCY_DETECT_STABLE_US) &&
+		    chip->config.freq_det_in_play) {
+			rc = haptics_get_closeloop_lra_period(chip, false);
+			if (rc < 0)
+				dev_dbg(chip->dev, "get resonance frequency failed, rc=%d\n",
+					rc);
+		}
+
 		rc = haptics_enable_play(chip, false);
 		if (rc < 0) {
 			dev_err(chip->dev, "stop play failed, rc=%d\n", rc);
@@ -3419,6 +3551,9 @@ restore:
 		if (rc)
 			return rc;
 	}
+
+	/* Restore vmax clamp to default off */
+	haptics_set_vmax_clamp(chip, &clamp_cfg);
 
 	/* Restore SWR play mode after SPMI play is done or any faults */
 	if (chip->wa_flags & IGNORE_SWR_IN_SPMI_PLAY)
@@ -4652,6 +4787,7 @@ static int haptics_parse_lra_dt(struct haptics_chip *chip)
 				"qcom,rt-imp-detect");
 
 	config->sw_cmd_freq_det = of_property_read_bool(node, "qcom,sw-cmd-freq-detect");
+	config->freq_det_in_play = of_property_read_bool(node, "qcom,freq-detect-in-play");
 
 	return 0;
 }
@@ -4769,6 +4905,61 @@ static int haptics_parse_hpwr_vreg_dt(struct haptics_chip *chip)
 	if (chip->hpwr_voltage_mv == 0 ||
 			chip->hpwr_voltage_mv > NON_HBOOST_MAX_VMAX_MV)
 		return -EINVAL;
+
+	return 0;
+}
+
+static int haptics_parse_hv_clamp_dt(struct haptics_chip *chip)
+{
+	struct haptics_hw_config *config = &chip->config;
+	struct device_node *node = chip->dev->of_node;
+	int rc;
+
+	rc = of_property_read_u32(node, "qcom,over-drive-mv", &config->over_drive_mv);
+	if (rc < 0) {
+		if (rc != -EINVAL) {
+			dev_err(chip->dev, "read qcom,over-drive-mv property failed, rc=%d\n", rc);
+			return rc;
+		} else {
+			return 0;
+		}
+	}
+
+	if (config->over_drive_mv <= config->vmax_mv) {
+		dev_err(chip->dev, "qcom,over-drive-mv (%d) must be higher than qcom,vmax-mv (%d).\n",
+				config->over_drive_mv, config->vmax_mv);
+		return -EINVAL;
+	}
+
+	rc = of_property_read_u8(node, "qcom,over-drive-half-cycles",
+				&config->clamp.ovrdrv_half_cycles);
+	if (rc < 0) {
+		dev_err(chip->dev, " Read qcom,over-drive-half-cycles failed, rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	if ((config->clamp.ovrdrv_half_cycles < 1) || (config->clamp.ovrdrv_half_cycles > 16)) {
+		dev_err(chip->dev, "qcom,over-drive-half-cycles (%d) must be between 1-16.\n",
+				config->clamp.ovrdrv_half_cycles);
+		return -EINVAL;
+	}
+
+	rc = of_property_read_u8(node, "qcom,over-brake-half-cycles",
+				&config->clamp.ovrbrk_half_cycles);
+	if (rc < 0) {
+		dev_err(chip->dev, "Read qcom,over-brake-half-cycles failed, rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	if ((config->clamp.ovrbrk_half_cycles < 1) || (config->clamp.ovrbrk_half_cycles > 16)) {
+		dev_err(chip->dev, "qcom,over-brake-half-cycles (%d) must be between 1-16.\n",
+				config->clamp.ovrbrk_half_cycles);
+		return -EINVAL;
+	}
+
+	config->clamp.enable = true;
 
 	return 0;
 }
@@ -4913,6 +5104,10 @@ static int haptics_parse_dt(struct haptics_chip *chip)
 				rc);
 		goto free_pbs;
 	}
+
+	rc = haptics_parse_hv_clamp_dt(chip);
+	if (rc < 0)
+		goto free_pbs;
 
 	return 0;
 free_pbs:
@@ -5511,7 +5706,7 @@ static int haptics_enable_autores_cal(struct haptics_chip *chip, bool enable)
 static int haptics_detect_lra_frequency(struct haptics_chip *chip)
 {
 	int rc;
-	u8 autores_cfg, drv_duty_cfg, amplitude, mask, val = 0;
+	u8 autores_cfg, drv_duty_cfg, amplitude, val = 0;
 	u32 vmax_mv = chip->config.vmax_mv;
 
 	rc = haptics_read(chip, chip->cfg_addr_base,
@@ -5531,31 +5726,7 @@ static int haptics_detect_lra_frequency(struct haptics_chip *chip)
 	if (!chip->config.sw_cmd_freq_det)
 		val = AUTORES_EN_BIT;
 
-	if (chip->hw_type >= HAP525_HV)
-		val |= AUTORES_EN_DLY_7_CYCLES << AUTORES_EN_DLY_SHIFT |
-			AUTORES_ERR_WINDOW_25_PERCENT;
-	else
-		val |= AUTORES_EN_DLY_6_CYCLES << AUTORES_EN_DLY_SHIFT|
-			AUTORES_ERR_WINDOW_50_PERCENT;
-
-	rc = haptics_masked_write(chip, chip->cfg_addr_base,
-			HAP_CFG_AUTORES_CFG_REG, AUTORES_EN_BIT |
-			AUTORES_EN_DLY_MASK(chip) | AUTORES_ERR_WINDOW_MASK,
-			val);
-	if (rc < 0)
-		return rc;
-
-	if (chip->hw_type >= HAP525_HV) {
-		mask = ADT_DRV_DUTY_EN_BIT | ADT_BRK_DUTY_EN_BIT |
-			DRV_DUTY_MASK | BRK_DUTY_MASK;
-		val = DRV_DUTY_62P5_PCT << DRV_DUTY_SHIFT | BRK_DUTY_75_PCT;
-	} else {
-		mask = ADT_DRV_DUTY_EN_BIT;
-		val = 0;
-	}
-
-	rc = haptics_masked_write(chip, chip->cfg_addr_base,
-			HAP_CFG_DRV_DUTY_CFG_REG, mask, val);
+	rc = haptics_autores_config(chip, !!val);
 	if (rc < 0)
 		goto restore;
 
@@ -6045,6 +6216,19 @@ static ssize_t lra_frequency_hz_show(const struct class *c,
 }
 static CLASS_ATTR_RO(lra_frequency_hz);
 
+static ssize_t lra_f0_cal_in_play_show(const struct class *c,
+	const struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+		struct haptics_chip, hap_class);
+	bool state;
+
+	state = (chip->config.freq_det_in_play) &&
+		(chip->cfg_revision >= HAP_CFG_V5_1);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", state ? 1 : 0);
+}
+static CLASS_ATTR_RO(lra_f0_cal_in_play);
+
 static ssize_t lra_impedance_show(const struct class *c,
 		const struct class_attribute *attr, char *buf)
 {
@@ -6152,6 +6336,7 @@ static const CLASS_ATTR_RO(i_gain_error);
 static struct attribute *hap_class_attrs[] = {
 	&class_attr_lra_calibration.attr,
 	&class_attr_lra_frequency_hz.attr,
+	&class_attr_lra_f0_cal_in_play.attr,
 	&class_attr_lra_impedance.attr,
 	&class_attr_primitive_duration.attr,
 	&class_attr_visense_enabled.attr,
