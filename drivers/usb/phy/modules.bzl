@@ -48,3 +48,17 @@ def register_modules(registry):
             "drivers/usb/phy/phy-qcom-emu.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/usb/phy/phy-msm-snps-hs",
+        out = "phy-msm-snps-hs.ko",
+        config = "CONFIG_MSM_HSUSB_PHY",
+        srcs = [
+            # do not sort
+            "drivers/usb/phy/phy-msm-snps-hs.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
