@@ -5,7 +5,7 @@
  *
  * Copyright (C) 2016, Intel Corporation
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -69,6 +69,9 @@ struct waltgov_policy {
 	bool			need_freq_update;
 	bool			thermal_isolated;
 	bool			boost_utils_inited;
+	bool			rtg_boost_flag;
+	bool			hispeed_flag;
+	bool			conservative_pl_flag;
 };
 
 struct waltgov_cpu {
@@ -79,6 +82,9 @@ struct waltgov_cpu {
 	unsigned long		util;
 	unsigned int		flags;
 	unsigned int		reasons;
+	bool			rtg_boost_flag;
+	bool			hispeed_flag;
+	bool			conservative_pl_flag;
 };
 
 DEFINE_PER_CPU(struct waltgov_callback *, waltgov_cb_data);
@@ -305,12 +311,31 @@ static unsigned int get_smart_freq_limit(unsigned int freq, struct waltgov_polic
 	return freq;
 }
 
+void post_update_cleanups(struct waltgov_policy *wg_policy)
+{
+	struct cpufreq_policy *policy = wg_policy->policy;
+	int cpu;
+
+	for_each_cpu(cpu, policy->cpus) {
+		struct waltgov_cpu *wg_cpu = &per_cpu(waltgov_cpu, cpu);
+
+		wg_cpu->rtg_boost_flag = false;
+		wg_cpu->hispeed_flag = false;
+		wg_cpu->conservative_pl_flag = false;
+	}
+
+	wg_policy->rtg_boost_flag = false;
+	wg_policy->hispeed_flag = false;
+	wg_policy->conservative_pl_flag = false;
+
+}
+
 static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 				  unsigned long util, unsigned long max,
 				  struct waltgov_cpu *wg_cpu, u64 time)
 {
 	struct cpufreq_policy *policy = wg_policy->policy;
-	unsigned int freq, raw_freq, final_freq;
+	unsigned int freq, raw_freq, final_freq, mod_freq, mod_adap_freq;
 	struct waltgov_cpu *wg_driv_cpu = &per_cpu(waltgov_cpu, wg_policy->driving_cpu);
 	struct walt_rq *wrq = &per_cpu(walt_rq, wg_policy->driving_cpu);
 	struct walt_sched_cluster *cluster = NULL;
@@ -318,6 +343,7 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	bool thermal_isolated_now = cpus_halted_by_client(
 			wg_policy->policy->related_cpus, PAUSE_THERMAL);
 	bool reset_need_freq_update = false;
+	unsigned int j;
 
 	if (soc_feat(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT)) {
 		if (thermal_isolated_now) {
@@ -344,7 +370,54 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	}
 
 	raw_freq = walt_map_util_freq(util, wg_policy, max, wg_driv_cpu->cpu);
-	freq = raw_freq;
+	mod_adap_freq = raw_freq;
+
+	if (wg_policy->rtg_boost_flag == true) {
+		for_each_cpu(j, policy->cpus) {
+			struct waltgov_cpu *j_wg_cpu = &per_cpu(waltgov_cpu, j);
+
+			mod_freq = wg_policy->tunables->rtg_boost_freq;
+			if (mod_freq > mod_adap_freq && j_wg_cpu->rtg_boost_flag == true) {
+				mod_adap_freq = mod_freq;
+				wg_driv_cpu->cpu = j_wg_cpu->cpu;
+				wg_driv_cpu->reasons |= CPUFREQ_REASON_RTG_BOOST_BIT;
+				break;
+			}
+		}
+	}
+
+	if (wg_policy->hispeed_flag == true) {
+		for_each_cpu(j, policy->cpus) {
+			struct waltgov_cpu *j_wg_cpu = &per_cpu(waltgov_cpu, j);
+
+			mod_freq = wg_policy->tunables->hispeed_freq;
+			if (mod_freq > mod_adap_freq && j_wg_cpu->hispeed_flag == true) {
+				mod_adap_freq = mod_freq;
+				wg_driv_cpu->cpu = j_wg_cpu->cpu;
+				wg_driv_cpu->reasons |= CPUFREQ_REASON_HISPEED_BIT;
+				break;
+			}
+		}
+	}
+
+	if (wg_policy->conservative_pl_flag == true) {
+		for_each_cpu(j, policy->cpus) {
+			struct waltgov_cpu *j_wg_cpu = &per_cpu(waltgov_cpu, j);
+			unsigned long cap = arch_scale_cpu_capacity(j_wg_cpu->cpu);
+			unsigned long fmax = j_wg_cpu->wg_policy->policy->cpuinfo.max_freq;
+
+			mod_freq = (fmax * j_wg_cpu->walt_load.pl)/cap;
+			if (mod_freq > mod_adap_freq &&
+					j_wg_cpu->conservative_pl_flag == true) {
+				mod_adap_freq = mod_freq;
+				wg_driv_cpu->cpu = j_wg_cpu->cpu;
+				wg_driv_cpu->reasons |= CPUFREQ_REASON_PL_BIT;
+				break;
+			}
+		}
+	}
+
+	freq = mod_adap_freq;
 
 	cluster = cpu_cluster(policy->cpu);
 	if (cpumask_intersects(&cluster->cpus, cpu_partial_halt_mask) &&
@@ -358,13 +431,13 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	}
 
 	if (wg_policy->tunables->adaptive_high_freq && !skip) {
-		if (raw_freq < get_adaptive_level_1(wg_policy)) {
+		if (mod_adap_freq < get_adaptive_level_1(wg_policy)) {
 			freq = get_adaptive_level_1(wg_policy);
 			wg_driv_cpu->reasons |= CPUFREQ_REASON_ADAPTIVE_LVL_1_BIT;
-		} else if (raw_freq < get_adaptive_low_freq(wg_policy)) {
+		} else if (mod_adap_freq < get_adaptive_low_freq(wg_policy)) {
 			freq = get_adaptive_low_freq(wg_policy);
 			wg_driv_cpu->reasons |= CPUFREQ_REASON_ADAPTIVE_LOW_BIT;
-		} else if (raw_freq <= get_adaptive_high_freq(wg_policy)) {
+		} else if (mod_adap_freq <= get_adaptive_high_freq(wg_policy)) {
 			freq = get_adaptive_high_freq(wg_policy);
 			wg_driv_cpu->reasons |= CPUFREQ_REASON_ADAPTIVE_HIGH_BIT;
 		}
@@ -409,6 +482,8 @@ out:
 
 	if (reset_need_freq_update)
 		wg_policy->need_freq_update = false;
+
+	post_update_cleanups(wg_policy);
 
 	return final_freq;
 }
@@ -485,9 +560,10 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	unsigned long min_util = *util;
 
 	if (is_rtg_boost && (!cpumask_test_cpu(wg_cpu->cpu, cpu_partial_halt_mask) ||
-				!is_state1()))
-		max_and_reason(util, wg_policy->rtg_boost_util, wg_cpu,
-				CPUFREQ_REASON_RTG_BOOST_BIT);
+				!is_state1())) {
+		wg_policy->rtg_boost_flag = true;
+		wg_cpu->rtg_boost_flag = true;
+	}
 
 	is_hiload = (cpu_util >= mult_frac(wg_policy->avg_cap,
 					   wg_policy->tunables->hispeed_load,
@@ -500,16 +576,28 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	if (wg_policy->avg_cap < wg_policy->hispeed_cond_util)
 		is_hiload = false;
 
-	if (is_hiload && !is_migration)
-		max_and_reason(util, wg_policy->hispeed_util, wg_cpu, CPUFREQ_REASON_HISPEED_BIT);
+	if (is_hiload && !is_migration) {
+		wg_policy->hispeed_flag = true;
+		wg_cpu->hispeed_flag = true;
+	}
 
 	if (is_hiload && nl >= mult_frac(cpu_util, NL_RATIO, 100))
 		max_and_reason(util, *max, wg_cpu, CPUFREQ_REASON_NWD_BIT);
 
+	/*
+	 * For conservative PL, 2 cases may arise, if we have set
+	 * sysctl_sched_conservative_pl that means we need to run on that pl
+	 * equivalent frequency, if it is not the case, i.e.
+	 * sysctl_sched_conservative_pl is not set we would like to go ahead
+	 * with pl frequency to be inflated based on target load for that zone.
+	 */
 	if (wg_policy->tunables->pl) {
-		if (sysctl_sched_conservative_pl)
-			pl = mult_frac(pl, TARGET_LOAD, 100);
-		max_and_reason(util, pl, wg_cpu, CPUFREQ_REASON_PL_BIT);
+		if (sysctl_sched_conservative_pl) {
+			wg_policy->conservative_pl_flag = true;
+			wg_cpu->conservative_pl_flag = true;
+		} else {
+			max_and_reason(util, pl, wg_cpu, CPUFREQ_REASON_PL_BIT);
+		}
 	}
 
 	if (employ_ed_boost)
