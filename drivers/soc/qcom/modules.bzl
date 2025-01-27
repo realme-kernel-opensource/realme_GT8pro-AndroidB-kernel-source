@@ -664,6 +664,21 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/cpucp_fast",
+        out = "cpucp_fast.ko",
+        config = "CONFIG_QCOM_CPUCP_FAST",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/cpucp_fast.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_cpucp.c",
+            "kernel/sched/walt/sched-walt",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom_cpuss_sleep_stats_v4",
         out = "qcom_cpuss_sleep_stats_v4.ko",
         config = "CONFIG_QCOM_CPUSS_SLEEP_STATS_V4",
