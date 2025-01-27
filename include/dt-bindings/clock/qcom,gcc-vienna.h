@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_CLK_QCOM_GCC_VIENNA_H
@@ -157,14 +157,6 @@
 #define GCC_VIDEO_VENUS_CLK_SRC					147
 #define GCC_VIDEO_VENUS_CTL_CLK					148
 #define GCC_VIDEO_XO_CLK					149
-
-/* GCC power domains */
-#define GCC_CAMSS_TOP_GDSC					0
-#define GCC_PCIE_0_GDSC						1
-#define GCC_PCIE_0_PHY_GDSC					2
-#define GCC_USB30_PRIM_GDSC					3
-#define GCC_VCODEC0_GDSC					4
-#define GCC_VENUS_GDSC						5
 
 /* GCC resets */
 #define GCC_CAMSS_OPE_BCR					0
