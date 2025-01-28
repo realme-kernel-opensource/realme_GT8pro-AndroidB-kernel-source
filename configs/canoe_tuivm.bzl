@@ -43,6 +43,7 @@ canoe_tuivm_config = {
     "CONFIG_QCOM_SI_CORE_WQ": "y",
     "CONFIG_QCOM_TLMM_VM_IRQCHIP": "m",
     "CONFIG_QCOM_VM_DMESG_DUMPER": "m",
+    "CONFIG_QCOM_SOC_WATCHDOG": "m",
     "CONFIG_QCOM_WDT_CORE": "m",
     "CONFIG_QMSGQ": "m",
     "CONFIG_QMSGQ_GUNYAH": "m",
