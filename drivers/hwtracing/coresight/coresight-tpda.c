@@ -91,6 +91,15 @@ static int tpdm_read_element_size(struct tpda_drvdata *drvdata,
 				"qcom,cmb-element-bits", &drvdata->cmb_esize);
 	}
 
+	if (is_static_tpdm(csdev)) {
+		fwnode_property_read_u32(dev_fwnode(csdev->dev.parent),
+				"qcom,dsb-element-bits", &drvdata->dsb_esize);
+		fwnode_property_read_u32(dev_fwnode(csdev->dev.parent),
+				"qcom,cmb-element-bits", &drvdata->cmb_esize);
+		if (drvdata->dsb_esize || drvdata->cmb_esize)
+			rc = 0;
+	}
+
 	if (rc)
 		dev_warn_once(&csdev->dev,
 			"Failed to read TPDM Element size: %d\n", rc);
@@ -127,8 +136,6 @@ static int tpda_get_element_size(struct tpda_drvdata *drvdata,
 		if (coresight_device_is_tpdm(in)) {
 			if (drvdata->dsb_esize || drvdata->cmb_esize)
 				return -EEXIST;
-			if (is_static_tpdm(in))
-				return IS_STATIC_TPDM;
 			rc = tpdm_read_element_size(drvdata, in);
 			if (rc)
 				return rc;
@@ -163,14 +170,11 @@ static int tpda_enable_port(struct tpda_drvdata *drvdata, int port)
 	val = readl_relaxed(drvdata->base + TPDA_Pn_CR(port));
 	tpda_clear_element_size(drvdata->csdev);
 	rc = tpda_get_element_size(drvdata, drvdata->csdev, port);
-	if ((!rc && (drvdata->dsb_esize || drvdata->cmb_esize))
-	    || rc == IS_STATIC_TPDM) {
-		if (!rc && (drvdata->dsb_esize || drvdata->cmb_esize))
-			tpda_set_element_size(drvdata, &val);
+	if ((!rc && (drvdata->dsb_esize || drvdata->cmb_esize))) {
+		tpda_set_element_size(drvdata, &val);
 		/* Enable the port */
 		val |= TPDA_Pn_CR_ENA;
 		writel_relaxed(val, drvdata->base + TPDA_Pn_CR(port));
-		rc = 0;
 	} else if (rc == -EEXIST)
 		dev_warn_once(&drvdata->csdev->dev,
 			      "Detected multiple TPDMs on port %d", port);
