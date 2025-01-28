@@ -265,6 +265,33 @@ static const struct phy_ops m31eusb2_phy_gen_ops = {
 	.owner		= THIS_MODULE,
 };
 
+static int m31eusb2_phy_runtime_suspend(struct device *dev)
+{
+	struct m31eusb2_phy *phy = dev_get_drvdata(dev);
+
+	dev_dbg(dev, "Suspending M31 eUSB2 Phy\n");
+
+	m31eusb2_phy_clocks(phy, false);
+
+	return 0;
+}
+
+static int m31eusb2_phy_runtime_resume(struct device *dev)
+{
+	struct m31eusb2_phy *phy = dev_get_drvdata(dev);
+
+	dev_dbg(dev, "Resuming M31 eUSB2 Phy\n");
+
+	m31eusb2_phy_clocks(phy, true);
+
+	return 0;
+}
+
+static const struct dev_pm_ops m31eusb2_phy_pm_ops = {
+	SET_RUNTIME_PM_OPS(m31eusb2_phy_runtime_suspend,
+			   m31eusb2_phy_runtime_resume, NULL)
+};
+
 static int m31eusb2_phy_probe(struct platform_device *pdev)
 {
 	struct phy_provider *phy_provider;
@@ -299,6 +326,10 @@ static int m31eusb2_phy_probe(struct platform_device *pdev)
 	if (IS_ERR(phy->ref_clk))
 		return dev_err_probe(dev, PTR_ERR(phy->ref_clk),
 				     "failed to get ref clk\n");
+
+	dev_set_drvdata(dev, phy);
+	pm_runtime_set_active(dev);
+	pm_runtime_enable(dev);
 
 	phy->phy = devm_phy_create(dev, NULL, &m31eusb2_phy_gen_ops);
 	if (IS_ERR(phy->phy))
@@ -345,6 +376,7 @@ static struct platform_driver m31eusb2_phy_driver = {
 	.probe = m31eusb2_phy_probe,
 	.driver = {
 		.name = "qcom-m31eusb2-phy",
+		.pm = &m31eusb2_phy_pm_ops,
 		.of_match_table = m31eusb2_phy_id_table,
 	},
 };
