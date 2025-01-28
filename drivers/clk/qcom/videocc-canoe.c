@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -736,7 +736,7 @@ static struct gdsc video_cc_mvs0_vpp0_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_TRIGGER,
-	.supply = "vdd_mm",
+	.supply = "vdd_mm_mxc_voter",
 };
 
 static struct gdsc video_cc_mvs0_vpp1_gdsc = {
@@ -749,7 +749,7 @@ static struct gdsc video_cc_mvs0_vpp1_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_TRIGGER,
-	.supply = "vdd_mm",
+	.supply = "vdd_mm_mxc_voter",
 };
 
 static struct gdsc video_cc_mvs0a_gdsc = {
@@ -762,7 +762,7 @@ static struct gdsc video_cc_mvs0a_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_TRIGGER,
-	.supply = "vdd_mm",
+	.supply = "vdd_mm_mxc_voter",
 };
 
 static struct gdsc video_cc_mvs0c_gdsc = {
@@ -775,7 +775,7 @@ static struct gdsc video_cc_mvs0c_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_mm",
+	.supply = "vdd_mm_mxc_voter",
 };
 
 static struct gdsc video_cc_mvs0_gdsc = {
@@ -789,7 +789,7 @@ static struct gdsc video_cc_mvs0_gdsc = {
 	.pwrsts = PWRSTS_OFF_ON,
 	.parent = &video_cc_mvs0c_gdsc.pd,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_TRIGGER,
-	.supply = "vdd_mm",
+	.supply = "vdd_mm_mxc_voter",
 };
 
 static struct clk_regmap *video_cc_canoe_clocks[] = {
