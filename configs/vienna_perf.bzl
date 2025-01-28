@@ -1,6 +1,8 @@
 vienna_perf_config = {
     # keep sorted
     "CONFIG_ARCH_VIENNA": "y",
+    "CONFIG_ARM_QCOM_CPUFREQ_HW": "m",
+    "CONFIG_ARM_QCOM_CPUFREQ_HW_DEBUG": "m",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
     "CONFIG_ARM_SMMU_QCOM": "m",
@@ -34,6 +36,7 @@ vienna_perf_config = {
     "CONFIG_POWER_RESET_QCOM_DOWNLOAD_MODE": "m",
     "CONFIG_POWER_RESET_QCOM_DOWNLOAD_MODE_DEFAULT": "y",
     "CONFIG_QCOM_AOSS_QMP": "m",
+    "CONFIG_QCOM_CLK_RPMH": "m",
     "CONFIG_QCOM_COMMAND_DB": "m",
     "CONFIG_QCOM_CPUSS_SLEEP_STATS": "m",
     "CONFIG_QCOM_DMABUF_HEAPS": "m",
