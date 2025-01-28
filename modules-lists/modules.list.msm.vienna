@@ -48,3 +48,6 @@ msm_qmp.ko
 qrtr.ko
 gcc-vienna.ko
 gpucc-vienna.ko
+qcom_edac.ko
+kryo_arm64_edac.ko
+llcc-qcom.ko
