@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _LINUX_QCOM_GENI_SE_COMMON
@@ -47,6 +47,8 @@ if (print) { \
 } while (0)
 
 #define DEFAULT_BUS_WIDTH	(4)
+
+#define	GENI_SE_QSPI		0x9
 
 /* In KHz */
 #define DEFAULT_SE_CLK	19200
