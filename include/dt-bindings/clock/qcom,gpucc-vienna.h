@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_CLK_QCOM_GPU_CC_VIENNA_H
@@ -32,10 +32,6 @@
 #define GPU_CC_MND1X_0_GFX3D_CLK				22
 #define GPU_CC_MND1X_1_GFX3D_CLK				23
 #define GPU_CC_SLEEP_CLK					24
-
-/* GPU_CC power domains */
-#define GPU_CC_CX_GDSC						0
-#define GPU_CC_GX_GDSC						1
 
 /* GPU_CC resets */
 #define GPU_CC_ACD_BCR						0
