@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _LINUX_SI_OBJECT_H__
@@ -227,5 +227,11 @@ int init_si_object_user(struct si_object *object, enum si_object_type ot,
 int get_si_object(struct si_object *object);
 void put_si_object(struct si_object *object);
 int get_async_proto_version(void);
+
+/* si-core helpers */
+int si_core_get_client_env(struct si_object_invoke_ctx *oic, struct si_object **client_env);
+int si_core_client_env_open(struct si_object_invoke_ctx *oic, struct si_object *client_env,
+			    u32 uid_val, struct si_object **service);
+
 
 #endif /* _LINUX_SI_OBJECT_H__ */

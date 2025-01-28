@@ -32,6 +32,7 @@ def register_modules(registry):
             "drivers/firmware/qcom/si_core/si_core_adci.c",
             "drivers/firmware/qcom/si_core/si_core_adci.h",
             "drivers/firmware/qcom/si_core/si_core_async.c",
+            "drivers/firmware/qcom/si_core/si_core_helpers.c",
         ],
         conditional_srcs = {
             "CONFIG_QCOM_SI_CORE_WQ": {

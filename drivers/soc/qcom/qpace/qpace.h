@@ -165,6 +165,11 @@ int qpace_consume_er(int er_num,
 		     process_ed_fn success_handler,
 		     process_ed_fn fail_handler);
 
+/*
+ * is_qpace_enabled() - return true if qpace is enabled
+ */
+bool is_qpace_enabled(void);
+
 #else /* CONFIG_QTI_PAGE_COMPRESSION_ENGINE */
 
 static inline int qpace_urgent_compress(phys_addr_t input_addr,
@@ -207,6 +212,11 @@ static inline int qpace_consume_er(int er_num,
 				   process_ed_fn fail_handler)
 {
 	return 0;
+}
+
+static inline bool is_qpace_enabled(void)
+{
+	return false;
 }
 
 #endif
