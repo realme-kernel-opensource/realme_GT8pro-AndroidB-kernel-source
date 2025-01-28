@@ -120,6 +120,8 @@ struct m31eusb2_phy {
 	struct regulator_bulk_data	 *vregs;
 	struct clk			 *clk;
 	struct reset_control		 *reset;
+	struct clk			 *ref_clk_src;
+	struct clk			 *ref_clk;
 
 	struct phy			 *repeater;
 };
@@ -177,6 +179,27 @@ static int m31eusb2_phy_set_mode(struct phy *uphy, enum phy_mode mode, int submo
 	return phy_set_mode_ext(phy->repeater, mode, submode);
 }
 
+static int m31eusb2_phy_clocks(struct m31eusb2_phy *phy, bool on)
+{
+	int ret = 0;
+
+	if (on) {
+		ret = clk_prepare_enable(phy->ref_clk_src);
+		if (ret)
+			return ret;
+
+		if (phy->ref_clk)
+			ret = clk_prepare_enable(phy->ref_clk);
+	} else {
+		if (phy->ref_clk)
+			clk_disable_unprepare(phy->ref_clk);
+
+		clk_disable_unprepare(phy->ref_clk_src);
+	}
+
+	return ret;
+}
+
 static int m31eusb2_phy_init(struct phy *uphy)
 {
 	struct m31eusb2_phy *phy = phy_get_drvdata(uphy);
@@ -195,9 +218,9 @@ static int m31eusb2_phy_init(struct phy *uphy)
 		goto disable_vreg;
 	}
 
-	ret = clk_prepare_enable(phy->clk);
+	ret = m31eusb2_phy_clocks(phy, true);
 	if (ret) {
-		dev_err(&uphy->dev, "failed to enable cfg ahb clock, %d\n", ret);
+		dev_err(&uphy->dev, "failed to enable phy clock, %d\n", ret);
 		goto disable_repeater;
 	}
 
@@ -227,7 +250,7 @@ static int m31eusb2_phy_exit(struct phy *uphy)
 {
 	struct m31eusb2_phy *phy = phy_get_drvdata(uphy);
 
-	clk_disable_unprepare(phy->clk);
+	m31eusb2_phy_clocks(phy, false);
 	regulator_bulk_disable(M31_EUSB_NUM_VREGS, phy->vregs);
 	phy_exit(phy->repeater);
 
@@ -266,10 +289,15 @@ static int m31eusb2_phy_probe(struct platform_device *pdev)
 	if (IS_ERR(phy->reset))
 		return PTR_ERR(phy->reset);
 
-	phy->clk = devm_clk_get(dev, NULL);
-	if (IS_ERR(phy->clk))
-		return dev_err_probe(dev, PTR_ERR(phy->clk),
-				     "failed to get clk\n");
+	phy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");
+	if (IS_ERR(phy->ref_clk_src))
+		return dev_err_probe(dev, PTR_ERR(phy->ref_clk_src),
+				     "failed to get ref clk src\n");
+
+	phy->ref_clk = devm_clk_get_optional(dev, "ref_clk");
+	if (IS_ERR(phy->ref_clk))
+		return dev_err_probe(dev, PTR_ERR(phy->ref_clk),
+				     "failed to get ref clk\n");
 
 	phy->phy = devm_phy_create(dev, NULL, &m31eusb2_phy_gen_ops);
 	if (IS_ERR(phy->phy))
