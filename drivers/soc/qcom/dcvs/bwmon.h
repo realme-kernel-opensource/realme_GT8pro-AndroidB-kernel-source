@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _QCOM_BWMON_H
@@ -139,6 +139,7 @@ struct hwmon_node {
 	unsigned int		hyst_length;
 	unsigned int		idle_length;
 	unsigned int		idle_mbps;
+	unsigned int		min_mbps;
 	unsigned int		ab_scale;
 	unsigned int		second_ab_scale;
 	unsigned int		mbps_zones[NUM_MBPS_ZONES];
