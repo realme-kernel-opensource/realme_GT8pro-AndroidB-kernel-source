@@ -119,3 +119,13 @@ def register_modules(registry):
             "drivers/regulator/debug-regulator",
         ],
     )
+
+    registry.register(
+        name = "drivers/regulator/virtio_regulator",
+        out = "virtio_regulator.ko",
+        config = "CONFIG_VIRTIO_REGULATOR",
+        srcs = [
+            # do not sort
+            "drivers/regulator/virtio_regulator.c",
+        ],
+    )
