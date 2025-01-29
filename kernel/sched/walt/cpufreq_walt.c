@@ -251,8 +251,26 @@ static inline unsigned long walt_map_util_freq(unsigned long util,
 					unsigned long cap, int cpu)
 {
 	unsigned long fmax = wg_policy->policy->cpuinfo.max_freq;
+	unsigned long util_boost_factor = (fmax + (fmax >> 2));
+	int i;
 
-	return (fmax + (fmax >> 2)) * util / cap;
+	util = min(MAX_UTIL, util);
+
+	/*
+	 * We are updating util_boost_factor to a set value for a specific utilization if it falls
+	 * under a zone which is defined by sysfs tunable.
+	 */
+	for (i = 0 ; i < MAX_ZONES; i++) {
+		if (wg_policy->zone_util[i].util_thresh == -1)
+			break;
+
+		if (util <= wg_policy->zone_util[i].util_thresh) {
+			util_boost_factor = wg_policy->zone_util[i].inflate_factor;
+			break;
+		}
+	}
+
+	return (util_boost_factor * util/cap);
 }
 
 static inline unsigned int get_adaptive_level_1(struct waltgov_policy *wg_policy)
