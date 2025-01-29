@@ -21,6 +21,8 @@
 #include <linux/delay.h>
 #include <linux/workqueue.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/debugfs.h>
+#include <linux/uaccess.h>
 
 #include <linux/irqchip/arm-gic-v3.h>
 #include <trace/hooks/gic_v3.h>
@@ -75,6 +77,9 @@ struct gic_quirk {
 	u32 mask;
 };
 
+static struct dentry *debugfs_dir;
+static char debugfs_buf[NR_CPUS];
+
 static int process_cpu_index(struct device_node *np, int cpu_index, int clss)
 {
 	struct device_node *dev_phandle;
@@ -107,6 +112,125 @@ static int process_cpu_index(struct device_node *np, int cpu_index, int clss)
 dec_node:
 	of_node_put(dev_phandle);
 	return ret;
+}
+
+static ssize_t cpu_select_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+	return simple_read_from_buffer(buf, count, ppos, debugfs_buf, strlen(debugfs_buf));
+}
+
+static ssize_t cpu_select_write(struct file *file, const char __user *buf, size_t count,
+		loff_t *ppos)
+{
+	struct device_node *np = file->f_inode->i_private;
+	int num_cpus = cpumask_weight(cpu_possible_mask);
+	int valid_cpu_count = 0;
+	char *kbuf;
+	int *valid_cpus;
+	char *token;
+	int cpu_index;
+	int ret;
+	int i;
+
+	kbuf = kmalloc_array(count + 1, sizeof(char), GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	char *kbuf_ptr = kbuf;
+
+	valid_cpus = kmalloc_array(num_cpus, sizeof(int), GFP_KERNEL);
+	if (!valid_cpus) {
+		kfree(kbuf);
+		return -ENOMEM;
+	}
+
+	memset(valid_cpus, -1, num_cpus * sizeof(int));
+	if (count > sizeof(valid_cpus) - 1) {
+		kfree(kbuf);
+		kfree(valid_cpus);
+		return -EINVAL;
+	}
+
+	if (copy_from_user(debugfs_buf, buf, count)) {
+		kfree(kbuf);
+		kfree(valid_cpus);
+		return -EFAULT;
+	}
+
+	debugfs_buf[count] = '\0';
+
+	strscpy(kbuf, debugfs_buf, count + 1);
+	kbuf[count] = '\0';
+
+	cpus_read_lock();
+	token = strsep(&kbuf_ptr, " ");
+	while (token) {
+		if (!kstrtou32(token, 0, &cpu_index)) {
+			if (cpu_index < num_cpus && cpu_online(cpu_index)) {
+				valid_cpus[cpu_index] = 1;
+				valid_cpu_count++;
+			} else {
+				pr_err("CPU %d is invalid\n", cpu_index);
+				count = -EINVAL;
+				goto unlock;
+			}
+		}
+		token = strsep(&kbuf_ptr, " ");
+	}
+
+	for (i = 0; i < num_cpus; i++) {
+		if (valid_cpus[i] == 1 &&
+				!cpumask_test_cpu(i, &gic_routing_data.gic_routing_class0_cpus)) {
+			ret = process_cpu_index(np, i, 0);
+			if (ret < 0) {
+				count = ret;
+				goto unlock;
+			}
+			cpumask_set_cpu(i, &gic_routing_data.gic_routing_class0_cpus);
+			cpumask_clear_cpu(i, &gic_routing_data.gic_routing_class1_cpus);
+		} else if (valid_cpus[i] == -1 && cpumask_test_cpu(i, cpu_online_mask) &&
+				!cpumask_test_cpu(i, &gic_routing_data.gic_routing_class1_cpus)) {
+			ret = process_cpu_index(np, i, 1);
+			if (ret < 0) {
+				count = ret;
+				goto unlock;
+			}
+			cpumask_set_cpu(i, &gic_routing_data.gic_routing_class1_cpus);
+			cpumask_clear_cpu(i, &gic_routing_data.gic_routing_class0_cpus);
+		}
+	}
+
+unlock:
+	cpus_read_unlock();
+	kfree(kbuf);
+	kfree(valid_cpus);
+
+	return count;
+}
+
+static const struct file_operations cpu_select_fops = {
+	.read = cpu_select_read,
+	.write = cpu_select_write,
+};
+
+static int debugfs_init(struct platform_device *pdev)
+{
+	debugfs_dir = debugfs_create_dir("gic_intr_routing", NULL);
+	if (!debugfs_dir)
+		return -ENOMEM;
+
+	if (IS_ERR(debugfs_create_file("cpu_select", 0600, debugfs_dir,
+					pdev->dev.of_node, &cpu_select_fops))) {
+		debugfs_remove_recursive(debugfs_dir);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static void debugfs_exit(void)
+{
+	debugfs_remove_recursive(debugfs_dir);
 }
 
 static bool gicd_typer_1_of_N_supported(void __iomem *base)
@@ -656,6 +780,12 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 	int i, cpus_len, cpu;
 	int rc = 0;
 
+	rc = debugfs_init(pdev);
+	if (rc) {
+		pr_err("Failed to initialize debugfs\n");
+		return rc;
+	}
+
 	cpus_len = of_count_phandle_with_args(pdev->dev.of_node, "qcom,gic-class0-cpus", NULL);
 	if (cpus_len <= 0) {
 		pr_err("%s: Failed to get qcom,gic-class0-cpus DT property\n",
@@ -726,6 +856,11 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void gic_intr_routing_remove(struct platform_device *pdev)
+{
+	debugfs_exit();
+}
+
 static const struct of_device_id gic_intr_routing_of_match[] = {
 	{ .compatible = "qcom,gic-intr-routing"},
 	{}
@@ -734,6 +869,7 @@ MODULE_DEVICE_TABLE(of, gic_intr_routing_of_match);
 
 static struct platform_driver gic_intr_routing_driver = {
 	.probe = gic_intr_routing_probe,
+	.remove = gic_intr_routing_remove,
 	.driver = {
 		.name = "gic_intr_routing",
 		.of_match_table = gic_intr_routing_of_match,
