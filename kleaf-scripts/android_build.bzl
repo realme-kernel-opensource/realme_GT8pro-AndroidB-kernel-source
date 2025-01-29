@@ -49,8 +49,8 @@ def define_single_android_build(
         variant,
         config_fragment,
         base_kernel,
-        dtb_target = None,
-        build_img_opts = None):
+        build_img_opts = None,
+        dtb_target = None):
     stem = "{}_{}".format(name, variant)
     modules = registry.define_modules(stem, config_fragment, base_kernel)
 
@@ -71,6 +71,7 @@ def define_single_android_build(
             stem = stem,
             target = dtb_target,
             defconfig = "//common:arch/arm64/configs/gki_defconfig",
+            cmdline = build_img_opts.kernel_vendor_cmdline_extras if build_img_opts else [""],
         )
     else:
         dtb_list = None
