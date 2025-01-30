@@ -49,7 +49,7 @@ do {									\
 #define GROUP3				0x0194
 #define TGU_LAR				0x0FB0
 
-#define MAX_GROUP_SETS			256
+#define MAX_GROUP_SETS			288
 #define MAX_GROUPS			4
 #define MAX_CONDITION_SETS		64
 #define MAX_TIMER_COUNTER_SETS		8
@@ -170,13 +170,13 @@ static ssize_t enable_tgu_store(struct device *dev,
 	} else {
 		/* Disable TGU to program the triggers */
 		tgu_writel(drvdata, 0, TGU_CONTROL);
-
-		pm_runtime_put_sync(drvdata->dev);
 		dev_dbg(dev, "Coresight-TGU disabled\n");
 	}
 
 	TGU_LOCK(drvdata);
 	spin_unlock(&drvdata->spinlock);
+	if (!value)
+		pm_runtime_put_sync(drvdata->dev);
 	return size;
 }
 static DEVICE_ATTR_WO(enable_tgu);
@@ -334,7 +334,7 @@ static ssize_t set_timer_store(struct device *dev, struct device_attribute
 		return -EINVAL;
 
 	spin_lock(&drvdata->spinlock);
-	if (step <= drvdata->max_timer_counter) {
+	if (step <= drvdata->max_steps) {
 		drvdata->timer_data[drvdata->timer_refcnt].timeraddr =
 						TIMER0_COMPARE_STEP(step);
 		drvdata->timer_data[drvdata->timer_refcnt].value = value;
@@ -364,7 +364,7 @@ static ssize_t set_counter_store(struct device *dev, struct device_attribute
 		return -EINVAL;
 
 	spin_lock(&drvdata->spinlock);
-	if (step <= drvdata->max_timer_counter) {
+	if (step <= drvdata->max_steps) {
 		drvdata->counter_data[drvdata->counter_refcnt].counteraddr =
 						COUNTER0_COMPARE_STEP(step);
 		drvdata->counter_data[drvdata->counter_refcnt].value = value;
@@ -440,11 +440,6 @@ static int tgu_probe(struct amba_device *adev, const struct amba_id *id)
 
 	ret = of_property_read_u32(adev->dev.of_node, "tgu-regs",
 							&drvdata->max_regs);
-	if (ret)
-		return -EINVAL;
-
-	ret = of_property_read_u32(adev->dev.of_node, "tgu-timer-counters",
-						&drvdata->max_timer_counter);
 	if (ret)
 		return -EINVAL;
 

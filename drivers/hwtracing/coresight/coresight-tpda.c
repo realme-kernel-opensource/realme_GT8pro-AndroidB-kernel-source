@@ -91,6 +91,15 @@ static int tpdm_read_element_size(struct tpda_drvdata *drvdata,
 				"qcom,cmb-element-bits", &drvdata->cmb_esize);
 	}
 
+	if (is_static_tpdm(csdev)) {
+		fwnode_property_read_u32(dev_fwnode(csdev->dev.parent),
+				"qcom,dsb-element-bits", &drvdata->dsb_esize);
+		fwnode_property_read_u32(dev_fwnode(csdev->dev.parent),
+				"qcom,cmb-element-bits", &drvdata->cmb_esize);
+		if (drvdata->dsb_esize || drvdata->cmb_esize)
+			rc = 0;
+	}
+
 	if (rc)
 		dev_warn_once(&csdev->dev,
 			"Failed to read TPDM Element size: %d\n", rc);
@@ -127,8 +136,6 @@ static int tpda_get_element_size(struct tpda_drvdata *drvdata,
 		if (coresight_device_is_tpdm(in)) {
 			if (drvdata->dsb_esize || drvdata->cmb_esize)
 				return -EEXIST;
-			if (is_static_tpdm(in))
-				return IS_STATIC_TPDM;
 			rc = tpdm_read_element_size(drvdata, in);
 			if (rc)
 				return rc;
@@ -150,9 +157,37 @@ static void tpda_enable_pre_port(struct tpda_drvdata *drvdata)
 	u32 val;
 
 	val = readl_relaxed(drvdata->base + TPDA_CR);
+	val &= ~TPDA_CR_MID;
 	val &= ~TPDA_CR_ATID;
 	val |= FIELD_PREP(TPDA_CR_ATID, drvdata->atid);
+	if (drvdata->trig_async)
+		val = val | TPDA_CR_SRIE;
+	else
+		val = val & ~TPDA_CR_SRIE;
+	if (drvdata->trig_flag_ts)
+		val = val | TPDA_CR_FLRIE;
+	else
+		val = val & ~TPDA_CR_FLRIE;
+	if (drvdata->trig_freq)
+		val = val | TPDA_CR_FRIE;
+	else
+		val = val & ~TPDA_CR_FRIE;
+	if (drvdata->freq_ts)
+		val = val | TPDA_CR_FREQTS;
+	else
+		val = val & ~TPDA_CR_FREQTS;
+	if (drvdata->cmbchan_mode)
+		val = val | TPDA_CR_CMBCHANMODE;
+	else
+		val = val & ~TPDA_CR_CMBCHANMODE;
 	writel_relaxed(val, drvdata->base + TPDA_CR);
+
+	/*
+	 * If FLRIE bit is set, set the master and channel
+	 * id as zero
+	 */
+	if (drvdata->trig_flag_ts)
+		writel_relaxed(0x0, drvdata->base + TPDA_FPID_CR);
 }
 
 static int tpda_enable_port(struct tpda_drvdata *drvdata, int port)
@@ -163,14 +198,11 @@ static int tpda_enable_port(struct tpda_drvdata *drvdata, int port)
 	val = readl_relaxed(drvdata->base + TPDA_Pn_CR(port));
 	tpda_clear_element_size(drvdata->csdev);
 	rc = tpda_get_element_size(drvdata, drvdata->csdev, port);
-	if ((!rc && (drvdata->dsb_esize || drvdata->cmb_esize))
-	    || rc == IS_STATIC_TPDM) {
-		if (!rc && (drvdata->dsb_esize || drvdata->cmb_esize))
-			tpda_set_element_size(drvdata, &val);
+	if ((!rc && (drvdata->dsb_esize || drvdata->cmb_esize))) {
+		tpda_set_element_size(drvdata, &val);
 		/* Enable the port */
 		val |= TPDA_Pn_CR_ENA;
 		writel_relaxed(val, drvdata->base + TPDA_Pn_CR(port));
-		rc = 0;
 	} else if (rc == -EEXIST)
 		dev_warn_once(&drvdata->csdev->dev,
 			      "Detected multiple TPDMs on port %d", port);
@@ -179,6 +211,18 @@ static int tpda_enable_port(struct tpda_drvdata *drvdata, int port)
 			      "Didn't find TPDM element size");
 
 	return rc;
+}
+
+static void tpda_enable_post_port(struct tpda_drvdata *drvdata)
+{
+	uint32_t val;
+
+	val = readl_relaxed(drvdata->base + TPDA_SYNCR);
+	/* Clear the mode */
+	val = val & ~TPDA_MODE_CTRL;
+	/* Program the counter value */
+	val = val | 0xFFF;
+	writel_relaxed(val, drvdata->base + TPDA_SYNCR);
 }
 
 static int __tpda_enable(struct tpda_drvdata *drvdata, int port)
@@ -197,6 +241,9 @@ static int __tpda_enable(struct tpda_drvdata *drvdata, int port)
 
 	ret = tpda_enable_port(drvdata, port);
 	CS_LOCK(drvdata->base);
+
+	if (!drvdata->csdev->refcnt)
+		tpda_enable_post_port(drvdata);
 
 	return ret;
 }
@@ -305,22 +352,321 @@ static const struct coresight_ops tpda_cs_ops = {
 	.link_ops	= &tpda_link_ops,
 };
 
-static int tpda_init_default_data(struct tpda_drvdata *drvdata)
+static ssize_t trig_async_enable_show(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
 {
-	int atid;
-	/*
-	 * TPDA must has a unique atid. This atid can uniquely
-	 * identify the TPDM trace source connected to the TPDA.
-	 * The TPDMs which are connected to same TPDA share the
-	 * same trace-id. When TPDA does packetization, different
-	 * port will have unique channel number for decoding.
-	 */
-	atid = coresight_trace_id_get_system_id();
-	if (atid < 0)
-		return atid;
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
-	drvdata->atid = atid;
-	return 0;
+	return sysfs_emit(buf, "%u\n", (unsigned int)drvdata->trig_async);
+}
+
+static ssize_t trig_async_enable_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf,
+				       size_t size)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	if (val)
+		drvdata->trig_async = true;
+	else
+		drvdata->trig_async = false;
+
+	return size;
+}
+static DEVICE_ATTR_RW(trig_async_enable);
+
+static ssize_t trig_flag_ts_enable_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	return sysfs_emit(buf, "%u\n", (unsigned int)drvdata->trig_flag_ts);
+}
+
+static ssize_t trig_flag_ts_enable_store(struct device *dev,
+					 struct device_attribute *attr,
+					 const char *buf,
+					 size_t size)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	if (val)
+		drvdata->trig_flag_ts = true;
+	else
+		drvdata->trig_flag_ts = false;
+
+	return size;
+}
+static DEVICE_ATTR_RW(trig_flag_ts_enable);
+
+static ssize_t trig_freq_enable_show(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	return sysfs_emit(buf, "%u\n", (unsigned int)drvdata->trig_freq);
+}
+
+static ssize_t trig_freq_enable_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf,
+				      size_t size)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	if (val)
+		drvdata->trig_freq = true;
+	else
+		drvdata->trig_freq = false;
+
+	return size;
+}
+static DEVICE_ATTR_RW(trig_freq_enable);
+
+static ssize_t freq_ts_enable_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	return sysfs_emit(buf, "%u\n", (unsigned int)drvdata->freq_ts);
+}
+
+static ssize_t freq_ts_enable_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf,
+				    size_t size)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	if (val)
+		drvdata->freq_ts = true;
+	else
+		drvdata->freq_ts = false;
+
+	return size;
+}
+static DEVICE_ATTR_RW(freq_ts_enable);
+
+static ssize_t freq_req_val_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val = drvdata->freq_req_val;
+
+	return sysfs_emit(buf, "%#lx\n", val);
+}
+
+static ssize_t freq_req_val_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t size)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	drvdata->freq_req_val = val;
+
+	return size;
+}
+static DEVICE_ATTR_RW(freq_req_val);
+
+static ssize_t freq_req_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	return sysfs_emit(buf, "%u\n", (unsigned int)drvdata->freq_req);
+}
+
+static ssize_t freq_req_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf,
+			      size_t size)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	if (val)
+		drvdata->freq_req = true;
+	else
+		drvdata->freq_req = false;
+
+	return size;
+}
+static DEVICE_ATTR_RW(freq_req);
+
+static ssize_t global_flush_req_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	guard(spinlock)(&drvdata->spinlock);
+	if (!drvdata->csdev->refcnt)
+		return -EPERM;
+
+	val = readl_relaxed(drvdata->base + TPDA_CR);
+	return sysfs_emit(buf, "%lx\n", val);
+}
+
+static ssize_t global_flush_req_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf,
+				      size_t size)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	if (!drvdata->csdev->refcnt)
+		return -EPERM;
+
+	if (val) {
+		CS_UNLOCK(drvdata->base);
+		val = readl_relaxed(drvdata->base + TPDA_CR);
+		val = val | BIT(0);
+		writel_relaxed(val, drvdata->base + TPDA_CR);
+		CS_LOCK(drvdata->base);
+	}
+
+	return size;
+}
+static DEVICE_ATTR_RW(global_flush_req);
+
+static ssize_t port_flush_req_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	guard(spinlock)(&drvdata->spinlock);
+	if (!drvdata->csdev->refcnt)
+		return -EPERM;
+
+	val = readl_relaxed(drvdata->base + TPDA_FLUSH_CR);
+	return sysfs_emit(buf, "%lx\n", val);
+}
+
+static ssize_t port_flush_req_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf,
+				    size_t size)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	if (!drvdata->csdev->refcnt)
+		return -EPERM;
+
+	if (val) {
+		CS_UNLOCK(drvdata->base);
+		writel_relaxed(val, drvdata->base + TPDA_FLUSH_CR);
+		CS_LOCK(drvdata->base);
+	}
+
+	return size;
+}
+static DEVICE_ATTR_RW(port_flush_req);
+
+static ssize_t cmbchan_mode_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	return sysfs_emit(buf, "%u\n", (unsigned int)drvdata->cmbchan_mode);
+}
+
+static ssize_t cmbchan_mode_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t size)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	bool val;
+
+	if (kstrtobool(buf, &val))
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	if (val)
+		drvdata->cmbchan_mode = true;
+	else
+		drvdata->cmbchan_mode = false;
+
+	return size;
+}
+static DEVICE_ATTR_RW(cmbchan_mode);
+
+static struct attribute *tpda_attrs[] = {
+	&dev_attr_trig_async_enable.attr,
+	&dev_attr_trig_flag_ts_enable.attr,
+	&dev_attr_trig_freq_enable.attr,
+	&dev_attr_freq_ts_enable.attr,
+	&dev_attr_freq_req_val.attr,
+	&dev_attr_freq_req.attr,
+	&dev_attr_global_flush_req.attr,
+	&dev_attr_port_flush_req.attr,
+	&dev_attr_cmbchan_mode.attr,
+	NULL,
+};
+
+static struct attribute_group tpda_attr_grp = {
+	.attrs = tpda_attrs,
+};
+
+static const struct attribute_group *tpda_attr_grps[] = {
+	&tpda_attr_grp,
+	NULL,
+};
+
+static void tpda_init_default_data(struct tpda_drvdata *drvdata)
+{
+	drvdata->freq_ts = true;
 }
 
 static int tpda_probe(struct amba_device *adev, const struct amba_id *id)
@@ -358,9 +704,7 @@ static int tpda_probe(struct amba_device *adev, const struct amba_id *id)
 
 	spin_lock_init(&drvdata->spinlock);
 
-	ret = tpda_init_default_data(drvdata);
-	if (ret)
-		return ret;
+	tpda_init_default_data(drvdata);
 
 	desc.name = coresight_alloc_device_name(&tpda_devs, dev);
 	if (!desc.name)
@@ -370,6 +714,7 @@ static int tpda_probe(struct amba_device *adev, const struct amba_id *id)
 	desc.ops = &tpda_cs_ops;
 	desc.pdata = adev->dev.platform_data;
 	desc.dev = &adev->dev;
+	desc.groups = tpda_attr_grps;
 	desc.access = CSDEV_ACCESS_IOMEM(base);
 	drvdata->csdev = coresight_register(&desc);
 	if (IS_ERR(drvdata->csdev))

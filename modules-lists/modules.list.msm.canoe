@@ -15,6 +15,7 @@ qcom_cpu_vendor_hooks.ko
 cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko
+qcom_soc_wdt.ko
 debug-regulator.ko
 debugcc-canoe.ko
 dispcc-canoe.ko
@@ -31,6 +32,7 @@ icc-bcm-voter.ko
 icc-debug.ko
 icc-rpmh.ko
 qcom_cpucp.ko
+cpucp_fast.ko
 qcom_scmi_vendor.ko
 qcom_scmi_client.ko
 dcvs_fp.ko
@@ -52,6 +54,7 @@ qcom-dload-mode.ko
 memory_dump_v2.ko
 minidump.ko
 pinctrl-msm.ko
+pinctrl-alor.ko
 pinctrl-canoe.ko
 qcom_tsens.ko
 qcom-ipcc.ko

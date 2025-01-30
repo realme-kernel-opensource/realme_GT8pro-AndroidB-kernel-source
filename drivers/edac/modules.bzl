@@ -15,8 +15,6 @@ def register_modules(registry):
         config = "CONFIG_EDAC_KRYO_ARM64",
         srcs = [
             # do not sort
-            "drivers/edac/edac_device.h",
-            "drivers/edac/edac_mc.h",
             "drivers/edac/kryo_arm64_edac.c",
         ],
     )

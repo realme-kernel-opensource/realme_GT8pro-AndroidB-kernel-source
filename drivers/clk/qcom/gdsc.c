@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015, 2017-2018, 2022, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -141,7 +141,7 @@ static int gdsc_update_collapse_bit(struct gdsc *sc, bool val)
 static int gdsc_toggle_logic(struct gdsc *sc, enum gdsc_status status,
 		bool wait)
 {
-	int ret;
+	int ret = 0;
 	u32 val;
 
 	if (status == GDSC_ON && sc->rsupply) {
@@ -153,7 +153,7 @@ static int gdsc_toggle_logic(struct gdsc *sc, enum gdsc_status status,
 	regmap_read(sc->regmap, sc->gdscr, &val);
 	if (val & HW_CONTROL_MASK) {
 		pr_debug("%s in HW control mode\n", sc->pd.name);
-		return 0;
+		goto out;
 	}
 
 	ret = gdsc_update_collapse_bit(sc, status == GDSC_OFF);

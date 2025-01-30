@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt) "gic-router: %s: " fmt, __func__
 
@@ -259,11 +259,6 @@ void gic_do_class_update(
  *         not spread, if only cpus of that affinity mask go offline and
  *         comes back online.
  *
- *    3.2  Any class0 irq, for which affinity is broken, and the new
- *         effective affinity CPU (CPU4 in our example) goes offline; such
- *         irqs won't be spread to class 0 cpus, once those CPUs come back
- *         online. This is not a problem for cases where due to some
- *         constraint, CPU4 is never hotplugged.
  */
 static void trace_gic_v3_set_affinity(void *unused, struct irq_data *d,
 					const struct cpumask *mask_val, u64 *affinity,
@@ -361,7 +356,7 @@ static void trace_gic_v3_set_affinity(void *unused, struct irq_data *d,
 	    !cpumask_equal(&gic_routing_data.gic_routing_class1_cpus, cpu_affinity) &&
 	    !cpumask_equal(&all_cpus, cpu_affinity)) {
 		pr_debug("irq: %lu has subset affinity, skip class setting\n", d->hwirq);
-		goto clear_class;
+		return;
 	}
 
 	if (cpumask_any_and(cpu_affinity, cpu_online_mask) >= nr_cpu_ids)
@@ -376,9 +371,6 @@ static void trace_gic_v3_set_affinity(void *unused, struct irq_data *d,
 	} else {
 		is_class1 = is_class0 = true;
 	}
-
-	if (!(is_class0 || is_class1))
-		goto clear_class;
 
 	*affinity |= GIC_INTERRUPT_ROUTING_MODE;
 
@@ -397,13 +389,8 @@ static void trace_gic_v3_set_affinity(void *unused, struct irq_data *d,
 
 	if (need_class_update)
 		gic_do_class_update(base, irq, is_class0, is_class1);
-	return;
 
-clear_class:
-	spin_lock(&gic_class_lock);
-	clear_bit(irq, active_gic_class0);
-	clear_bit(irq, active_gic_class1);
-	spin_unlock(&gic_class_lock);
+	return;
 }
 
 static bool is_gic_chip(struct irq_desc *desc, struct irq_chip *gic_chip)
