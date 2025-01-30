@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __PINCTRL_MSM_H__
 #define __PINCTRL_MSM_H__
@@ -36,6 +36,12 @@ struct pinctrl_pin_desc;
 	[qca_mux_##fname] = PINCTRL_PINFUNCTION(#fname,		\
 					fname##_groups,		\
 					ARRAY_SIZE(fname##_groups))
+
+struct msm_function {
+	const char *name;
+	const char * const *groups;
+	unsigned int ngroups;
+};
 
 /**
  * struct msm_pingroup - Qualcomm pingroup definition
@@ -79,6 +85,9 @@ struct pinctrl_pin_desc;
  * @wake_bit:             Bit number for the corresponding gpio
  */
 struct msm_pingroup {
+	const char *name;
+	const unsigned int *pins;
+	unsigned int npins;
 	struct pingroup grp;
 
 	unsigned *funcs;
@@ -89,6 +98,7 @@ struct msm_pingroup {
 	u32 intr_cfg_reg;
 	u32 intr_status_reg;
 	u32 intr_target_reg;
+	u32 dir_conn_reg;
 	unsigned int reg_size_4k:5;
 
 	unsigned int tile:2;
@@ -119,6 +129,7 @@ struct msm_pingroup {
 	unsigned intr_polarity_bit:5;
 	unsigned intr_detection_bit:5;
 	unsigned intr_detection_width:5;
+	unsigned dir_conn_en_bit:8;
 
 	u32 wake_reg;
 	unsigned int wake_bit;
@@ -132,6 +143,16 @@ struct msm_pingroup {
 struct msm_gpio_wakeirq_map {
 	unsigned int gpio;
 	unsigned int wakeirq;
+};
+
+/**
+ * struct msm_dir_conn - TLMM Direct GPIO connect configuration
+ * @gpio:      GPIO pin number
+ * @irq:       The GIC interrupt that the pin is connected to
+ */
+struct msm_dir_conn {
+	int gpio;
+	int irq;
 };
 
 /*
@@ -199,6 +220,7 @@ struct msm_pinctrl_soc_data {
 	unsigned int egpio_func;
 	const struct msm_spare_tlmm *spare_regs;
 	unsigned int nspare_regs;
+	struct msm_dir_conn *dir_conn;
 };
 
 extern const struct dev_pm_ops msm_pinctrl_dev_pm_ops;
