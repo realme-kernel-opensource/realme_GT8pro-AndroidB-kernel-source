@@ -6855,6 +6855,22 @@ static void msm_dwc3_perf_vote_enable(struct dwc3_msm *mdwc, bool enable)
 	}
 }
 
+static bool is_m31eUSB2_present(struct dwc3_msm *mdwc)
+{
+	struct device *dev;
+
+	if (mdwc->hs_phy) {
+		if (mdwc->hs_phy->label && !strcmp(mdwc->hs_phy->label,
+						   "M31 eUSB2"))
+			return true;
+	} else {
+		dev = mdwc->usb2_phy->dev.parent;
+		return of_device_is_compatible(dev->of_node, "qcom,m31-eUSB2-phy");
+	}
+
+	return false;
+}
+
 /**
  * dwc3_otg_start_host -  helper function for starting/stopping the host
  * controller driver.
@@ -6933,7 +6949,7 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		 * based, or M31 PHY.  Check for the USB PHY label to determine what
 		 * is being registered to the hs_phy before modifying the registers.
 		 */
-		if (mdwc->hs_phy->label && !strcmp(mdwc->hs_phy->label, "M31 eUSB2"))
+		if (is_m31eUSB2_present(mdwc))
 			dwc3_msm_write_reg_field(mdwc->base, DWC3_GUCTL1,
 						DWC3_GUCTL1_RESUME_OPMODE_HS_HOST, 1);
 
