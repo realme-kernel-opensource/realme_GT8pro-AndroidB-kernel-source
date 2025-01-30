@@ -980,3 +980,29 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/clk/qcom/virtio_clk",
+        out = "virtio_clk.ko",
+        config = "CONFIG_VIRTIO_CLK",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/virtio_clk.c",
+            "drivers/clk/qcom/virtio_clk_common.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/virtio_clk_lemans",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/clk/qcom/virtio_clk_lemans",
+        out = "virtio_clk_lemans.ko",
+        config = "CONFIG_VIRTIO_CLK",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/virtio_clk_lemans.c",
+            "drivers/clk/qcom/virtio_clk_common.h",
+        ],
+    )
