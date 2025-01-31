@@ -243,6 +243,7 @@ enum geni_i3c_od_mode {
 #define LOW_STATIC_ADDR_MASK	GENMASK(7, 0)
 #define HIGH_DYN_ADDR_MASK	GENMASK(15, 8)
 #define NON_MANAGER_EE_SET	BIT(16)
+#define	SECURE_EE_SET		BIT(17)
 
 enum geni_i3c_err_code {
 	RD_TERM,
@@ -390,6 +391,7 @@ struct geni_i3c_dev {
 	bool pm_ctrl_client;  /* set from DTSI by client for AON case */
 	u32  skip_entdaa_mask; /* skip entdaa mask flag for secure slaves */
 	bool is_probe_done; /* i3c master probe done flag */
+	bool is_skip_tlmm_config;
 	bool is_aon_client_probe_done; /* aon i3c probe done flag */
 	bool hj_in_progress; /* hotjoin in progress flag */
 	bool is_i2c_xfer; /* i2c transfer flag */
@@ -3996,6 +3998,9 @@ static int i3c_geni_rsrcs_init(struct geni_i3c_dev *gi3c,
 	if (ret)
 		gi3c->dfs_idx = 0xf;
 
+	if (gi3c->is_skip_tlmm_config)
+		return 0;
+
 	gi3c->i3c_rsc.i3c_pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(gi3c->i3c_rsc.i3c_pinctrl)) {
 		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
@@ -4370,6 +4375,10 @@ static int geni_i3c_read_dt_properties(struct geni_i3c_dev *gi3c, struct platfor
 
 		if (gi3c->skip_entdaa_mask & NON_MANAGER_EE_SET)
 			gi3c->is_manager = false;
+
+		/* MultiEE : GSI HW configures TLMM as part of Lock/Unlock TRE */
+		if (gi3c->skip_entdaa_mask & SECURE_EE_SET)
+			gi3c->is_skip_tlmm_config = true;
 	}
 
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,pm-ctrl-client")) {
@@ -4459,7 +4468,8 @@ static int geni_i3c_probe(struct platform_device *pdev)
 		goto cleanup_init;
 	}
 
-	ret = geni_se_resources_on(&gi3c->se);
+	ret = geni_se_common_clks_on(gi3c->se.clk, gi3c->i3c_rsc.m_ahb_clk,
+				     gi3c->i3c_rsc.s_ahb_clk);
 	if (ret) {
 		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
 			"Error turning on resources %d\n", ret);
@@ -4781,7 +4791,12 @@ static int geni_i3c_runtime_resume(struct device *dev)
 		return ret;
 	}
 
-	ret = geni_se_resources_on(&gi3c->se);
+	if (gi3c->is_skip_tlmm_config)
+		ret = geni_se_common_clks_on(gi3c->se.clk, gi3c->i3c_rsc.m_ahb_clk,
+					     gi3c->i3c_rsc.s_ahb_clk);
+	else
+		ret = geni_se_resources_on(&gi3c->se);
+
 	if (ret) {
 		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
 			"%s geni_se_resources_on failed %d\n", __func__, ret);
