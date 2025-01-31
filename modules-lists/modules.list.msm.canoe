@@ -22,6 +22,7 @@ debug-regulator.ko
 debugcc-canoe.ko
 dispcc-canoe.ko
 evacc-canoe.ko
+gcc-alor.ko
 gcc-canoe.ko
 gdsc-regulator.ko
 gpucc-canoe.ko
