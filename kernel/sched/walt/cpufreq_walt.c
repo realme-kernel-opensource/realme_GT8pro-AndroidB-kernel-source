@@ -16,6 +16,15 @@
 #include "walt.h"
 #include "trace.h"
 
+#define MAX_ZONES 10
+#define ZONE_TUPLE_SIZE 2
+#define MAX_UTIL 1024
+
+struct waltgov_zones {
+	int util_thresh;
+	int inflate_factor;
+};
+
 struct waltgov_tunables {
 	struct gov_attr_set	attr_set;
 	unsigned int		up_rate_limit_us;
@@ -32,6 +41,7 @@ struct waltgov_tunables {
 	unsigned int		adaptive_high_freq_kernel;
 	bool			pl;
 	int			boost;
+	int			zone_util_pct[MAX_ZONES][ZONE_TUPLE_SIZE];
 };
 
 struct waltgov_policy {
@@ -43,6 +53,7 @@ struct waltgov_policy {
 	struct waltgov_tunables	*tunables;
 	struct list_head	tunables_hook;
 	unsigned long		hispeed_cond_util;
+	struct waltgov_zones	zone_util[MAX_ZONES];
 
 	raw_spinlock_t		update_lock;
 	u64			last_freq_update_time;
@@ -934,6 +945,191 @@ static ssize_t boost_store(struct gov_attr_set *attr_set, const char *buf,
 	return count;
 }
 
+/*
+ * update_util_inflate_factor() - Updates the zone ranges and the equivalent
+ * utilization inflation factor for each zone. This function stores the updated
+ * values gathered from sysfs node in the internally maintained wg_policy
+ * structure data member, zone_util.
+ */
+void update_util_inflate_factor(struct waltgov_tunables *tunables,
+		struct waltgov_policy *wg_policy)
+{
+	unsigned long fmax, cap;
+	int i = 0;
+
+	fmax = wg_policy->policy->cpuinfo.max_freq;
+	cap = arch_scale_cpu_capacity(wg_policy->policy->cpu);
+
+	for (i = 0; i < MAX_ZONES; i++) {
+		if (tunables->zone_util_pct[i][0] == -1)
+			break;
+
+		wg_policy->zone_util[i].util_thresh =
+			tunables->zone_util_pct[i][0] * cap/fmax;
+		wg_policy->zone_util[i].inflate_factor =
+			((fmax * 100) / tunables->zone_util_pct[i][1]);
+	}
+}
+
+static ssize_t zone_max_util_pct_show(struct gov_attr_set *attr_set, char *buf)
+{
+	struct waltgov_tunables *tunables = to_waltgov_tunables(attr_set);
+	ssize_t len = 0;
+	int i, j;
+
+	for (i = 0; i < MAX_ZONES; i++) {
+		if (tunables->zone_util_pct[i][0] == -1)
+			break;
+
+		for (j = 0; j < ZONE_TUPLE_SIZE; j++) {
+			len += scnprintf(buf + len, PAGE_SIZE, "%d ",
+					tunables->zone_util_pct[i][j]);
+		}
+	}
+	len += scnprintf(buf + len, PAGE_SIZE, "\n");
+
+	return len;
+}
+
+
+int write_once_zone_max_util_pct_cluster[MAX_CLUSTERS];
+
+static ssize_t zone_max_util_pct_store(struct gov_attr_set *attr_set,
+		const char *buf, size_t count)
+{
+	struct waltgov_tunables *tunables = to_waltgov_tunables(attr_set);
+	struct waltgov_policy *wg_policy;
+	unsigned int value;
+	static DEFINE_MUTEX(target_load_lock);
+	size_t size = 0;
+	unsigned long flags;
+	char *token;
+	char str[1024];
+	char *ex;
+	ssize_t ret;
+	int temp[MAX_ZONES*ZONE_TUPLE_SIZE];
+	int temp2[MAX_ZONES*ZONE_TUPLE_SIZE];
+	int i, j, k;
+	struct walt_sched_cluster *cluster;
+
+	size = strlen(buf) + 1;
+	ex = str;
+	strscpy(str, buf, size);
+
+	size = 0;
+	mutex_lock(&target_load_lock);
+
+	ret = -EINVAL;
+
+	/*
+	 * read and write values one by one and stores it in temp array which we got from user.
+	 */
+	while ((token = strsep(&ex, " ")) != NULL) {
+		if (size >= MAX_ZONES*ZONE_TUPLE_SIZE)
+			goto exit;
+
+		if (kstrtouint(token, 10, &value) == 0)
+			temp[size++] = value;
+		else
+			goto exit;
+	}
+
+	/* Check if every zone value has a corresponding target load percentage value */
+	if (size%2 != 0)
+		goto exit;
+
+	list_for_each_entry(wg_policy, &attr_set->policy_list, tunables_hook) {
+		cluster = cpu_cluster(wg_policy->policy->cpu);
+
+		/*
+		 * Check if target load percentange entered for zones are in range
+		 * and greater than 80%.
+		 */
+		for (i = 1; i < size; i += 2) {
+			if (temp[i] < 80 || temp[i] > 100)
+				goto exit;
+
+			if (i > 1 && temp[i] > temp[i-2])
+				goto exit;
+		}
+
+		k = 0;
+		/*
+		 * If a user specifies target load to be lower than the previous one
+		 * but we need to maintain the restriction of it being in descending
+		 * order.
+		 */
+		if (write_once_zone_max_util_pct_cluster[cluster->id]) {
+
+			for (i = 0; i < MAX_ZONES; i++) {
+				for (j = 0; j < ZONE_TUPLE_SIZE; j++)
+					temp2[k++] = tunables->zone_util_pct[i][j];
+			}
+
+			for (i = 0; i < MAX_ZONES; i++) {
+
+				if (tunables->zone_util_pct[i][0] == -1)
+					break;
+
+				for (j = 0; j < MAX_ZONES*ZONE_TUPLE_SIZE; j += 2) {
+					if (temp[j] == tunables->zone_util_pct[i][0]) {
+						temp2[(2*i+1)] = temp[j+1];
+						break;
+					}
+				}
+			}
+
+			for (i = 1; i < MAX_ZONES*ZONE_TUPLE_SIZE; i += 2) {
+				if (temp2[i] == -1)
+					break;
+
+				if (temp2[i] < 80 || temp2[i] > 100)
+					goto exit;
+
+				if (i > 1 && temp2[i] > temp2[i-2])
+					goto exit;
+
+			}
+		}
+		/*
+		 * If a user enters a specified target load percentage for a defined zone already.
+		 * We update it here. If user enters some undefined zone, then that will be ignored.
+		 */
+		if (write_once_zone_max_util_pct_cluster[cluster->id]) {
+			for (i = 0; i < MAX_ZONES; i++) {
+				if (tunables->zone_util_pct[i][0] == -1)
+					break;
+
+				for (j = 0; j < MAX_ZONES*ZONE_TUPLE_SIZE; j += 2) {
+					if (temp[j] == tunables->zone_util_pct[i][0])
+						tunables->zone_util_pct[i][1] = temp[j+1];
+				}
+			}
+		}
+
+		k = 0;
+		/*
+		 * Writing once initially for all the zones defined and equivalent target load.
+		 */
+		if (!write_once_zone_max_util_pct_cluster[cluster->id]) {
+			for (i = 0; i < size/2; i++) {
+				for (j = 0; j < 2; j++)
+					tunables->zone_util_pct[i][j] = temp[k++];
+			}
+			write_once_zone_max_util_pct_cluster[cluster->id] = 1;
+		}
+
+		ret = count;
+		raw_spin_lock_irqsave(&wg_policy->update_lock, flags);
+		update_util_inflate_factor(tunables, wg_policy);
+		raw_spin_unlock_irqrestore(&wg_policy->update_lock, flags);
+	}
+
+exit:
+	mutex_unlock(&target_load_lock);
+	return ret;
+}
+
 /**
  * cpufreq_walt_set_adaptive_freq() - set the waltgov adaptive freq for cpu
  * @cpu:               the cpu for which the values should be set
@@ -1088,6 +1284,7 @@ static struct governor_attr hispeed_cond_freq = __ATTR_RW(hispeed_cond_freq);
 static struct governor_attr rtg_boost_freq = __ATTR_RW(rtg_boost_freq);
 static struct governor_attr pl = __ATTR_RW(pl);
 static struct governor_attr boost = __ATTR_RW(boost);
+static struct governor_attr zone_max_util_pct = __ATTR_RW(zone_max_util_pct);
 WALTGOV_ATTR_RW(adaptive_level_1);
 WALTGOV_ATTR_RW(adaptive_low_freq);
 WALTGOV_ATTR_RW(adaptive_high_freq);
@@ -1104,6 +1301,7 @@ static struct attribute *waltgov_attrs[] = {
 	&adaptive_level_1.attr,
 	&adaptive_low_freq.attr,
 	&adaptive_high_freq.attr,
+	&zone_max_util_pct.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(waltgov);
@@ -1187,7 +1385,7 @@ static void waltgov_kthread_stop(struct waltgov_policy *wg_policy)
 static void waltgov_tunables_save(struct cpufreq_policy *policy,
 		struct waltgov_tunables *tunables)
 {
-	int cpu;
+	int cpu, i, j;
 	struct waltgov_tunables *cached = per_cpu(cached_tunables, policy->cpu);
 
 	if (!cached) {
@@ -1213,6 +1411,10 @@ static void waltgov_tunables_save(struct cpufreq_policy *policy,
 	cached->adaptive_level_1_kernel = tunables->adaptive_level_1_kernel;
 	cached->adaptive_low_freq_kernel = tunables->adaptive_low_freq_kernel;
 	cached->adaptive_high_freq_kernel = tunables->adaptive_high_freq_kernel;
+	for (i = 0; i < MAX_ZONES; i++) {
+		for (j = 0; j < ZONE_TUPLE_SIZE; j++)
+			cached->zone_util_pct[i][j] = tunables->zone_util_pct[i][j];
+	}
 }
 
 static void waltgov_tunables_restore(struct cpufreq_policy *policy)
@@ -1220,6 +1422,7 @@ static void waltgov_tunables_restore(struct cpufreq_policy *policy)
 	struct waltgov_policy *wg_policy = policy->governor_data;
 	struct waltgov_tunables *tunables = wg_policy->tunables;
 	struct waltgov_tunables *cached = per_cpu(cached_tunables, policy->cpu);
+	int i, j;
 
 	if (!cached)
 		return;
@@ -1238,6 +1441,12 @@ static void waltgov_tunables_restore(struct cpufreq_policy *policy)
 	tunables->adaptive_level_1_kernel = cached->adaptive_level_1_kernel;
 	tunables->adaptive_low_freq_kernel = cached->adaptive_low_freq_kernel;
 	tunables->adaptive_high_freq_kernel = cached->adaptive_high_freq_kernel;
+	for (i = 0; i < MAX_ZONES; i++) {
+		for (j = 0; j < ZONE_TUPLE_SIZE; j++)
+			tunables->zone_util_pct[i][j] = cached->zone_util_pct[i][j];
+	}
+
+	update_util_inflate_factor(tunables, wg_policy);
 }
 
 bool waltgov_disabled = true;
@@ -1274,6 +1483,14 @@ static int waltgov_init(struct cpufreq_policy *policy)
 
 	gov_attr_set_init(&tunables->attr_set, &wg_policy->tunables_hook);
 	tunables->hispeed_load = DEFAULT_HISPEED_LOAD;
+
+	/*
+	 * Initialize each zone and its util inflate factor to -1 during
+	 * cpufreq_walt initialization.
+	 */
+	memset(tunables->zone_util_pct,
+			-1, sizeof(tunables->zone_util_pct));
+	memset(wg_policy->zone_util, -1, sizeof(wg_policy->zone_util));
 
 	if (is_min_possible_cluster_cpu(policy->cpu))
 		tunables->rtg_boost_freq = DEFAULT_SILVER_RTG_BOOST_FREQ;
