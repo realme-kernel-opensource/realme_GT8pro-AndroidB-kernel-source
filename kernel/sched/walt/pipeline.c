@@ -239,12 +239,14 @@ static inline bool should_pipeline_pin_special(void)
 cpumask_t last_available_big_cpus = CPU_MASK_NONE;
 int have_heavy_list;
 u32 total_util;
+#define REARRANGE_HYST_MS	100ULL
 bool find_heaviest_topapp(u64 window_start)
 {
 	struct walt_related_thread_group *grp;
 	struct walt_task_struct *wts;
 	unsigned long flags;
 	static u64 last_rearrange_ns;
+	u64 rearrange_target_ns = 0;
 	int i, j, start;
 	struct walt_task_struct *heavy_wts_to_drop[MAX_NR_PIPELINE];
 
@@ -269,14 +271,21 @@ bool find_heaviest_topapp(u64 window_start)
 
 			pipeline_set_unisolation(false, AUTO_PIPELINE);
 		}
+		last_rearrange_ns = window_start;
 		return false;
 	}
 
-	if (last_rearrange_ns && (window_start < (last_rearrange_ns +
-					(u64)sysctl_pipeline_rearrange_delay_ms[0] * MSEC_TO_NSEC)))
-		return false;
-	last_rearrange_ns = window_start;
 
+	if (likely(heavy_wts[0]))
+		rearrange_target_ns = last_rearrange_ns +
+					((u64)sysctl_pipeline_rearrange_delay_ms[0] * MSEC_TO_NSEC);
+	else
+		rearrange_target_ns = last_rearrange_ns + (REARRANGE_HYST_MS * MSEC_TO_NSEC);
+
+	if (last_rearrange_ns && (window_start < rearrange_target_ns))
+		return false;
+
+	last_rearrange_ns = window_start;
 	raw_spin_lock_irqsave(&grp->lock, flags);
 	raw_spin_lock(&heavy_lock);
 
