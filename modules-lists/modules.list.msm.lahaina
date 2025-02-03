@@ -15,6 +15,8 @@ qcom_rpmh.ko
 crm-v2.ko
 debug-regulator.ko
 gdsc-regulator.ko
+gcc-sc7280.ko
+dispcc-sc7280.ko
 smem.ko
 debug_symbol.ko
 socinfo.ko
@@ -51,6 +53,7 @@ qcom_aoss.ko
 qrtr.ko
 msm_qmp.ko
 qnoc-qos.ko
+qnoc-yupik.ko
 qcom_iommu_debug.ko
 qcom_ipc_logging.ko
 iommu-logger.ko
