@@ -527,6 +527,8 @@ struct dwc3_msm {
 
 	struct usb_phy		*hs_phy, *ss_phy;
 	struct usb_redriver	*redriver;
+	/* Generic USB Phys */
+	struct phy		*usb2_phy, *usb3_phy;
 
 	const struct dbm_reg_data *dbm_reg_table;
 	int			dbm_num_eps;
@@ -5972,9 +5974,69 @@ static int dwc3_msm_get_repeater_ver(struct dwc3_msm *mdwc)
 	return 0;
 }
 
-static int dwc3_msm_parse_core_params(struct dwc3_msm *mdwc, struct device_node *dwc3_node)
+static int dwc3_msm_get_phy(struct dwc3_msm *mdwc, struct device_node *dwc3_node)
 {
 	struct device_node *phy_node;
+	int ret;
+
+	phy_node = of_parse_phandle(dwc3_node, "usb-phy", 0);
+	mdwc->hs_phy = devm_usb_get_phy_by_node(mdwc->dev, phy_node, NULL);
+	of_node_put(phy_node);
+	if (IS_ERR(mdwc->hs_phy)) {
+		ret = PTR_ERR(mdwc->hs_phy);
+		if (ret == -ENXIO || ret == -ENODEV) {
+			mdwc->hs_phy = NULL;
+		} else {
+			dev_err(mdwc->dev, "unable to get hsphy device,ret:%d\n", ret);
+			return ret;
+		}
+	}
+
+	phy_node = of_parse_phandle(dwc3_node, "usb-phy", 1);
+	mdwc->ss_phy = devm_usb_get_phy_by_node(mdwc->dev, phy_node, NULL);
+	of_node_put(phy_node);
+	if (IS_ERR(mdwc->ss_phy)) {
+		ret = PTR_ERR(mdwc->ss_phy);
+		if (ret == -ENXIO || ret == -ENODEV) {
+			mdwc->ss_phy = NULL;
+		} else {
+			dev_err(mdwc->dev, "unable to get ssphy device,ret:%d\n", ret);
+			return ret;
+		}
+	}
+
+	mdwc->usb2_phy = devm_of_phy_get(mdwc->dev, dwc3_node, "usb2-phy");
+	if (IS_ERR(mdwc->usb2_phy)) {
+		ret = PTR_ERR(mdwc->usb2_phy);
+		if (ret == -ENXIO || ret == -ENODEV) {
+			mdwc->usb2_phy = NULL;
+		} else {
+			dev_err(mdwc->dev, "failed to lookup usb2-phy,ret:%d\n", ret);
+			return ret;
+		}
+	}
+
+	mdwc->usb3_phy = devm_of_phy_get(mdwc->dev, dwc3_node, "usb3-phy");
+	if (IS_ERR(mdwc->usb3_phy)) {
+		ret = PTR_ERR(mdwc->usb3_phy);
+		if (ret == -ENXIO || ret == -ENODEV) {
+			mdwc->usb3_phy = NULL;
+		} else {
+			dev_err(mdwc->dev, "failed to lookup usb3-phy,ret:%d\n", ret);
+			return ret;
+		}
+	}
+
+	if ((!mdwc->hs_phy && !mdwc->usb2_phy) ||
+	    (dwc3_msm_get_max_speed(mdwc) >= USB_SPEED_SUPER &&
+	     (!mdwc->ss_phy && !mdwc->usb3_phy)))
+		return -ENODEV;
+
+	return 0;
+}
+
+static int dwc3_msm_parse_core_params(struct dwc3_msm *mdwc, struct device_node *dwc3_node)
+{
 	int ret;
 	const char *prop_string;
 
@@ -5991,24 +6053,13 @@ static int dwc3_msm_parse_core_params(struct dwc3_msm *mdwc, struct device_node 
 
 	mdwc->core_irq = of_irq_get(dwc3_node, 0);
 
-	phy_node = of_parse_phandle(dwc3_node, "usb-phy", 0);
-	mdwc->hs_phy = devm_usb_get_phy_by_node(mdwc->dev, phy_node, NULL);
-	if (IS_ERR(mdwc->hs_phy)) {
-		dev_err(mdwc->dev, "unable to get hsphy device\n");
-		ret = PTR_ERR(mdwc->hs_phy);
+	ret = dwc3_msm_get_phy(mdwc, dwc3_node);
+	if (ret)
 		return ret;
-	}
-
-	phy_node = of_parse_phandle(dwc3_node, "usb-phy", 1);
-	mdwc->ss_phy = devm_usb_get_phy_by_node(mdwc->dev, phy_node, NULL);
-	if (IS_ERR(mdwc->ss_phy)) {
-		dev_err(mdwc->dev, "unable to get ssphy device\n");
-		ret = PTR_ERR(mdwc->ss_phy);
-		return ret;
-	}
 
 	/* Populate USB repeater version for TD 9.23 WA */
-	dwc3_msm_get_repeater_ver(mdwc);
+	if (mdwc->hs_phy)
+		dwc3_msm_get_repeater_ver(mdwc);
 
 	return ret;
 }
