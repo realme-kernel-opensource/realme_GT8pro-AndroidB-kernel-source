@@ -57,3 +57,18 @@ def register_modules(registry):
             "drivers/power/reset/reboot-mode.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/power/reset/msm-vm-poweroff",
+        out = "msm-vm-poweroff.ko",
+        config = "CONFIG_POWER_RESET_QCOM_VM",
+        srcs = [
+            # do not sort
+            "drivers/power/reset/msm-vm-poweroff.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_wdt_core",
+            "drivers/soc/qcom/qcom_soc_wdt",
+        ],
+    )
