@@ -97,4 +97,7 @@ vienna_perf_config = {
     "CONFIG_SDW_GPUCC_VIENNA": "m",
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_VIRT_DRIVERS": "y",
+    "CONFIG_NOP_USB_XCEIV": "m",
+    "CONFIG_USB_DWC3_MSM": "m",
+    "CONFIG_USB_QCOM_EMU_PHY": "m",
 }

@@ -13,4 +13,7 @@ vienna_consolidate_config = {
     "CONFIG_PAGE_POISONING": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_RUNTIME_TESTING_MENU": "y",
+    "CONFIG_NOP_USB_XCEIV": "m",
+    "CONFIG_USB_DWC3_MSM": "m",
+    "CONFIG_USB_QCOM_EMU_PHY": "m",
 }

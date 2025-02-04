@@ -53,3 +53,6 @@ kryo_arm64_edac.ko
 llcc-qcom.ko
 mdt_loader.ko
 qcom_ipc_logging.ko
+dwc3-msm.ko
+phy-generic.ko
+phy-qcom-emu.ko
