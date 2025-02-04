@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -246,7 +246,7 @@ void gh_destroy_vcpu(struct gh_vcpu *vcpu)
 
 int gh_destroy_vm(struct gh_vm *vm)
 {
-	int vcpu_id = 0, ret;
+	int vcpu_id, ret;
 
 	if (vm->status.vm_status == GH_RM_VM_STATUS_NO_STATE)
 		goto clean_vm;
@@ -255,11 +255,10 @@ int gh_destroy_vm(struct gh_vm *vm)
 	if (ret)
 		return ret;
 
-	while (vm->created_vcpus && vcpu_id < GH_MAX_VCPUS) {
+	for (vcpu_id = 0; vm->created_vcpus && vcpu_id < GH_MAX_VCPUS; vcpu_id++) {
 		if (!vm->vcpus[vcpu_id])
 			continue;
 		gh_destroy_vcpu(vm->vcpus[vcpu_id]);
-		vcpu_id++;
 	}
 
 	gh_vm_cleanup(vm);
