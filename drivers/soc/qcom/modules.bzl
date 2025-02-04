@@ -689,6 +689,19 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qcom_cpuss_sleep_stats",
+        out = "qcom_cpuss_sleep_stats.ko",
+        config = "CONFIG_QCOM_CPUSS_SLEEP_STATS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_cpuss_sleep_stats.c",
+        ],
+        deps = [
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom_cpu_vendor_hooks",
         out = "qcom_cpu_vendor_hooks.ko",
         config = "CONFIG_QCOM_CPU_VENDOR_HOOKS",
