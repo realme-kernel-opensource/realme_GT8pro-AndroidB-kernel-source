@@ -24,6 +24,7 @@ autogvm_perf_config = {
     "CONFIG_MSM_BOOT_STATS": "m",
     "CONFIG_MSM_QMP": "m",
     "CONFIG_PINCTRL_LEMANS": "m",
+    "CONFIG_PINCTRL_MONACO_AUTO": "m",
     "CONFIG_POWER_RESET_QCOM_VM": "m",
     "CONFIG_VIRTIO_BLK": "m",
     "CONFIG_RENAME_DEVICES": "m",
