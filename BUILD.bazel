@@ -237,6 +237,7 @@ filegroup(
         "//common:kernel/time/tick-sched.h",
         "//common:kernel/time/timekeeping.h",
         "//common:kernel/workqueue_internal.h",
+        "//common:mm/cma.h",
         "//common:mm/internal.h",
         "//common:mm/slab.h",
         "//common:mm/vma.h",
