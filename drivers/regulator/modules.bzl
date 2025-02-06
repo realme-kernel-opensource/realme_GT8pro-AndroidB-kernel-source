@@ -39,9 +39,9 @@ def register_modules(registry):
         config = "CONFIG_REGULATOR_QTI_FIXED_VOLTAGE",
         srcs = [
             # do not sort
-            "drivers/regulator/qti-fixed-regulator.c",
-            "drivers/regulator/fixed.h",
+            "drivers/regulator/qti_fixed_regulator.c",
         ],
+        copts = ["-DQTI_FIXED_REGULATOR"],
         deps = [
             # do not sort
             "drivers/regulator/debug-regulator",
