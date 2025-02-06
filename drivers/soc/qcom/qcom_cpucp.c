@@ -148,8 +148,14 @@ static int qcom_cpucp_mbox_send_data(struct mbox_chan *chan, void *data)
 	struct qcom_cpucp_ipc *cpucp_ipc = container_of(chan->mbox, struct qcom_cpucp_ipc, mbox);
 	unsigned long chan_id = (unsigned long)chan->con_priv;
 	const struct qcom_cpucp_mbox_desc *desc = cpucp_ipc->desc;
-	u32 val = desc->v2_mbox ? *(u32 *)data : CPUCP_SEND_IRQ_VAL;
 	u32 offset = desc->v2_mbox ? (chan_id * desc->chan_stride) : 0;
+	u32 val = CPUCP_SEND_IRQ_VAL;
+
+	if (desc->v2_mbox) {
+		if (data == NULL)
+			return 0;
+		val = *(u32 *)data;
+	}
 
 	writel(val, cpucp_ipc->tx_irq_base + desc->send_reg + offset);
 
