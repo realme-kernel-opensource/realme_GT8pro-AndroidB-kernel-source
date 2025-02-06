@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -31,6 +31,7 @@
 struct qcom_cpucp_ipc {
 	struct mbox_controller mbox;
 	struct mbox_chan *chans;
+	spinlock_t *chans_locks;
 	const struct qcom_cpucp_mbox_desc *desc;
 	void __iomem *tx_irq_base;
 	void __iomem *rx_irq_base;
@@ -66,10 +67,10 @@ static irqreturn_t qcom_cpucp_rx_interrupt(int irq, void *p)
 			       cpucp_ipc->rx_irq_base + desc->clear_reg + (i * desc->chan_stride));
 			/* Make sure reg write is complete before proceeding */
 			mb();
-			spin_lock_irqsave(&cpucp_ipc->chans[i].lock, flags);
+			spin_lock_irqsave(&cpucp_ipc->chans_locks[i], flags);
 			if (!IS_ERR(cpucp_ipc->chans[i].con_priv))
 				mbox_chan_received_data(&cpucp_ipc->chans[i], NULL);
-			spin_unlock_irqrestore(&cpucp_ipc->chans[i].lock, flags);
+			spin_unlock_irqrestore(&cpucp_ipc->chans_locks[i], flags);
 		}
 	}
 
@@ -96,10 +97,10 @@ static irqreturn_t qcom_cpucp_v2_mbox_rx_interrupt(int irq, void *p)
 			writeq(status, cpucp_ipc->rx_irq_base + desc->clear_reg);
 			/* Make sure reg write is complete before proceeding */
 			mb();
-			spin_lock_irqsave(&cpucp_ipc->chans[i].lock, flags);
+			spin_lock_irqsave(&cpucp_ipc->chans_locks[i], flags);
 			if (!IS_ERR(cpucp_ipc->chans[i].con_priv))
 				mbox_chan_received_data(&cpucp_ipc->chans[i], (void *)&data);
-			spin_unlock_irqrestore(&cpucp_ipc->chans[i].lock, flags);
+			spin_unlock_irqrestore(&cpucp_ipc->chans_locks[i], flags);
 			ret = IRQ_HANDLED;
 		}
 	}
@@ -137,9 +138,9 @@ static void qcom_cpucp_mbox_shutdown(struct mbox_chan *chan)
 		writeq(val, cpucp_ipc->rx_irq_base + desc->enable_reg);
 	}
 
-	spin_lock_irqsave(&chan->lock, flags);
+	spin_lock_irqsave(&cpucp_ipc->chans_locks[chan_id], flags);
 	chan->con_priv = ERR_PTR(-EINVAL);
-	spin_unlock_irqrestore(&chan->lock, flags);
+	spin_unlock_irqrestore(&cpucp_ipc->chans_locks[chan_id], flags);
 }
 
 static int qcom_cpucp_mbox_send_data(struct mbox_chan *chan, void *data)
@@ -208,7 +209,7 @@ static int qcom_cpucp_probe(struct platform_device *pdev)
 	struct qcom_cpucp_ipc *cpucp_ipc;
 	struct resource *res;
 	unsigned long flags = IRQF_TRIGGER_HIGH | IRQF_NO_SUSPEND;
-	int ret;
+	int i, ret;
 
 	desc = device_get_match_data(&pdev->dev);
 	if (!desc)
@@ -251,6 +252,13 @@ static int qcom_cpucp_probe(struct platform_device *pdev)
 					sizeof(struct mbox_chan), GFP_KERNEL);
 	if (!cpucp_ipc->chans)
 		return -ENOMEM;
+
+	cpucp_ipc->chans_locks = devm_kzalloc(&pdev->dev, desc->num_chans *
+					sizeof(spinlock_t), GFP_KERNEL);
+	if (!cpucp_ipc->chans_locks)
+		return -ENOMEM;
+	for (i = 0; i < desc->num_chans; i++)
+		spin_lock_init(&cpucp_ipc->chans_locks[i]);
 
 	if (desc->v2_mbox) {
 		writeq(0, cpucp_ipc->rx_irq_base + desc->enable_reg);
