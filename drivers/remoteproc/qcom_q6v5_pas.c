@@ -1203,6 +1203,7 @@ static int adsp_attach(struct rproc *rproc)
 		if (ret) {
 			dev_err(adsp->dev, "Timed out on ping/pong, assuming device crashed\n");
 			rproc->state = RPROC_CRASHED;
+			panic("Panicking, timed out on ping/pong for %s\n", rproc->name);
 		}
 	}
 
