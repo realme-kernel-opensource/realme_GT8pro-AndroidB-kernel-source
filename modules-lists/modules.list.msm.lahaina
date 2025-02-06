@@ -64,6 +64,7 @@ qcom_dma_heaps.ko
 ufshcd-crypto-qti.ko
 qcom_ice.ko
 ufs-qcom.ko
+phy-qcom-ufs-qmp-v4-yupik.ko
 phy-qcom-ufs-qrbtc-sdm845.ko
 phy-qcom-ufs.ko
 sg.ko
