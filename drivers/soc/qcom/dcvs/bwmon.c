@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt) "qcom-bwmon: " fmt
 
@@ -368,8 +368,11 @@ show_attr(idle_length);
 store_attr(idle_length, 0U, 90U);
 static BWMON_ATTR_RW(idle_length);
 show_attr(idle_mbps);
-store_attr(idle_mbps, 0U, 2000U);
+store_attr(idle_mbps, 0U, 10000U);
 static BWMON_ATTR_RW(idle_mbps);
+show_attr(min_mbps);
+store_attr(min_mbps, 0U, 10000U);
+static BWMON_ATTR_RW(min_mbps);
 show_attr(ab_scale);
 store_attr(ab_scale, 0U, 200U);
 static BWMON_ATTR_RW(ab_scale);
@@ -407,6 +410,7 @@ static struct attribute *bwmon_attrs[] = {
 	&hyst_length.attr,
 	&idle_length.attr,
 	&idle_mbps.attr,
+	&min_mbps.attr,
 	&ab_scale.attr,
 	&second_ab_scale.attr,
 	&mbps_zones.attr,
@@ -578,7 +582,6 @@ static unsigned long to_mbps_zone(struct hwmon_node *node, unsigned long mbps)
 	return KHZ_TO_MBPS(node->max_freq, node->hw->dcvs_width);
 }
 
-#define MIN_MBPS	500UL
 #define HIST_PEAK_TOL	75
 static unsigned long get_bw_and_set_irq(struct hwmon_node *node,
 					struct dcvs_freq *freq_mbps)
@@ -660,7 +663,7 @@ static unsigned long get_bw_and_set_irq(struct hwmon_node *node,
 	}
 
 	hyst_lo_tol = (node->hyst_mbps * HIST_PEAK_TOL) / 100;
-	if (meas_mbps > node->hyst_mbps && meas_mbps > MIN_MBPS) {
+	if (meas_mbps > node->hyst_mbps && meas_mbps > node->min_mbps) {
 		hyst_lo_tol = (meas_mbps * HIST_PEAK_TOL) / 100;
 		node->hyst_peak = 0;
 		node->hyst_trig_win = node->hyst_length;
@@ -673,7 +676,7 @@ static unsigned long get_bw_and_set_irq(struct hwmon_node *node,
 	 * Check node->max_mbps to avoid double counting peaks that cause
 	 * early termination of a window.
 	 */
-	if (meas_mbps >= hyst_lo_tol && meas_mbps > MIN_MBPS
+	if (meas_mbps >= hyst_lo_tol && meas_mbps > node->min_mbps
 	    && !node->max_mbps) {
 		node->hyst_peak++;
 		if (node->hyst_peak >= node->hyst_trigger_count) {
@@ -703,11 +706,11 @@ static unsigned long get_bw_and_set_irq(struct hwmon_node *node,
 	}
 
 	/* Stretch the short sample window size, if the traffic is too low */
-	if (meas_mbps < MIN_MBPS) {
-		hw->up_wake_mbps = (max(MIN_MBPS, req_mbps)
+	if (meas_mbps < node->min_mbps) {
+		hw->up_wake_mbps = (max(node->min_mbps, req_mbps)
 					* (100 + node->up_thres)) / 100;
 		hw->down_wake_mbps = 0;
-		thres = mbps_to_bytes(max(MIN_MBPS, req_mbps / 2),
+		thres = mbps_to_bytes(max(node->min_mbps, req_mbps / 2),
 					node->sample_ms);
 	} else {
 		/*
@@ -985,7 +988,7 @@ static int start_monitor(struct bw_hwmon *hwmon)
 	mbps = KHZ_TO_MBPS(node->cur_freqs[0].ib, hwmon->dcvs_width) *
 					node->io_percent / 100;
 	hwmon->up_wake_mbps = mbps;
-	hwmon->down_wake_mbps = MIN_MBPS;
+	hwmon->down_wake_mbps = node->min_mbps;
 	ret = hwmon->start_hwmon(hwmon, mbps);
 	if (ret < 0) {
 		dev_err(hwmon->dev, "Unable to start HW monitor! (%d)\n", ret);
@@ -1034,6 +1037,7 @@ static int configure_hwmon_node(struct bw_hwmon *hwmon)
 	node->hyst_length = 0;
 	node->idle_length = 0;
 	node->idle_mbps = 400;
+	node->min_mbps = 1500;
 	node->ab_scale = 100;
 	node->second_ab_scale = 0;
 	node->mbps_zones[0] = 0;
