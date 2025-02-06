@@ -49,6 +49,7 @@ vienna_perf_config = {
     "CONFIG_QCOM_EUD": "m",
     "CONFIG_QCOM_FORCE_WDOG_BITE_ON_PANIC": "y",
     "CONFIG_QCOM_GDSC_REGULATOR": "m",
+    "CONFIG_QCOM_GLINK_PKT": "m",
     "CONFIG_QCOM_IOMMU_DEBUG": "m",
     "CONFIG_QCOM_IOMMU_UTIL": "m",
     "CONFIG_QCOM_IPCC": "m",
