@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load(
@@ -105,9 +106,21 @@ def define_qc_core_kernel(name, defconfig, defconfig_fragments = None):
             "modules",
         ],
         system_trusted_key = ":verity_cert.pem",
+        kconfig_ext = ":kconfig.qtvm.generated",
     )
 
 def define_qtvm():
+    # create a copy of Kconfig.qtvm for qtvm to use because :kconfig.msm.generated gave errors if
+    # included twice, as would be the case when used by ddk_module.
+    copy_file(
+        name = "kconfig.qtvm.generated",
+        src = "Kconfig.qtvm",
+        out = "kconfig.qtvm/Kconfig.ext",
+    )
     define_qc_core_header_config("qc_core_kernel_header_config")
     define_qc_core_kernel("kernel_aarch64_qtvm", "arch/arm64/configs/generic_vm_defconfig")
-    define_qc_core_kernel("kernel_aarch64_qtvm_debug", "arch/arm64/configs/generic_vm_defconfig", defconfig_fragments = ["arch/arm64/configs/generic_vm_debug.fragment"])
+    define_qc_core_kernel(
+        "kernel_aarch64_qtvm_debug",
+        "arch/arm64/configs/generic_vm_defconfig",
+        defconfig_fragments = ["arch/arm64/configs/generic_vm_debug.fragment"],
+    )
