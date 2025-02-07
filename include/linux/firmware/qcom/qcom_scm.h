@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2010-2015, 2018-2019 The Linux Foundation. All rights reserved.
  * Copyright (C) 2015 Linaro Ltd.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __QCOM_SCM_H
 #define __QCOM_SCM_H
@@ -17,6 +17,8 @@
 #define QCOM_SCM_CPU_PWR_DOWN_L2_OFF	0x1
 #define QCOM_SCM_HDCP_MAX_REQ_CNT	5
 #define QCOM_SCM_CAMERA_MAX_QOS_CNT	20
+#define QCOM_SCM_QUSB2PHY_LVL_SHIFTER_CMD_ID    0x1B
+
 
 struct qcom_scm_camera_qos {
 	u32 offset;
@@ -152,6 +154,7 @@ extern int qcom_scm_spin_cpu(void);
 extern void qcom_scm_set_download_mode(enum qcom_download_mode mode);
 extern int qcom_scm_get_download_mode(unsigned int *mode);
 extern int qcom_scm_config_cpu_errata(void);
+extern void qcom_scm_phy_update_scm_level_shifter(u32 val);
 
 struct qcom_scm_pas_metadata {
 	void *ptr;

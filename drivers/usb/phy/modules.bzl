@@ -62,3 +62,31 @@ def register_modules(registry):
             "drivers/firmware/qcom/qcom-scm",
         ],
     )
+
+    registry.register(
+        name = "drivers/usb/phy/phy-msm-qusb",
+        out = "phy-msm-qusb.ko",
+        config = "CONFIG_MSM_QUSB_PHY",
+        srcs = [
+            # do not sort
+            "drivers/usb/phy/phy-msm-qusb.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/usb/phy/phy-msm-qusb-v2",
+        out = "phy-msm-qusb-v2.ko",
+        config = "CONFIG_MSM_QUSB_PHY",
+        srcs = [
+            # do not sort
+            "drivers/usb/phy/phy-msm-qusb-v2.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
