@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/interrupt.h>
@@ -191,6 +191,7 @@ irqfd_shutdown(struct work_struct *work)
 		eventfd_ctx_remove_wait_queue(irq->ctx, &irq->wait, &isr);
 		eventfd_ctx_put(irq->ctx);
 		fdput(irq->fd);
+		irq->fd = EMPTY_FD;
 		irq->ctx = NULL;
 	}
 	spin_unlock_irqrestore(&vb_dev->lock, iflags);
@@ -237,7 +238,7 @@ static int vb_dev_irqfd(struct virtio_backend_device *vb_dev,
 
 	spin_lock_irqsave(&vb_dev->lock, flags);
 
-	if (fd_file(vb_dev->irq.fd))
+	if (!fd_empty(vb_dev->irq.fd))
 		goto fail;
 
 	f = fdget(ifd->fd);
