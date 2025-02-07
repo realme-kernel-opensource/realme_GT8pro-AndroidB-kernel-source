@@ -396,7 +396,7 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 			mod_freq = wg_policy->tunables->rtg_boost_freq;
 			if (mod_freq > mod_adap_freq && j_wg_cpu->rtg_boost_flag == true) {
 				mod_adap_freq = mod_freq;
-				wg_driv_cpu->cpu = j_wg_cpu->cpu;
+				wg_driv_cpu = j_wg_cpu;
 				wg_driv_cpu->reasons |= CPUFREQ_REASON_RTG_BOOST_BIT;
 				break;
 			}
@@ -410,7 +410,7 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 			mod_freq = wg_policy->tunables->hispeed_freq;
 			if (mod_freq > mod_adap_freq && j_wg_cpu->hispeed_flag == true) {
 				mod_adap_freq = mod_freq;
-				wg_driv_cpu->cpu = j_wg_cpu->cpu;
+				wg_driv_cpu = j_wg_cpu;
 				wg_driv_cpu->reasons |= CPUFREQ_REASON_HISPEED_BIT;
 				break;
 			}
@@ -427,7 +427,7 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 			if (mod_freq > mod_adap_freq &&
 					j_wg_cpu->conservative_pl_flag == true) {
 				mod_adap_freq = mod_freq;
-				wg_driv_cpu->cpu = j_wg_cpu->cpu;
+				wg_driv_cpu = j_wg_cpu;
 				wg_driv_cpu->reasons |= CPUFREQ_REASON_PL_BIT;
 				break;
 			}
