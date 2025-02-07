@@ -1027,6 +1027,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/clk/qcom/virtio_clk_lemans",
+            "drivers/clk/qcom/virtio_clk_monaco",
         ],
     )
 
@@ -1037,6 +1038,17 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/clk/qcom/virtio_clk_lemans.c",
+            "drivers/clk/qcom/virtio_clk_common.h",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/clk/qcom/virtio_clk_monaco",
+        out = "virtio_clk_monaco.ko",
+        config = "CONFIG_VIRTIO_CLK",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/virtio_clk_monaco.c",
             "drivers/clk/qcom/virtio_clk_common.h",
         ],
     )
