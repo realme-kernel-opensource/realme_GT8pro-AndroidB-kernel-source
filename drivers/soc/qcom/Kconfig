@@ -1058,4 +1058,15 @@ config QCOM_FDCVS
 
 	  Users could dynamically select different fdcvs configs according to different
 	  use cases.
+
+config MEM_PROT
+	tristate "DDR Memory protection support"
+	depends on ARCH_QCOM
+	default n
+	help
+	  This is a mem-prot kernel driver. The driver helps facilitate dynamic
+	  enable/disable of memory protection for DDR regions. This feature is also needed
+	  to enable support for dynamic hypervisor heap memory management.
+	  Say N if unsure.
+
 endmenu

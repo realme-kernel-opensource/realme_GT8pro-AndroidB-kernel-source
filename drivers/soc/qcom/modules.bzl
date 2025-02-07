@@ -16,6 +16,21 @@ def register_modules(registry):
     register_hab(registry)
 
     registry.register(
+        name = "drivers/soc/qcom/mem-prot",
+        out = "mem-prot.ko",
+        config = "CONFIG_MEM_PROT",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/mem-prot.c",
+            "include/linux/mem-prot.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/adsp_sleepmon",
         out = "adsp_sleepmon.ko",
         config = "CONFIG_QCOM_ADSP_SLEEPMON",
