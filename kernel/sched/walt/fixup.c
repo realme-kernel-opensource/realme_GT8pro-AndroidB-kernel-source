@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <trace/hooks/cpufreq.h>
@@ -138,9 +138,10 @@ void account_yields(u64 wallclock)
 	u64 delta = wallclock - yield_counting_window_ts;
 	unsigned int threshold_cnt = MAX_YIELD_CNT_GLOBAL_THR_DEFAULT;
 
-	if (smart_freq_info->cluster_active_reason & (BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+	if (sysctl_force_frequent_yielder ||
+	    (smart_freq_info->cluster_active_reason & (BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
 						      BIT(PIPELINE_90FPS_SMART_FREQ) |
-						      BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ)))
+						      BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ))))
 		threshold_cnt = MAX_YIELD_CNT_GLOBAL_THR_PIPELINE;
 
 	/* window boundary crossed */
@@ -244,12 +245,12 @@ static void walt_do_sched_yield_before(void *unused, long *skip)
 			 * pipeline(i.e some load condition, ignore injecting sleep
 			 * for the yielding task.
 			 */
-			in_legacy_uncap =
-				!!(smart_freq_info->cluster_active_reason &
+			in_legacy_uncap = !sysctl_force_frequent_yielder &&
+					!!(smart_freq_info->cluster_active_reason &
 					~(BIT(NO_REASON_SMART_FREQ) |
-					     BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
-					     BIT(PIPELINE_90FPS_SMART_FREQ) |
-					     BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ)));
+					  BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					  BIT(PIPELINE_90FPS_SMART_FREQ) |
+					  BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ)));
 			if (!in_legacy_uncap) {
 				wts->yield_state |= YIELD_INDUCED_SLEEP;
 				total_sleep_cnt++;

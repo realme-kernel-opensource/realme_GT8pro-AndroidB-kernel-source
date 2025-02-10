@@ -126,6 +126,7 @@ unsigned int load_sync_low_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_low_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_high_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_high_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int sysctl_force_frequent_yielder;
 unsigned int sysctl_pipeline_special_task_util_thres;
 unsigned int sysctl_pipeline_non_special_task_util_thres;
 unsigned int sysctl_pipeline_pin_thres_low_pct;
@@ -2022,6 +2023,15 @@ static struct ctl_table walt_table[] = {
 		.proc_handler	= sched_sibling_cluster_handler,
 		.extra1		= SYSCTL_NEG_ONE,
 		.extra2		= &three,
+	},
+	{
+		.procname	= "sched_force_frequent_yielder",
+		.data		= &sysctl_force_frequent_yielder,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 };
 
