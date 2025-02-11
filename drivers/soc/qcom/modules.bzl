@@ -1246,3 +1246,17 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/rename_devices",
+        out = "rename_devices.ko",
+        config = "CONFIG_RENAME_DEVICES",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/rename_devices.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/block/virtio_blk",
+        ],
+    )
