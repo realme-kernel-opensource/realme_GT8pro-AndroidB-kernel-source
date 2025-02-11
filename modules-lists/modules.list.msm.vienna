@@ -56,3 +56,7 @@ qcom_ipc_logging.ko
 dwc3-msm.ko
 phy-generic.ko
 phy-qcom-emu.ko
+usb_f_ccid.ko
+usb_f_cdev.ko
+usb_f_gsi.ko
+usb_f_qdss.ko

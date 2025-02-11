@@ -100,4 +100,12 @@ vienna_perf_config = {
     "CONFIG_NOP_USB_XCEIV": "m",
     "CONFIG_USB_DWC3_MSM": "m",
     "CONFIG_USB_QCOM_EMU_PHY": "m",
+    "CONFIG_USB_CONFIGFS_F_CCID": "m",
+    "CONFIG_USB_CONFIGFS_F_CDEV": "m",
+    "CONFIG_USB_CONFIGFS_F_GSI": "m",
+    "CONFIG_USB_CONFIGFS_F_QDSS": "m",
+    "CONFIG_USB_F_CCID": "m",
+    "CONFIG_USB_F_CDEV": "m",
+    "CONFIG_USB_F_GSI": "m",
+    "CONFIG_USB_F_QDSS": "m",
 }
