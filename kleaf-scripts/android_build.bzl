@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("//build:msm_kernel_extensions.bzl", "define_extras", "get_gki_ramdisk_prebuilt_binary", "get_vendor_ramdisk_binaries")
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
@@ -114,6 +115,12 @@ def define_single_android_build(
                     echo {} > "$@"
                 """.format(board_bc_extras),
             )
+
+    copy_file(
+        name = "{}_system_dlkm_blocklist".format(stem),
+        src = "modules-lists/modules.systemdlkm_blocklist.msm.{}".format(name),
+        out = "{}/system_dlkm.modules.blocklist".format(stem),
+    )
 
     kernel_images(
         name = "{}_images".format(stem),
@@ -249,6 +256,7 @@ def define_single_android_build(
         "{}_merge_msm_uapi_headers".format(stem),
         "{}_dtb_build_config".format(stem),
         "{}_tar_kernel_headers".format(stem),
+        "{}_system_dlkm_blocklist".format(stem),
     ] + [
         ":{}/{}".format(stem, module)
         for module in modules
