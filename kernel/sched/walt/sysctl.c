@@ -628,7 +628,7 @@ unlock_mutex:
 #ifdef CONFIG_PROC_SYSCTL
 static void sched_update_updown_migrate_values(bool up)
 {
-	int i = 0, cpu;
+	int i = 0;
 	struct walt_sched_cluster *cluster;
 
 	for_each_sched_cluster(cluster) {
@@ -636,18 +636,16 @@ static void sched_update_updown_migrate_values(bool up)
 		 * No need to worry about CPUs in last cluster
 		 * if there are more than 2 clusters in the system
 		 */
-		for_each_cpu(cpu, &cluster->cpus) {
-			if (up)
-				sched_capacity_margin_up[cpu] =
-				SCHED_FIXEDPOINT_SCALE * 100 /
-				sysctl_sched_capacity_margin_up_pct[i];
-			else
-				sched_capacity_margin_down[cpu] =
-				SCHED_FIXEDPOINT_SCALE * 100 /
-				sysctl_sched_capacity_margin_dn_pct[i];
-		}
+		if (up)
+			sched_capacity_margin_up[ANDROID_CGROUP_OTHER][cluster->id] =
+			SCHED_FIXEDPOINT_SCALE * 100 /
+			sysctl_sched_capacity_margin_up_pct[i];
+		else
+			sched_capacity_margin_down[ANDROID_CGROUP_OTHER][cluster->id] =
+			SCHED_FIXEDPOINT_SCALE * 100 /
+			sysctl_sched_capacity_margin_dn_pct[i];
 
-		trace_sched_update_updown_migrate_values(i, 0);
+		trace_sched_update_updown_migrate_values(i, ANDROID_CGROUP_OTHER);
 		if (++i >= num_sched_clusters - 1)
 			break;
 	}
@@ -719,7 +717,7 @@ int sched_updown_migrate_handler(const struct ctl_table *table, int write,
 	for (i = 0; i < cap_margin_levels; i++)
 		data[i] = val[i];
 
-	/* update individual cpu thresholds */
+	/* update individual cluster thresholds */
 	sched_update_updown_migrate_values(data == &sysctl_sched_capacity_margin_up_pct[0]);
 
 unlock_mutex:
@@ -733,7 +731,7 @@ int sched_cgroup_updown_migrate_handler(const struct ctl_table *table, int write
 				void __user *buffer, size_t *lenp,
 				loff_t *ppos)
 {
-	int ret, i, cpu;
+	int ret, i;
 	unsigned int *data = (unsigned int *)table->data;
 	int val[NUM_UPDOWN_SETTINGS];
 	struct ctl_table tmp = {
@@ -821,14 +819,11 @@ int sched_cgroup_updown_migrate_handler(const struct ctl_table *table, int write
 	for (i = 0; i < NUM_UPDOWN_SETTINGS; i++)
 		data[i] = val[i];
 
-	/* update individual cpu thresholds */
-
-	for_each_cpu(cpu, &sched_cluster[cluster]->cpus) {
-		sched_capacity_cgroup_margin_up[cgroup][cpu] =
-			SCHED_FIXEDPOINT_SCALE * 100 / val[0];
-		sched_capacity_cgroup_margin_down[cgroup][cpu] =
-			SCHED_FIXEDPOINT_SCALE * 100 / val[1];
-	}
+	/* update individual cluster thresholds */
+	sched_capacity_margin_up[cgroup][cluster] =
+		SCHED_FIXEDPOINT_SCALE * 100 / val[0];
+	sched_capacity_margin_down[cgroup][cluster] =
+		SCHED_FIXEDPOINT_SCALE * 100 / val[1];
 
 	trace_sched_update_updown_migrate_values(cluster, cgroup);
 
@@ -840,7 +835,7 @@ unlock_mutex:
 
 static void sched_update_updown_early_migrate_values(bool up)
 {
-	int i = 0, cpu;
+	int i = 0;
 	struct walt_sched_cluster *cluster;
 
 	for_each_sched_cluster(cluster) {
@@ -848,14 +843,15 @@ static void sched_update_updown_early_migrate_values(bool up)
 		 * No need to worry about CPUs in last cluster
 		 * if there are more than 2 clusters in the system
 		 */
-		for_each_cpu(cpu, &cluster->cpus) {
-			if (up)
-				sched_capacity_margin_early_up[cpu] = sysctl_sched_early_up[i];
-			else
-				sched_capacity_margin_early_down[cpu] = sysctl_sched_early_down[i];
-		}
+		if (up)
+			sched_capacity_margin_up[ANDROID_CGROUP_TOPAPP][cluster->id] =
+				sysctl_sched_early_up[i];
+		else
+			sched_capacity_margin_down[ANDROID_CGROUP_TOPAPP][cluster->id] =
+				sysctl_sched_early_down[i];
 
-		trace_sched_update_updown_early_migrate_values(up, i);
+		trace_sched_update_updown_migrate_values(i, ANDROID_CGROUP_TOPAPP);
+
 		if (++i >= num_sched_clusters - 1)
 			break;
 	}
@@ -925,7 +921,7 @@ int sched_updown_early_migrate_handler(const struct ctl_table *table, int write,
 	for (i = 0; i < cap_margin_levels; i++)
 		data[i] = val[i];
 
-	/* update individual cpu thresholds */
+	/* update individual cluster thresholds */
 	sched_update_updown_early_migrate_values(data == &sysctl_sched_early_up[0]);
 unlock_mutex:
 	mutex_unlock(&sysctl_cgroup_mutex);

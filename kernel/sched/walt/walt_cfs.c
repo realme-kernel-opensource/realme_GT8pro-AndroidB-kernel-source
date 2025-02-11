@@ -57,35 +57,20 @@ void create_util_to_cost(void)
 DECLARE_PER_CPU(unsigned long, gov_last_util);
 
 /* Migration margins */
-unsigned int sched_capacity_margin_up[WALT_NR_CPUS] = {
-			[0 ... WALT_NR_CPUS-1] = 1078 /* ~5% margin */
-};
-unsigned int sched_capacity_margin_down[WALT_NR_CPUS] = {
-			[0 ... WALT_NR_CPUS-1] = 1205 /* ~15% margin */
-};
-
-unsigned int sched_capacity_cgroup_margin_up[ANDROID_CGROUPS][WALT_NR_CPUS] = {
+unsigned int sched_capacity_margin_up[ANDROID_CGROUPS][MAX_CLUSTERS] = {
 			/* ~5% margin */
-			{[0 ... WALT_NR_CPUS-1] = 1078},
-			{[0 ... WALT_NR_CPUS-1] = 1078},
-			{[0 ... WALT_NR_CPUS-1] = 1078},
-			{[0 ... WALT_NR_CPUS-1] = 1078}
+			{[0 ... MAX_CLUSTERS-1] = 1078},
+			{[0 ... MAX_CLUSTERS-1] = 1078},
+			{[0 ... MAX_CLUSTERS-1] = 1078},
+			{[0 ... MAX_CLUSTERS-1] = 1078}
 
 };
-unsigned int sched_capacity_cgroup_margin_down[ANDROID_CGROUPS][WALT_NR_CPUS] = {
+unsigned int sched_capacity_margin_down[ANDROID_CGROUPS][MAX_CLUSTERS] = {
 			/* ~15% margin */
-			{[0 ... WALT_NR_CPUS-1] = 1205},
-			{[0 ... WALT_NR_CPUS-1] = 1205},
-			{[0 ... WALT_NR_CPUS-1] = 1205},
-			{[0 ... WALT_NR_CPUS-1] = 1205}
-};
-
-/* Migration margins for topapp */
-unsigned int sched_capacity_margin_early_up[WALT_NR_CPUS] = {
-			[0 ... WALT_NR_CPUS-1] = 1078 /* ~5% margin */
-};
-unsigned int sched_capacity_margin_early_down[WALT_NR_CPUS] = {
-			[0 ... WALT_NR_CPUS-1] = 1205 /* ~15% margin */
+			{[0 ... MAX_CLUSTERS-1] = 1205},
+			{[0 ... MAX_CLUSTERS-1] = 1205},
+			{[0 ... MAX_CLUSTERS-1] = 1205},
+			{[0 ... MAX_CLUSTERS-1] = 1205}
 };
 
 static inline bool

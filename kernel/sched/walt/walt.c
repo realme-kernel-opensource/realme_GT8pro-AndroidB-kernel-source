@@ -297,11 +297,9 @@ void walt_rq_dump(int cpu)
 				wrq->load_subs[i].new_subs);
 	}
 	walt_task_dump(tsk);
-	SCHED_PRINT(sched_capacity_margin_up[cpu]);
-	SCHED_PRINT(sched_capacity_margin_down[cpu]);
 	for (i = 0; i < ANDROID_CGROUPS; i++) {
-		SCHED_PRINT(sched_capacity_cgroup_margin_up[i][cpu]);
-		SCHED_PRINT(sched_capacity_cgroup_margin_down[i][cpu]);
+		SCHED_PRINT(sched_capacity_margin_up[i][cpu_cluster(cpu)->id]);
+		SCHED_PRINT(sched_capacity_margin_down[i][cpu_cluster(cpu)->id]);
 	}
 }
 
