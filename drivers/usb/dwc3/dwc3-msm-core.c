@@ -529,6 +529,7 @@ struct dwc3_msm {
 	struct usb_redriver	*redriver;
 	/* Generic USB Phys */
 	struct phy		*usb2_phy, *usb3_phy;
+	unsigned int		phy_flags;
 
 	const struct dbm_reg_data *dbm_reg_table;
 	int			dbm_num_eps;
@@ -3743,24 +3744,31 @@ static void dwc3_set_phy_speed_flags(struct dwc3_msm *mdwc)
 	dwc = platform_get_drvdata(mdwc->dwc3);
 
 	dwc3_msm_clear_usbphy_flags(mdwc->hs_phy, (PHY_HSFS_MODE | PHY_LS_MODE));
+	mdwc->phy_flags &= ~(PHY_HSFS_MODE | PHY_LS_MODE);
 	if (mdwc->in_host_mode) {
 		reg = dwc3_msm_read_reg(mdwc->base, USB3_HCSPARAMS1);
 		num_ports = HCS_MAX_PORTS(reg);
 		for (i = 0; i < num_ports; i++) {
 			reg = dwc3_msm_read_reg(mdwc->base, USB3_PORTSC(mdwc, i));
 			if (reg & PORT_CONNECT) {
-				if (DEV_HIGHSPEED(reg) || DEV_FULLSPEED(reg))
+				if (DEV_HIGHSPEED(reg) || DEV_FULLSPEED(reg)) {
 					dwc3_msm_set_usbphy_flags(mdwc->hs_phy, PHY_HSFS_MODE);
-				else if (DEV_LOWSPEED(reg))
+					mdwc->phy_flags |= PHY_HSFS_MODE;
+				} else if (DEV_LOWSPEED(reg)) {
 					dwc3_msm_set_usbphy_flags(mdwc->hs_phy, PHY_LS_MODE);
+					mdwc->phy_flags |= PHY_LS_MODE;
+				}
 			}
 		}
 	} else if (mdwc->drd_state == DRD_STATE_PERIPHERAL_SUSPEND) {
 		if (dwc->gadget->speed == USB_SPEED_HIGH ||
-			dwc->gadget->speed == USB_SPEED_FULL)
+			dwc->gadget->speed == USB_SPEED_FULL) {
 			dwc3_msm_set_usbphy_flags(mdwc->hs_phy, PHY_HSFS_MODE);
-		else if (dwc->gadget->speed == USB_SPEED_LOW)
+			mdwc->phy_flags |= PHY_HSFS_MODE;
+		} else if (dwc->gadget->speed == USB_SPEED_LOW) {
 			dwc3_msm_set_usbphy_flags(mdwc->hs_phy, PHY_LS_MODE);
+			mdwc->phy_flags |= PHY_LS_MODE;
+		}
 	}
 }
 
@@ -3853,7 +3861,7 @@ static void enable_usb_pdc_interrupt(struct dwc3_msm *mdwc, bool enable)
 	if (!enable)
 		goto disable_usb_irq;
 
-	if (dwc3_msm_check_usbphy_flags(mdwc->hs_phy, PHY_LS_MODE)) {
+	if (mdwc->phy_flags & PHY_LS_MODE) {
 		/*
 		 * According to eUSB2 spec, eDP line will be pulled high for remote
 		 * wakeup scenario for LS connected device in host mode. On disconnect
@@ -3869,7 +3877,7 @@ static void enable_usb_pdc_interrupt(struct dwc3_msm *mdwc, bool enable)
 				&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_FALLING, enable);
 
-	} else if (dwc3_msm_check_usbphy_flags(mdwc->hs_phy, PHY_HSFS_MODE)) {
+	} else if (mdwc->phy_flags & PHY_HSFS_MODE) {
 		/*
 		 * According to eUSB2 spec, eDM line will be pulled high for remote
 		 * wakeup scenario for HS/FS connected device in host mode. On disconnect
@@ -4192,7 +4200,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 	 *	2. A Highspeed device is connected but not a Superspeed device
 	 */
 	no_active_ss = (!mdwc->in_host_mode) || (mdwc->in_host_mode &&
-		((dwc3_msm_check_usbphy_flags(mdwc->hs_phy, PHY_HSFS_MODE | PHY_LS_MODE)) &&
+		((mdwc->phy_flags & (PHY_HSFS_MODE | PHY_LS_MODE)) &&
 			!dwc3_msm_is_superspeed(mdwc)));
 	can_suspend_ssphy = dwc3_msm_get_max_speed(mdwc) >= USB_SPEED_SUPER &&
 			(!mdwc->use_pwr_event_for_wakeup || no_active_ss);
@@ -4392,6 +4400,7 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	}
 
 	dwc3_msm_clear_usbphy_flags(mdwc->hs_phy, (PHY_HSFS_MODE | PHY_LS_MODE));
+	mdwc->phy_flags &= ~(PHY_HSFS_MODE | PHY_LS_MODE);
 	/* Resume HS PHY */
 	usb_phy_set_suspend(mdwc->hs_phy, 0);
 
