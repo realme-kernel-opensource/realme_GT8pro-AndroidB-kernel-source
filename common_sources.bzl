@@ -12,6 +12,8 @@ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
 COPY_FILES = [
     "drivers/leds/trigger/ledtrig-pattern.c",
+    "drivers/char/virtio_console.c",
+    "drivers/virtio/virtio_input.c",
 ]
 
 def define_common_upstream_files():

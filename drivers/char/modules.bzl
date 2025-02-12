@@ -12,3 +12,17 @@ def register_modules(registry):
             "drivers/soc/qcom/smem",
         ],
     )
+
+    registry.register(
+        name = "drivers/char/virtio_console",
+        out = "virtio_console.ko",
+        config = "CONFIG_VIRTIO_CONSOLE",
+        srcs = [
+            # do not sort
+            "drivers/char/virtio_console.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/virtio/virtio_mmio",
+        ],
+    )
