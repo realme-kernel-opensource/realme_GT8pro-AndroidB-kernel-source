@@ -136,6 +136,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_AOSS_QMP": "m",
     "CONFIG_QCOM_BAM_DMA": "m",
     "CONFIG_QCOM_BWMON": "m",
+    "CONFIG_QCOM_CACHE_ALLOCATION": "m",
     "CONFIG_QCOM_CDSP_RM": "m",
     "CONFIG_QCOM_CLK_RPMH": "m",
     "CONFIG_QCOM_COMMAND_DB": "m",
