@@ -1515,3 +1515,5 @@ int md_minidump_memory_init(void)
 
 	return error;
 }
+
+MODULE_IMPORT_NS(DMA_BUF);
