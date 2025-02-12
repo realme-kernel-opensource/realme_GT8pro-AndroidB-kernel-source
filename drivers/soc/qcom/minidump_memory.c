@@ -823,9 +823,7 @@ static bool is_slub_debug_enabled(void)
 	return false;
 }
 
-static int dump_tracking(const struct kmem_cache *s,
-		const void *object,
-		const struct track *t, void *private)
+static int dump_tracking(struct kmem_cache *s, void *object, void *private)
 {
 	int ret = 0;
 	u32 nr_entries;
@@ -833,9 +831,20 @@ static int dump_tracking(const struct kmem_cache *s,
 	char *buf;
 	size_t size;
 	unsigned long *entries;
+	struct track *t;
+	depot_stack_handle_t handle;
 
-	if (!t->addr || !t->handle)
-		return 0;
+	t = get_track(s, object, TRACK_ALLOC);
+#ifdef CONFIG_STACKDEPOT
+	handle = READ_ONCE(t->handle);
+#else
+	handle = 0;
+#endif
+
+	if (!t->addr || !handle) {
+		pr_err("Did not get valid tracking data for slabowner\n");
+		return -EINVAL;
+	}
 
 	priv_buf = (struct priv_buf *)private;
 	buf = priv_buf->buf + priv_buf->offset;
@@ -844,18 +853,18 @@ static int dump_tracking(const struct kmem_cache *s,
 	{
 		int i;
 
-		nr_entries = stack_depot_fetch(t->handle, &entries);
+		nr_entries = stack_depot_fetch(handle, &entries);
 
 		if ((buf > (md_slabowner_dump_addr +
 			md_slabowner_dump_size - slab_owner_handles_size))
-			|| !found_stack(t->handle,
+			|| !found_stack(handle,
 				md_slabowner_dump_addr,
 				md_slabowner_dump_size,
 				slab_owner_handles_size,
 				&nr_slab_owner_handles)) {
 
 			ret = scnprintf(buf, size, "%p %u %u\n",
-				object, t->handle, nr_entries);
+				object, handle, nr_entries);
 			if (ret == size - 1)
 				goto err;
 
@@ -867,25 +876,27 @@ static int dump_tracking(const struct kmem_cache *s,
 			}
 		} else {
 			ret = scnprintf(buf, size, "%p %u %u\n",
-					object, t->handle, 0);
+					object, handle, 0);
 		}
 	}
 #else
 	ret = scnprintf(buf, size, "%p %p\n", object, (void *)t->addr);
 
 #endif
+	priv_buf->offset += ret;
+	return 0;
 err:
 	priv_buf->offset += ret;
-	return ret;
+	if (priv_buf->offset >= priv_buf->size - 1)
+		pr_err("slabowner minidump region exhausted\n");
+
+	return -EINVAL;
 }
 
 static void md_dump_slabowner(char *m, size_t dump_size)
 {
 	struct kmem_cache *s;
-	int node;
 	struct priv_buf buf;
-	struct kmem_cache_node *n;
-	ssize_t ret;
 	int i;
 
 	buf.buf = m;
@@ -902,34 +913,10 @@ static void md_dump_slabowner(char *m, size_t dump_size)
 					"%s\n", s->name);
 		if (buf.offset == buf.size - 1)
 			return;
-		for_each_kmem_cache_node(s, node, n) {
-			unsigned long flags;
-			struct slab *slab;
 
-			if (!atomic_long_read(&n->nr_slabs))
-				continue;
+		if (IS_ENABLED(CONFIG_SLUB_DEBUG_ON) || (s->flags & SLAB_STORE_USER))
+			get_each_kmemcache_object(s, dump_tracking, &buf);
 
-			spin_lock_irqsave(&n->list_lock, flags);
-			list_for_each_entry(slab, &n->partial, slab_list) {
-				ret  = get_each_object_track(s, slab, TRACK_ALLOC,
-						dump_tracking, &buf);
-				if (buf.offset == buf.size - 1) {
-					spin_unlock_irqrestore(&n->list_lock, flags);
-					pr_err("slabowner minidump region exhausted\n");
-					return;
-				}
-			}
-			list_for_each_entry(slab, &n->full, slab_list) {
-				ret  = get_each_object_track(s, slab, TRACK_ALLOC,
-						dump_tracking, &buf);
-				if (buf.offset == buf.size - 1) {
-					spin_unlock_irqrestore(&n->list_lock, flags);
-					pr_err("slabowner minidump region exhausted\n");
-					return;
-				}
-			}
-			spin_unlock_irqrestore(&n->list_lock, flags);
-		}
 		buf.offset += scnprintf(buf.buf + buf.offset, buf.size - buf.offset, "\n");
 		if (buf.offset == buf.size - 1)
 			return;
