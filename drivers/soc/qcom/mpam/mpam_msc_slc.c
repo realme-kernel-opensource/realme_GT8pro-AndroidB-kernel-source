@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "qcom_mpam_slc: " fmt
@@ -18,22 +18,7 @@
 #include <soc/qcom/mpam_msc.h>
 #include <soc/qcom/mpam_slc.h>
 
-#define QCOM_SLC_MPAM_SCMI_STR	0x534c434d50414d /* SLCMPAM */
-#define SCMI_GET_PARAM_LEN	32
-
-enum mpam_slc_set_param_ids {
-	PARAM_SET_CACHE_PARTITION_MSC = 1,
-	PARAM_RESET_CACHE_PARTITION_MSC = 2,
-	PARAM_SET_CONFIG_MON_MSC = 3,
-	PARAM_SET_CONFIG_SLC_MPAM_START_STOP = 4,
-};
-
-enum mpam_slc_get_param_ids {
-	PARAM_GET_CLIENT_INFO_MSC = 1,
-	PARAM_GET_CACHE_CAPABILITY_MSC = 2,
-	PARAM_GET_CACHE_PARTITION_MSC = 3,
-};
-
+#define SCMI_GET_PARAM_LEN	64
 static uint16_t slc_client_id[] = {
 	APPS,
 	GPU,
@@ -87,16 +72,16 @@ static struct qcom_mpam_msc *slc_capability_check(struct device *dev, struct msc
 	client_idx = query->client_id;
 	partid_idx = query->part_id;
 
-	if (client_idx >= SLC_CLIENT_MAX) {
-		dev_err(dev, "Invalid Client ID %d\n", client_idx);
-		return NULL;
-	}
-
 	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
 	if (qcom_msc == NULL)
 		return NULL;
 
 	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
+	if (client_idx >= slc_capability->num_clients) {
+		dev_err(dev, "Invalid Client ID %d\n", client_idx);
+		return NULL;
+	}
+
 	slc_client_cap = &(slc_capability->slc_client_cap[client_idx]);
 
 	if (slc_client_cap->enabled == false) {
@@ -185,7 +170,7 @@ static int slc_get_cache_partition(struct device *dev, void *msc_partid, void *m
 {
 	struct qcom_mpam_msc *qcom_msc;
 	struct msc_query *query;
-	struct qcom_slc_capability *qcom_slc_capability;
+	struct qcom_slc_capability *slc_capability;
 	struct slc_client_capability *slc_client_cap;
 	struct qcom_slc_gear_val *gear_config;
 
@@ -195,8 +180,8 @@ static int slc_get_cache_partition(struct device *dev, void *msc_partid, void *m
 		return -EINVAL;
 
 	gear_config = (struct qcom_slc_gear_val *)msc_partconfig;
-	qcom_slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
-	slc_client_cap = &qcom_slc_capability->slc_client_cap[query->client_id];
+	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
+	slc_client_cap = &slc_capability->slc_client_cap[query->client_id];
 	if (slc_client_cap->enabled == false)
 		return -EINVAL;
 
@@ -209,7 +194,7 @@ static int slc_get_cache_partition_capability(struct device *dev, void *msc_part
 {
 	struct qcom_mpam_msc *qcom_msc;
 	struct msc_query *query;
-	struct qcom_slc_capability *qcom_slc_capability;
+	struct qcom_slc_capability *slc_capability;
 	struct slc_partid_capability *slc_partid_capability;
 	struct slc_client_capability *slc_client_cap;
 
@@ -219,8 +204,8 @@ static int slc_get_cache_partition_capability(struct device *dev, void *msc_part
 		return -EINVAL;
 
 	slc_partid_capability = (struct slc_partid_capability *) msc_partconfig;
-	qcom_slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
-	slc_client_cap = &qcom_slc_capability->slc_client_cap[query->client_id];
+	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
+	slc_client_cap = &slc_capability->slc_client_cap[query->client_id];
 	if (slc_client_cap->enabled == false)
 		return -EINVAL;
 
@@ -460,22 +445,23 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 	struct msc_query query;
 	struct qcom_mpam_msc *qcom_msc;
 	struct slc_client_capability *slc_client_cap;
-	struct qcom_slc_capability *qcom_slc_capability;
+	struct qcom_slc_capability *slc_capability;
 
 	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
 	if (qcom_msc->qcom_msc_id.qcom_msc_type != SLC)
 		return -EINVAL;
 
-	qcom_slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
+	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
 	query.qcom_msc_id.qcom_msc_type = qcom_msc->qcom_msc_id.qcom_msc_type;
 	query.qcom_msc_id.qcom_msc_class = qcom_msc->qcom_msc_id.qcom_msc_class;
 	query.qcom_msc_id.idx = qcom_msc->qcom_msc_id.idx;
-	for (client_idx = 0; client_idx < qcom_slc_capability->num_clients; client_idx++) {
-		slc_client_cap = &(qcom_slc_capability->slc_client_cap[client_idx]);
+	for (client_idx = 0; client_idx < slc_capability->num_clients; client_idx++) {
+		slc_client_cap = &(slc_capability->slc_client_cap[client_idx]);
 		query.client_id = slc_client_id[client_idx];
 		slc_client_cap->client_info.client_id = slc_client_id[client_idx];
 		ret = of_property_read_string_index(node, "qcom,slc-clients", client_idx,
 							&slc_client_cap->client_name);
+
 		slc_client_cap->enabled = false;
 		if (slc_client_query(dev, &query, &(slc_client_cap->client_info)))
 			continue;
