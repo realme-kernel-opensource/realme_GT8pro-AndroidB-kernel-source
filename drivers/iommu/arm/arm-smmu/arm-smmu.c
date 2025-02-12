@@ -2951,26 +2951,28 @@ static void arm_smmu_device_reset(struct arm_smmu_device *smmu)
 {
 	int i;
 	u32 reg;
+	const char *prop;
 
 	/* clear global FSR */
 	reg = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_sGFSR);
 	arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_sGFSR, reg);
-
+	if (of_property_read_string(smmu->dev->of_node,
+					"qcom,reset-stream-mapping-groups", &prop)) {
 	/*
 	 * Reset stream mapping groups: Initial values mark all SMRn as
 	 * invalid and all S2CRn as bypass unless overridden.
 	 */
-	mutex_lock(&smmu->stream_map_mutex);
-	for (i = 0; i < smmu->num_mapping_groups; ++i)
-		arm_smmu_write_sme(smmu, i);
-	mutex_unlock(&smmu->stream_map_mutex);
+		mutex_lock(&smmu->stream_map_mutex);
+		for (i = 0; i < smmu->num_mapping_groups; ++i)
+			arm_smmu_write_sme(smmu, i);
+		mutex_unlock(&smmu->stream_map_mutex);
 
 	/* Make sure all context banks are disabled and clear CB_FSR  */
-	for (i = 0; i < smmu->num_context_banks; ++i) {
-		arm_smmu_write_context_bank(smmu, i);
-		arm_smmu_cb_write(smmu, i, ARM_SMMU_CB_FSR, ARM_SMMU_CB_FSR_FAULT);
+		for (i = 0; i < smmu->num_context_banks; ++i) {
+			arm_smmu_write_context_bank(smmu, i);
+			arm_smmu_cb_write(smmu, i, ARM_SMMU_CB_FSR, ARM_SMMU_CB_FSR_FAULT);
+		}
 	}
-
 	/* Invalidate the TLB, just in case */
 	arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_TLBIALLH, QCOM_DUMMY_VAL);
 	arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_TLBIALLNSNH, QCOM_DUMMY_VAL);
