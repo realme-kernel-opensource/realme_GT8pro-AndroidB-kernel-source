@@ -653,7 +653,7 @@ static int qcom_ddump_alive_log_probe(struct qcom_dmesg_dumper *qdd)
 			return -ENOMEM;
 
 		qdd->gh_panic_nb.notifier_call = qcom_ddump_gh_panic_handler;
-		qdd->gh_panic_nb.priority = INT_MAX;
+		qdd->vm_nb.priority = INT_MAX - 1;
 		ret = gh_panic_notifier_register(&qdd->gh_panic_nb);
 		if (ret)
 			goto err_panic_notifier_register;

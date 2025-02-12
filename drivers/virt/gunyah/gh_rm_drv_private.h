@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __GH_RM_DRV_PRIVATE_H
@@ -43,6 +43,8 @@ struct gh_vm_property {
 	char *uri;
 	char *name;
 	char *sign_auth;
+	struct completion setup_complete;
+	struct completion cleanup_complete;
 };
 
 /* RPC Header versions */
@@ -570,5 +572,10 @@ struct gh_vm_get_hyp_res_resp_entry *
 gh_rm_vm_get_hyp_res(gh_vmid_t vmid, u32 *out_n_entries);
 int gh_msgq_populate_cap_info(int label, u64 cap_id, int direction, int irq);
 int gh_rm_setup_feature_scm_assign(void);
+void gh_reset_vm_prop_table_entry(gh_vmid_t vmid);
+void gh_wait_for_vm_setup(enum gh_vm_names vm_name);
+void gh_complete_vm_setup(enum gh_vm_names vm_name);
+void gh_wait_for_vm_cleanup(enum gh_vm_names vm_name);
+void gh_complete_vm_cleanup(enum gh_vm_names vm_name);
 
 #endif /* __GH_RM_DRV_PRIVATE_H */

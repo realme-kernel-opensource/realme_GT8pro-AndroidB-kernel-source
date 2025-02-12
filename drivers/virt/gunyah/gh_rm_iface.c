@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -70,6 +70,8 @@ void gh_init_vm_prop_table(void)
 		gh_vm_table[vm_name].uri = NULL;
 		gh_vm_table[vm_name].name = NULL;
 		gh_vm_table[vm_name].sign_auth = NULL;
+		init_completion(&gh_vm_table[vm_name].setup_complete);
+		init_completion(&gh_vm_table[vm_name].cleanup_complete);
 	}
 
 	spin_unlock(&gh_vm_table_lock);
@@ -122,11 +124,33 @@ void gh_reset_vm_prop_table_entry(gh_vmid_t vmid)
 			gh_vm_table[vm_name].guid = NULL;
 			gh_vm_table[vm_name].name = NULL;
 			gh_vm_table[vm_name].sign_auth = NULL;
+			reinit_completion(&gh_vm_table[vm_name].setup_complete);
+			reinit_completion(&gh_vm_table[vm_name].cleanup_complete);
 			break;
 		}
 	}
 
 	spin_unlock(&gh_vm_table_lock);
+}
+
+void gh_wait_for_vm_setup(enum gh_vm_names vm_name)
+{
+	wait_for_completion(&gh_vm_table[vm_name].setup_complete);
+}
+
+void gh_complete_vm_setup(enum gh_vm_names vm_name)
+{
+	complete(&gh_vm_table[vm_name].setup_complete);
+}
+
+void gh_wait_for_vm_cleanup(enum gh_vm_names vm_name)
+{
+	wait_for_completion(&gh_vm_table[vm_name].cleanup_complete);
+}
+
+void gh_complete_vm_cleanup(enum gh_vm_names vm_name)
+{
+	complete(&gh_vm_table[vm_name].cleanup_complete);
 }
 
 /**
