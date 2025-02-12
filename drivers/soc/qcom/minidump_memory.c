@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/page_ext.h>
 #include <linux/page_owner.h>
+#include <linux/page-flags.h>
 #include <linux/debugfs.h>
 #include <linux/ctype.h>
 #include <soc/qcom/minidump.h>
@@ -429,7 +430,10 @@ static bool check_unaccounted(char *buf, ssize_t count,
 	struct accounted_call_site *call_site;
 
 	if ((page->flags &
-		((1UL << PG_lru) | (1UL << PG_slab) | (1UL << PG_swapbacked))))
+		((1UL << PG_lru) | (1UL << PG_swapbacked))))
+		return false;
+
+	if (PageSlab(page))
 		return false;
 
 	nr_entries = stack_depot_fetch(handle, &entries);
@@ -472,7 +476,7 @@ static ssize_t dump_page_owner_md(char *buf, size_t count,
 					goto dump;
 				break;
 			case 0x2:
-				if (page->flags & (1UL << PG_slab))
+				if (PageSlab(page))
 					goto dump;
 				break;
 			case 0x4:
