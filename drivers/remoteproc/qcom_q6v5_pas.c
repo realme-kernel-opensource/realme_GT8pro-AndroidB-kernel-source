@@ -5,7 +5,7 @@
  * Copyright (C) 2016 Linaro Ltd
  * Copyright (C) 2014 Sony Mobile Communications AB
  * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -1204,6 +1204,7 @@ static int adsp_attach(struct rproc *rproc)
 			dev_err(adsp->dev, "Timed out on ping/pong, assuming device crashed\n");
 			rproc->state = RPROC_CRASHED;
 		}
+		adsp->q6v5.running = true;
 	}
 
 	return ret;
