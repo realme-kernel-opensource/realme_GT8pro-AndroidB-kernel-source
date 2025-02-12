@@ -233,48 +233,18 @@ static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 			      struct sockaddr_qrtr *to, unsigned int flags);
 static struct qrtr_sock *qrtr_port_lookup(int port);
 static void qrtr_port_put(struct qrtr_sock *ipc);
+static int qrtr_parse_header(struct qrtr_cb *cb, size_t *hdrlen, unsigned int *size,
+			     const void *data);
 
 void qrtr_print_wakeup_reason(const void *data)
 {
-	const struct qrtr_hdr_v1 *v1;
-	const struct qrtr_hdr_v2 *v2;
 	struct qrtr_cb cb;
 	unsigned int size;
-	unsigned int ver;
 	int service_id;
 	size_t hdrlen;
 	u64 preview = 0;
 
-	ver = *(u8 *)data;
-	switch (ver) {
-	case QRTR_PROTO_VER_1:
-		v1 = data;
-		hdrlen = sizeof(*v1);
-		cb.src_node = le32_to_cpu(v1->src_node_id);
-		cb.src_port = le32_to_cpu(v1->src_port_id);
-		cb.dst_node = le32_to_cpu(v1->dst_node_id);
-		cb.dst_port = le32_to_cpu(v1->dst_port_id);
-
-		size = le32_to_cpu(v1->size);
-		break;
-	case QRTR_PROTO_VER_2:
-		v2 = data;
-		hdrlen = sizeof(*v2) + v2->optlen;
-		cb.src_node = le16_to_cpu(v2->src_node_id);
-		cb.src_port = le16_to_cpu(v2->src_port_id);
-		cb.dst_node = le16_to_cpu(v2->dst_node_id);
-		cb.dst_port = le16_to_cpu(v2->dst_port_id);
-
-		if (cb.src_port == (u16)QRTR_PORT_CTRL)
-			cb.src_port = QRTR_PORT_CTRL;
-		if (cb.dst_port == (u16)QRTR_PORT_CTRL)
-			cb.dst_port = QRTR_PORT_CTRL;
-
-		size = le32_to_cpu(v2->size);
-		break;
-	default:
-		return;
-	}
+	qrtr_parse_header(&cb, &hdrlen, &size, data);
 
 	service_id = qrtr_get_service_id(cb.src_node, cb.src_port);
 	if (service_id < 0)
@@ -291,6 +261,67 @@ void qrtr_print_wakeup_reason(const void *data)
 		service_id);
 }
 EXPORT_SYMBOL_GPL(qrtr_print_wakeup_reason);
+
+static int qrtr_parse_header(struct qrtr_cb *cb, size_t *hdrlen, unsigned int *size,
+			     const void *data)
+{
+	const struct qrtr_hdr_v1 *v1;
+	const struct qrtr_hdr_v2 *v2;
+	unsigned int ver;
+
+	ver = *(u8 *)data;
+	switch (ver) {
+	case QRTR_PROTO_VER_1:
+		v1 = data;
+		*hdrlen = sizeof(*v1);
+		cb->src_node = le32_to_cpu(v1->src_node_id);
+		cb->src_port = le32_to_cpu(v1->src_port_id);
+		cb->dst_node = le32_to_cpu(v1->dst_node_id);
+		cb->dst_port = le32_to_cpu(v1->dst_port_id);
+
+		*size = le32_to_cpu(v1->size);
+		break;
+	case QRTR_PROTO_VER_2:
+		v2 = data;
+		*hdrlen = sizeof(*v2) + v2->optlen;
+		cb->src_node = le16_to_cpu(v2->src_node_id);
+		cb->src_port = le16_to_cpu(v2->src_port_id);
+		cb->dst_node = le16_to_cpu(v2->dst_node_id);
+		cb->dst_port = le16_to_cpu(v2->dst_port_id);
+
+		if (cb->src_port == (u16)QRTR_PORT_CTRL)
+			cb->src_port = QRTR_PORT_CTRL;
+		if (cb->dst_port == (u16)QRTR_PORT_CTRL)
+			cb->dst_port = QRTR_PORT_CTRL;
+
+		*size = le32_to_cpu(v2->size);
+		break;
+	default:
+		return -1;
+	}
+
+	return 0;
+}
+
+static void qrtr_print_skb_failure_reason(size_t skb_len, const void *data)
+{
+	struct qrtr_cb cb;
+	unsigned int size;
+	int service_id;
+	size_t hdrlen;
+
+	qrtr_parse_header(&cb, &hdrlen, &size, data);
+
+	service_id = qrtr_get_service_id(cb.src_node, cb.src_port);
+	if (service_id < 0)
+		service_id = qrtr_get_service_id(cb.dst_node, cb.dst_port);
+
+	pr_err("%s: skb_len[%zu], src[0x%x:0x%x] dst[0x%x:0x%x] service[0x%x]\n",
+	       __func__, skb_len,
+	       cb.src_node, cb.src_port,
+	       cb.dst_node, cb.dst_port,
+	       service_id);
+}
 
 static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 			    struct sk_buff *skb)
@@ -982,20 +1013,22 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 	struct qrtr_sock *ipc;
 	struct sk_buff *skb;
 	struct qrtr_cb *cb;
-	size_t size;
 	unsigned int ver;
 	size_t hdrlen;
+	size_t size;
 	int errcode;
 	int svc_id;
+	gfp_t flag;
 
 	if (len == 0 || len & 3)
 		return -EINVAL;
 
-	skb = alloc_skb_with_frags(sizeof(*v1), len, 0, &errcode, GFP_ATOMIC |  __GFP_NOWARN);
+	flag = (ep->in_thread ? GFP_KERNEL : GFP_ATOMIC) | __GFP_NOWARN;
+	skb = alloc_skb_with_frags(sizeof(*v1), len, 0, &errcode, flag);
 	if (!skb) {
 		skb = qrtr_get_backup(len);
 		if (!skb) {
-			pr_err("qrtr: Unable to get skb with len:%lu\n", len);
+			qrtr_print_skb_failure_reason(len, data);
 			return -ENOMEM;
 		}
 	}
@@ -2266,6 +2299,7 @@ static int qrtr_create(struct net *net, struct socket *sock,
 		return -ENOMEM;
 
 	sock_set_flag(sk, SOCK_ZAPPED);
+	sk->sk_allocation |= __GFP_RETRY_MAYFAIL;
 
 	sock_init_data(sock, sk);
 	sock->ops = &qrtr_proto_ops;
