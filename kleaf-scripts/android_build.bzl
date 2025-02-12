@@ -166,7 +166,7 @@ def define_single_android_build(
         name = "{}_super_image".format(stem),
         system_dlkm_image = ":{}_system_dlkm_image_file".format(stem),
         vendor_dlkm_image = ":{}_vendor_dlkm_image_file".format(stem),
-        super_img_size = 0x11000000,
+        super_img_size = 0x22000000,
     )
 
     unsparsed_image(
