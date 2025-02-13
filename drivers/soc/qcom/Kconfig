@@ -933,4 +933,13 @@ config QTI_DMOF_SCMI
 
 	  It is intended to be used by clients familiar with
 	  Memcpy Optimization Feature on Qualcomm Technologies, Inc. SOCs.
+
+config QCOM_CACHE_ALLOCATION
+	tristate "Qualcomm Technologies Inc. Cache Allocation"
+	default n
+	help
+	  This is a cache allocation driver. It realizes a governor that is to configure
+	  cache with different size for cpu/gpu dynamically according to cpu/gpu load
+	  varies in runtime, like freq and bandwidth varies. This driver also provides
+	  sysfs nodes to enable/disable this governor and to set thresholds for control.
 endmenu
