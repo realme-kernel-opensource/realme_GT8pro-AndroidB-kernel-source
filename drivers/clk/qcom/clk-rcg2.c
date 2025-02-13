@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013, 2016-2018, 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -2133,7 +2133,7 @@ static int clk_rcg2_vote_perf_level(struct clk_hw *hw, unsigned long rate)
 
 	for (i = 0; i < MAX_CRM_SW_DRV_STATE; i++) {
 		cmd.pwr_state.sw = i;
-		ret = crm_write_perf_ol(crm->dev, CRM_SW_DRV, 0, &cmd);
+		ret = crm_write_perf_ol(crm->dev, CRM_SW_DRV, crm->client_idx, &cmd);
 		if (ret) {
 			pr_err("%s err write_perf_ol rcg name %s ret=%d\n",
 			       __func__, qcom_clk_hw_get_name(hw), ret);
@@ -2298,7 +2298,7 @@ static int clk_rcg2_vote_bw(struct clk_hw *hw, unsigned long rate)
 
 	for (i = 0; i < MAX_CRM_SW_DRV_STATE; i++) {
 		cmd.pwr_state.sw = i;
-		ret = crm_write_bw_vote(crm->dev, CRM_SW_DRV, 0, &cmd);
+		ret = crm_write_bw_vote(crm->dev, CRM_SW_DRV, crm->client_idx, &cmd);
 		if (ret) {
 			pr_err("%s err crm_write_bw_vote rcg name %s ret=%d\n",
 			       __func__, qcom_clk_hw_get_name(hw), ret);
