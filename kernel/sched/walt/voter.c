@@ -4,7 +4,6 @@
  * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include <linux/debugfs.h>
 #include <linux/spinlock.h>
 #include <linux/errno.h>
 #include <linux/bitops.h>
@@ -15,12 +14,9 @@
 #include "voter.h"
 
 #define NUM_MAX_CLIENTS		32
-#define DEBUG_FORCE_CLIENT	"DEBUG_FORCE_CLIENT"
 
 static DEFINE_SPINLOCK(votable_list_slock);
 static LIST_HEAD(votable_list);
-
-static struct dentry *debug_root;
 
 struct client_vote {
 	bool	enabled;
@@ -45,12 +41,6 @@ struct votable {
 						const char *effective_client);
 	char			*client_strs[NUM_MAX_CLIENTS];
 	bool			voted_on;
-	struct dentry		*root;
-	struct dentry		*status_ent;
-	u32			force_val;
-	struct dentry		*force_val_ent;
-	bool			force_active;
-	struct dentry		*force_active_ent;
 };
 
 /**
@@ -313,9 +303,6 @@ int get_effective_result_locked(struct votable *votable)
 	if (!votable)
 		return -EINVAL;
 
-	if (votable->force_active)
-		return votable->force_val;
-
 	if (votable->override_result != -EINVAL)
 		return votable->override_result;
 
@@ -358,9 +345,6 @@ const char *get_effective_client_locked(struct votable *votable)
 {
 	if (!votable)
 		return NULL;
-
-	if (votable->force_active)
-		return DEBUG_FORCE_CLIENT;
 
 	if (votable->override_result != -EINVAL)
 		return votable->override_client;
@@ -483,8 +467,7 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 			votable->name, effective_result,
 			get_client_str(votable, effective_id),
 			effective_id);
-		if (votable->callback && !votable->force_active
-				&& (votable->override_result == -EINVAL))
+		if (votable->callback && (votable->override_result == -EINVAL))
 			rc = votable->callback(votable, votable->data,
 					effective_result,
 					get_client_str(votable, effective_id));
@@ -501,10 +484,7 @@ out:
  *
  * @votable:		The votable object
  * @override_client:	The voting client that will override other client's
- *			votes, that are already present. When force_active
- *			and override votes are set on a votable, force_active's
- *			client will have the higher priority and it's vote will
- *			be the effective one.
+ *			votes, that are already present.
  * @enabled:		This provides a means for the override client to exclude
  *			itself from election. This client's vote
  *			(the next argument) will be considered only when
@@ -571,110 +551,6 @@ int rerun_election(struct votable *votable)
 	return rc;
 }
 
-static int force_active_get(void *data, u64 *val)
-{
-	struct votable *votable = data;
-
-	*val = votable->force_active;
-
-	return 0;
-}
-
-static int force_active_set(void *data, u64 val)
-{
-	struct votable *votable = data;
-	int rc = 0;
-	int effective_result;
-	const char *client;
-	unsigned long flags;
-
-	raw_spin_lock_irqsave(&votable->vote_lock, flags);
-	votable->force_active = !!val;
-
-	if (!votable->callback)
-		goto out;
-
-	if (votable->force_active) {
-		rc = votable->callback(votable, votable->data,
-			votable->force_val,
-			DEBUG_FORCE_CLIENT);
-	} else {
-		if (votable->override_result != -EINVAL) {
-			effective_result = votable->override_result;
-			client = votable->override_client;
-		} else {
-			effective_result = votable->effective_result;
-			client = get_client_str(votable,
-					votable->effective_client_id);
-		}
-		rc = votable->callback(votable, votable->data, effective_result,
-					client);
-	}
-out:
-	spin_unlock_irqrestore(&votable->vote_lock, flags);
-	return rc;
-}
-DEFINE_DEBUGFS_ATTRIBUTE(votable_force_ops, force_active_get, force_active_set,
-		"%lld\n");
-
-static int show_votable_clients(struct seq_file *m, void *data)
-{
-	struct votable *votable = m->private;
-	int i;
-	char *type_str = "Unkonwn";
-	const char *effective_client_str;
-	unsigned long flags;
-
-	raw_spin_lock_irqsave(&votable->vote_lock, flags);
-
-	for (i = 0; i < votable->num_clients; i++) {
-		if (votable->client_strs[i]) {
-			seq_printf(m, "%s: %s:\t\t\ten=%d v=%d\n",
-					votable->name,
-					votable->client_strs[i],
-					votable->votes[i].enabled,
-					votable->votes[i].value);
-		}
-	}
-
-	switch (votable->type) {
-	case VOTE_MIN:
-		type_str = "Min";
-		break;
-	case VOTE_MAX:
-		type_str = "Max";
-		break;
-	case VOTE_SET_ANY:
-		type_str = "Set_any";
-		break;
-	}
-
-	effective_client_str = get_effective_client_locked(votable);
-	seq_printf(m, "%s: effective=%s type=%s v=%d\n",
-			votable->name,
-			effective_client_str ? effective_client_str : "none",
-			type_str,
-			get_effective_result_locked(votable));
-	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
-
-	return 0;
-}
-
-static int votable_status_open(struct inode *inode, struct file *file)
-{
-	struct votable *votable = inode->i_private;
-
-	return single_open(file, show_votable_clients, votable);
-}
-
-static const struct file_operations votable_status_ops = {
-	.owner		= THIS_MODULE,
-	.open		= votable_status_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
-
 struct votable *create_votable(const char *name,
 				int votable_type,
 				int (*callback)(struct votable *votable,
@@ -688,14 +564,6 @@ struct votable *create_votable(const char *name,
 
 	if (!name)
 		return ERR_PTR(-EINVAL);
-
-	if (debug_root == NULL) {
-		debug_root = debugfs_create_dir("pmic-votable", NULL);
-		if (!debug_root) {
-			pr_err("Couldn't create debug dir\n");
-			return ERR_PTR(-ENOMEM);
-		}
-	}
 
 	if (votable_type >= NUM_VOTABLE_TYPES) {
 		pr_err("Invalid votable_type specified for voter\n");
@@ -732,42 +600,6 @@ struct votable *create_votable(const char *name,
 	list_add(&votable->list, &votable_list);
 	spin_unlock_irqrestore(&votable_list_slock, flags);
 
-	votable->root = debugfs_create_dir(name, debug_root);
-	if (!votable->root) {
-		pr_err("Couldn't create debug dir %s\n", name);
-		kfree(votable->name);
-		kfree(votable);
-		return ERR_PTR(-ENOMEM);
-	}
-
-	votable->status_ent = debugfs_create_file("status", S_IFREG | 0444,
-				  votable->root, votable,
-				  &votable_status_ops);
-	if (!votable->status_ent) {
-		pr_err("Couldn't create status dbg file for %s\n", name);
-		debugfs_remove_recursive(votable->root);
-		kfree(votable->name);
-		kfree(votable);
-		return ERR_PTR(-EEXIST);
-	}
-
-	debugfs_create_u32("force_val",
-			S_IFREG | 0644,
-			votable->root,
-			&(votable->force_val));
-
-	votable->force_active_ent = debugfs_create_file("force_active",
-					S_IFREG | 0444,
-					votable->root, votable,
-					&votable_force_ops);
-	if (!votable->force_active_ent) {
-		pr_err("Couldn't create force_active dbg file for %s\n", name);
-		debugfs_remove_recursive(votable->root);
-		kfree(votable->name);
-		kfree(votable);
-		return ERR_PTR(-EEXIST);
-	}
-
 	return votable;
 }
 
@@ -782,8 +614,6 @@ void destroy_votable(struct votable *votable)
 	spin_lock_irqsave(&votable_list_slock, flags);
 	list_del(&votable->list);
 	spin_unlock_irqrestore(&votable_list_slock, flags);
-
-	debugfs_remove_recursive(votable->root);
 
 	for (i = 0; i < votable->num_clients && votable->client_strs[i]; i++)
 		kfree(votable->client_strs[i]);
