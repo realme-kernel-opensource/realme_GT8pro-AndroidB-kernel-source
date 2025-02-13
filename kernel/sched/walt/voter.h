@@ -37,7 +37,5 @@ struct votable *create_votable(const char *name,
 						const char *effective_client),
 				void *data);
 void destroy_votable(struct votable *votable);
-void lock_votable(struct votable *votable);
-void unlock_votable(struct votable *votable);
 
 #endif /* __PMIC_VOTER_H */

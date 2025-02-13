@@ -37,7 +37,7 @@ struct votable {
 	int			effective_client_id;
 	int			effective_result;
 	int			override_result;
-	struct mutex		vote_lock;
+	raw_spinlock_t		vote_lock;
 	void			*data;
 	int			(*callback)(struct votable *votable,
 						void *data,
@@ -173,16 +173,6 @@ static char *get_client_str(struct votable *votable, int client_id)
 	return votable->client_strs[client_id];
 }
 
-void lock_votable(struct votable *votable)
-{
-	mutex_lock(&votable->vote_lock);
-}
-
-void unlock_votable(struct votable *votable)
-{
-	mutex_unlock(&votable->vote_lock);
-}
-
 /**
  * is_override_vote_enabled() -
  * is_override_vote_enabled_locked() -
@@ -204,13 +194,14 @@ bool is_override_vote_enabled_locked(struct votable *votable)
 bool is_override_vote_enabled(struct votable *votable)
 {
 	bool enable;
+	unsigned long flags;
 
 	if (!votable)
 		return false;
 
-	lock_votable(votable);
+	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 	enable = is_override_vote_enabled_locked(votable);
-	unlock_votable(votable);
+	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 
 	return enable;
 }
@@ -245,13 +236,14 @@ bool is_client_vote_enabled_locked(struct votable *votable,
 bool is_client_vote_enabled(struct votable *votable, const char *client_str)
 {
 	bool enabled;
+	unsigned long flags;
 
 	if (!votable || !client_str)
 		return false;
 
-	lock_votable(votable);
+	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 	enabled = is_client_vote_enabled_locked(votable, client_str);
-	unlock_votable(votable);
+	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 	return enabled;
 }
 
@@ -288,13 +280,14 @@ int get_client_vote_locked(struct votable *votable, const char *client_str)
 int get_client_vote(struct votable *votable, const char *client_str)
 {
 	int value;
+	unsigned long flags;
 
 	if (!votable || !client_str)
 		return -EINVAL;
 
-	lock_votable(votable);
+	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 	value = get_client_vote_locked(votable, client_str);
-	unlock_votable(votable);
+	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 	return value;
 }
 
@@ -332,13 +325,14 @@ int get_effective_result_locked(struct votable *votable)
 int get_effective_result(struct votable *votable)
 {
 	int value;
+	unsigned long flags;
 
 	if (!votable)
 		return -EINVAL;
 
-	lock_votable(votable);
+	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 	value = get_effective_result_locked(votable);
-	unlock_votable(votable);
+	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 	return value;
 }
 
@@ -377,13 +371,14 @@ const char *get_effective_client_locked(struct votable *votable)
 const char *get_effective_client(struct votable *votable)
 {
 	const char *client_str;
+	unsigned long flags;
 
 	if (!votable)
 		return NULL;
 
-	lock_votable(votable);
+	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 	client_str = get_effective_client_locked(votable);
-	unlock_votable(votable);
+	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 	return client_str;
 }
 
@@ -417,11 +412,12 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 	int client_id;
 	int rc = 0;
 	bool similar_vote = false;
+	unsigned long flags;
 
 	if (!votable || !client_str)
 		return -EINVAL;
 
-	lock_votable(votable);
+	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 
 	client_id = get_client_id(votable, client_str);
 	if (client_id < 0) {
@@ -496,7 +492,7 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 
 	votable->voted_on = true;
 out:
-	unlock_votable(votable);
+	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 	return rc;
 }
 
@@ -525,11 +521,12 @@ int vote_override(struct votable *votable, const char *override_client,
 		  bool enabled, int val)
 {
 	int rc = 0;
+	unsigned long flags;
 
 	if (!votable || !override_client)
 		return -EINVAL;
 
-	lock_votable(votable);
+	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 	if (votable->force_active) {
 		votable->override_result = enabled ? val : -EINVAL;
 		goto out;
@@ -550,7 +547,7 @@ int vote_override(struct votable *votable, const char *override_client,
 	}
 
 out:
-	unlock_votable(votable);
+	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 	return rc;
 }
 
@@ -558,18 +555,19 @@ int rerun_election(struct votable *votable)
 {
 	int rc = 0;
 	int effective_result;
+	unsigned long flags;
 
 	if (!votable)
 		return -EINVAL;
 
-	lock_votable(votable);
+	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 	effective_result = get_effective_result_locked(votable);
 	if (votable->callback)
 		rc = votable->callback(votable,
 			votable->data,
 			effective_result,
 			get_client_str(votable, votable->effective_client_id));
-	unlock_votable(votable);
+	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 	return rc;
 }
 
@@ -588,8 +586,9 @@ static int force_active_set(void *data, u64 val)
 	int rc = 0;
 	int effective_result;
 	const char *client;
+	unsigned long flags;
 
-	lock_votable(votable);
+	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 	votable->force_active = !!val;
 
 	if (!votable->callback)
@@ -612,7 +611,7 @@ static int force_active_set(void *data, u64 val)
 					client);
 	}
 out:
-	unlock_votable(votable);
+	spin_unlock_irqrestore(&votable->vote_lock, flags);
 	return rc;
 }
 DEFINE_DEBUGFS_ATTRIBUTE(votable_force_ops, force_active_get, force_active_set,
@@ -624,8 +623,9 @@ static int show_votable_clients(struct seq_file *m, void *data)
 	int i;
 	char *type_str = "Unkonwn";
 	const char *effective_client_str;
+	unsigned long flags;
 
-	lock_votable(votable);
+	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 
 	for (i = 0; i < votable->num_clients; i++) {
 		if (votable->client_strs[i]) {
@@ -655,7 +655,7 @@ static int show_votable_clients(struct seq_file *m, void *data)
 			effective_client_str ? effective_client_str : "none",
 			type_str,
 			get_effective_result_locked(votable));
-	unlock_votable(votable);
+	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 
 	return 0;
 }
@@ -717,7 +717,7 @@ struct votable *create_votable(const char *name,
 	votable->type = votable_type;
 	votable->data = data;
 	votable->override_result = -EINVAL;
-	mutex_init(&votable->vote_lock);
+	raw_spin_lock_init(&votable->vote_lock);
 
 	/*
 	 * Because effective_result and client states are invalid
