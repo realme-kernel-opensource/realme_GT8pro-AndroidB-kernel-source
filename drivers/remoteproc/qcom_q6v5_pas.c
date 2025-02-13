@@ -1205,6 +1205,7 @@ static int adsp_attach(struct rproc *rproc)
 			rproc->state = RPROC_CRASHED;
 			panic("Panicking, timed out on ping/pong for %s\n", rproc->name);
 		}
+		adsp->q6v5.running = true;
 	}
 
 	return ret;
