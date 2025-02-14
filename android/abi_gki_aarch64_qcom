@@ -2182,6 +2182,7 @@
   __media_device_register
   media_device_unregister
   media_entity_pads_init
+  mem_alloc_profiling_key
   memblock_end_of_DRAM
   __memcat_p
   memchr
@@ -2233,8 +2234,8 @@
   mmc_regulator_set_vqmmc
   mmc_send_tuning
   __mmdrop
-  mmput
   mm_get_unmapped_area
+  mmput
   mod_delayed_work_on
   mod_node_page_state
   mod_timer
@@ -2838,6 +2839,7 @@
   qcom_smem_state_register
   qcom_smem_state_unregister
   qcom_smem_state_update_bits
+  qcom_tzmem_alloc
   queue_delayed_work_on
   queue_work_on
   radix_tree_delete
@@ -4423,4 +4425,3 @@
   zs_map_object
   zs_pool_stats
   zs_unmap_object
-  qcom_tzmem_alloc
