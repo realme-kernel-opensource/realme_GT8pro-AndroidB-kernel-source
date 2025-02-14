@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (C) 2015 Srinivas Kandagatla <srinivas.kandagatla@linaro.org>
- * Copyright (c) 2021,2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021,2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -519,6 +519,7 @@ static const struct of_device_id qfprom_of_match[] = {
 	{ .compatible = "qcom,sc7280-qfprom", .data = &sc7280_qfprom},
 	{ .compatible = "qcom,sun-qfprom",    .data = &sun_qfprom},
 	{ .compatible = "qcom,canoe-qfprom",    .data = &canoe_qfprom},
+	{ .compatible = "qcom,alor-qfprom",    .data = &canoe_qfprom},
 	{/* sentinel */},
 };
 MODULE_DEVICE_TABLE(of, qfprom_of_match);
