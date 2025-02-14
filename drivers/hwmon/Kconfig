@@ -19,4 +19,15 @@ config SENSORS_QTI_AMOLED_ECM
 	  To compile this driver as module, choose M here: the module will
 	  be called qti_amoled_ecm.
 
+config SENSORS_QTI_BTL
+	tristate "Qualcomm Technologies, Inc. Battery Temperature Logging"
+	depends on SPMI
+	help
+	  Qualcomm Technologies, Inc. Battery temperature logging driver
+	  supports reading back how long device spends within a given
+	  set of temperature ranges.
+
+	  To compile this driver as module, choose M here: the module will
+	  be called qti_btl.
+
 endif # HWMON
