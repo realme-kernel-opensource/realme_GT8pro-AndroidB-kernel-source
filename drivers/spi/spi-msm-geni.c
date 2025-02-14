@@ -1668,6 +1668,45 @@ static void spi_geni_set_sampling_rate(struct spi_geni_master *mas,
 		__func__, cfg_reg108, cfg_reg109, cfg_seq_start);
 }
 
+/**
+ * spi_verify_proto() - Checks protocol configured in SE engine
+ * @mas: pointer to spi_geni_master
+ *
+ * Return:0 on success, or a negative error code upon failure.
+ */
+static int spi_verify_proto(struct spi_geni_master *mas)
+{
+	struct spi_controller *spi = dev_get_drvdata(mas->dev);
+	unsigned int proto;
+	int ret;
+
+	if (!mas->is_le_vm) {
+		ret = geni_se_resources_on(&mas->spi_rsc);
+		if (ret < 0) {
+			dev_err(mas->dev, "%s: geni_se_resources_on failed %d\n",
+				__func__, ret);
+			return ret;
+		}
+	}
+
+	proto = geni_se_read_proto(&mas->spi_rsc);
+
+	if (spi->target) {
+		if (proto != GENI_SE_SPI_SLAVE) {
+			dev_err(mas->dev, "Invalid proto %d\n", proto);
+			ret = -ENXIO;
+		}
+	} else if (proto != GENI_SE_SPI) {
+		dev_err(mas->dev, "Invalid proto %d\n", proto);
+		ret = -ENXIO;
+	}
+
+	if (!mas->is_le_vm)
+		geni_se_resources_off(&mas->spi_rsc);
+
+	return ret;
+}
+
 /*
  * spi_geni_mas_setup is done once per spi session.
  * In LA, it is called in prepare_transfer_hardware whereas
@@ -1678,27 +1717,18 @@ static void spi_geni_set_sampling_rate(struct spi_geni_master *mas,
 static int spi_geni_mas_setup(struct spi_controller *spi)
 {
 	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
-	int proto = geni_se_read_proto(&mas->spi_rsc);
 	unsigned int major;
 	unsigned int minor;
 	int hw_ver;
 	int ret = 0;
 
-	if (spi->target) {
-		if (mas->slave_setup)
-			goto setup_ipc;
-		if (unlikely(proto != GENI_SE_SPI_SLAVE)) {
-			dev_err(mas->dev, "Invalid proto %d\n", proto);
-			return -ENXIO;
-		}
+	if (mas->is_le_vm && !mas->setup) {
+		ret = spi_verify_proto(mas);
+		if (ret)
+			return ret;
 	}
 
 	if (unlikely(!mas->setup)) {
-		if ((unlikely(proto != GENI_SE_SPI)) && !spi->target) {
-			dev_err(mas->dev, "Invalid proto %d\n", proto);
-			return -ENXIO;
-		}
-
 		if (spi->target)
 			spi_slv_setup(mas);
 
@@ -2783,6 +2813,12 @@ static int spi_geni_probe(struct platform_device *pdev)
 		}
 	}
 	geni_mas->spi_rsc.base = geni_mas->base;
+
+	if (!geni_mas->is_le_vm) {
+		ret = spi_verify_proto(geni_mas);
+		if (ret)
+			goto spi_geni_probe_err;
+	}
 
 	spi->mode_bits = (SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH);
 	spi->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 32);
