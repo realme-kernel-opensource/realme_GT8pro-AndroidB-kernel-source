@@ -44,8 +44,8 @@
 #define QMP_MAGIC			0x4d41494c /* mail */
 #define QMP_VERSION			1
 
-/* 64 bytes is enough to store the requests and provides padding to 4 bytes */
-#define QMP_MSG_LEN			64
+/* 0x64 bytes is enough to store the requests and provides padding to 4 bytes */
+#define QMP_MSG_LEN			0x64
 
 #define QMP_NUM_COOLING_RESOURCES	2
 
