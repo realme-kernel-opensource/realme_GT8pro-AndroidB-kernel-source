@@ -122,6 +122,12 @@ static void glink_smem_rx_peek(struct qcom_glink_pipe *np,
 	if (tail >= pipe->native.length)
 		tail -= pipe->native.length;
 
+	/* Update the tail pointer and add a memory barrier to ensure
+	 * consistent read/write between the APPS and the remote.
+	 * This prevents the APPS from reading stale data from the FIFO.
+	 */
+	mb();
+
 	len = min_t(size_t, count, pipe->native.length - tail);
 	if (len)
 		memcpy_fromio(data, pipe->fifo + tail, len);
