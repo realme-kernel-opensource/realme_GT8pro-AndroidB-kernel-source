@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"gh_panic_notifier: " fmt
@@ -395,8 +395,10 @@ static int gh_panic_notifier_vm_cb(struct notifier_block *nb, unsigned long cmd,
 			atomic_notifier_chain_register(&panic_notifier_list, &gpnd->gh_panic_blk);
 		}
 		break;
+	case GH_VM_POWERUP_FAIL:
+		fallthrough;
 	case GH_VM_EARLY_POWEROFF:
-		if (peer_vmid == *notify_vmid) {
+		if (peer_vmid == *notify_vmid && gpnd->base) {
 			atomic_notifier_chain_unregister(&panic_notifier_list, &gpnd->gh_panic_blk);
 			gh_panic_notifier_unshare_mem(gpnd, self_vmid, peer_vmid);
 		}

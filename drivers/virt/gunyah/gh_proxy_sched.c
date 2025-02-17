@@ -14,7 +14,7 @@
  * This driver is based on idea from Hafnium Hypervisor Linux Driver,
  * but modified to work with Gunyah Hypervisor as needed.
  *
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"gh_proxy_sched: " fmt
@@ -383,7 +383,7 @@ static int gh_unpopulate_vm_vcpu_info(gh_vmid_t vmid, gh_label_t cpu_idx,
 
 	mutex_lock(&gh_vm_mutex);
 	vm = gh_get_vm(vmid);
-	if (vm && vm->is_vcpu_info_populated) {
+	if (vm) {
 		if (vm->vcpu_wq) {
 			destroy_workqueue(vm->vcpu_wq);
 			vm->vcpu_wq = NULL;
@@ -554,7 +554,14 @@ static void gh_populate_all_res_info(gh_vmid_t vmid, bool res_populated)
 		gh_reset_vm(vm);
 		if (nr_vms)
 			nr_vms--;
-	}
+	/*
+	 * When do gh_rm_populate_hyp_res, we populate VCPU
+	 * firstly. If populate VCPU successfully, but fail
+	 * at other resource. We need call reset struct
+	 * gh_proxy_vm to make it can populate again.
+	 */
+	} else if (!res_populated && !vm->is_vcpu_info_populated)
+		gh_reset_vm(vm);
 unlock:
 	mutex_unlock(&gh_vm_mutex);
 }
