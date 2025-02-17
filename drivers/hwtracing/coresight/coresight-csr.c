@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2013, 2015-2017, 2019-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -74,6 +74,11 @@ do {									\
 #define CSR_RPMH_STRESS_TRIG1	(0x18C)
 #define CSR_ARADDR_EXT		(0x130)
 #define CSR_AWADDR_EXT		(0x134)
+#define SWAOCSR_CMB_DSB_EN	(0x130)
+#define SWAOCSR_DDRAUX_DSB_EN	(0x134)
+#define SWAOCSR_VRM_DSB_EN	(0x138)
+#define SWAOCSR_ARC_DSB_EN	(0x13C)
+#define SWAOCSR_PDC_DSB_EN	(0x140)
 #define MSR_NUM			((drvdata->msr_end - drvdata->msr_start + 1) \
 				/ sizeof(uint32_t))
 #define MSR_MAX_NUM		128
@@ -124,6 +129,7 @@ struct csr_drvdata {
 	u64			hbeat_mask1;
 	uint32_t		rpmh_stress_trig0;
 	uint32_t		rpmh_stress_trig1;
+	uint32_t		aoss_dsb_en;
 	struct coresight_csr		csr;
 	struct clk		*clk;
 	spinlock_t		spin_lock;
@@ -995,7 +1001,59 @@ static ssize_t rpmh_stress_trig1_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(rpmh_stress_trig1);
 
+static ssize_t aoss_dsb_en_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	struct csr_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	if (IS_ERR_OR_NULL(drvdata))
+		return -EINVAL;
+
+	return sysfs_emit(buf, "%u\n", drvdata->aoss_dsb_en);
+}
+
+static ssize_t aoss_dsb_en_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf,
+				 size_t size)
+{
+	struct csr_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	bool val;
+	unsigned long flags;
+	int ret;
+
+	if (IS_ERR_OR_NULL(drvdata))
+		return -EINVAL;
+
+	if (kstrtobool(buf, &val))
+		return -EINVAL;
+
+	if (!val)
+		return size;
+
+	ret = clk_prepare_enable(drvdata->clk);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&drvdata->spin_lock, flags);
+	drvdata->aoss_dsb_en = val;
+	CSR_UNLOCK(drvdata);
+	csr_writel(drvdata, drvdata->aoss_dsb_en, SWAOCSR_CMB_DSB_EN);
+	csr_writel(drvdata, drvdata->aoss_dsb_en, SWAOCSR_DDRAUX_DSB_EN);
+	csr_writel(drvdata, drvdata->aoss_dsb_en, SWAOCSR_VRM_DSB_EN);
+	csr_writel(drvdata, drvdata->aoss_dsb_en, SWAOCSR_ARC_DSB_EN);
+	csr_writel(drvdata, drvdata->aoss_dsb_en, SWAOCSR_PDC_DSB_EN);
+	CSR_LOCK(drvdata);
+	spin_unlock_irqrestore(&drvdata->spin_lock, flags);
+	clk_disable_unprepare(drvdata->clk);
+
+	return size;
+}
+static DEVICE_ATTR_RW(aoss_dsb_en);
+
 static struct attribute *swao_csr_attrs[] = {
+	&dev_attr_aoss_dsb_en.attr,
 	&dev_attr_timestamp.attr,
 	&dev_attr_msr.attr,
 	&dev_attr_msr_reset.attr,
