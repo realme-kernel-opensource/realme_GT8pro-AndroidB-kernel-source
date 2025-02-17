@@ -225,6 +225,7 @@ void walt_config(void)
 		debugfs_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 
 	} else if (!strcmp(name, "KERA")) {
+		soc_sched_lib_name_capacity = 3;
 		/*
 		 * Trailblazer settings
 		 */
