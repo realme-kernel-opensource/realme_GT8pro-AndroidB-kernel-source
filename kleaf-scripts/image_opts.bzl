@@ -25,10 +25,12 @@ def boot_image_opts(
 def vm_image_opts(
         preferred_usespace = "vm",
         vm_dtb_img_create = True,
-        kernel_offset = 0x0,
-        dtb_offset = 0x2000000,
-        ramdisk_offset = 0x2100000,
-        cmdline_cpio_offset = 0x2100000,
+        kernel_offset = 0x200000,
+        dtb_offset = 0x2200000,
+        ramdisk_offset = 0x2300000,
+        cmdline_cpio_offset = 0x2300000,
+        metadata_offset = 0x0,
+        metadata_size = 8192,
         vm_size_ext4 = 270000000,
         dummy_img_size = 4096):
     return struct(
@@ -38,6 +40,8 @@ def vm_image_opts(
         dtb_offset = dtb_offset,
         ramdisk_offset = ramdisk_offset,
         cmdline_cpio_offset = cmdline_cpio_offset,
+        metadata_offset = metadata_offset,
+        metadata_size = metadata_size,
         vm_size_ext4 = vm_size_ext4,
         dummy_img_size = dummy_img_size,
     )
