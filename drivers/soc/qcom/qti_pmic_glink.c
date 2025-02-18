@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt)	"PMIC_GLINK: %s: " fmt, __func__
 
@@ -52,6 +52,7 @@
  * @child_probed:	indicates when the children are probed
  * @log_filter:		message owner filter for logging
  * @log_enable:		enables message logging
+ * @crash_on_err:	triggers a crash upon error
  * @client_dev_list:	list of client devices to be notified on state
  *			transition during an SSR or PDR
  * @ssr_nb:		notifier block for subsystem notifier
@@ -83,6 +84,7 @@ struct pmic_glink_dev {
 	bool			child_probed;
 	u32			log_filter;
 	bool			log_enable;
+	bool			crash_on_err;
 	struct list_head	client_dev_list;
 	struct notifier_block	ssr_nb;
 	const char		*subsys_name;
@@ -262,9 +264,11 @@ int pmic_glink_write(struct pmic_glink_client *client, void *data,
 	mutex_unlock(&client->lock);
 	up_read(&client->pgdev->rpdev_sem);
 
-	if (rc < 0)
+	if (rc < 0) {
 		pr_err("Failed to send data [%*ph] for client %s, rc=%d\n",
 			(int)len, data, client->name, rc);
+		BUG_ON(client->pgdev->crash_on_err);
+	}
 
 	if (!rc && client->pgdev->log_enable) {
 		struct pmic_glink_hdr *hdr = data;
@@ -540,6 +544,7 @@ static void pmic_glink_add_debugfs(struct pmic_glink_dev *pgdev)
 	pgdev->debugfs_dir = dir;
 	debugfs_create_u32("filter", 0600, dir, &pgdev->log_filter);
 	debugfs_create_bool("enable", 0600, dir, &pgdev->log_enable);
+	debugfs_create_bool("crash_on_error", 0600, dir, &pgdev->crash_on_err);
 }
 #else
 static inline void pmic_glink_add_debugfs(struct pmic_glink_dev *pgdev)
