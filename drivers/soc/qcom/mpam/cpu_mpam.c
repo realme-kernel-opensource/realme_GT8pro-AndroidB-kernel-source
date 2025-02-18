@@ -30,6 +30,7 @@ static unsigned long *monitor_free_bitmap;
 static struct mpam_config_val mpam_default_val;
 static struct monitors_value *mpam_mon_base;
 static struct cpu_mpam_msc *mpam_mscs;
+static int monitor_enabled[MONITOR_MAX];
 static int mpam_msc_cnt;
 static bool can_monitor;
 
@@ -350,6 +351,7 @@ static ssize_t cpu_mpam_enable_monitor_store(struct config_item *item,
 	if (!input && monitor_id != INT_MAX) {
 		bitmap_clear(monitor_free_bitmap, monitor_id, 1);
 		set_monitor_id(item, INT_MAX);
+		monitor_enabled[monitor_id] = INT_MAX;
 		cpu_mpam_disable_monitor(monitor_id, MPAM_TYPE_CSU_MONITOR);
 		cpu_mpam_disable_monitor(monitor_id, MPAM_TYPE_MBW_MONITOR);
 	} else if (input && monitor_id == INT_MAX) {
@@ -362,6 +364,7 @@ static ssize_t cpu_mpam_enable_monitor_store(struct config_item *item,
 
 		bitmap_set(monitor_free_bitmap, monitor_id, 1);
 		set_monitor_id(item, monitor_id);
+		monitor_enabled[monitor_id] = part_id;
 		cpu_mpam_enable_monitor(monitor_id, part_id,
 				MPAM_TYPE_CSU_MONITOR);
 		cpu_mpam_enable_monitor(monitor_id, part_id,
@@ -420,6 +423,49 @@ static struct configfs_attribute *cpu_mpam_attrs_legacy[] = {
 	&cpu_mpam_attr_part_id,
 	&cpu_mpam_attr_schemata,
 	&cpu_mpam_attr_tasks,
+	NULL,
+};
+
+static ssize_t cpu_mpam_monitors_data_show(struct config_item *item,
+		char *page)
+{
+	int i, j, retry_cnt = 0;
+	ssize_t len = 0, len_bak;
+	uint32_t csu_value, mscid;
+	uint64_t mbw_value, timestamp, capture_status;
+	struct monitors_value *mpam_mon_data;
+
+	for (i = 0; i < mpam_msc_cnt; i++) {
+		mscid = mpam_mscs[i].msc_id;
+		mpam_mon_data = &mpam_mon_base[mscid];
+		len += scnprintf(page + len, PAGE_SIZE - len, "%s:\n", mpam_mscs[i].msc_name);
+		len_bak = len;
+		do {
+			while (unlikely((capture_status =
+					mpam_mon_data->capture_status) % 2) &&
+					(retry_cnt < MPAM_MAX_RETRY))
+				retry_cnt++;
+			len = len_bak;
+			timestamp = mpam_mon_data->last_capture_time;
+			len += scnprintf(page + len, PAGE_SIZE - len,
+				"timestamp=%llu\n", timestamp);
+			for (j = 0; j < MONITOR_MAX; j++) {
+				if (monitor_enabled[j] == INT_MAX)
+					continue;
+				csu_value = mpam_mon_data->csu_mon_value[j];
+				mbw_value = mpam_mon_data->mbw_mon_value[j];
+				len += scnprintf(page + len, PAGE_SIZE - len,
+					"%d:csu=%u,mbwu=%llu\n",
+					monitor_enabled[j], csu_value, mbw_value);
+			}
+		} while (capture_status != mpam_mon_data->capture_status);
+	}
+	return len;
+}
+CONFIGFS_ATTR_RO(cpu_mpam_, monitors_data);
+
+static struct configfs_attribute *cpu_mpam_attrs_monitors[] = {
+	&cpu_mpam_attr_monitors_data,
 	NULL,
 };
 
@@ -516,6 +562,7 @@ static struct configfs_group_operations cpu_mpam_group_ops = {
 
 static const struct config_item_type cpu_mpam_subsys_type = {
 	.ct_group_ops	= &cpu_mpam_group_ops,
+	.ct_attrs	= cpu_mpam_attrs_monitors,
 	.ct_owner	= THIS_MODULE,
 };
 
@@ -663,6 +710,9 @@ static int cpu_mpam_probe(struct platform_device *pdev)
 		mpam_default_val.capacity = 100;
 		mpam_default_val.dspri = 0;
 	}
+
+	for (i = 0; i < MONITOR_MAX; i++)
+		monitor_enabled[i] = INT_MAX;
 
 	ret = cpu_mpam_configfs_init();
 	if (ret)
