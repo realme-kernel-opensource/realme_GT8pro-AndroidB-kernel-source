@@ -46,6 +46,8 @@
 #include <linux/usb/role.h>
 #include <linux/usb/redriver.h>
 #include <linux/usb/composite.h>
+#include <linux/usb/typec.h>
+#include <linux/usb/typec_mux.h>
 #include <linux/soc/qcom/wcd939x-i2c.h>
 #include <linux/usb/repeater.h>
 
@@ -606,6 +608,7 @@ struct dwc3_msm {
 	struct usb_role_switch *dwc3_drd_sw;
 	bool			ss_release_called;
 	int			orientation_override;
+	int			typec_orientation;
 
 #define MAX_ERROR_RECOVERY_TRIES	3
 	bool			err_evt_seen;
@@ -3799,18 +3802,15 @@ static void dwc3_set_ssphy_orientation_flag(struct dwc3_msm *mdwc)
 	union extcon_property_value val;
 	struct extcon_dev *edev = NULL;
 	unsigned int extcon_id;
-	int ret, orientation;
+	int ret, orientation = -EINVAL;
 
 	dwc3_msm_clear_usbphy_flags(mdwc->ss_phy, (PHY_LANE_A | PHY_LANE_B));
 
 	if (mdwc->orientation_override) {
-		dwc3_msm_set_usbphy_flags(mdwc->ss_phy, mdwc->orientation_override);
+		orientation = mdwc->orientation_override;
 	} else if (mdwc->has_orientation_gpio) {
-		orientation = gpio_get_value(mdwc->orientation_gpio);
-		if (orientation == 0)
-			dwc3_msm_set_usbphy_flags(mdwc->ss_phy, PHY_LANE_A);
-		else
-			dwc3_msm_set_usbphy_flags(mdwc->ss_phy, PHY_LANE_B);
+		ret = gpio_get_value(mdwc->orientation_gpio);
+		orientation = ret ? PHY_LANE_B : PHY_LANE_A;
 	} else {
 		if (mdwc->extcon && mdwc->vbus_active && !mdwc->in_restart) {
 			extcon_id = EXTCON_USB;
@@ -3824,12 +3824,34 @@ static void dwc3_set_ssphy_orientation_flag(struct dwc3_msm *mdwc)
 			ret = extcon_get_property(edev, extcon_id,
 					EXTCON_PROP_USB_TYPEC_POLARITY, &val);
 			if (ret == 0)
-				dwc3_msm_set_usbphy_flags(mdwc->ss_phy, (val.intval ?
-						PHY_LANE_B : PHY_LANE_A));
+				orientation = val.intval ? PHY_LANE_B : PHY_LANE_A;
 		}
 	}
 
+	if (orientation < 0)
+		return;
+
+	dwc3_msm_set_usbphy_flags(mdwc->ss_phy, orientation);
 	dbg_event(0xFF, "ss_flag", dwc3_msm_get_usbphy_flags(mdwc->ss_phy));
+	mdwc->typec_orientation = orientation;
+}
+
+static void dwc3_msm_typec_switch_set(struct dwc3_msm *mdwc, int orientation)
+{
+	struct typec_switch *sw;
+
+	if (orientation <= 0)
+		return;
+
+	sw = fwnode_typec_switch_get(mdwc->dev->fwnode);
+	if (IS_ERR(sw)) {
+		dev_err(mdwc->dev, "failed to acquire orientation-switch\n");
+		return;
+	}
+
+	typec_switch_set(sw, (orientation == PHY_LANE_A) ?
+			 TYPEC_ORIENTATION_NORMAL : TYPEC_ORIENTATION_REVERSE);
+	typec_switch_put(sw);
 }
 
 static void msm_dwc3_perf_vote_enable(struct dwc3_msm *mdwc, bool enable);
@@ -4370,6 +4392,9 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	if (dwc3_msm_get_max_speed(mdwc) >= USB_SPEED_SUPER &&
 			mdwc->lpm_flags & MDWC3_SS_PHY_SUSPEND) {
 		dwc3_set_ssphy_orientation_flag(mdwc);
+		/* Send orientation to USB3 PHY subsystem */
+		dwc3_msm_typec_switch_set(mdwc, mdwc->typec_orientation);
+
 		if (!mdwc->in_host_mode || mdwc->disable_host_ssphy_powerdown ||
 			(mdwc->in_host_mode && mdwc->max_rh_port_speed != USB_SPEED_HIGH))
 			usb_phy_set_suspend(mdwc->ss_phy, 0);
@@ -5551,7 +5576,7 @@ static void dwc3_msm_clear_dp_only_params(struct dwc3_msm *mdwc)
 static void dwc3_msm_set_dp_only_params(struct dwc3_msm *mdwc)
 {
 	usb_redriver_release_lanes(mdwc->redriver,
-				dwc3_msm_check_usbphy_flags(mdwc->ss_phy, PHY_LANE_A) ?
+				mdwc->typec_orientation & PHY_LANE_A ?
 				ORIENTATION_CC1 : ORIENTATION_CC2, 4);
 
 	/* restart USB host mode into high speed */
@@ -5615,7 +5640,7 @@ int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes)
 		mdwc->refcnt_dp_usb++;
 		mutex_unlock(&mdwc->role_switch_mutex);
 		usb_redriver_release_lanes(mdwc->redriver,
-				dwc3_msm_check_usbphy_flags(mdwc->ss_phy, PHY_LANE_A) ?
+				mdwc->typec_orientation & PHY_LANE_A ?
 				ORIENTATION_CC1 : ORIENTATION_CC2, 2);
 		pm_runtime_get_sync(&mdwc->dwc3->dev);
 		dwc3_msm_set_usbphy_flags(mdwc->ss_phy, PHY_USB_DP_CONCURRENT_MODE);
@@ -6905,8 +6930,8 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		clk_set_rate(mdwc->core_clk, mdwc->core_clk_rate);
 
 		usb_redriver_notify_connect(mdwc->redriver,
-				dwc3_msm_check_usbphy_flags(mdwc->ss_phy, PHY_LANE_A) ?
-					ORIENTATION_CC1 : ORIENTATION_CC2);
+				mdwc->typec_orientation & PHY_LANE_A ?
+				ORIENTATION_CC1 : ORIENTATION_CC2);
 		if (dwc3_msm_get_max_speed(mdwc) >= USB_SPEED_SUPER) {
 			dwc3_msm_set_usbphy_flags(mdwc->ss_phy, PHY_HOST_MODE);
 			usb_phy_notify_connect(mdwc->ss_phy,
@@ -7115,8 +7140,8 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 		dwc3_override_vbus_status(mdwc, true);
 
 		usb_redriver_notify_connect(mdwc->redriver,
-				dwc3_msm_check_usbphy_flags(mdwc->ss_phy, PHY_LANE_A) ?
-					ORIENTATION_CC1 : ORIENTATION_CC2);
+				mdwc->typec_orientation & PHY_LANE_A ?
+				ORIENTATION_CC1 : ORIENTATION_CC2);
 		if (dwc3_msm_get_max_speed(mdwc) >= USB_SPEED_SUPER)
 			usb_phy_notify_connect(mdwc->ss_phy, USB_SPEED_SUPER);
 
