@@ -13,6 +13,7 @@ def register_modules(registry):
             "drivers/soc/qcom/mem_buf/mem_buf_dma_buf.c",
             "drivers/dma-buf/heaps/qcom_sg_ops.h",
             "drivers/dma-buf/heaps/qcom_dma_heap_priv.h",
+            "drivers/dma-buf/heaps/deferred-free-helper.h",
         ],
         conditional_srcs = {
             "CONFIG_QCOM_MEM_BUF_DEV_GH": {
@@ -46,6 +47,7 @@ def register_modules(registry):
             "drivers/soc/qcom/mem_buf/mem-buf-gh.h",
             "drivers/soc/qcom/mem_buf/mem-buf-ids.h",
             "drivers/soc/qcom/mem_buf/mem-buf.c",
+            "drivers/dma-buf/heaps/deferred-free-helper.h",
         ],
         conditional_srcs = {
             "CONFIG_QCOM_MEM_BUF_GH": {
