@@ -224,6 +224,11 @@ void walt_config(void)
 		trailblazer_floor_freq[2] = 1000000;
 		debugfs_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 
+		/*
+		 * Do not put the whole cluster at Fmin during thermal halt condition.
+		 */
+		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
+
 	} else if (!strcmp(name, "KERA")) {
 		soc_sched_lib_name_capacity = 3;
 		/*
@@ -232,6 +237,11 @@ void walt_config(void)
 		trailblazer_floor_freq[0] = 1000000;
 		trailblazer_floor_freq[1] = 1000000;
 		debugfs_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+
+		/*
+		 * Do not put the whole cluster at Fmin during thermal halt condition.
+		 */
+		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
 	}
 }
