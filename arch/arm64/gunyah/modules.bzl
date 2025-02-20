@@ -11,13 +11,3 @@ def register_modules(registry):
             "arch/arm64/gunyah/reset.h",
         ],
     )
-
-    registry.register(
-        name = "arch/arm64/gunyah/gunyah_hypercall",
-        out = "gunyah_hypercall.ko",
-        config = "CONFIG_GUNYAH",
-        srcs = [
-            # do not sort
-            "arch/arm64/gunyah/gunyah_hypercall.c",
-        ],
-    )

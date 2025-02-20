@@ -282,9 +282,6 @@ def register_modules(registry):
             # do not sort
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
@@ -366,9 +363,6 @@ def register_modules(registry):
             # do not sort
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
@@ -750,9 +744,6 @@ def register_modules(registry):
             # do not sort
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
