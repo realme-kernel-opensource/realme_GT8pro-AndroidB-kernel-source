@@ -106,6 +106,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/usb/gadget/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/usb/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/video/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/virt/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/virtio/Kconfig"
