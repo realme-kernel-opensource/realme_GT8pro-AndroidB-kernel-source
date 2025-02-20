@@ -759,6 +759,7 @@ struct haptics_play_info {
 struct haptics_hw_config {
 	struct hv_clamp_cfg	clamp;
 	struct brake_cfg	brake;
+	struct brake_cfg	swr_brake;
 	u32			vmax_mv;
 	u32			t_lra_us;
 	u32			cl_t_lra_us;
@@ -3555,6 +3556,11 @@ restore:
 	/* Restore vmax clamp to default off */
 	haptics_set_vmax_clamp(chip, &clamp_cfg);
 
+	/* Set brake settings for SWR mode play to use it later */
+	rc = haptics_set_brake(chip, &chip->config.swr_brake);
+	if (rc < 0)
+		dev_err(chip->dev, "set brake for SWR mode failed\n");
+
 	/* Restore SWR play mode after SPMI play is done or any faults */
 	if (chip->wa_flags & IGNORE_SWR_IN_SPMI_PLAY)
 		haptics_ignore_swr_play(chip, false);
@@ -4191,6 +4197,19 @@ static int haptics_init_fifo_config(struct haptics_chip *chip)
 	return 0;
 }
 
+static int haptics_init_brake(struct haptics_chip *chip)
+{
+	/*
+	 * Brake setting is updated before every SPMI mode play, however, it
+	 * has no chance to program brake setting in every SWR play. Instead,
+	 * update SWR brake settings in these 2 cases for it to be able to be
+	 * used during SWR play:
+	 *   1) HW initialization
+	 *   2) After SPMI play is stopped
+	 */
+	return haptics_set_brake(chip, &chip->config.swr_brake);
+}
+
 static int haptics_auto_brake_manual_config(struct haptics_chip *chip);
 
 static int haptics_hbst_ovp_trim_pbs_trigger(struct haptics_chip *chip)
@@ -4225,6 +4244,10 @@ static int haptics_hw_init(struct haptics_chip *chip)
 		return rc;
 
 	rc = haptics_init_hpwr_config(chip);
+	if (rc < 0)
+		return rc;
+
+	rc = haptics_init_brake(chip);
 	if (rc < 0)
 		return rc;
 
@@ -4964,12 +4987,79 @@ static int haptics_parse_hv_clamp_dt(struct haptics_chip *chip)
 	return 0;
 }
 
+static int haptics_parse_brake_dt(struct haptics_chip *chip)
+{
+	struct haptics_hw_config *config = &chip->config;
+	struct device_node *node = chip->dev->of_node;
+	int rc = 0, tmp;
+
+	config->brake.mode = AUTO_BRAKE;
+	of_property_read_u32(node, "qcom,brake-mode", &config->brake.mode);
+	if (config->brake.mode > AUTO_BRAKE) {
+		dev_err(chip->dev, "Can't support brake mode: %d\n",
+				config->brake.mode);
+		return -EINVAL;
+	}
+
+	config->brake.disabled =
+		of_property_read_bool(node, "qcom,brake-disable");
+	tmp = of_property_count_u8_elems(node, "qcom,brake-pattern");
+	if (tmp > BRAKE_SAMPLE_COUNT) {
+		dev_err(chip->dev, "more than %d brake samples\n",
+				BRAKE_SAMPLE_COUNT);
+		return -EINVAL;
+	}
+
+	if (tmp > 0) {
+		rc = of_property_read_u8_array(node, "qcom,brake-pattern",
+				config->brake.samples, tmp);
+		if (rc < 0) {
+			dev_err(chip->dev, "Read brake-pattern failed, rc=%d\n",
+					rc);
+			return rc;
+		}
+		verify_brake_samples(&config->brake);
+	} else {
+		if (config->brake.mode == OL_BRAKE ||
+				config->brake.mode == CL_BRAKE)
+			config->brake.disabled = true;
+	}
+
+	config->swr_brake.mode = AUTO_BRAKE;
+	of_property_read_u32(node, "qcom,swr-brake-mode", &config->swr_brake.mode);
+	if (config->swr_brake.mode < AUTO_BRAKE) {
+		tmp = of_property_count_u8_elems(node, "qcom,swr-brake-pattern");
+		if (tmp > BRAKE_SAMPLE_COUNT) {
+			dev_err(chip->dev, "more than %d brake samples\n",
+					BRAKE_SAMPLE_COUNT);
+			return -EINVAL;
+		}
+
+		if (tmp > 0) {
+			rc = of_property_read_u8_array(node, "qcom,swr-brake-pattern",
+					config->swr_brake.samples, tmp);
+			if (rc < 0) {
+				dev_err(chip->dev, "Read swr-brake-pattern failed, rc=%d\n",
+						rc);
+				return rc;
+			}
+			verify_brake_samples(&config->swr_brake);
+		} else {
+			if (config->swr_brake.mode == OL_BRAKE ||
+					config->swr_brake.mode == CL_BRAKE)
+				config->swr_brake.disabled = true;
+		}
+	}
+
+	return rc;
+}
+
 static int haptics_parse_dt(struct haptics_chip *chip)
 {
 	struct haptics_hw_config *config = &chip->config;
 	struct device_node *node = chip->dev->of_node;
 	struct platform_device *pdev = to_platform_device(chip->dev);
-	int rc = 0, tmp;
+	int rc = 0;
 
 	rc = haptics_parse_hpwr_vreg_dt(chip);
 	if (rc < 0)
@@ -5040,38 +5130,10 @@ static int haptics_parse_dt(struct haptics_chip *chip)
 		goto free_pbs;
 	}
 
-	config->brake.mode = AUTO_BRAKE;
-	of_property_read_u32(node, "qcom,brake-mode", &config->brake.mode);
-	if (config->brake.mode > AUTO_BRAKE) {
-		dev_err(chip->dev, "Can't support brake mode: %d\n",
-				config->brake.mode);
-		rc = -EINVAL;
+	rc = haptics_parse_brake_dt(chip);
+	if (rc < 0) {
+		dev_err(chip->dev, "Parse device-tree for brake failed, rc=%d\n", rc);
 		goto free_pbs;
-	}
-
-	config->brake.disabled =
-		of_property_read_bool(node, "qcom,brake-disable");
-	tmp = of_property_count_u8_elems(node, "qcom,brake-pattern");
-	if (tmp > BRAKE_SAMPLE_COUNT) {
-		dev_err(chip->dev, "more than %d brake samples\n",
-				BRAKE_SAMPLE_COUNT);
-		rc = -EINVAL;
-		goto free_pbs;
-	}
-
-	if (tmp > 0) {
-		rc = of_property_read_u8_array(node, "qcom,brake-pattern",
-				config->brake.samples, tmp);
-		if (rc < 0) {
-			dev_err(chip->dev, "Read brake-pattern failed, rc=%d\n",
-					rc);
-			goto free_pbs;
-		}
-		verify_brake_samples(&config->brake);
-	} else {
-		if (config->brake.mode == OL_BRAKE ||
-				config->brake.mode == CL_BRAKE)
-			config->brake.disabled = true;
 	}
 
 	config->is_erm = of_property_read_bool(node, "qcom,use-erm");
