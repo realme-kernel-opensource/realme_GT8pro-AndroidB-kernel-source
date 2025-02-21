@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/atomic.h>
@@ -1036,6 +1036,21 @@ static void gpi_dump_debug_reg(struct gpii *gpii)
 
 	GPII_ERR(gpii, GPI_DBG_COMMON, "Global IRQ handling Exit\n");
 }
+
+/**
+ * get_gpii_chan_req_tres() - Retrieve the TRE size (`req_tres`) for
+ *                            the specified GPII channel from the DTSI
+ * @chan: Base address of the DMA channel
+ *
+ * Return: The TRE size of the GPII channel.
+ */
+u32 get_gpii_chan_req_tres(struct dma_chan *chan)
+{
+	struct gpii_chan *gpii_chan = to_gpii_chan(chan);
+
+	return gpii_chan->req_tres;
+}
+EXPORT_SYMBOL_GPL(get_gpii_chan_req_tres);
 
 void gpi_dump_for_geni(struct dma_chan *chan)
 {
