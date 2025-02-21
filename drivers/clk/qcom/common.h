@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2014, 2018-2020, The Linux Foundation. All rights reserved. */
-/* Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #ifndef __QCOM_CLK_COMMON_H__
 #define __QCOM_CLK_COMMON_H__
@@ -80,7 +80,6 @@ struct crm_offsets {
  * @regmap_crmc: corresponds to crmc instance
  * @crm_dev: crm dev
  * @crm_initialized: crm init flag
- * @client_idx: SW Client Index
  */
 struct clk_crm {
 	const char *name;
@@ -90,7 +89,6 @@ struct clk_crm {
 	struct crm_offsets offsets;
 	bool initialized;
 	u8 num_perf_ol;
-	u8 client_idx;
 };
 
 extern const struct freq_tbl *qcom_find_freq(const struct freq_tbl *f,
