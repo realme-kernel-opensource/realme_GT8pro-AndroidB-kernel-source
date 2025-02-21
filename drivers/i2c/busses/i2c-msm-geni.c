@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -1859,14 +1859,32 @@ static int geni_i2c_stop_on_bus(struct geni_i2c_dev *gi2c)
 static void geni_i2c_check_for_gsi_multi_desc_mode(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[],
 						   int num)
 {
-	u32 i = 0;
+	u32 i, requested_tres = get_gpii_chan_req_tres(gi2c->tx_c);
+
+	if (requested_tres == 0) {
+		I2C_LOG_ERR(gi2c->ipcl, true, gi2c->dev, "%s TRE size is zero, check!\n", __func__);
+		return;
+	}
 
 	if (!gi2c->is_split_tx_dma_tre && num >= MIN_NUM_MSGS_FOR_MULTI_DESC_MODE) {
 		gi2c->gsi_tx.is_multi_descriptor = true;
 		/* assumes multi descriptor supports only for continuous writes */
-		for (i = 0; i < num; i++)
-			if (msgs[i].flags & I2C_M_RD)
+		for (i = 0; i < num; i++) {
+			if (msgs[i].flags & I2C_M_RD) {
 				gi2c->gsi_tx.is_multi_descriptor = false;
+				break;
+			}
+		}
+
+		/*
+		 * Enable multi-descriptor mode if TRE size exceeds default;
+		 * otherwise, use single descriptor
+		 */
+		if (gi2c->gsi_tx.is_multi_descriptor && requested_tres <= DEFAULT_TRE_SIZE) {
+			gi2c->gsi_tx.is_multi_descriptor = false;
+			I2C_LOG_ERR(gi2c->ipcl, true, gi2c->dev,
+				    "TRE size too small. Use >= 2x DEFAULT_TRE_SIZE\n");
+		}
 	} else {
 		gi2c->gsi_tx.is_multi_descriptor = false;
 	}
