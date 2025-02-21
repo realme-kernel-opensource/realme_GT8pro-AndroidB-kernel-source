@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2009-2017, 2021 The Linux Foundation. All rights reserved.
  * Copyright (c) 2017-2019, Linaro Ltd.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -633,6 +633,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(CANOE) },
 	{ qcom_board_id(CANOEP) },
 	{ qcom_board_id(ALOR) },
+	{ qcom_board_id(ALOR_INTERPOSER) },
 	{ qcom_board_id(VIENNA) },
 	{ qcom_board_id(VIENNAP) },
 };
