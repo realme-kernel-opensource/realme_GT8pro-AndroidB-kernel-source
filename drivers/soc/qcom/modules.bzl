@@ -648,6 +648,21 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qcom_cache_allocation",
+        out = "qcom_cache_allocation.ko",
+        config = "CONFIG_QCOM_CACHE_ALLOCATION",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_cache_allocation.c",
+            "drivers/soc/qcom/trace-cache_allocation.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/mpam/mpam_msc",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom_cpucp",
         out = "qcom_cpucp.ko",
         config = "CONFIG_QCOM_CPUCP",
