@@ -3,7 +3,7 @@
  * QTI TEE shared memory bridge driver
  *
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -345,7 +345,8 @@ int32_t qtee_shmbridge_register(
 			handle);
 
 	if (ret) {
-		pr_err("%s: create shmbridge failed, ret = %d\n", __func__, ret);
+		pr_err("Shm creation failed, ret: %d, NS PA|Perm: 0x%llx, size|flags: 0x%llx, ns_vmids: 0x%llx\n",
+			ret, pfn_and_ns_perm_flags, size_and_flags, ns_vmids);
 
 		/* if bridge is already existing and we are not real owner also paddr not
 		 * exist in our map we will add an entry in our map and go for deregister
