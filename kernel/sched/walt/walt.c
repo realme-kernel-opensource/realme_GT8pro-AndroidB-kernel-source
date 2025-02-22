@@ -2250,7 +2250,7 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 	bool is_prev_trailblazer = walt_flag_test(p, WALT_TRAILBLAZER_BIT);
 	u64 trailblazer_capacity;
 
-	if (sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
+	if (!pipeline_in_progress() && sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
 			(((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
 			wts->high_util_history >= TRAILBLAZER_BYPASS)) {
 		*trailblazer_demand = 1 << SCHED_CAPACITY_SHIFT;
