@@ -320,6 +320,24 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/glink_probe",
+        out = "glink_probe.ko",
+        config = "CONFIG_QCOM_GLINK",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/glink_probe.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/rpmsg/qcom_glink_smem",
+            "drivers/rpmsg/qcom_glink_spss",
+            "drivers/rpmsg/qcom_glink",
+            "drivers/remoteproc/rproc_qcom_common",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/hung_task_enh",
         out = "hung_task_enh.ko",
         config = "CONFIG_QCOM_HUNG_TASK_ENH",
