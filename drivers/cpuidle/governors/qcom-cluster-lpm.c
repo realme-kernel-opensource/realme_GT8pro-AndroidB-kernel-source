@@ -419,7 +419,7 @@ ktime_t get_cluster_sleep_time(struct lpm_cluster *cluster_gov)
 
 	next_wakeup = KTIME_MAX;
 	for_each_cpu_and(cpu, genpd->cpus, cpu_online_mask) {
-		next_cpu_wakeup = cluster_gov->cpu_next_wakeup[cpu];
+		next_cpu_wakeup = *per_cpu_ptr(cluster_gov->cpu_next_wakeup, cpu);
 		if (ktime_before(next_cpu_wakeup, next_wakeup))
 			next_wakeup = next_cpu_wakeup;
 	}
@@ -466,7 +466,7 @@ void update_cluster_select(struct lpm_cpu *cpu_gov)
 		if (cpumask_test_cpu(cpu, genpd->cpus)) {
 			spin_lock(&cluster_gov->lock);
 			cluster_gov->now = cpu_gov->now;
-			cluster_gov->cpu_next_wakeup[cpu] = cpu_gov->next_wakeup;
+			*per_cpu_ptr(cluster_gov->cpu_next_wakeup, cpu) = cpu_gov->next_wakeup;
 			update_cluster_next_wakeup(cluster_gov);
 			spin_unlock(&cluster_gov->lock);
 		}
@@ -546,6 +546,10 @@ static int lpm_cluster_gov_probe(struct platform_device *pdev)
 
 	cluster_gov->use_bias_timer = of_property_read_bool(dn,
 					"qcom,use-cluster-bias-timer");
+
+	cluster_gov->cpu_next_wakeup = devm_alloc_percpu(&pdev->dev, ktime_t);
+	if (!cluster_gov->cpu_next_wakeup)
+		return -ENOMEM;
 
 	spin_lock_init(&cluster_gov->lock);
 	cluster_gov->dev = &pdev->dev;
