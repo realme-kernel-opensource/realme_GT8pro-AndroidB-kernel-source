@@ -36,8 +36,7 @@ struct votable {
 	int			(*callback)(struct votable *votable,
 						void *data,
 						int effective_result,
-						const char *effective_client);
-	char			*client_strs[NUM_MAX_CLIENTS];
+						int effective_client);
 	bool			voted_on;
 };
 
@@ -62,7 +61,7 @@ static void vote_set_any(struct votable *votable, int client_id,
 
 	*eff_res = 0;
 
-	for (i = 0; i < votable->num_clients && votable->client_strs[i]; i++)
+	for (i = 0; i < votable->num_clients; i++)
 		*eff_res |= votable->votes[i].enabled;
 
 	*eff_id = client_id;
@@ -88,7 +87,7 @@ static void vote_min(struct votable *votable, int client_id,
 
 	*eff_res = INT_MAX;
 	*eff_id = -EINVAL;
-	for (i = 0; i < votable->num_clients && votable->client_strs[i]; i++) {
+	for (i = 0; i < votable->num_clients; i++) {
 		if (votable->votes[i].enabled
 			&& *eff_res > votable->votes[i].value) {
 			*eff_res = votable->votes[i].value;
@@ -119,7 +118,7 @@ static void vote_max(struct votable *votable, int client_id,
 
 	*eff_res = INT_MIN;
 	*eff_id = -EINVAL;
-	for (i = 0; i < votable->num_clients && votable->client_strs[i]; i++) {
+	for (i = 0; i < votable->num_clients; i++) {
 		if (votable->votes[i].enabled &&
 				*eff_res < votable->votes[i].value) {
 			*eff_res = votable->votes[i].value;
@@ -130,121 +129,45 @@ static void vote_max(struct votable *votable, int client_id,
 		*eff_res = -EINVAL;
 }
 
-static int get_client_id(struct votable *votable, const char *client_str)
-{
-	int i;
-
-	for (i = 0; i < votable->num_clients; i++) {
-		if (votable->client_strs[i]
-		 && (strcmp(votable->client_strs[i], client_str) == 0))
-			return i;
-	}
-
-	/* new client */
-	for (i = 0; i < votable->num_clients; i++) {
-		if (!votable->client_strs[i]) {
-			votable->client_strs[i]
-				= kstrdup(client_str, GFP_KERNEL);
-			if (!votable->client_strs[i])
-				return -ENOMEM;
-			return i;
-		}
-	}
-	return -EINVAL;
-}
-
-static char *get_client_str(struct votable *votable, int client_id)
-{
-	if (!votable || (client_id == -EINVAL))
-		return NULL;
-
-	return votable->client_strs[client_id];
-}
-
-/**
- * is_client_vote_enabled() -
- * is_client_vote_enabled_locked() -
- *		The unlocked and locked variants of getting whether a client's
-		vote is enabled.
- * @votable:	the votable object
- * @client_str: client of interest
- *
- * Returns:
- *	True if the client's vote is enabled; false otherwise.
- */
-bool is_client_vote_enabled_locked(struct votable *votable,
-							const char *client_str)
-{
-
-	int client_id;
-
-	if (!votable || !client_str)
-		return false;
-
-	client_id = get_client_id(votable, client_str);
-	if (client_id < 0)
-		return false;
-
-	return votable->votes[client_id].enabled;
-}
-
-bool is_client_vote_enabled(struct votable *votable, const char *client_str)
-{
-	bool enabled;
-	unsigned long flags;
-
-	if (!votable || !client_str)
-		return false;
-
-	raw_spin_lock_irqsave(&votable->vote_lock, flags);
-	enabled = is_client_vote_enabled_locked(votable, client_str);
-	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
-	return enabled;
-}
-
 /**
  * get_client_vote() -
  * get_client_vote_locked() -
- *		The unlocked and locked variants of getting a client's voted
- *		value.
- * @votable:	the votable object
- * @client_str: client of interest
+ *             The unlocked and locked variants of getting a client's voted
+ *             value.
+ * @votable:   the votable object
+ * @client_id: client of interest
  *
  * Returns:
- *	The value the client voted for. -EINVAL is returned if the client
- *	is not enabled or the client is not found.
+ *     The value the client voted for. -EINVAL is returned if the client
+ *     is not enabled or the client is not found.
  */
-int get_client_vote_locked(struct votable *votable, const char *client_str)
+int get_client_vote_locked(struct votable *votable, int client_id)
 {
-	int client_id;
 
-	if (!votable || !client_str)
-		return -EINVAL;
-
-	client_id = get_client_id(votable, client_str);
-	if (client_id < 0)
+	if (!votable || (client_id < 0))
 		return -EINVAL;
 
 	if ((votable->type != VOTE_SET_ANY)
-		&& !votable->votes[client_id].enabled)
+	    && !votable->votes[client_id].enabled)
 		return -EINVAL;
 
 	return votable->votes[client_id].value;
 }
 
-int get_client_vote(struct votable *votable, const char *client_str)
+int get_client_vote(struct votable *votable, int client_id)
 {
 	int value;
 	unsigned long flags;
 
-	if (!votable || !client_str)
+	if (!votable || (client_id < 0))
 		return -EINVAL;
 
 	raw_spin_lock_irqsave(&votable->vote_lock, flags);
-	value = get_client_vote_locked(votable, client_str);
+	value = get_client_vote_locked(votable, client_id);
 	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 	return value;
 }
+
 
 /**
  * get_effective_result() -
@@ -303,33 +226,34 @@ int get_effective_result(struct votable *votable)
  *	from election, the only client that casts a vote or the client that
  *	caused the result to change is returned.
  */
-const char *get_effective_client_locked(struct votable *votable)
+int get_effective_client_locked(struct votable *votable)
 {
 	if (!votable)
-		return NULL;
+		return -EINVAL;
 
-	return get_client_str(votable, votable->effective_client_id);
+	return votable->effective_client_id;
 }
 
-const char *get_effective_client(struct votable *votable)
+int get_effective_client(struct votable *votable)
 {
-	const char *client_str;
 	unsigned long flags;
+	int client_id;
 
 	if (!votable)
-		return NULL;
+		return -EINVAL;
 
 	raw_spin_lock_irqsave(&votable->vote_lock, flags);
-	client_str = get_effective_client_locked(votable);
+	client_id = get_effective_client_locked(votable);
 	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
-	return client_str;
+
+	return client_id;
 }
 
 /**
  * vote() -
  *
  * @votable:	the votable object
- * @client_str: the voting client
+ * @client_id:  the voting client
  * @enabled:	This provides a means for the client to exclude himself from
  *		election. This clients val (the next argument) will be
  *		considered only when he has enabled his participation.
@@ -348,25 +272,18 @@ const char *get_effective_client(struct votable *votable)
  *	The return from the callback when present and needs to be called
  *	or zero.
  */
-int vote(struct votable *votable, const char *client_str, bool enabled, int val)
+int vote(struct votable *votable, int client_id, bool enabled, int val)
 {
 	int effective_id = -EINVAL;
 	int effective_result;
-	int client_id;
 	int rc = 0;
 	bool similar_vote = false;
 	unsigned long flags;
 
-	if (!votable || !client_str)
+	if (!votable || (client_id < 0))
 		return -EINVAL;
 
 	raw_spin_lock_irqsave(&votable->vote_lock, flags);
-
-	client_id = get_client_id(votable, client_str);
-	if (client_id < 0) {
-		rc = client_id;
-		goto out;
-	}
 
 	/*
 	 * for SET_ANY the val is to be ignored, set it
@@ -377,28 +294,15 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 		val = enabled;
 
 	if ((votable->votes[client_id].enabled == enabled) &&
-		(votable->votes[client_id].value == val)) {
-		pr_debug("%s: %s,%d same voting %s of val=%d\n",
-				votable->name,
-				client_str, client_id,
-				enabled ? "on" : "off",
-				val);
+		(votable->votes[client_id].value == val))
 		similar_vote = true;
-	}
 
 	votable->votes[client_id].enabled = enabled;
 	votable->votes[client_id].value = val;
 
-	if (similar_vote && votable->voted_on) {
-		pr_debug("%s: %s,%d Ignoring similar voting %s of val=%d\n",
-			votable->name,
-			client_str, client_id, enabled ? "on" : "off", val);
+	if (similar_vote && votable->voted_on)
 		goto out;
-	}
 
-	pr_debug("%s: %s,%d voting %s of val=%d\n",
-		votable->name,
-		client_str, client_id, enabled ? "on" : "off", val);
 	switch (votable->type) {
 	case VOTE_MIN:
 		vote_min(votable, client_id, &effective_result, &effective_id);
@@ -422,14 +326,10 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 			|| (effective_result != votable->effective_result)) {
 		votable->effective_client_id = effective_id;
 		votable->effective_result = effective_result;
-		pr_debug("%s: effective voting is now %d voted by %s,%d\n",
-			votable->name, effective_result,
-			get_client_str(votable, effective_id),
-			effective_id);
 		if (votable->callback)
 			rc = votable->callback(votable, votable->data,
 					effective_result,
-					get_client_str(votable, effective_id));
+					effective_id);
 	}
 
 	votable->voted_on = true;
@@ -453,7 +353,7 @@ int rerun_election(struct votable *votable)
 		rc = votable->callback(votable,
 			votable->data,
 			effective_result,
-			get_client_str(votable, votable->effective_client_id));
+			votable->effective_client_id);
 	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 	return rc;
 }
@@ -463,7 +363,7 @@ struct votable *create_votable(const char *name,
 				int (*callback)(struct votable *votable,
 					void *data,
 					int effective_result,
-					const char *effective_client),
+					int effective_client),
 				void *data)
 {
 	struct votable *votable;
@@ -512,7 +412,6 @@ struct votable *create_votable(const char *name,
 void destroy_votable(struct votable *votable)
 {
 	unsigned long flags;
-	int i;
 
 	if (!votable)
 		return;
@@ -520,9 +419,6 @@ void destroy_votable(struct votable *votable)
 	spin_lock_irqsave(&votable_list_slock, flags);
 	list_del(&votable->list);
 	spin_unlock_irqrestore(&votable_list_slock, flags);
-
-	for (i = 0; i < votable->num_clients && votable->client_strs[i]; i++)
-		kfree(votable->client_strs[i]);
 
 	kfree(votable->name);
 	kfree(votable);
