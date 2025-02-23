@@ -25,14 +25,12 @@ struct client_vote {
 
 struct votable {
 	const char		*name;
-	const char		*override_client;
 	struct list_head	list;
 	struct client_vote	votes[NUM_MAX_CLIENTS];
 	int			num_clients;
 	int			type;
 	int			effective_client_id;
 	int			effective_result;
-	int			override_result;
 	raw_spinlock_t		vote_lock;
 	void			*data;
 	int			(*callback)(struct votable *votable,
@@ -164,39 +162,6 @@ static char *get_client_str(struct votable *votable, int client_id)
 }
 
 /**
- * is_override_vote_enabled() -
- * is_override_vote_enabled_locked() -
- *		The unlocked and locked variants of getting whether override
-		vote is enabled.
- * @votable:	the votable object
- *
- * Returns:
- *	True if the client's vote is enabled; false otherwise.
- */
-bool is_override_vote_enabled_locked(struct votable *votable)
-{
-	if (!votable)
-		return false;
-
-	return votable->override_result != -EINVAL;
-}
-
-bool is_override_vote_enabled(struct votable *votable)
-{
-	bool enable;
-	unsigned long flags;
-
-	if (!votable)
-		return false;
-
-	raw_spin_lock_irqsave(&votable->vote_lock, flags);
-	enable = is_override_vote_enabled_locked(votable);
-	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
-
-	return enable;
-}
-
-/**
  * is_client_vote_enabled() -
  * is_client_vote_enabled_locked() -
  *		The unlocked and locked variants of getting whether a client's
@@ -303,9 +268,6 @@ int get_effective_result_locked(struct votable *votable)
 	if (!votable)
 		return -EINVAL;
 
-	if (votable->override_result != -EINVAL)
-		return votable->override_result;
-
 	return votable->effective_result;
 }
 
@@ -345,9 +307,6 @@ const char *get_effective_client_locked(struct votable *votable)
 {
 	if (!votable)
 		return NULL;
-
-	if (votable->override_result != -EINVAL)
-		return votable->override_client;
 
 	return get_client_str(votable, votable->effective_client_id);
 }
@@ -467,65 +426,13 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 			votable->name, effective_result,
 			get_client_str(votable, effective_id),
 			effective_id);
-		if (votable->callback && (votable->override_result == -EINVAL))
+		if (votable->callback)
 			rc = votable->callback(votable, votable->data,
 					effective_result,
 					get_client_str(votable, effective_id));
 	}
 
 	votable->voted_on = true;
-out:
-	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
-	return rc;
-}
-
-/**
- * vote_override() -
- *
- * @votable:		The votable object
- * @override_client:	The voting client that will override other client's
- *			votes, that are already present.
- * @enabled:		This provides a means for the override client to exclude
- *			itself from election. This client's vote
- *			(the next argument) will be considered only when
- *			it has enabled its participation. When this is
- *			set true, this will force a value on a MIN/MAX votable
- *			irrespective of its current value.
- * @val:		The vote value. This will be effective only if enabled
- *			is set true.
- * Returns:
- *	The result of vote. 0 is returned if the vote
- *	is successfully set by the overriding client, when enabled is set.
- */
-int vote_override(struct votable *votable, const char *override_client,
-		  bool enabled, int val)
-{
-	int rc = 0;
-	unsigned long flags;
-
-	if (!votable || !override_client)
-		return -EINVAL;
-
-	raw_spin_lock_irqsave(&votable->vote_lock, flags);
-	if (votable->force_active) {
-		votable->override_result = enabled ? val : -EINVAL;
-		goto out;
-	}
-
-	if (enabled) {
-		rc = votable->callback(votable, votable->data,
-					val, override_client);
-		if (!rc) {
-			votable->override_client = override_client;
-			votable->override_result = val;
-		}
-	} else {
-		rc = votable->callback(votable, votable->data,
-			votable->effective_result,
-			get_client_str(votable, votable->effective_client_id));
-		votable->override_result = -EINVAL;
-	}
-
 out:
 	raw_spin_unlock_irqrestore(&votable->vote_lock, flags);
 	return rc;
@@ -584,7 +491,6 @@ struct votable *create_votable(const char *name,
 	votable->callback = callback;
 	votable->type = votable_type;
 	votable->data = data;
-	votable->override_result = -EINVAL;
 	raw_spin_lock_init(&votable->vote_lock);
 
 	/*
