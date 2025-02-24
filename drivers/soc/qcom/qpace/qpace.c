@@ -794,8 +794,15 @@ static irqreturn_t event_or_word_error_interrupt_handler(int irq, void *unused)
 						1 << er_num);
 
 			complete(&ev_rings[er_num].ring_has_events);
+
+			goto exit;
 		}
 
+	if (status_reg & (COMMON_EE_DMA_ER_COMPL_S_DMA_ER_BUS_ERR_STAT |
+			  COMMON_EE_DMA_ER_COMPL_S_DMA_TR_BUS_ERR_STAT))
+		panic("%s: word error detected, unrecoverable\n", __func__);
+
+exit:
 	return IRQ_HANDLED;
 }
 
