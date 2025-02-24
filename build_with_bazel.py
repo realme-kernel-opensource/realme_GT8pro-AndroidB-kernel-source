@@ -18,6 +18,7 @@ ABL_EXTENSIONS = "build/abl_extensions.bzl"
 DEFAULT_MSM_EXTENSIONS_SRC = "../soc-repo/kleaf-scripts/msm_kernel_extensions.bzl"
 DEFAULT_ABL_EXTENSIONS_SRC = "../bootable/bootloader/edk2/abl_extensions.bzl"
 DEFAULT_OUT_DIR = "{workspace}/out/msm-kernel-{target}-{variant}"
+GH_VARIANTS =["perf", "consolidate"]
 
 CURR_DIR = os.getcwd()
 DEFAULT_CACHE_DIR = os.path.join(CURR_DIR, 'bazel-cache')
@@ -396,6 +397,19 @@ class BazelBuilder:
         if not self.dry_run:
             self.run_targets(targets_to_build)
 
+def build_gvm_image(variant):
+    VM_BOOTLOADER_SRC = None
+    for root, dirs, files in os.walk('.'):
+        for file in files:
+            if file == "gvm-pilsplitter.sh":
+                VM_BOOTLOADER_SRC= os.path.join(root, file)
+
+    if VM_BOOTLOADER_SRC != None:
+        if variant == "ALL":
+            for gh_variant in GH_VARIANTS:
+                subprocess.check_call([VM_BOOTLOADER_SRC, gh_variant])
+        else:
+            subprocess.check_call([VM_BOOTLOADER_SRC, variant])
 
 def main():
     """Main script entrypoint"""
@@ -490,6 +504,9 @@ def main():
     if args.dry_run:
         logging.info("Dry-run completed successfully!")
     else:
+        for target in args.target:
+            if target[0] == "autogvm":
+                build_gvm_image(target[1])
         logging.info("Build completed successfully!")
 
 if __name__ == "__main__":
