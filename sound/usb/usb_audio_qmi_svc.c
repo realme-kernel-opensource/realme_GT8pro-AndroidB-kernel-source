@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -710,7 +710,7 @@ skip_sync_ep:
 
 	/* event ring */
 	ret = xhci_sideband_create_interrupter(uadev[card_num].sb, 1,
-						uaudio_qdev->intr_num, false);
+						false, 0, uaudio_qdev->intr_num);
 	if (ret == -ENOMEM) {
 		ret = -ENODEV;
 		goto drop_sync_ep;
@@ -955,13 +955,15 @@ static void uaudio_dev_cleanup(struct uaudio_dev *dev)
 static void uaudio_connect(struct snd_usb_audio *chip)
 {
 	struct xhci_sideband *sb;
+	struct usb_interface *intf;
 
 	if (chip->card->number >= SNDRV_CARDS) {
 		uaudio_err("Invalid card number\n");
 		return;
 	}
 
-	sb = xhci_sideband_register(chip->dev);
+	intf = chip->intf[chip->num_interfaces - 1];
+	sb = xhci_sideband_register(intf, XHCI_SIDEBAND_VENDOR);
 	if (!sb)
 		return;
 
