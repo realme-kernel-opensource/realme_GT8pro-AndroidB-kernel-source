@@ -1771,6 +1771,12 @@ static void zram_compress_success_handler(struct qpace_event_descriptor *ed, int
 
 	pr_debug("comp-success-handler, index: %d\n", ed_index);
 
+	if (ed->replication_found) {
+		atomic64_inc(&zmeta->zram->stats.same_pages);
+		zram_write_finish(zmeta, comp_len, ed->rep_word, ZRAM_SAME);
+		return;
+	}
+
 	if (comp_len >= huge_class_size) {
 		struct bio *bio = zmeta->bio;
 		struct bvec_iter iter = bio->bi_iter;
@@ -1950,9 +1956,6 @@ static int qpace_zram_write_page(struct zram *zram, struct bio *bio)
 {
 	unsigned long handle = -ENOMEM;
 	unsigned int comp_len = 0;
-	void *mem;
-	unsigned long element = 0;
-	enum zram_pageflags flags = 0;
 
 	/* bio specific variables */
 	unsigned long start_time = bio_start_io_acct(bio);
@@ -1977,18 +1980,6 @@ static int qpace_zram_write_page(struct zram *zram, struct bio *bio)
 
 	zmeta.comp_len = comp_len;
 	zmeta.handle = handle;
-
-	mem = kmap_local_page(page);
-	if (page_same_filled(mem, &element)) {
-		kunmap_local(mem);
-		/* Free memory associated with this sector now. */
-		flags = ZRAM_SAME;
-		atomic64_inc(&zram->stats.same_pages);
-
-		/* comp_len should be 0 here */
-		return zram_write_finish(&zmeta, comp_len, element, flags);
-	}
-	kunmap_local(mem);
 
 	ret = zram_compress_queue(&zmeta, page_to_phys(page));
 	if (ret) {
