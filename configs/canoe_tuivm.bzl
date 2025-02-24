@@ -63,7 +63,5 @@ canoe_tuivm_config = {
     "CONFIG_VIRTIO_MMIO_SWIOTLB": "y",
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_INTERCONNECT_CLK": "m",
-    "CONFIG_GH_SECURE_VM_LOADER": "m",
-    "CONFIG_QCOM_MDT_LOADER": "m",
     "CONFIG_PSI": "y",
 }

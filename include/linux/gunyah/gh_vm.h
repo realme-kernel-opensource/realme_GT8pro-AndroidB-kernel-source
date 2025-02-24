@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _GH_VM_H
@@ -20,11 +20,11 @@ int gh_unregister_vm_notifier(struct notifier_block *nb);
 #else
 static inline int gh_register_vm_notifier(struct notifier_block *nb)
 {
-	return -EINVAL;
+	return 0;
 }
 static inline int gh_unregister_vm_notifier(struct notifier_block *nb)
 {
-	return -EINVAL;
+	return 0;
 }
 #endif
 
