@@ -331,7 +331,7 @@ int32_t qtee_shmbridge_register(
 	ipfn_and_s_perm_flags = UPDATE_IPFN_AND_S_PERM_FLAGS(paddr, tz_perm);
 	size_and_flags = UPDATE_SIZE_AND_FLAGS(size, ns_vmid_num);
 
-	if (support_hyp) {
+	if (support_hyp && (ns_vmid_num == 0)) {
 		size_and_flags |= SELF_OWNER_BIT << 1;
 		size_and_flags |= (VM_PERM_R | VM_PERM_W) << 2;
 	}
