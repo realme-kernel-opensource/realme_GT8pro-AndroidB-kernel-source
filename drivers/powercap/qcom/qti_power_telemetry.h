@@ -168,6 +168,7 @@ struct qpt_device {
  * @ipc_log_event:	Handle to ipc_logging for qpt events
  * @tperiod:		channel pmic hardware time period
  * @bob_tperiod:	BoB channel pmic hardware time period
+ * @data_update_sampling: Hardware data reporting period in milliseconds
  * @overflow_counter:   Counter to capture number of channel overflow trigger
  * @rtc_ts:		RTC Timestamp collected just after qpt irq data update
  * @hw_read_ts:		Timestamp collected just after qpt irq data update
@@ -202,6 +203,7 @@ struct qpt_priv {
 	void			*ipc_log_event;
 	u32			tperiod;
 	u32			bob_tperiod;
+	u32			data_update_sampling;
 	u32			overflow_counter;
 	u32			rtc_ts;
 	u64			hw_read_ts;
