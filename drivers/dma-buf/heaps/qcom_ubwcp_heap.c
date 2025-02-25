@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/dma-buf.h>
@@ -232,14 +232,7 @@ static void ubwcp_release(struct dma_buf *dmabuf)
 		}
 	}
 
-	ret = mem_buf_vmperm_release(buffer->qcom_sg_buf.vmperm);
-	if (ret) {
-		pr_err("%s: Failed to release vmperm, err: %d\n", __func__, ret);
-		return;
-	}
-
-	msm_dma_buf_freed(dmabuf->priv);
-	qcom_system_heap_free(&buffer->qcom_sg_buf);
+	qcom_sg_dmabuf_release(dmabuf);
 }
 
 struct mem_buf_dma_buf_ops ubwcp_ops = {
@@ -352,7 +345,7 @@ buf_release:
 	return ERR_PTR(ret);
 
 free_vmperm:
-	mem_buf_vmperm_release(buffer->qcom_sg_buf.vmperm);
+	mem_buf_vmperm_free(buffer->qcom_sg_buf.vmperm);
 free_sys_heap_mem:
 	qcom_system_heap_free(&buffer->qcom_sg_buf);
 	return ERR_PTR(ret);
