@@ -274,6 +274,11 @@
 #define CURRENT_SEL_VAL_250MA			1
 
 /* Only for HAP530 */
+#define HAP_CFG_RAMP_DN_CFG2_REG		0x86
+#define PRE_HIZ_DLY_MASK			GENMASK(2, 0)
+#define PRE_HIZ_DLY_VAL_10US			1
+#define PRE_HIZ_DLY_VAL_120US			7
+
 #define HAP_CFG_DIG_SPARE_REG			0xB8
 #define EN_FE_PU_CHECK_BIT			BIT(3)
 
@@ -2199,7 +2204,7 @@ restore:
 static int haptics_set_brake(struct haptics_chip *chip, struct brake_cfg *brake)
 {
 	int rc = 0;
-	u8 val;
+	u8 mask, val;
 
 	if (brake->disabled)
 		return 0;
@@ -2219,6 +2224,20 @@ static int haptics_set_brake(struct haptics_chip *chip, struct brake_cfg *brake)
 	if (rc < 0) {
 		dev_err(chip->dev, "set brake pattern failed, rc=%d\n", rc);
 		return rc;
+	}
+
+	if (chip->hw_type < HAP530_HV)
+		return 0;
+
+	if (brake->mode == CL_BRAKE) {
+		mask = PRE_HIZ_DLY_MASK;
+		val = FIELD_PREP(PRE_HIZ_DLY_MASK, PRE_HIZ_DLY_VAL_120US);
+		rc = haptics_masked_write(chip, chip->cfg_addr_base,
+				HAP_CFG_RAMP_DN_CFG2_REG, mask, val);
+		if (rc < 0) {
+			dev_err(chip->dev, "set PRE_HIZ_DLY failed, rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	return 0;
@@ -2700,7 +2719,15 @@ static int haptics_autores_config(struct haptics_chip *chip, bool autores_en)
 		val = mask = EN_HW_RECOVERY_BIT | SW_ERR_DRV_FREQ_BIT;
 		rc = haptics_masked_write(chip, chip->cfg_addr_base,
 				HAP_CFG_AUTORES_ERR_RECOVERY_REG, mask, val);
+		if (rc < 0)
+			return rc;
+
+		mask = PRE_HIZ_DLY_MASK;
+		val = FIELD_PREP(PRE_HIZ_DLY_MASK, PRE_HIZ_DLY_VAL_10US);
+		rc = haptics_masked_write(chip, chip->cfg_addr_base,
+				HAP_CFG_RAMP_DN_CFG2_REG, mask, val);
 	}
+
 	return rc;
 }
 
