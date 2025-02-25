@@ -31,9 +31,11 @@
 #define SE_NUM_FOR_TEST_BUS	5
 
 #define SE_GENI_CFG_REG68		(0x210)
+#define SE_I2C_HS_TLOW_REG		(0X268)
 #define SE_I2C_TX_TRANS_LEN		(0x26C)
 #define SE_I2C_RX_TRANS_LEN		(0x270)
 #define SE_I2C_SCL_COUNTERS		(0x278)
+#define SE_I2C_HS_TCYCLE_REG		(0X27C)
 
 /* M_CMD OP codes for I2C */
 #define I2C_WRITE		(0x1)
@@ -42,6 +44,10 @@
 #define I2C_ADDR_ONLY		(0x4)
 #define I2C_BUS_CLEAR		(0x6)
 #define I2C_STOP_ON_BUS		(0x7)
+#define I2C_HS_WRITE		(0xa)
+#define I2C_HS_READ		(0xb)
+#define I2C_HS_WRITE_READ	(0xc)
+
 /* M_CMD params for I2C */
 #define PRE_CMD_DELAY		(BIT(0))
 #define TIMESTAMP_BEFORE	(BIT(1))
@@ -117,8 +123,12 @@ if (dev) \
 #define MAX_NUM_TRE_MSGS	448
 #define NUM_TRE_MSGS_PER_INTR	64
 #define IMMEDIATE_DMA_LEN	8
-
 #define MIN_NUM_MSGS_FOR_MULTI_DESC_MODE	4
+
+#define I2C_HS_MODE_FREQ	3400000
+#define I2C_HS_SRC_SE_FREQ	100000000
+#define I2C_HS_TLOW_CNT		38
+#define I2C_HS_TCYCLE_CNT	28
 
 /* FTRACE Logging */
 void i2c_trace_log(struct device *dev, const char *fmt, ...)
@@ -190,6 +200,7 @@ struct geni_i2c_dev {
 	struct msm_gpi_tre lock_t;
 	struct msm_gpi_tre unlock_t;
 	struct msm_gpi_tre cfg0_t;
+	struct msm_gpi_tre cfg1_t;
 	struct msm_gpi_tre go_t;
 	struct msm_gpi_tre tx_t;
 	struct msm_gpi_tre rx_t;
@@ -203,6 +214,7 @@ struct geni_i2c_dev {
 	dma_addr_t rx_sg_dma;
 	int cfg_sent;
 	int clk_freq_out;
+	u32 dfs_idx;
 	struct dma_async_tx_descriptor *tx_desc;
 	struct dma_async_tx_descriptor *rx_desc;
 	struct msm_gpi_dma_async_tx_cb_param tx_cb;
@@ -262,10 +274,10 @@ static struct geni_i2c_err_log gi2c_log[] = {
 
 struct geni_i2c_clk_fld {
 	u32	clk_freq_out;
-	u8	clk_div;
-	u8	t_high;
-	u8	t_low;
-	u8	t_cycle;
+	u16	clk_div;
+	u16	t_high;
+	u16	t_low;
+	u16	t_cycle;
 };
 
 static struct geni_i2c_clk_fld geni_i2c_clk_map[] = {
@@ -280,12 +292,27 @@ static struct geni_i2c_clk_fld geni_i2c_hub_clk_map[] = {
 	{KHz(1000), 1, 3,  9, 18},
 };
 
+static struct geni_i2c_clk_fld geni_i2c_hs_clk_map[] = {
+	{KHz(100), 1, 449, 548, 998},
+	{KHz(400), 1, 76, 167, 248},
+	{KHz(1000), 1, 23, 59, 98},
+};
+
 static int geni_i2c_clk_map_idx(struct geni_i2c_dev *gi2c)
 {
 	int i;
 	int ret = 0;
 	bool clk_map_present = false;
 	struct geni_i2c_clk_fld *itr;
+
+	if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ) {
+		/*
+		 * I2C_HS_MODE, Always start with 1MHZ for Master code transmission.
+		 * 1st Byte is  Master code, which is before regular i2c xfer.
+		 */
+		gi2c->clk_fld_idx = 2;
+		return 0;
+	}
 
 	itr = (gi2c->is_i2c_rtl_based) ? geni_i2c_hub_clk_map : geni_i2c_clk_map;
 
@@ -485,18 +512,26 @@ static ssize_t capture_kpi_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(capture_kpi);
 
-static inline void qcom_geni_i2c_conf(struct geni_i2c_dev *gi2c, int dfs)
+static inline void qcom_geni_i2c_conf(struct geni_i2c_dev *gi2c)
 {
 	struct geni_i2c_clk_fld *itr;
 
 	if (gi2c->is_i2c_rtl_based)
 		itr = geni_i2c_hub_clk_map + gi2c->clk_fld_idx;
+	else if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ)
+		itr = geni_i2c_hs_clk_map + gi2c->clk_fld_idx;
 	else
 		itr = geni_i2c_clk_map + gi2c->clk_fld_idx;
 
 	/* do not configure the dfs index for i2c hub master */
 	if (!gi2c->is_i2c_hub)
-		geni_write_reg(dfs, gi2c->base, SE_GENI_CLK_SEL);
+		geni_write_reg(gi2c->dfs_idx, gi2c->base, SE_GENI_CLK_SEL);
+
+	/* update i2c hs counter values for fifo mode */
+	if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ) {
+		geni_write_reg(I2C_HS_TCYCLE_CNT, gi2c->base, SE_I2C_HS_TCYCLE_REG);
+		geni_write_reg(I2C_HS_TLOW_CNT, gi2c->base, SE_I2C_HS_TLOW_REG);
+	}
 
 	geni_write_reg((itr->clk_div << 4) | 1, gi2c->base, GENI_SER_M_CLK_CFG);
 	geni_write_reg(((itr->t_high << 20) | (itr->t_low << 10) |
@@ -522,7 +557,7 @@ static inline void qcom_geni_i2c_calc_timeout(struct geni_i2c_dev *gi2c)
 	else
 		clk_itr = geni_i2c_clk_map + gi2c->clk_fld_idx;
 
-	bit_usec = (bit_cnt * USEC_PER_SEC) / clk_itr->clk_freq_out;
+	bit_usec = bit_cnt * (USEC_PER_SEC / gi2c->clk_freq_out);
 	xfer_max_usec = (bit_usec * I2C_TIMEOUT_SAFETY_COEFFICIENT) +
 							I2C_TIMEOUT_MIN_USEC;
 	gi2c->xfer_timeout = usecs_to_jiffies(xfer_max_usec);
@@ -824,7 +859,7 @@ static int geni_i2c_prepare(struct geni_i2c_dev *gi2c)
 
 			gi2c->tx_wm = gi2c_tx_depth - 1;
 			geni_se_init(&gi2c->i2c_rsc, gi2c->tx_wm, gi2c_tx_depth);
-			qcom_geni_i2c_conf(gi2c, 0);
+			qcom_geni_i2c_conf(gi2c);
 			geni_se_config_packing(&gi2c->i2c_rsc, 8, 4, true, true, true);
 			I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
 					"i2c fifo/se-dma mode. fifo depth:%d\n",
@@ -1301,6 +1336,28 @@ static struct msm_gpi_tre *setup_lock_tre(struct geni_i2c_dev *gi2c)
 	return lock_t;
 }
 
+/*
+ * setup_cfg1_tre: setup config1 tre
+ *
+ * @gi2c: Geni I2C device handle
+ *
+ * Return: returning config1 tre handle
+ */
+static struct msm_gpi_tre *setup_cfg1_tre(struct geni_i2c_dev *gi2c)
+{
+	struct msm_gpi_tre *cfg1_t = &gi2c->cfg1_t;
+
+	/* CONFIG1 */
+	cfg1_t->dword[0] = MSM_GPI_I2C_CONFIG1_TRE_DWORD0(I2C_HS_TCYCLE_CNT, I2C_HS_TLOW_CNT);
+	cfg1_t->dword[1] = MSM_GPI_I2C_CONFIG1_TRE_DWORD1(0, 0);
+	cfg1_t->dword[2] = MSM_GPI_I2C_CONFIG1_TRE_DWORD2(0, 0);
+	cfg1_t->dword[3] = MSM_GPI_I2C_CONFIG1_TRE_DWORD3(0, 0, 0, 0, 1);
+	I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "cfg1_tre 0x%x 0x%x 0x%x 0x%x\n",
+		    cfg1_t->dword[0], cfg1_t->dword[1], cfg1_t->dword[2], cfg1_t->dword[3]);
+
+	return cfg1_t;
+}
+
 static struct msm_gpi_tre *setup_cfg0_tre(struct geni_i2c_dev *gi2c)
 {
 	struct geni_i2c_clk_fld *itr;
@@ -1312,6 +1369,8 @@ static struct msm_gpi_tre *setup_cfg0_tre(struct geni_i2c_dev *gi2c)
 
 	if (gi2c->is_i2c_rtl_based)
 		itr = geni_i2c_hub_clk_map + gi2c->clk_fld_idx;
+	else if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ)
+		itr = geni_i2c_hs_clk_map + gi2c->clk_fld_idx;
 	else
 		itr = geni_i2c_clk_map + gi2c->clk_fld_idx;
 
@@ -1319,7 +1378,7 @@ static struct msm_gpi_tre *setup_cfg0_tre(struct geni_i2c_dev *gi2c)
 	cfg0_t->dword[0] = MSM_GPI_I2C_CONFIG0_TRE_DWORD0(I2C_PACK_EN,
 				itr->t_cycle, itr->t_high, itr->t_low);
 	cfg0_t->dword[1] = MSM_GPI_I2C_CONFIG0_TRE_DWORD1(0, 0);
-	cfg0_t->dword[2] = MSM_GPI_I2C_CONFIG0_TRE_DWORD2(0, itr->clk_div);
+	cfg0_t->dword[2] = MSM_GPI_I2C_CONFIG0_TRE_DWORD2(gi2c->dfs_idx, itr->clk_div);
 	cfg0_t->dword[3] = MSM_GPI_I2C_CONFIG0_TRE_DWORD3(0, gsi_bei, 0, 0, 1);
 	I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "cfg_tre 0x%x 0x%x 0x%x 0x%x\n",
 		    cfg0_t->dword[0], cfg0_t->dword[1], cfg0_t->dword[2], cfg0_t->dword[3]);
@@ -1331,15 +1390,21 @@ static struct msm_gpi_tre *setup_go_tre(struct geni_i2c_dev *gi2c,
 				struct i2c_msg msgs[], int i, int num)
 {
 	struct msm_gpi_tre *go_t = &gi2c->go_t;
-	u8 op = (msgs[i].flags & I2C_M_RD) ? 2 : 1;
+	u8 op, master_code = 0;
 	int stretch = (i < (num - 1));
 	bool gsi_bei = false;
+
+	if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ)
+		op = (msgs[i].flags & I2C_M_RD) ? I2C_HS_READ : I2C_HS_WRITE;
+	else
+		op = (msgs[i].flags & I2C_M_RD) ? I2C_READ : I2C_WRITE;
 
 	if (gi2c->gsi_tx.is_multi_descriptor)
 		gsi_bei = true;
 
+	/* i2c hs mode, for linux EE using master code as zero */
 	go_t->dword[0] = MSM_GPI_I2C_GO_TRE_DWORD0((stretch << 2),
-							   msgs[i].addr, op);
+						   (master_code << 15) | msgs[i].addr, op);
 	go_t->dword[1] = MSM_GPI_I2C_GO_TRE_DWORD1;
 
 	if (msgs[i].flags & I2C_M_RD) {
@@ -2175,24 +2240,16 @@ static int geni_i2c_gsi_xfer_out(struct geni_i2c_dev *gi2c, int ret)
 	return ret;
 }
 
-static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
-			     int num)
+/**
+ * geni_i2c_gsi_channel_init_and_lock() - gi2c channel init and lock for levm
+ * @gi2c:geni i2c structure as a pointer
+ *
+ * Return: return 0 for success or error for failure case.
+ */
+static int geni_i2c_gsi_channel_init_and_lock(struct geni_i2c_dev *gi2c)
 {
-	struct geni_i2c_dev *gi2c = i2c_get_adapdata(adap);
-	u32 i = 0;
-	int ret = 0, timeout = 0;
-	struct msm_gpi_tre *lock_t = NULL;
-	struct msm_gpi_tre *unlock_t = NULL;
-	struct msm_gpi_tre *cfg0_t = NULL;
-	u8 *rd_dma_buf = NULL;
-	u8 op;
-	int segs;
-	u32 index = 0, wr_idx = 0;
-	struct msm_gpi_tre *go_t = NULL;
-	unsigned long long start_time;
-	unsigned long long start_time_xfer = sched_clock();
+	int ret;
 
-	gi2c->gsi_err = false;
 	if (!gi2c->req_chan) {
 		ret = geni_i2c_gsi_request_channel(gi2c);
 		if (ret)
@@ -2211,6 +2268,32 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 		gi2c->le_gpi_reset_done = false;
 	}
 
+	return 0;
+}
+
+static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
+			     int num)
+{
+	struct geni_i2c_dev *gi2c = i2c_get_adapdata(adap);
+	u32 i = 0;
+	int ret = 0, timeout = 0;
+	struct msm_gpi_tre *lock_t = NULL;
+	struct msm_gpi_tre *unlock_t = NULL;
+	struct msm_gpi_tre *cfg0_t = NULL;
+	struct msm_gpi_tre *cfg1_t = NULL;
+	u8 *rd_dma_buf = NULL;
+	u8 op;
+	int segs;
+	u32 index = 0, wr_idx = 0;
+	struct msm_gpi_tre *go_t = NULL;
+	unsigned long long start_time;
+	unsigned long long start_time_xfer = sched_clock();
+
+	gi2c->gsi_err = false;
+	ret =  geni_i2c_gsi_channel_init_and_lock(gi2c);
+	if (ret)
+		return ret;
+
 	if (gi2c->is_shared) {
 		lock_t = setup_lock_tre(gi2c);
 		unlock_t = setup_unlock_tre(gi2c);
@@ -2218,8 +2301,11 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 
 	geni_i2c_check_for_gsi_multi_desc_mode(gi2c, msgs, num);
 
-	if (!gi2c->cfg_sent)
+	if (!gi2c->cfg_sent) {
 		cfg0_t = setup_cfg0_tre(gi2c);
+		if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ)
+			cfg1_t = setup_cfg1_tre(gi2c);
+	}
 
 	gi2c->msgs = msgs;
 	gi2c->gsi_tx.msg_cnt = 0;
@@ -2251,8 +2337,11 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 
 		qcom_geni_i2c_calc_timeout(gi2c);
 
-		if (!gi2c->cfg_sent)
+		if (!gi2c->cfg_sent) {
 			segs++;
+			if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ)
+				segs++;
+		}
 		if (gi2c->is_shared && (i == 0 || i == num-1)) {
 			segs++;
 			if (num == 1)
@@ -2268,8 +2357,9 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 
 		/* Send cfg tre when cfg not sent already */
 		if (!gi2c->cfg_sent) {
-			sg_set_buf(&gi2c->tx_sg[index++], cfg0_t,
-						sizeof(gi2c->cfg0_t));
+			sg_set_buf(&gi2c->tx_sg[index++], cfg0_t, sizeof(gi2c->cfg0_t));
+			if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ)
+				sg_set_buf(&gi2c->tx_sg[index++], cfg1_t, sizeof(gi2c->cfg1_t));
 			gi2c->cfg_sent = 1;
 		}
 
@@ -2459,9 +2549,8 @@ static int geni_i2c_execute_xfer(struct geni_i2c_dev *gi2c,
 		if (msgs[i].flags & I2C_M_RD) {
 			I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
 				"msgs[%d].len:%d R\n", i, gi2c->cur->len);
-			geni_write_reg(msgs[i].len,
-				       gi2c->base, SE_I2C_RX_TRANS_LEN);
-			m_cmd = I2C_READ;
+			geni_write_reg(msgs[i].len, gi2c->base, SE_I2C_TX_TRANS_LEN);
+			m_cmd = (gi2c->clk_freq_out == I2C_HS_MODE_FREQ) ? I2C_HS_READ : I2C_READ;
 			geni_se_setup_m_cmd(&gi2c->i2c_rsc, m_cmd, m_param);
 			if (mode == GENI_SE_DMA) {
 				ret = geni_se_rx_dma_prep(&gi2c->i2c_rsc, dma_buf, msgs[i].len,
@@ -2480,7 +2569,7 @@ static int geni_i2c_execute_xfer(struct geni_i2c_dev *gi2c,
 			I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
 				"msgs[%d].len:%d W\n", i, gi2c->cur->len);
 			geni_write_reg(msgs[i].len, gi2c->base, SE_I2C_TX_TRANS_LEN);
-			m_cmd = I2C_WRITE;
+			m_cmd = (gi2c->clk_freq_out == I2C_HS_MODE_FREQ) ? I2C_HS_WRITE : I2C_WRITE;
 			geni_se_setup_m_cmd(&gi2c->i2c_rsc, m_cmd, m_param);
 			if (mode == GENI_SE_DMA) {
 				ret = geni_se_tx_dma_prep(&gi2c->i2c_rsc, dma_buf, msgs[i].len,
@@ -2784,6 +2873,7 @@ static int get_geni_se_i2c_hub(struct geni_i2c_dev *gi2c)
 static int geni_i2c_resources_init(struct platform_device *pdev, struct geni_i2c_dev *gi2c)
 {
 	int ret;
+	unsigned long freq;
 
 	/*
 	 * For LE, clocks, gpio and icb voting will be provided by
@@ -2862,6 +2952,25 @@ static int geni_i2c_resources_init(struct platform_device *pdev, struct geni_i2c
 				__func__, ret);
 			return ret;
 		}
+	}
+
+	if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ) {
+		/* for i2c HS mode, recommended to use 100mhz source clock */
+		ret = geni_se_clk_freq_match(&gi2c->i2c_rsc, I2C_HS_SRC_SE_FREQ,
+					     &gi2c->dfs_idx, &freq, false);
+		if (ret) {
+			dev_err(gi2c->dev, "se clk freq match failed freq:%d ret:%d\n",
+				gi2c->clk_freq_out, ret);
+			return ret;
+		}
+
+		ret = clk_set_rate(gi2c->i2c_rsc.clk, freq);
+		if (ret) {
+			dev_err(gi2c->dev, "set clk rate failed ret:%d\n", ret);
+			return ret;
+		}
+	} else {
+		gi2c->dfs_idx = 0;
 	}
 
 	gi2c->irq = platform_get_irq(pdev, 0);
@@ -2980,8 +3089,8 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		}
 	}
 
-	gi2c->tx_sg = dmam_alloc_coherent(gi2c->dev, 5*sizeof(struct scatterlist),
-					&gi2c->tx_sg_dma, GFP_KERNEL);
+	gi2c->tx_sg = dmam_alloc_coherent(gi2c->dev, 6 * sizeof(struct scatterlist),
+					  &gi2c->tx_sg_dma, GFP_KERNEL);
 	if (!gi2c->tx_sg) {
 		dev_err(&pdev->dev, "could not allocate for tx_sg\n");
 		return -ENOMEM;

@@ -189,6 +189,17 @@ enum msm_gpi_tre_type {
 	((0x2 << 20) | (0x2 << 16) | (link_rx << 11) | (bei << 10) | \
 	(ieot << 9) | (ieob << 8) | ch)
 
+/* I2C Config1 TRE */
+#define MSM_GPI_I2C_CONFIG1_TRE_DWORD0(t_cycle, t_low) \
+	((t_cycle << 10) | t_low)
+#define MSM_GPI_I2C_CONFIG1_TRE_DWORD1(t_high, hold_time) \
+	((t_high << 10) | hold_time)
+#define MSM_GPI_I2C_CONFIG1_TRE_DWORD2(noise_rj_lvl, noise_en) \
+	((noise_rj_lvl << 1) | noise_en)
+#define MSM_GPI_I2C_CONFIG1_TRE_DWORD3(link_rx, bei, ieot, ieob, ch) \
+	((0x2 << 20) | (0x3 << 16) | (link_rx << 11) | (bei << 10) | \
+	(ieot << 9) | (ieob << 8) | ch)
+
 /* I3C GO TRE */
 #define MSM_GPI_I3C_GO_TRE_DWORD0(flags, ccc_hdr, slave, opcode) \
 	((flags << 24) | (ccc_hdr << 16) | (slave << 8) | opcode)
