@@ -14,6 +14,7 @@ COPY_FILES = [
     "drivers/leds/trigger/ledtrig-pattern.c",
     "drivers/char/virtio_console.c",
     "drivers/virtio/virtio_input.c",
+    "drivers/block/virtio_blk.c",
 ]
 
 def define_common_upstream_files():
