@@ -107,6 +107,7 @@ static const struct m31_phy_tbl_entry m31_eusb_phy_reset_tbl[] = {
 static const struct regulator_bulk_data m31_eusb_phy_vregs[] = {
 	{ .supply = "vdd" },
 	{ .supply = "vdda12" },
+	{ .supply = "vdd_refgen" },
 };
 
 #define M31_EUSB_NUM_VREGS		ARRAY_SIZE(m31_eusb_phy_vregs)
