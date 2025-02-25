@@ -96,6 +96,7 @@ canoe_perf_config = {
     "CONFIG_MAC80211_RC_DEFAULT": "\"\"",
     "CONFIG_MAC80211_RC_MINSTREL": "n",
     "CONFIG_MEM_SHARE_QMI_SERVICE": "m",
+    "CONFIG_MFD_I2C_PMIC": "m",
     "CONFIG_MFD_SPMI_PMIC": "m",
     "CONFIG_MHI_BUS": "m",
     "CONFIG_MHI_BUS_MISC": "y",
