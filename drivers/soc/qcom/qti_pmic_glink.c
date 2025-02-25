@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt)	"PMIC_GLINK: %s: " fmt, __func__
 
@@ -52,6 +52,7 @@
  * @child_probed:	indicates when the children are probed
  * @log_filter:		message owner filter for logging
  * @log_enable:		enables message logging
+ * @crash_on_err:	triggers a crash upon error
  * @client_dev_list:	list of client devices to be notified on state
  *			transition during an SSR or PDR
  * @ssr_nb:		notifier block for subsystem notifier
@@ -62,6 +63,8 @@
  * @pdr_service_name:	protection domain service name
  * @pdr_path_name:	protection domain path name
  * @pdr_state:		protection domain service state
+ * @wake_count_lock:	lock to update wake_count
+ * @wake_count:		wake counter
  */
 struct pmic_glink_dev {
 	struct rpmsg_device	*rpdev;
@@ -83,6 +86,7 @@ struct pmic_glink_dev {
 	bool			child_probed;
 	u32			log_filter;
 	bool			log_enable;
+	bool			crash_on_err;
 	struct list_head	client_dev_list;
 	struct notifier_block	ssr_nb;
 	const char		*subsys_name;
@@ -91,6 +95,8 @@ struct pmic_glink_dev {
 	const char		*pdr_service_name;
 	const char		*pdr_path_name;
 	atomic_t		pdr_state;
+	spinlock_t		wake_count_lock;
+	int			wake_count;
 };
 
 /**
@@ -127,19 +133,47 @@ struct pmic_glink_buf {
 static LIST_HEAD(pmic_glink_dev_list);
 static DEFINE_MUTEX(pmic_glink_dev_lock);
 
+static void pmic_glink_wake_acquire(struct pmic_glink_dev *pdev)
+{
+	spin_lock(&pdev->wake_count_lock);
+
+	if (!pdev->wake_count) {
+		pm_stay_awake(pdev->dev);
+		dev_dbg(pdev->dev, "wakeup acquired\n");
+	}
+	pdev->wake_count++;
+
+	spin_unlock(&pdev->wake_count_lock);
+}
+
+static void pmic_glink_wake_relax(struct pmic_glink_dev *pdev)
+{
+	spin_lock(&pdev->wake_count_lock);
+
+	if (pdev->wake_count) {
+		pdev->wake_count--;
+		if (!pdev->wake_count) {
+			pm_relax(pdev->dev);
+			dev_dbg(pdev->dev, "wakeup released\n");
+		}
+	}
+
+	spin_unlock(&pdev->wake_count_lock);
+}
+
 static void pmic_glink_notify_clients(struct pmic_glink_dev *pgdev,
 					enum pmic_glink_state state)
 {
 	struct pmic_glink_client *pos;
 
-	pm_stay_awake(pgdev->dev);
+	pmic_glink_wake_acquire(pgdev);
 
 	mutex_lock(&pgdev->client_lock);
 	list_for_each_entry(pos, &pgdev->client_dev_list, node)
 		pos->state_cb(pos->priv, state);
 	mutex_unlock(&pgdev->client_lock);
 
-	pm_relax(pgdev->dev);
+	pmic_glink_wake_relax(pgdev);
 
 	pmic_glink_dbg(pgdev, "state_cb done %d\n", state);
 }
@@ -262,9 +296,11 @@ int pmic_glink_write(struct pmic_glink_client *client, void *data,
 	mutex_unlock(&client->lock);
 	up_read(&client->pgdev->rpdev_sem);
 
-	if (rc < 0)
+	if (rc < 0) {
 		pr_err("Failed to send data [%*ph] for client %s, rc=%d\n",
 			(int)len, data, client->name, rc);
+		BUG_ON(client->pgdev->crash_on_err);
+	}
 
 	if (!rc && client->pgdev->log_enable) {
 		struct pmic_glink_hdr *hdr = data;
@@ -433,6 +469,7 @@ static void pmic_glink_rx_work(struct work_struct *work)
 		list_for_each_entry_safe(pbuf, tmp, &pdev->rx_list, node) {
 			spin_unlock_irqrestore(&pdev->rx_lock, flags);
 			pmic_glink_rx_callback(pdev, pbuf);
+			pmic_glink_wake_relax(pdev);
 			spin_lock_irqsave(&pdev->rx_lock, flags);
 			list_del(&pbuf->node);
 			kfree(pbuf);
@@ -460,6 +497,8 @@ static int pmic_glink_rpmsg_callback(struct rpmsg_device *rpdev, void *data,
 
 	pbuf->len = len;
 	memcpy(pbuf->buf, data, len);
+
+	pmic_glink_wake_acquire(pdev);
 
 	spin_lock_irqsave(&pdev->rx_lock, flags);
 	list_add_tail(&pbuf->node, &pdev->rx_list);
@@ -540,6 +579,7 @@ static void pmic_glink_add_debugfs(struct pmic_glink_dev *pgdev)
 	pgdev->debugfs_dir = dir;
 	debugfs_create_u32("filter", 0600, dir, &pgdev->log_filter);
 	debugfs_create_bool("enable", 0600, dir, &pgdev->log_enable);
+	debugfs_create_bool("crash_on_error", 0600, dir, &pgdev->crash_on_err);
 }
 #else
 static inline void pmic_glink_add_debugfs(struct pmic_glink_dev *pgdev)
@@ -657,6 +697,7 @@ static int pmic_glink_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&pgdev->rx_list);
 	INIT_LIST_HEAD(&pgdev->dev_list);
 	spin_lock_init(&pgdev->rx_lock);
+	spin_lock_init(&pgdev->wake_count_lock);
 	mutex_init(&pgdev->client_lock);
 	idr_init(&pgdev->client_idr);
 	atomic_set(&pgdev->prev_state, QCOM_SSR_BEFORE_POWERUP);
