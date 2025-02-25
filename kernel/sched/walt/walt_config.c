@@ -229,6 +229,8 @@ void walt_config(void)
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
+		sysctl_sched_suppress_region2 = 1;
+
 	} else if (!strcmp(name, "KERA")) {
 		soc_sched_lib_name_capacity = 3;
 		/*
