@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -201,6 +201,10 @@ static int mem_buf_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "mem_buf_reserve_ipa failed\n");
 #endif
+
+	ret = mem_buf_dma_buf_init();
+	if (ret)
+		return dev_err_probe(dev, ret, "mem_buf_dma_buf_init failed\n");
 
 	if (of_property_match_string(dev->of_node, "qcom,mem-buf-capabilities",
 				     "supplier") >= 0)
