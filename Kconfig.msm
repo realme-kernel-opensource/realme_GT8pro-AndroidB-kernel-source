@@ -72,6 +72,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/power/reset/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/power/supply/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/powercap/qcom/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/regulator/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/remoteproc/Kconfig"
