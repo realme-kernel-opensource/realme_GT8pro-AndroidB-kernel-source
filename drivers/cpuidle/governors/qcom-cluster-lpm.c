@@ -300,17 +300,30 @@ static int cluster_power_down(struct lpm_cluster *cluster_gov)
 	if (cluster_gov->use_bias_timer &&
 	    num_possible_cpus() != cpumask_weight(cluster_gov->genpd->cpus)) {
 		if (!cluster_gov->is_timer_expired && !cluster_gov->is_timer_queued) {
+			cluster_gov->need_timer_requeue = false;
 			clusttimer_cancel(cluster_gov);
 			clusttimer_start(cluster_gov, NSEC_PER_MSEC *
 					 CLUST_BIAS_TIME_MSEC);
 			cluster_gov->is_timer_queued = true;
 			return -1;
 		}
-		if (cluster_gov->is_timer_queued)
+		if (cluster_gov->is_timer_queued) {
+			cluster_gov->need_timer_requeue = true;
 			return -1;
+		}
 
 		cluster_gov->htmr_wkup = false;
 		cluster_gov->is_timer_expired = false;
+
+		if (cluster_gov->need_timer_requeue) {
+			cluster_gov->need_timer_requeue = false;
+			clusttimer_cancel(cluster_gov);
+			clusttimer_start(cluster_gov, NSEC_PER_MSEC *
+					 CLUST_BIAS_TIME_MSEC);
+			cluster_gov->is_timer_queued = true;
+			return -1;
+		}
+
 		return 0;
 	}
 
@@ -437,14 +450,36 @@ ktime_t get_cluster_sleep_time(struct lpm_cluster *cluster_gov)
 static void update_cluster_next_wakeup(struct lpm_cluster *cluster_gov)
 {
 	cluster_gov->next_wakeup = get_cluster_sleep_time(cluster_gov);
-	if (cluster_gov->pred_wakeup) {
-		if (ktime_before(cluster_gov->pred_wakeup,
-				cluster_gov->next_wakeup))
-			cluster_gov->next_wakeup = cluster_gov->pred_wakeup;
-	}
 
-	dev_pm_genpd_set_next_wakeup(cluster_gov->dev,
-				     cluster_gov->next_wakeup);
+	if (ktime_before(cluster_gov->next_wakeup, ktime_get()))
+		cluster_gov->next_wakeup = KTIME_MAX;
+
+	dev_pm_genpd_set_next_wakeup(cluster_gov->dev, cluster_gov->next_wakeup);
+}
+
+/**
+ * cluster_gov_reflect() - This will be called when cpu exiting lpm to update
+ *			   its cluster governor.
+ * @cpu_gov: CPU's lpm data structure.
+ */
+static void cluster_gov_reflect(struct lpm_cpu *cpu_gov)
+{
+	struct generic_pm_domain *genpd;
+	struct lpm_cluster *cluster_gov;
+	int cpu = cpu_gov->cpu;
+
+	list_for_each_entry(cluster_gov, &cluster_dev_list, list) {
+		if (!cluster_gov->initialized)
+			continue;
+
+		genpd = cluster_gov->genpd;
+		if (cpumask_test_cpu(cpu, genpd->cpus)) {
+			spin_lock(&cluster_gov->lock);
+			if (cluster_gov->is_timer_queued)
+				cluster_gov->need_timer_requeue = true;
+			spin_unlock(&cluster_gov->lock);
+		}
+	}
 }
 
 /**
@@ -452,7 +487,7 @@ static void update_cluster_next_wakeup(struct lpm_cluster *cluster_gov)
  *			   its next wakeup value to corresponding cluster domain device.
  * @cpu_gov: CPU's lpm data structure.
  */
-void update_cluster_select(struct lpm_cpu *cpu_gov)
+static void update_cluster_select(struct lpm_cpu *cpu_gov)
 {
 	struct generic_pm_domain *genpd;
 	struct lpm_cluster *cluster_gov;
@@ -505,6 +540,7 @@ struct cluster_governor gov_ops = {
 	.select = update_cluster_select,
 	.enable = cluster_gov_enable,
 	.disable = cluster_gov_disable,
+	.reflect = cluster_gov_reflect,
 };
 
 static void lpm_cluster_gov_remove(struct platform_device *pdev)
