@@ -2929,6 +2929,21 @@ static int qcom_scm_query_wq_queue_info(struct qcom_scm *scm)
 	return ret;
 }
 
+int qcom_scm_set_gic_cpuclass(u32 mpidr, u32 clss)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_GIC,
+		.cmd =  QCOM_SCM_GIC_SET_CPUCLASS,
+		.arginfo = QCOM_SCM_ARGS(2),
+		.args[0] = mpidr,
+		.args[1] = clss,
+		.owner = ARM_SMCCC_OWNER_SIP
+	};
+
+	return qcom_scm_call_atomic(__scm->dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_set_gic_cpuclass);
+
 bool qcom_scm_multi_call_allow(struct device *dev, bool multicall_allowed)
 {
 	struct qcom_scm *scm;

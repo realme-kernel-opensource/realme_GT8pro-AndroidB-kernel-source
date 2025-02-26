@@ -172,6 +172,8 @@ extern int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t  addr, 
 
 extern int qcom_scm_io_reset(void);
 
+extern int qcom_scm_set_gic_cpuclass(u32 mpdir, u32 clss);
+
 extern bool qcom_scm_is_secure_wdog_trigger_available(void);
 extern bool qcom_scm_is_mode_switch_available(void);
 

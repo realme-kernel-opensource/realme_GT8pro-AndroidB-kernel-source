@@ -197,6 +197,9 @@ struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
 #define QCOM_SCM_CAMERA_PROTECT_PHY_LANES	0x07
 #define QCOM_SCM_CAMERA_UPDATE_CAMNOC_QOS	0x0A
 
+#define QCOM_SCM_SVC_GIC			0x1D
+#define QCOM_SCM_GIC_SET_CPUCLASS		0x02
+
 #define QCOM_SCM_SVC_WAITQ			0x24
 #define QCOM_SCM_WAITQ_ACK			0x01
 #define QCOM_SCM_WAITQ_RESUME			0x02
