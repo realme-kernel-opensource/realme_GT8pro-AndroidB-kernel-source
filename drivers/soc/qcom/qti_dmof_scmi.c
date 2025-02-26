@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cpu.h>
@@ -327,6 +327,7 @@ static int qcom_dmof_probe(struct platform_device *pdev)
 	qcom_dmof_dd->thread_comm = "cpudmof/%u";
 	qcom_dmof_dd->cmd = COMMAND_INIT;
 	qcom_dmof_dd->ret = 0;
+	qcom_dmof_dd->val = 1;
 
 	qcom_dmof_dd->waitq = devm_kcalloc(&pdev->dev, num_possible_cpus(),
 					   sizeof(wait_queue_head_t), GFP_KERNEL);
