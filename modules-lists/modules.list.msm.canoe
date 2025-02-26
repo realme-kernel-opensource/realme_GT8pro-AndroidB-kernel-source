@@ -11,10 +11,10 @@ clk-rpmh.ko
 clk-scmi.ko
 sched-walt.ko
 sched-walt-debug.ko
-qcom_cpu_vendor_hooks.ko
 cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko
+debug_symbol.ko
 qcom_soc_wdt.ko
 debug-regulator.ko
 debugcc-canoe.ko
@@ -26,7 +26,6 @@ gpucc-canoe.ko
 tcsrcc-canoe.ko
 videocc-canoe.ko
 smem.ko
-debug_symbol.ko
 socinfo.ko
 icc-bcm-voter.ko
 icc-debug.ko
@@ -50,6 +49,7 @@ nvmem_qcom-spmi-sdam.ko
 rtc-pm8xxx.ko
 pmic-pon-log.ko
 qcom-pdc.ko
+qcom_cpu_vendor_hooks.ko
 qcom-dload-mode.ko
 memory_dump_v2.ko
 minidump.ko
