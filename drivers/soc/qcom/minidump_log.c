@@ -104,11 +104,11 @@ static bool is_vmap_stack __read_mostly;
 #include <linux/trace_seq.h>
 
 #define MD_FTRACE_BUF_SIZE	SZ_2M
+#define MD_FTRACE_BUF_MARKER	"==END=="
 
 static char *md_ftrace_buf_addr;
 static size_t md_ftrace_buf_current;
 static bool minidump_ftrace_in_oops;
-static bool minidump_ftrace_dump = true;
 #endif
 
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_DUMP
@@ -591,16 +591,22 @@ static inline void register_irq_stack(void) {}
 static void minidump_add_trace_event(char *buf, size_t size)
 {
 	char *addr;
+	size_t wrap_size = 0;
 
 	if (!READ_ONCE(md_ftrace_buf_addr) ||
 	    (size > (size_t)MD_FTRACE_BUF_SIZE))
 		return;
 
-	if ((md_ftrace_buf_current + size) > (size_t)MD_FTRACE_BUF_SIZE)
+	if ((md_ftrace_buf_current + size) > (size_t)MD_FTRACE_BUF_SIZE) {
+		wrap_size = MD_FTRACE_BUF_SIZE - md_ftrace_buf_current;
+		addr = md_ftrace_buf_addr + md_ftrace_buf_current;
+		memcpy(addr, buf, wrap_size);
 		md_ftrace_buf_current = 0;
+	}
+
 	addr = md_ftrace_buf_addr + md_ftrace_buf_current;
-	memcpy(addr, buf, size);
-	md_ftrace_buf_current += size;
+	memcpy(addr, buf + wrap_size, size - wrap_size);
+	md_ftrace_buf_current += size - wrap_size;
 }
 
 static void md_trace_oops_enter(void *unused, bool *enter_check)
@@ -615,6 +621,8 @@ static void md_trace_oops_enter(void *unused, bool *enter_check)
 
 static void md_trace_oops_exit(void *unused, bool *exit_check)
 {
+	minidump_add_trace_event(MD_FTRACE_BUF_MARKER,
+		sizeof(MD_FTRACE_BUF_MARKER));
 	minidump_ftrace_in_oops = false;
 }
 
@@ -623,25 +631,10 @@ static void md_update_trace_fmt(void *unused, bool *format_check)
 	*format_check = false;
 }
 
-static void md_buf_size_check(void *unused, unsigned long buffer_size,
-			      bool *size_check)
-{
-	if (!minidump_ftrace_dump) {
-		*size_check = true;
-		return;
-	}
-
-	if (buffer_size > (SZ_256K + PAGE_SIZE)) {
-		pr_err("Skip md ftrace buffer dump for: %#lx\n", buffer_size);
-		minidump_ftrace_dump = false;
-		*size_check = true;
-	}
-}
-
 static void md_dump_trace_buf(void *unused, struct trace_seq *trace_buf,
 			      bool *printk_check)
 {
-	if (minidump_ftrace_in_oops && minidump_ftrace_dump) {
+	if (minidump_ftrace_in_oops) {
 		minidump_add_trace_event(trace_buf->buffer,
 					 trace_buf->seq.len);
 		*printk_check = false;
@@ -669,8 +662,6 @@ static void md_register_trace_buf(void)
 							 NULL);
 	register_trace_android_vh_ftrace_oops_exit(md_trace_oops_exit,
 							 NULL);
-	register_trace_android_vh_ftrace_size_check(md_buf_size_check,
-						    NULL);
 	register_trace_android_vh_ftrace_format_check(md_update_trace_fmt,
 						      NULL);
 	register_trace_android_vh_ftrace_dump_buffer(md_dump_trace_buf,
