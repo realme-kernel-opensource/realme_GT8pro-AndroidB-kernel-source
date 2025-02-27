@@ -672,6 +672,15 @@ config QCOM_MINIDUMP_PSTORE
 	  (non-volatile memory) and during warm reboot these
 	  dump will be copied outside the system on panic.
 
+config MINIDUMP_ALL_TASK_INFO
+	bool "Minidump All task info"
+	depends on QCOM_MINIDUMP
+	help
+	  Minidump runqueue dump only collect running task
+	  info by default, this enables all task info
+	  collection during panic. This can provide more
+	  debug info.
+
 config MINIDUMP_MAX_ENTRIES
 	int "Minidump Maximum num of entries"
 	default 200
