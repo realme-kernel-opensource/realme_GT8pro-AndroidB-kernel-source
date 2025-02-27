@@ -1146,6 +1146,16 @@ power_off:
 	return ret;
 }
 
+static void qpace_remove(struct platform_device *pdev)
+{
+	if (!is_qpace_enabled())
+		return;
+
+	deinit_transfer_rings(NUM_RINGS);
+	deinit_event_rings(NUM_RINGS);
+	qpace_power_off();
+}
+
 static const struct of_device_id qpace_match_table[] = {
 	{.compatible = "qcom,qpace"},
 	{},
@@ -1153,6 +1163,7 @@ static const struct of_device_id qpace_match_table[] = {
 
 static struct platform_driver qpace_driver = {
 	.probe = qpace_probe,
+	.remove = qpace_remove,
 	.driver = {
 		.name = "qcom-qpace",
 		.of_match_table = qpace_match_table,
@@ -1164,7 +1175,13 @@ static int __init qpace_module_init(void)
 	return platform_driver_register(&qpace_driver);
 }
 
+static void __exit qpace_module_exit(void)
+{
+	platform_driver_unregister(&qpace_driver);
+}
+
 module_init(qpace_module_init);
+module_exit(qpace_module_exit);
 
 MODULE_LICENSE("GPL");
 
