@@ -8,6 +8,7 @@ autogvm_perf_config = {
     "CONFIG_CRYPTO_DEV_QCOM_RNG": "m",
     "CONFIG_VIOSPMI_MSM_PMIC_ARB": "m",
     "CONFIG_QCOM_TZMEM": "m",
+    "CONFIG_MSM_HAB": "m",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
