@@ -5260,6 +5260,7 @@ static int msm_pcie_get_gdsc_genpd(struct msm_pcie_dev_t *pcie_dev)
 			return -EINVAL;
 		}
 
+		pm_suspend_ignore_children(&pdev->dev, true);
 		pm_runtime_enable(&pdev->dev);
 
 		return 0;
