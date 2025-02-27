@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Description: CoreSight Replicator driver
  */
@@ -358,6 +358,7 @@ static int replicator_add_coresight_dev(struct device *dev, struct resource *res
 	}
 
 	replicator_reset(drvdata);
+	pm_runtime_put_sync(dev);
 	drvdata->pm_config.hw_powered = true;
 
 out_disable_clk:
