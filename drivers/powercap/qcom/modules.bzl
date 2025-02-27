@@ -18,6 +18,7 @@ def register_modules(registry):
             # do not sort
             "drivers/powercap/qcom/qti_power_telemetry.c",
             "drivers/powercap/qcom/qti_power_telemetry.h",
+            "drivers/powercap/qcom/trace.h",
         ],
         deps = [
             # do not sort

@@ -21,6 +21,9 @@
 #include <linux/sched/clock.h>
 #include <linux/unaligned.h>
 
+#define CREATE_TRACE_POINTS
+#include "trace.h"
+
 #include "qti_power_telemetry.h"
 
 #define QPT_CONFIG_SDAM_BASE_OFF	0x45
@@ -285,6 +288,9 @@ static void qpt_channel_avg_data_update(struct qpt_device *qpt_dev,
 	qpt_dev->last_data_uw = cur_last_data_uw;
 
 	mutex_unlock(&qpt_dev->lock);
+
+	trace_qpt_data_update(qpt_dev->ch_id, qpt_dev->last_data,
+				qpt_dev->total_energey_uj, qpt_dev->pavg);
 	QPT_DBG_DATA(qpt_dev->priv,
 		"qpt[0x%x]: tot_power:%lluuw ADC:0x%llx tot_energy:%lluuj powavg %lluuw",
 			qpt_dev->ch_id, qpt_dev->last_data_uw, qpt_dev->last_data,
