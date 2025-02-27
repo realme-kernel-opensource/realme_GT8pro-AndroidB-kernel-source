@@ -4249,8 +4249,14 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 			}
 		}
 		/* indicate phy about SS mode */
-		if (dwc3_msm_is_superspeed(mdwc))
+		if (dwc3_msm_is_superspeed(mdwc)) {
+			enum phy_mode mode;
+
 			dwc3_msm_set_usbphy_flags(mdwc->ss_phy, DEVICE_IN_SS_MODE);
+			mode = mdwc->in_host_mode ? PHY_MODE_USB_HOST_SS :
+				PHY_MODE_USB_DEVICE_SS;
+			phy_set_mode(mdwc->usb3_phy, mode);
+		}
 		usb_phy_set_suspend(mdwc->ss_phy, 1);
 		mdwc->lpm_flags |= MDWC3_SS_PHY_SUSPEND;
 	} else if (mdwc->use_pwr_event_for_wakeup) {
