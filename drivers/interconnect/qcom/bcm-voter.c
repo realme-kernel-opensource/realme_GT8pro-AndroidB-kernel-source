@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <asm/div64.h>
@@ -560,7 +560,7 @@ static int qcom_icc_bcm_voter_probe(struct platform_device *pdev)
 		crm->dev = crm_get_device(crm_name);
 		if (IS_ERR(crm->dev)) {
 			if (PTR_ERR(crm->dev) == -ENODEV) {
-				dev_err(&pdev->dev, "crm_name=%s unavailable=%d\n",
+				dev_dbg(&pdev->dev, "crm_name=%s unavailable=%d\n",
 					crm_name, -EPROBE_DEFER);
 				return -EPROBE_DEFER;
 			}
