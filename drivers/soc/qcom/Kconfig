@@ -979,4 +979,14 @@ config QCOM_CACHE_ALLOCATION
 	  cache with different size for cpu/gpu dynamically according to cpu/gpu load
 	  varies in runtime, like freq and bandwidth varies. This driver also provides
 	  sysfs nodes to enable/disable this governor and to set thresholds for control.
+
+config QCOM_CPUSS_TELEMETRY
+	tristate "Qualcomm CPUSS Telemetry driver"
+	depends on QTI_SCMI_VENDOR_PROTOCOL
+	default n
+	help
+	  This is a cpuss telemetry driver. It realizes that to get cpuss telemetry data
+	  exposed in shared memory location from CPUCP. This data is the LPM statistics
+	  of cpu cores, clusters and cpu subsystem. And the data is exposed via debugfs
+	  nodes for utilization.
 endmenu

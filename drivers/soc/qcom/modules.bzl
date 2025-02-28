@@ -164,6 +164,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/cpuss_telemetry",
+        out = "cpuss_telemetry.ko",
+        config = "CONFIG_QCOM_CPUSS_TELEMETRY",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/cpuss_telemetry.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/cpu_phys_log_map",
         out = "cpu_phys_log_map.ko",
         config = "CONFIG_QCOM_CPU_PHYS_LOG_MAP",
