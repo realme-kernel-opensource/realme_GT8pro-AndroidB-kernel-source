@@ -582,7 +582,7 @@ struct ufs_qcom_host {
 	atomic_t therm_mitigation;
 	cpumask_t perf_mask;
 	cpumask_t def_mask;
-	cpumask_t esi_affinity_mask;
+	u32 *esi_affinity_mask;
 	bool disable_wb_support;
 	struct ufs_qcom_ber_hist ber_hist[UFS_QCOM_BER_MODE_MAX];
 	struct list_head regs_list_head;
@@ -598,6 +598,7 @@ struct ufs_qcom_host {
 	unsigned long active_cmds;
 	u32 max_cpus;
 	u32 device_id;
+	unsigned int boost_monitor_timer;
 };
 
 static inline u32

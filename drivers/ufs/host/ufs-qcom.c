@@ -30,7 +30,7 @@
 #include <trace/hooks/ufshcd.h>
 #include <linux/ipc_logging.h>
 #include <soc/qcom/minidump.h>
-#ifdef CONFIG_SCHED_WALT
+#if IS_ENABLED(CONFIG_SCHED_WALT)
 #include <linux/sched/walt.h>
 #endif
 #include <linux/nvmem-consumer.h>
@@ -1611,30 +1611,29 @@ static void ufs_qcom_set_affinity_hint(struct ufs_hba *hba, bool prime)
 static void ufs_qcom_set_esi_affinity_hint(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	cpumask_t *affinity_mask = &host->esi_affinity_mask;
 	const cpumask_t *mask;
 	struct msi_desc *desc;
 	unsigned int set = IRQ_NO_BALANCING;
 	unsigned int clear = 0;
-	unsigned int cpu = 0;
 	int ret, i = 0;
 
-	if (affinity_mask->bits[0] == 0)
+	if (!host->esi_affinity_mask)
 		return;
 
 	msi_lock_descs(hba->dev);
 	msi_for_each_desc(desc, hba->dev, MSI_DESC_ALL) {
-		if (i % cpumask_weight(affinity_mask) == 0)
-			cpu = cpumask_first(affinity_mask);
-		else
-			cpu = cpumask_next(cpu, affinity_mask);
+		/* Affine IRQ for each desc parsed from DT node */
+		mask = get_cpu_mask(host->esi_affinity_mask[i]);
+		if (!cpumask_subset(mask, cpu_possible_mask)) {
+			dev_err(hba->dev, "Invalid esi-cpu affinity mask passed, using default\n");
+			mask = get_cpu_mask(UFS_QCOM_ESI_AFFINITY_MASK);
+		}
 
-		mask = get_cpu_mask(cpu);
 		irq_modify_status(desc->irq, clear, set);
 		ret = irq_set_affinity_hint(desc->irq, mask);
 		if (ret < 0)
 			dev_err(hba->dev, "%s: Failed to set affinity hint to cpu %d for ESI %d, err = %d\n",
-					__func__, cpu, desc->irq, ret);
+					__func__, i, desc->irq, ret);
 		i++;
 	}
 	msi_unlock_descs(hba->dev);
@@ -1656,7 +1655,7 @@ static void ufs_qcom_toggle_pri_affinity(struct ufs_hba *hba, bool on)
 	if (on && atomic_read(&host->therm_mitigation))
 		return;
 
-#ifdef CONFIG_SCHED_WALT
+#if IS_ENABLED(CONFIG_SCHED_WALT)
 	if (on)
 		sched_set_boost(STORAGE_BOOST);
 	else
@@ -1711,7 +1710,7 @@ static void ufs_qcom_cpufreq_dwork(struct work_struct *work)
 
 out:
 	queue_delayed_work(host->ufs_qos->workq, &host->fwork,
-			   msecs_to_jiffies(UFS_QCOM_LOAD_MON_DLY_MS));
+			   msecs_to_jiffies(host->boost_monitor_timer));
 }
 
 static int add_group_qos(struct qos_cpu_group *qcg, enum constraint type)
@@ -2957,6 +2956,7 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 	struct device_node *np = dev->of_node;
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int mask = 0;
+	int num_cqs = 0;
 
 	/*
 	 * In a system where CPUs are partially populated, the cpu mapping
@@ -2974,27 +2974,45 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 	of_property_read_u32(np, "qcom,prime-mask", &mask);
 	host->perf_mask.bits[0] = mask;
 	if (!cpumask_subset(&host->perf_mask, cpu_possible_mask)) {
-		dev_err(dev, "Invalid group prime mask 0x%x\n", mask);
+		dev_err(dev, "Invalid group prime mask\n");
 		host->perf_mask.bits[0] = UFS_QCOM_IRQ_PRIME_MASK;
 	}
 	mask = 0;
 	of_property_read_u32(np, "qcom,silver-mask", &mask);
 	host->def_mask.bits[0] = mask;
 	if (!cpumask_subset(&host->def_mask, cpu_possible_mask)) {
-		dev_err(dev, "Invalid group silver mask 0x%x\n", mask);
+		dev_err(dev, "Invalid group silver mask\n");
 		host->def_mask.bits[0] = UFS_QCOM_IRQ_SLVR_MASK;
 	}
 	mask = 0;
-	of_property_read_u32(np, "qcom,esi-affinity-mask", &mask);
-	host->esi_affinity_mask.bits[0] = mask;
-	if (!cpumask_subset(&host->esi_affinity_mask, cpu_possible_mask)) {
-		dev_err(dev, "Invalid group ESI affinity mask\n");
-		host->esi_affinity_mask.bits[0] = UFS_QCOM_ESI_AFFINITY_MASK;
+	if (of_find_property(dev->of_node, "qcom,esi-affinity-mask", &mask)) {
+		num_cqs = mask/sizeof(*host->esi_affinity_mask);
+		host->esi_affinity_mask = devm_kcalloc(hba->dev, num_cqs,
+						sizeof(*host->esi_affinity_mask),
+						GFP_KERNEL);
+		if (!host->esi_affinity_mask)
+			return;
+
+		mask = of_property_read_variable_u32_array(np, "qcom,esi-affinity-mask",
+				host->esi_affinity_mask, 0, num_cqs);
+
+		if (mask < 0) {
+			dev_info(dev, "Not found esi-affinity-mask property values\n");
+			return;
+		}
 	}
 
 	/* If device includes perf mask, enable dynamic irq affinity feature */
 	if (host->perf_mask.bits[0])
 		host->irq_affinity_support = true;
+}
+
+/* ufs_qcom_storage_boost_param_init - Init Storage boost param */
+static void ufs_qcom_storage_boost_param_init(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	host->boost_monitor_timer = UFS_QCOM_LOAD_MON_DLY_MS;
 }
 
 /* Returns the max mitigation level supported */
@@ -3666,6 +3684,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	ufs_qcom_qos_init(hba);
 	ufs_qcom_parse_irq_affinity(hba);
 	ufs_qcom_ber_mon_init(hba);
+	ufs_qcom_storage_boost_param_init(hba);
 	host->ufs_ipc_log_ctx = ipc_log_context_create(UFS_QCOM_MAX_LOG_SZ,
 							"ufs-qcom", 0);
 	if (!host->ufs_ipc_log_ctx)
@@ -3889,10 +3908,8 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 			if (!host->cpufreq_dis &&
 			    !(atomic_read(&host->therm_mitigation))) {
 				atomic_set(&host->num_reqs_threshold, 0);
-				queue_delayed_work(host->ufs_qos->workq,
-						  &host->fwork,
-					msecs_to_jiffies(
-						UFS_QCOM_LOAD_MON_DLY_MS));
+				queue_delayed_work(host->ufs_qos->workq, &host->fwork,
+						msecs_to_jiffies(host->boost_monitor_timer));
 			}
 		} else {
 			err = ufs_qcom_clk_scale_down_pre_change(hba);
@@ -5294,6 +5311,39 @@ static ssize_t irq_affinity_support_show(struct device *dev,
 
 static DEVICE_ATTR_RW(irq_affinity_support);
 
+static ssize_t boost_monitor_timer_ms_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	int ret;
+	u32 val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
+	ret = kstrtouint(buf, 0, &val);
+	if (ret) {
+		dev_err(hba->dev, "boost max thres store failed\n");
+		return -EINVAL;
+	}
+
+	host->boost_monitor_timer = val;
+	return count;
+}
+
+static ssize_t boost_monitor_timer_ms_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", host->boost_monitor_timer);
+}
+
+static DEVICE_ATTR_RW(boost_monitor_timer_ms);
+
 static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_err_state.attr,
 	&dev_attr_power_mode.attr,
@@ -5305,6 +5355,7 @@ static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_hibern8_count.attr,
 	&dev_attr_ber_th_exceeded.attr,
 	&dev_attr_irq_affinity_support.attr,
+	&dev_attr_boost_monitor_timer_ms.attr,
 	NULL
 };
 
