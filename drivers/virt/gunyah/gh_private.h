@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _GH_PRIVATE_H
@@ -35,6 +35,7 @@ struct gh_vm {
 	bool vm_run_once;
 	bool keep_running;
 	bool proxy_vm; /* is true for VMs scheduled by proxy driver*/
+	bool is_populate_hyp_res;
 	u32 created_vcpus;
 	u32 allowed_vcpus;
 	gh_vmid_t vmid;

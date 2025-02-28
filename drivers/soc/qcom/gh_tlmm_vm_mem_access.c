@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -13,6 +13,7 @@
 #include <linux/types.h>
 #include "linux/gunyah/gh_mem_notifier.h"
 #include "linux/gunyah/gh_rm_drv.h"
+#include "linux/gunyah/gh_vm.h"
 #include <linux/pinctrl/consumer.h>
 #include <linux/pinctrl/qcom-pinctrl.h>
 #include <linux/slab.h>
@@ -131,32 +132,29 @@ static int __maybe_unused gh_guest_memshare_nb_handler(struct notifier_block *th
 {
 	struct gh_tlmm_data *tlmm_data;
 	struct gh_tlmm_vm_info *vm_info;
-	struct gh_rm_notif_vm_status_payload *vm_status_payload = data;
+	gh_vmid_t vmid;
 	int ret;
 
+	if (!data)
+		return NOTIFY_DONE;
+
+	vmid = *((gh_vmid_t *)data);
 	tlmm_data = container_of(this, struct gh_tlmm_data, guest_memshare_nb);
 
-	if (cmd != GH_RM_NOTIF_VM_STATUS)
-		return NOTIFY_DONE;
-
-	/*
-	 * Listen to STATUS_READY notification from RM.
-	 * These notifications come from RM after PIL loading the VM images.
-	 */
-	if (vm_status_payload->vm_status != GH_RM_VM_STATUS_READY)
-		return NOTIFY_DONE;
-
-	list_for_each_entry(vm_info, &tlmm_data->vm_info, list) {
-		if (vm_status_payload->vmid != vm_info->vmid)
-			continue;
-		ret = gh_rm_get_vm_name(vm_info->vmid, &vm_info->vm_name);
-		if (ret)
-			dev_err(tlmm_data->dev,
-				"Failed to get VM name for VMID%d\n",
-				vm_info->vmid);
-		else
-			gh_tlmm_vm_mem_share(vm_info);
-		break;
+	switch (cmd) {
+	case  GH_VM_BEFORE_POWERUP:
+		list_for_each_entry(vm_info, &tlmm_data->vm_info, list) {
+			if (vmid != vm_info->vmid)
+				continue;
+			ret = gh_rm_get_vm_name(vm_info->vmid, &vm_info->vm_name);
+			if (ret)
+				dev_err(tlmm_data->dev,
+					"Failed to get VM name for VMID%d\n",
+					vm_info->vmid);
+			else
+				gh_tlmm_vm_mem_share(vm_info);
+			break;
+		}
 	}
 
 	return NOTIFY_DONE;
@@ -440,7 +438,7 @@ static int gh_tlmm_vm_mem_access_probe(struct platform_device *pdev)
 			gh_guest_memshare_nb_handler;
 
 		tlmm_data->guest_memshare_nb.priority = INT_MAX;
-		ret = gh_rm_register_notifier(&tlmm_data->guest_memshare_nb);
+		ret = gh_register_vm_notifier(&tlmm_data->guest_memshare_nb);
 		if (ret)
 			return ret;
 	} else {
@@ -466,7 +464,7 @@ static void gh_tlmm_vm_mem_access_remove(struct platform_device *pdev)
 	master = of_property_read_bool(np, "qcom,master");
 	if (master)
 		gh_mem_notifier_unregister(tlmm_data->mem_cookie);
-	gh_rm_unregister_notifier(&tlmm_data->guest_memshare_nb);
+	gh_unregister_vm_notifier(&tlmm_data->guest_memshare_nb);
 }
 
 static const struct of_device_id gh_tlmm_vm_mem_access_of_match[] = {

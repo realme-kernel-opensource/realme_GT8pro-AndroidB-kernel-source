@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -279,8 +279,10 @@ static int gh_sec_vm_loader_load_fw(struct gh_sec_vm_dev *vm_dev,
 	if (ret < 0) {
 		dev_err(dev, "Couldn't allocate VMID for %s %d\n",
 						vm_dev->vm_name, ret);
-		if (!vm_dev->is_static)
+		if (!vm_dev->is_static) {
 			dma_free_coherent(dev, vm_dev->fw_size, virt, dma_handle);
+			vm_dev->fw_virt = NULL;
+		}
 		return ret;
 	}
 
@@ -480,6 +482,8 @@ long gh_vm_ioctl_set_fw_name(struct gh_vm *vm, unsigned long arg)
 
 	dev = sec_vm_dev->dev;
 
+	scnprintf(vm->fw_name, ARRAY_SIZE(vm->fw_name),
+						"%s", vm_fw_name.name);
 	ret = gh_sec_vm_loader_load_fw(sec_vm_dev, vm);
 	if (ret) {
 		dev_err(dev, "Loading secure VM %s to memory failed %ld\n",
@@ -487,8 +491,6 @@ long gh_vm_ioctl_set_fw_name(struct gh_vm *vm, unsigned long arg)
 		goto err_fw_name;
 	}
 
-	scnprintf(vm->fw_name, ARRAY_SIZE(vm->fw_name),
-						"%s", vm_fw_name.name);
 	gh_uevent_notify_change(GH_EVENT_CREATE_VM, vm);
 	mutex_unlock(&vm->vm_lock);
 	return ret;
@@ -516,6 +518,7 @@ long gh_vm_ioctl_get_fw_name(struct gh_vm *vm, unsigned long arg)
 int gh_secure_vm_loader_reclaim_fw(struct gh_vm *vm)
 {
 	struct gh_sec_vm_dev *sec_vm_dev;
+	gh_vmid_t vmid = vm->vmid;
 	struct device *dev;
 	char *fw_name;
 	int ret = 0;
@@ -531,12 +534,18 @@ int gh_secure_vm_loader_reclaim_fw(struct gh_vm *vm)
 	if (!sec_vm_dev->system_vm)
 		gh_reclaim_user_mem(vm);
 
-	ret = gh_reclaim_mem(vm, sec_vm_dev->fw_phys,
-			sec_vm_dev->fw_size, sec_vm_dev->system_vm);
+	if (vm->is_secure_vm)
+		ret = gh_reclaim_mem(vm, sec_vm_dev->fw_phys,
+				sec_vm_dev->fw_size, sec_vm_dev->system_vm);
 	if (!ret && !sec_vm_dev->is_static) {
 		dma_free_coherent(dev, sec_vm_dev->fw_size, sec_vm_dev->fw_virt,
 			phys_to_dma(dev, sec_vm_dev->fw_phys));
+		sec_vm_dev->fw_virt = NULL;
 	}
+
+	ret = gh_rm_vm_dealloc_vmid(vmid);
+	if (ret)
+		pr_warn("Failed to dealloc VMID: %d: %d\n", vmid, ret);
 
 	return ret;
 }
