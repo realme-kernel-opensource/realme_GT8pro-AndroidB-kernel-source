@@ -7,6 +7,9 @@ def register_modules(registry):
             # do not sort
             "net/qmsgq/af_qmsgq.h",
             "net/qmsgq/af_qmsgq.c",
+            "net/qmsgq/qmsgq_transport.h",
+            "net/qmsgq/qmsgq_gunyah.h",
+            "net/qmsgq/qmsgq_transport.c",
         ],
         deps = [
             # do not sort
@@ -21,6 +24,8 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "net/qmsgq/af_qmsgq.h",
+            "net/qmsgq/qmsgq_transport.h",
+            "net/qmsgq/qmsgq_gunyah.h",
             "net/qmsgq/qmsgq_gunyah.c",
         ],
         deps = [
