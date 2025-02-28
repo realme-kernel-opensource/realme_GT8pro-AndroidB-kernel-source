@@ -12,6 +12,7 @@
 #include <linux/string.h>
 
 #include "voter.h"
+#include "trace.h"
 
 #define NUM_MAX_CLIENTS		32
 
@@ -283,6 +284,7 @@ int vote(struct votable *votable, int client_id, bool enabled, int val)
 	if (!votable || (client_id < 0))
 		return -EINVAL;
 
+	trace_sched_client_vote(votable->name, client_id, enabled, val);
 	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 
 	/*
@@ -326,6 +328,10 @@ int vote(struct votable *votable, int client_id, bool enabled, int val)
 			|| (effective_result != votable->effective_result)) {
 		votable->effective_client_id = effective_id;
 		votable->effective_result = effective_result;
+
+		trace_sched_votable_result(votable->name, votable->effective_client_id,
+					   votable->effective_result);
+
 		if (votable->callback)
 			rc = votable->callback(votable, votable->data,
 					effective_result,

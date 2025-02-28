@@ -19,6 +19,7 @@ struct group_cpu_time;
 struct walt_task_struct;
 struct walt_rq;
 struct walt_related_thread_group;
+struct votable;
 
 extern const char *task_event_names[];
 
@@ -2058,6 +2059,54 @@ TRACE_EVENT(walt_oscillate,
 		__entry->pid, __entry->src_cpu, __entry->dst_cpu,
 		__entry->oscillate_cpu, __entry->reason)
 );
+
+TRACE_EVENT(sched_client_vote,
+
+	TP_PROTO(const char *votable_name, int client_id, bool enabled, int val),
+
+	TP_ARGS(votable_name, client_id, enabled, val),
+
+	TP_STRUCT__entry(
+		__array(char,		votable_name, TASK_COMM_LEN)
+		__field(int,		client_id)
+		__field(bool,		enabled)
+		__field(int,		val)
+		),
+
+	TP_fast_assign(
+		memcpy(__entry->votable_name, votable_name, TASK_COMM_LEN);
+		__entry->client_id	= client_id;
+		__entry->enabled	= enabled;
+		__entry->val		= val;
+		),
+
+	TP_printk("votable_name=%s client=%d enable=%d val=%d",
+			__entry->votable_name, __entry->client_id, __entry->enabled, __entry->val)
+);
+
+TRACE_EVENT(sched_votable_result,
+
+	TP_PROTO(const char *votable_name, int effective_client_id, int effective_result),
+
+	TP_ARGS(votable_name, effective_client_id, effective_result),
+
+	TP_STRUCT__entry(
+		__array(char,		votable_name, TASK_COMM_LEN)
+		__field(int,		effective_client_id)
+		__field(int,		effective_result)
+		),
+
+	TP_fast_assign(
+		memcpy(__entry->votable_name, votable_name, TASK_COMM_LEN);
+		__entry->effective_client_id	= effective_client_id;
+		__entry->effective_result	= effective_result;
+		),
+
+	TP_printk("votable_name=%s eff_client=%d eff_result=%d",
+			__entry->votable_name, __entry->effective_client_id,
+			__entry->effective_result)
+);
+
 #endif /* _TRACE_WALT_H */
 
 #undef TRACE_INCLUDE_PATH
