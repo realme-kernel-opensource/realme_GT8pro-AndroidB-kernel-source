@@ -15,4 +15,13 @@ config QCOM_LLCC_PMU
 	   Adds the LLCC PMU into the perf events subsystem for monitoring
 	   LLCC miss events.
 
+config ARM_SMMU_PMU
+        tristate "ARM SMMU PMU"
+        depends on PERF_EVENTS && ARM64 && ARM_SMMU
+          help
+          Provides support for the SMMU performance monitor unit (PMU)
+          on ARM-based systems.
+          Adds the SMMU PMU into the perf events subsystem for
+          monitoring SMMU performance events.
+
 endmenu

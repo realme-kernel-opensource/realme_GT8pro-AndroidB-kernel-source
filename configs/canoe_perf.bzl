@@ -5,6 +5,7 @@ canoe_perf_config = {
     "CONFIG_ARM_QCOM_CPUFREQ_NVMEM": "n",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
+    "CONFIG_ARM_SMMU_PMU": "m",
     "CONFIG_ARM_SMMU_QCOM": "m",
     "CONFIG_ARM_SMMU_QCOM_DEBUG": "n",
     "CONFIG_ARM_SMMU_SELFTEST": "n",
