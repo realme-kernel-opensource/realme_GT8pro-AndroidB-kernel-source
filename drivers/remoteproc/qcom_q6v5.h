@@ -15,6 +15,11 @@ struct qcom_sysmon;
 #define PING_TIMEOUT 500 /* in milliseconds */
 #define PING_TEST_WAIT 500 /* in milliseconds */
 
+struct string_node {
+	struct list_head list;
+	char str[];
+};
+
 struct qcom_q6v5 {
 	struct device *dev;
 	struct rproc *rproc;
@@ -58,6 +63,9 @@ struct qcom_q6v5 {
 	unsigned long long crash_seq;
 
 	bool early_boot;
+
+	bool always_ssr;
+	struct string_node *always_ssr_reasons;
 };
 
 int ping_subsystem(struct qcom_q6v5 *q6v5);

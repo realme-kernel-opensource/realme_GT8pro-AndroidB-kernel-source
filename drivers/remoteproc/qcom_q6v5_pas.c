@@ -10,6 +10,7 @@
 
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/debugfs.h>
 #include <linux/dma-mapping.h>
 #include <linux/firmware.h>
 #include <linux/interrupt.h>
@@ -34,6 +35,7 @@
 #include <trace/hooks/remoteproc.h>
 #include <linux/iopoll.h>
 #include <linux/refcount.h>
+#include <linux/string.h>
 #include <linux/timer.h>
 #include <trace/events/rproc_qcom.h>
 #include <linux/interconnect.h>
@@ -1472,6 +1474,107 @@ void qcom_rproc_update_recovery_status(struct rproc *rproc, bool enable, bool lo
 }
 EXPORT_SYMBOL_GPL(qcom_rproc_update_recovery_status);
 
+static ssize_t q6v5_read_debugfs(struct file *file, char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	struct qcom_q6v5 *q6v5 = file->private_data;
+	struct string_node *node;
+	char *kbuf;
+	ssize_t len = 0;
+	size_t buf_size = count;
+	ssize_t ret = 0;
+
+	kbuf = kmalloc(buf_size, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	list_for_each_entry(node, &q6v5->always_ssr_reasons->list, list) {
+		len += snprintf(kbuf + len, buf_size - len, "%s\n", node->str);
+		if (len >= buf_size)
+			break;
+	}
+	ret = len;
+
+	if (*ppos >= len) {
+		ret = 0;
+		goto free_kbuf;
+	}
+
+	if (simple_read_from_buffer(buf, len, ppos, kbuf, buf_size) < 0) {
+		ret = -EFAULT;
+		goto free_kbuf;
+	}
+
+free_kbuf:
+	kfree(kbuf);
+
+	return ret;
+}
+
+static ssize_t q6v5_write_debugfs(struct file *file, const char __user *buf,
+				  size_t count, loff_t *ppos)
+{
+	struct qcom_q6v5 *q6v5 = file->private_data;
+	struct string_node *node;
+	struct string_node *next;
+	size_t trimmed_count = count;
+
+	node = kmalloc(sizeof(*node) + count + 1, GFP_KERNEL);
+	if (!node)
+		return -ENOMEM;
+
+	if (copy_from_user(node->str, buf, count)) {
+		kfree(node);
+		return -EFAULT;
+	}
+
+	list_add(&node->list, &q6v5->always_ssr_reasons->list);
+
+	if ('\n' == *(node->str + count - 1)) {
+		*(node->str + count - 1) = '\0';
+		trimmed_count--;
+	}
+
+	if (!trimmed_count) {
+		dev_info(q6v5->dev,
+			"Empty string entered, clearing always SSR list\n");
+		list_for_each_entry_safe(
+			node, next, &q6v5->always_ssr_reasons->list, list) {
+			list_del(&node->list);
+			kfree(node);
+		}
+	}
+
+	return count;
+}
+
+static const struct file_operations q6v5_debugfs_ops = {
+	.read = q6v5_read_debugfs,
+	.write = q6v5_write_debugfs,
+	.open = simple_open,
+};
+
+static int q6v5_debugfs_init(struct qcom_q6v5 *q6v5)
+{
+	struct dentry *dentry;
+	char head_string[] = "";
+	size_t len = strlen(head_string) + 1;
+
+	dentry = debugfs_create_file("ssr_reasons", 0644, q6v5->rproc->dbg_dir,
+				     q6v5, &q6v5_debugfs_ops);
+	if (!dentry)
+		return -ENOMEM;
+
+	q6v5->always_ssr_reasons = kmalloc(sizeof(*q6v5->always_ssr_reasons) + len, GFP_KERNEL);
+	if (!q6v5->always_ssr_reasons)
+		return -ENOMEM;
+
+	strscpy(q6v5->always_ssr_reasons->str, head_string, len);
+	INIT_LIST_HEAD(&q6v5->always_ssr_reasons->list);
+
+	return 0;
+}
+
 static int adsp_probe(struct platform_device *pdev)
 {
 	const struct adsp_data *desc;
@@ -1644,6 +1747,11 @@ static int adsp_probe(struct platform_device *pdev)
 	if (ret)
 		goto destroy_minidump_dev;
 
+	ret = q6v5_debugfs_init(&adsp->q6v5);
+	if (ret)
+		goto delete_rproc;
+
+
 	/*
 	 * Concurrent stores can happen on the same global variable with
 	 * different subsystem probe, however, as it is happening with
@@ -1660,6 +1768,8 @@ static int adsp_probe(struct platform_device *pdev)
 
 	return 0;
 
+delete_rproc:
+	rproc_del(rproc);
 destroy_minidump_dev:
 	if (adsp->minidump_dev)
 		qcom_destroy_ramdump_device(adsp->minidump_dev);
