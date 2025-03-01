@@ -477,6 +477,16 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/msm_show_epoch",
+        out = "msm_show_epoch.ko",
+        config = "CONFIG_SHOW_SUSPEND_EPOCH",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/msm_show_epoch.c",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/msm_performance",
         out = "msm_performance.ko",
         config = "CONFIG_MSM_PERFORMANCE",

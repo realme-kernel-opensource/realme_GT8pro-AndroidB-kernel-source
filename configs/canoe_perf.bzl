@@ -309,6 +309,7 @@ canoe_perf_config = {
     "CONFIG_SCSI_UFS_QCOM": "m",
     "CONFIG_SENSORS_QTI_AMOLED_ECM": "m",
     "CONFIG_SERIAL_MSM_GENI": "m",
+    "CONFIG_SHOW_SUSPEND_EPOCH": "m",
     "CONFIG_SLIMBUS": "m",
     "CONFIG_SLIM_QCOM_NGD_CTRL": "m",
     "CONFIG_SM_CAMBISTMCLKCC_CANOE": "m",
