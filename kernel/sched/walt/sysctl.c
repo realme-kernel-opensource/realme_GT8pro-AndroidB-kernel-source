@@ -54,7 +54,7 @@ unsigned int sysctl_sched_boost_on_input;
 unsigned int sysctl_sched_early_up[MAX_MARGIN_LEVELS];
 unsigned int sysctl_sched_early_down[MAX_MARGIN_LEVELS];
 
-/* sysctl nodes accesed by other files */
+/* sysctl nodes accessed by other files */
 unsigned int __read_mostly sysctl_sched_coloc_downmigrate_ns;
 unsigned int __read_mostly sysctl_sched_group_downmigrate_pct;
 unsigned int __read_mostly sysctl_sched_group_upmigrate_pct;
@@ -126,11 +126,12 @@ unsigned int load_sync_low_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_low_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_high_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_high_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
+unsigned int sysctl_force_frequent_yielder;
 unsigned int sysctl_pipeline_special_task_util_thres;
 unsigned int sysctl_pipeline_non_special_task_util_thres;
 unsigned int sysctl_pipeline_pin_thres_low_pct;
 unsigned int sysctl_pipeline_pin_thres_high_pct;
-unsigned int sysctl_pipeline_rearrange_delay_ms[2] = {100, 0};
+unsigned int sysctl_pipeline_rearrange_delay_ms[2] = {100, 4};
 unsigned int sysctl_single_thread_pipeline;
 
 /* range is [1 .. INT_MAX] */
@@ -1054,15 +1055,10 @@ static int sched_sibling_cluster_handler(const struct ctl_table *table, int writ
 				       loff_t *ppos)
 {
 	int ret = -EACCES, i = 0;
-	static bool initialized;
 	struct walt_sched_cluster *cluster;
-
-	if (write && initialized)
-		return ret;
 
 	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
 	if (!ret && write) {
-		initialized = true;
 		for_each_sched_cluster(cluster)
 			cluster->sibling_cluster = sysctl_sched_sibling_cluster_map[i++];
 	}
@@ -1958,7 +1954,8 @@ static struct ctl_table walt_table[] = {
 		/*
 		 * A tuple to configure following delay:
 		 * 1st val: delay between re-evaluation of pipeline tasks.
-		 * 2nd val: delay between re-arranging pipeline tasks between prime and gold.
+		 * 2nd val: number of windows to skip before re-arranging pipeline tasks
+		 *          between prime and gold.
 		 */
 		.procname	= "sched_pipeline_rearrange_delay_ms",
 		.data		= &sysctl_pipeline_rearrange_delay_ms,
@@ -2021,6 +2018,15 @@ static struct ctl_table walt_table[] = {
 		.proc_handler	= sched_sibling_cluster_handler,
 		.extra1		= SYSCTL_NEG_ONE,
 		.extra2		= &three,
+	},
+	{
+		.procname	= "sched_force_frequent_yielder",
+		.data		= &sysctl_force_frequent_yielder,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 };
 
