@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DMESG_DUMPER_PRIVATE_H
@@ -8,6 +8,7 @@
 
 #include <linux/dev_printk.h>
 #include <linux/kmsg_dump.h>
+#include <linux/gunyah/gh_ctrl.h>
 #include <soc/qcom/minidump.h>
 
 #define LOG_LINE_MAX				1024
@@ -16,6 +17,9 @@
 #define KEY_LEN						16
 #define ALIGN_LEN					16
 #define AES_256_ENCRYPTED_KEY_SIZE	256
+
+#define REC_TIME_NUM	8
+#define DDUMP_MAX_RETRY			5000
 
 /**
  * struct encrypt_data - the data struct of encrypted data
@@ -34,9 +38,21 @@ struct encrypt_data {
 };
 
 /**
+ * struct record_time - record time data
+ * @ns: The SVM resume ktime
+ * @pvm_svm_offset: The time offset between PVM and SVM
+ */
+struct record_time {
+	u64 ns;
+	u64 pvm_svm_ofs;
+};
+
+/**
  * struct ddump_shm_hdr - the header of shared memory
  * @user_buf_len: The userspace buffer size when PVM request
  * @svm_dump_len: The actual log length SVM dump
+ * @time_ofs: The arrays which record SVM ktime, offset
+ * @log_is_encrypted:  SVM dmesg is encrypted or not
  * @svm_is_suspend: Indicate SVM is in suspend mode or not
  * @data: The data need by decrypt when enable encrypt and
  *        must be end of the hdr
@@ -44,6 +60,8 @@ struct encrypt_data {
 struct ddump_shm_hdr {
 	u64 user_buf_len;
 	u64 svm_dump_len;
+	struct gh_virt_time_offset time_ofs[REC_TIME_NUM];
+	bool log_is_encrypted;
 	bool svm_is_suspend;
 	struct encrypt_data data;
 };
@@ -64,10 +82,12 @@ struct ddump_shm_hdr {
  * @rx_dbl: The gunyah doorbell rx handler
  * @ddump_completion: The completion for synchronization when dump
  *                    alive log
- * @wakeup_source : Avoid system enter suspend when dump alive log
- * @md_entry : minidump entry
+ * @wakeup_source: Avoid system enter suspend when dump alive log
+ * @md_entry: minidump entry
  * @is_static: The shared memory is from carve out or not
  * @is_ready: The vm is ready to get alive log or not
+ * @prec_time: The record of SVM kime and pvm_svm_offset in PVM
+ *              side
  */
 struct qcom_dmesg_dumper {
 	struct device *dev;
@@ -87,13 +107,14 @@ struct qcom_dmesg_dumper {
 	struct md_region md_entry;
 	bool is_static;
 	bool is_ready;
+	struct record_time *rec_time;
 };
 
 #if IS_ENABLED(CONFIG_QCOM_VM_ALIVE_LOG_ENCRYPT)
 #define DDUMP_GET_USER_HDR	(sizeof(struct encrypt_data) + TAG_LEN + ALIGN_LEN)
 #define DDUMP_GET_SHM_HDR	(sizeof(struct ddump_shm_hdr) + TAG_LEN + ALIGN_LEN)
 
-int qcom_ddump_encrypt_init(struct device_node *node);
+int qcom_ddump_encrypt_init(struct device_node *node, struct ddump_shm_hdr *hdr);
 void qcom_ddump_encrypt_exit(void);
 int qcom_ddump_alive_log_to_shm(struct qcom_dmesg_dumper *qdd,
 			     u64 user_size);
@@ -101,7 +122,8 @@ int qcom_ddump_alive_log_to_shm(struct qcom_dmesg_dumper *qdd,
 #define DDUMP_GET_USER_HDR	0
 #define DDUMP_GET_SHM_HDR	offsetof(struct ddump_shm_hdr, data)
 
-static inline int qcom_ddump_encrypt_init(struct device_node *node)
+static inline int qcom_ddump_encrypt_init(struct device_node *node,
+			struct ddump_shm_hdr *hdr)
 {
 	return 0;
 }
