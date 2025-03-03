@@ -16,86 +16,9 @@
 #include "walt.h"
 #include "trace.h"
 
-#define MAX_ZONES 10
-#define ZONE_TUPLE_SIZE 2
-#define MAX_UTIL 1024
-
-struct waltgov_zones {
-	int util_thresh;
-	int inflate_factor;
-};
-
-struct waltgov_tunables {
-	struct gov_attr_set	attr_set;
-	unsigned int		up_rate_limit_us;
-	unsigned int		down_rate_limit_us;
-	unsigned int		hispeed_load;
-	unsigned int		hispeed_freq;
-	unsigned int		hispeed_cond_freq;
-	unsigned int		rtg_boost_freq;
-	unsigned int		adaptive_level_1;
-	unsigned int		adaptive_low_freq;
-	unsigned int		adaptive_high_freq;
-	unsigned int		adaptive_level_1_kernel;
-	unsigned int		adaptive_low_freq_kernel;
-	unsigned int		adaptive_high_freq_kernel;
-	bool			pl;
-	int			boost;
-	int			zone_util_pct[MAX_ZONES][ZONE_TUPLE_SIZE];
-};
-
-struct waltgov_policy {
-	struct cpufreq_policy	*policy;
-	u64			last_ws;
-	u64			curr_cycles;
-	u64			last_cyc_update_time;
-	unsigned long		avg_cap;
-	struct waltgov_tunables	*tunables;
-	struct list_head	tunables_hook;
-	unsigned long		hispeed_cond_util;
-	struct waltgov_zones	zone_util[MAX_ZONES];
-
-	raw_spinlock_t		update_lock;
-	u64			last_freq_update_time;
-	s64			min_rate_limit_ns;
-	s64			up_rate_delay_ns;
-	s64			down_rate_delay_ns;
-	unsigned int		next_freq;
-	unsigned int		cached_raw_freq;
-	unsigned int		driving_cpu;
-	unsigned int		ipc_smart_freq;
-
-	/* The next fields are only needed if fast switch cannot be used: */
-	struct	irq_work	irq_work;
-	struct	kthread_work	work;
-	struct	mutex		work_lock;
-	struct	kthread_worker	worker;
-	struct task_struct	*thread;
-
-	bool			limits_changed;
-	bool			need_freq_update;
-	bool			thermal_isolated;
-	bool			rtg_boost_flag;
-	bool			hispeed_flag;
-	bool			conservative_pl_flag;
-};
-
-struct waltgov_cpu {
-	struct waltgov_callback	cb;
-	struct waltgov_policy	*wg_policy;
-	unsigned int		cpu;
-	struct walt_cpu_load	walt_load;
-	unsigned long		util;
-	unsigned int		flags;
-	unsigned int		reasons;
-	bool			rtg_boost_flag;
-	bool			hispeed_flag;
-	bool			conservative_pl_flag;
-};
-
 DEFINE_PER_CPU(struct waltgov_callback *, waltgov_cb_data);
-static DEFINE_PER_CPU(struct waltgov_cpu, waltgov_cpu);
-static DEFINE_PER_CPU(struct waltgov_tunables *, cached_tunables);
+DEFINE_PER_CPU(struct waltgov_cpu, waltgov_cpu);
+DEFINE_PER_CPU(struct waltgov_tunables *, cached_tunables);
 
 /************************ Governor internals ***********************/
 
