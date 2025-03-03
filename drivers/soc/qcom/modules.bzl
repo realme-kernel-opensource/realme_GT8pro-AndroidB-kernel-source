@@ -1,4 +1,5 @@
 load(":drivers/soc/qcom/dcvs/modules.bzl", register_dcvs = "register_modules")
+load(":drivers/soc/qcom/hab/modules.bzl", register_hab = "register_modules")
 load(":drivers/soc/qcom/mem_buf/modules.bzl", register_mem_buf = "register_modules")
 load(":drivers/soc/qcom/memshare/modules.bzl", register_memshare = "register_modules")
 load(":drivers/soc/qcom/mpam/modules.bzl", register_mpam = "register_modules")
@@ -12,6 +13,7 @@ def register_modules(registry):
     register_sps(registry)
     register_qpace(registry)
     register_mpam(registry)
+    register_hab(registry)
 
     registry.register(
         name = "drivers/soc/qcom/adsp_sleepmon",
