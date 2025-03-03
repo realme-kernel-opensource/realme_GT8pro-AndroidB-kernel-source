@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cdev.h>
+#include <linux/debugfs.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/idr.h>
@@ -14,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/mem-buf-altmap.h>
+#include <linux/gunyah/gh_vm.h>
 #include "mem-buf-gh.h"
 #include "mem-buf-ids.h"
 
@@ -331,11 +333,46 @@ static const struct file_operations mem_buf_dev_fops = {
 	.compat_ioctl = compat_ptr_ioctl,
 };
 
+static int notifier_vm_cb(struct notifier_block *nb, unsigned long cmd,
+			void *data)
+{
+	gh_vmid_t vmid;
+
+	if (!data)
+		return NOTIFY_DONE;
+	vmid = *((gh_vmid_t *)data);
+
+	switch (cmd) {
+	case GH_VM_EARLY_POWEROFF:
+		mem_buf_relinquish_all_mem(vmid);
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block vm_nb = {
+	.notifier_call = notifier_vm_cb,
+};
+
+static int mem_buf_debug_xmem_total_size_get(void *data, u64 *val)
+{
+	*val = mem_buf_account_all_mem();
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(mem_buf_debug_xmem_total_size_fops,
+			mem_buf_debug_xmem_total_size_get,
+			NULL,
+			"%llu\n");
+
 static int mem_buf_msgq_probe(struct platform_device *pdev)
 {
 	int ret;
 	struct device *dev = &pdev->dev;
 	struct device *class_dev;
+	struct dentry *dir, *file;
 
 	if (!mem_buf_dev)
 		return -EPROBE_DEFER;
@@ -356,8 +393,31 @@ static int mem_buf_msgq_probe(struct platform_device *pdev)
 		goto err_dev_create;
 	}
 
+	ret = gh_register_vm_notifier(&vm_nb);
+	if (ret)
+		goto err_gh_register;
+
+	dir = debugfs_create_dir("mem_buf", NULL);
+	if (IS_ERR(dir)) {
+		ret = PTR_ERR(dir);
+		goto err_debugfs_create_dir;
+	}
+	file = debugfs_create_file("xmem_total_size", 0400, dir, NULL,
+			&mem_buf_debug_xmem_total_size_fops);
+	if (IS_ERR(file)) {
+		ret = PTR_ERR(file);
+		goto err_debugfs_create_file;
+	}
+
+	platform_set_drvdata(pdev, dir);
+
 	return 0;
 
+err_debugfs_create_file:
+	debugfs_remove_recursive(dir);
+err_debugfs_create_dir:
+err_gh_register:
+	gh_unregister_vm_notifier(&vm_nb);
 err_dev_create:
 	cdev_del(&mem_buf_char_dev);
 err_cdev_add:
@@ -367,6 +427,10 @@ err_cdev_add:
 
 static void mem_buf_msgq_remove(struct platform_device *pdev)
 {
+	struct dentry *dir = platform_get_drvdata(pdev);
+
+	debugfs_remove_recursive(dir);
+	gh_unregister_vm_notifier(&vm_nb);
 	device_destroy(mem_buf_class, mem_buf_dev_no);
 	cdev_del(&mem_buf_char_dev);
 	mem_buf_msgq_free(&pdev->dev);
