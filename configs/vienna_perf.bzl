@@ -8,6 +8,7 @@ vienna_perf_config = {
     "CONFIG_ARM_SMMU_QCOM": "m",
     "CONFIG_ARM_SMMU_SELFTEST": "n",
     "CONFIG_COMMON_CLK_QCOM": "m",
+    "CONFIG_CORESIGHT": "m",
     "CONFIG_EDAC_QCOM": "m",
     "CONFIG_EDAC_KRYO_ARM64": "m",
     "CONFIG_EDAC_KRYO_ARM64_PANIC_ON_CE": "y",
