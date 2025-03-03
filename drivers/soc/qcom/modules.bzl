@@ -381,6 +381,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/llcc_heuristics",
+        out = "llcc_heuristics.ko",
+        config = "CONFIG_QCOM_LLCC_HEURISTICS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/llcc_heuristics.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/llcc-qcom",
         out = "llcc-qcom.ko",
         config = "CONFIG_QCOM_LLCC",
