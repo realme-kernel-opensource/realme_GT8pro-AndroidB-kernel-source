@@ -11,6 +11,7 @@ vienna_perf_config = {
     "CONFIG_CORESIGHT": "m",
     "CONFIG_CORESIGHT_CSR": "m",
     "CONFIG_CORESIGHT_CTI": "m",
+    "CONFIG_CORESIGHT_LINKS_AND_SINKS": "m",
     "CONFIG_CORESIGHT_TGU": "m",
     "CONFIG_EDAC_QCOM": "m",
     "CONFIG_EDAC_KRYO_ARM64": "m",
