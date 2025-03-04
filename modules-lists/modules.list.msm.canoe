@@ -104,3 +104,4 @@ cqhci.ko
 sdhci-msm.ko
 bcl_pmic5.ko
 arm_smmu_pmu.ko
+deferred-free-helper.ko
