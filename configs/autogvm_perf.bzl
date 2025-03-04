@@ -117,4 +117,7 @@ autogvm_perf_config = {
     "CONFIG_QCOM_MINIDUMP": "m",
     "CONFIG_QCOM_VA_MINIDUMP": "m",
     "CONFIG_QCOM_MSM_IPCC": "m",
+    "CONFIG_FAILOVER": "m",
+    "CONFIG_NET_FAILOVER": "m",
+    "CONFIG_VIRTIO_NET": "m",
 }
