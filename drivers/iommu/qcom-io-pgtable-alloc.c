@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -10,6 +10,7 @@
 #include <linux/firmware/qcom/qcom_scm.h>
 
 #include <soc/qcom/secure_buffer.h>
+#include "drivers/iommu/iommu-pages.h"
 
 struct io_pgtable_pool {
 	u32 vmid;
@@ -122,7 +123,7 @@ static void io_pgtable_pool_release(struct kref *ref)
 	page = __alloc_page_from_pool(&pool->page_pool);
 	while (page) {
 		if (!secure_vmid || !io_pgtable_hyp_unassign_page(pool->vmid, page))
-			__free_page(page);
+			__iommu_free_pages(page, 0);
 
 		page = __alloc_page_from_pool(&pool->page_pool);
 	}
@@ -218,7 +219,7 @@ struct page *qcom_io_pgtable_alloc_page(u32 vmid, gfp_t gfp)
 	if (page)
 		return page;
 
-	page = alloc_page(gfp);
+	page = __iommu_alloc_pages(gfp, 0);
 	if (!page)
 		return NULL;
 	/* The page may be inaccessible if this is true, so leak it. */
@@ -298,7 +299,7 @@ static unsigned long io_pgtable_alloc_scan_objects(struct shrinker *shrinker,
 		list_del(&page->lru);
 
 		if (!is_secure_vmid(vmid) || !io_pgtable_hyp_unassign_page(vmid, page))
-			__free_page(page);
+			__iommu_free_pages(page, 0);
 		else
 			count--;
 	}

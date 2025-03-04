@@ -185,6 +185,7 @@ filegroup(
         "//common:drivers/interconnect/internal.h",
         "//common:drivers/interconnect/qcom/icc-common.h",
         "//common:drivers/iommu/dma-iommu.h",
+        "//common:drivers/iommu/iommu-pages.h",
         "//common:drivers/iommu/iommu-priv.h",
         "//common:drivers/leds/leds.h",
         "//common:drivers/mmc/core/core.h",
