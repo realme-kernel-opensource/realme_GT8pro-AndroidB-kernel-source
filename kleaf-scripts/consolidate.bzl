@@ -42,7 +42,7 @@ def define_consolidated_kernel(name = "kernel_aarch64_consolidate"):
         pack_module_env = True,
         trim_nonlisted_kmi = False,
         kmi_symbol_list_strict_mode = False,
-        kmi_symbol_list = "//soc-repo:android/abi_gki_aarch64_qcom",
+        kmi_symbol_list = "//common:gki/aarch64/symbols/qcom",
         ddk_module_defconfig_fragments = [
             Label("//build/kernel/kleaf/impl/defconfig:signing_modules_disabled"),
         ],
