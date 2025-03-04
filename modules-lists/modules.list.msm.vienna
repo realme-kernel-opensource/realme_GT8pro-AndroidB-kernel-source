@@ -74,3 +74,4 @@ usb_f_qdss.ko
 clk-rpmh.ko
 qcom-cpufreq-hw.ko
 dcc_v2.ko
+memory_dump_v2.ko
