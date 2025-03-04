@@ -723,6 +723,10 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/qcom_cpuss_sleep_stats_v4.c",
         ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/cpuss_telemetry",
+        ],
     )
 
     registry.register(
