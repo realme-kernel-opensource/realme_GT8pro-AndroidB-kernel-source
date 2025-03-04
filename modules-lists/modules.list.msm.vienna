@@ -73,3 +73,4 @@ usb_f_gsi.ko
 usb_f_qdss.ko
 clk-rpmh.ko
 qcom-cpufreq-hw.ko
+dcc_v2.ko
