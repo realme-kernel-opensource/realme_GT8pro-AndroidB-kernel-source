@@ -12,6 +12,7 @@ vienna_perf_config = {
     "CONFIG_CORESIGHT_CSR": "m",
     "CONFIG_CORESIGHT_CTI": "m",
     "CONFIG_CORESIGHT_LINKS_AND_SINKS": "m",
+    "CONFIG_CORESIGHT_LINK_AND_SINK_TMC": "m",
     "CONFIG_CORESIGHT_STM": "m",
     "CONFIG_CORESIGHT_TGU": "m",
     "CONFIG_EDAC_QCOM": "m",
