@@ -284,7 +284,6 @@ int vote(struct votable *votable, int client_id, bool enabled, int val)
 	if (!votable || (client_id < 0))
 		return -EINVAL;
 
-	trace_sched_client_vote(votable->name, client_id, enabled, val);
 	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 
 	/*
@@ -305,6 +304,7 @@ int vote(struct votable *votable, int client_id, bool enabled, int val)
 	if (similar_vote && votable->voted_on)
 		goto out;
 
+	trace_sched_client_vote(votable->name, client_id, enabled, val);
 	switch (votable->type) {
 	case VOTE_MIN:
 		vote_min(votable, client_id, &effective_result, &effective_id);
