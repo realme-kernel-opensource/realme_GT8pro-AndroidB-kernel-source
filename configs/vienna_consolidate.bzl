@@ -27,4 +27,5 @@ vienna_consolidate_config = {
     "CONFIG_USB_F_CDEV": "m",
     "CONFIG_USB_F_GSI": "m",
     "CONFIG_USB_F_QDSS": "m",
+    "CONFIG_USB_M31_MSM_EUSB2_PHY": "m",
 }

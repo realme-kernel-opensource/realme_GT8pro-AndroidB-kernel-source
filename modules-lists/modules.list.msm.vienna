@@ -81,3 +81,4 @@ qcom-cpufreq-hw.ko
 dcc_v2.ko
 memory_dump_v2.ko
 sched-walt.ko
+phy-msm-m31-eusb2.ko
