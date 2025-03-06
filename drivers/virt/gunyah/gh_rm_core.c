@@ -97,7 +97,6 @@ static DEFINE_MUTEX(gh_rm_send_lock);
 
 static struct device_node *gh_rm_intc;
 static struct irq_domain *gh_rm_irq_domain;
-static u32 gh_rm_base_virq;
 
 SRCU_NOTIFIER_HEAD_STATIC(gh_rm_notifier);
 
@@ -287,29 +286,13 @@ EXPORT_SYMBOL_GPL(gh_rm_irq_to_virq);
 
 static int gh_rm_get_irq(struct gh_vm_get_hyp_res_resp_entry *res_entry)
 {
-	int ret, virq = res_entry->virq;
+	int virq = res_entry->virq;
 
 	/* For resources, such as DBL source, there's no IRQ. The virq_handle
 	 * wouldn't be defined for such cases. Hence ignore such cases
 	 */
 	if ((!res_entry->virq_handle && !virq) || virq == U32_MAX)
 		return 0;
-
-	/* Allocate and bind a new IRQ if RM-VM hasn't already done already */
-	if (virq == GH_RM_NO_IRQ_ALLOC) {
-		ret = virq = gh_get_virq(gh_rm_base_virq, virq);
-		if (ret < 0)
-			return ret;
-
-		/* Bind the vIRQ */
-		ret = gh_rm_vm_irq_accept(res_entry->virq_handle, virq);
-		if (ret < 0) {
-			pr_err("%s: IRQ accept failed: %d\n",
-				__func__, ret);
-			gh_put_virq(virq);
-			return ret;
-		}
-	}
 
 	return gh_rm_virq_to_irq(virq, IRQ_TYPE_EDGE_RISING);
 }
@@ -1152,12 +1135,6 @@ static int gh_rm_drv_probe(struct auxiliary_device *adev,
 	rm = rm_dev->driver_data;
 	if (!rm)
 		dev_err(dev, "Failed to get the rm pointer\n");
-
-	if (of_property_read_u32(node, "qcom,free-irq-start",
-				 &gh_rm_base_virq)) {
-		dev_err(dev, "Failed to get the vIRQ base\n");
-		return -ENXIO;
-	}
 
 	gh_rm_intc = of_irq_find_parent(node);
 	if (!gh_rm_intc) {
