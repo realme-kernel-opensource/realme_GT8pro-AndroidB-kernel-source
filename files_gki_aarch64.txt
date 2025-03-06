@@ -367,6 +367,7 @@ arch/arm64/kvm/hyp/nvhe/alloc_mgt.c
 arch/arm64/kvm/hyp/nvhe/cache.S
 arch/arm64/kvm/hyp/nvhe/clock.c
 arch/arm64/kvm/hyp/nvhe/debug-sr.c
+arch/arm64/kvm/hyp/nvhe/device/device.c
 arch/arm64/kvm/hyp/nvhe/early_alloc.c
 arch/arm64/kvm/hyp/nvhe/events.c
 arch/arm64/kvm/hyp/nvhe/ffa.c
@@ -1986,6 +1987,17 @@ drivers/usb/typec/ucsi/trace.c
 drivers/usb/typec/ucsi/trace.h
 drivers/usb/typec/ucsi/ucsi.c
 drivers/usb/typec/ucsi/ucsi.h
+drivers/vfio/container.c
+drivers/vfio/group.c
+drivers/vfio/platform/vfio_platform.c
+drivers/vfio/platform/vfio_platform_common.c
+drivers/vfio/platform/vfio_platform_irq.c
+drivers/vfio/platform/vfio_platform_private.h
+drivers/vfio/vfio.h
+drivers/vfio/vfio_iommu_type1.c
+drivers/vfio/vfio_main.c
+drivers/vfio/vfio_pkvm_iommu.c
+drivers/vfio/virqfd.c
 drivers/vhost/iotlb.c
 drivers/vhost/vhost.c
 drivers/vhost/vhost.h
@@ -2203,6 +2215,7 @@ fs/fs_struct.c
 fs/fs_types.c
 fs/fsopen.c
 fs/fuse/acl.c
+fs/fuse/backing.c
 fs/fuse/control.c
 fs/fuse/dev.c
 fs/fuse/dir.c
@@ -2758,6 +2771,7 @@ include/kvm/arm_hypercalls.h
 include/kvm/arm_pmu.h
 include/kvm/arm_psci.h
 include/kvm/arm_vgic.h
+include/kvm/device.h
 include/kvm/iodev.h
 include/kvm/iommu.h
 include/kvm/power_domain.h
@@ -3204,6 +3218,7 @@ include/linux/iomap.h
 include/linux/iommu-dma.h
 include/linux/iommu-helper.h
 include/linux/iommu.h
+include/linux/iommufd.h
 include/linux/iopoll.h
 include/linux/ioport.h
 include/linux/ioprio.h
@@ -3992,6 +4007,7 @@ include/linux/usb/uas.h
 include/linux/usb/usbnet.h
 include/linux/usb/uvc.h
 include/linux/usb/webusb.h
+include/linux/usb/xhci-sideband.h
 include/linux/usb_usual.h
 include/linux/usbdevice_fs.h
 include/linux/user-return-notifier.h
@@ -4414,6 +4430,7 @@ include/trace/bpf_probe.h
 include/trace/define_trace.h
 include/trace/events/9p.h
 include/trace/events/alarmtimer.h
+include/trace/events/android_vendor_lmk.h
 include/trace/events/asoc.h
 include/trace/events/avc.h
 include/trace/events/block.h
@@ -4516,6 +4533,7 @@ include/trace/hooks/binder.h
 include/trace/hooks/bl_hib.h
 include/trace/hooks/bug.h
 include/trace/hooks/cgroup.h
+include/trace/hooks/compaction.h
 include/trace/hooks/cpufreq.h
 include/trace/hooks/cpuidle.h
 include/trace/hooks/cpuidle_psci.h
@@ -4535,6 +4553,7 @@ include/trace/hooks/gic_v3.h
 include/trace/hooks/hung_task.h
 include/trace/hooks/iommu.h
 include/trace/hooks/logbuf.h
+include/trace/hooks/madvise.h
 include/trace/hooks/mm.h
 include/trace/hooks/mpam.h
 include/trace/hooks/net.h
@@ -4611,6 +4630,7 @@ include/uapi/linux/acct.h
 include/uapi/linux/aio_abi.h
 include/uapi/linux/android/binder.h
 include/uapi/linux/android/binderfs.h
+include/uapi/linux/android_fuse.h
 include/uapi/linux/arm_sdei.h
 include/uapi/linux/audit.h
 include/uapi/linux/auxvec.h
@@ -5199,6 +5219,7 @@ kernel/bpf/arena.c
 kernel/bpf/arraymap.c
 kernel/bpf/bloom_filter.c
 kernel/bpf/bpf_cgrp_storage.c
+kernel/bpf/bpf_fuse.c
 kernel/bpf/bpf_iter.c
 kernel/bpf/bpf_local_storage.c
 kernel/bpf/bpf_lru_list.c
@@ -5349,7 +5370,6 @@ kernel/locking/rwsem.c
 kernel/locking/semaphore.c
 kernel/locking/spinlock.c
 kernel/locking/ww_mutex.h
-kernel/module/gki_module.c
 kernel/module/internal.h
 kernel/module/kallsyms.c
 kernel/module/kmod.c
@@ -5550,6 +5570,7 @@ kernel/vhost_task.c
 kernel/watchdog.c
 kernel/workqueue.c
 kernel/workqueue_internal.h
+lib/alloc_tag.c
 lib/argv_split.c
 lib/asn1_decoder.c
 lib/assoc_array.c
@@ -5569,6 +5590,7 @@ lib/checksum.c
 lib/clz_ctz.c
 lib/clz_tab.c
 lib/cmdline.c
+lib/codetag.c
 lib/compat_audit.c
 lib/cpu_rmap.c
 lib/cpumask.c
