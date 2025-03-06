@@ -372,7 +372,6 @@ static int mem_buf_msgq_probe(struct platform_device *pdev)
 	int ret;
 	struct device *dev = &pdev->dev;
 	struct device *class_dev;
-	struct dentry *dir, *file;
 
 	if (!mem_buf_dev)
 		return -EPROBE_DEFER;
@@ -397,25 +396,12 @@ static int mem_buf_msgq_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_gh_register;
 
-	dir = debugfs_create_dir("mem_buf", NULL);
-	if (IS_ERR(dir)) {
-		ret = PTR_ERR(dir);
-		goto err_debugfs_create_dir;
-	}
-	file = debugfs_create_file("xmem_total_size", 0400, dir, NULL,
+	debugfs_create_file("xmem_total_size", 0400,
+			mem_buf_debugfs_root, NULL,
 			&mem_buf_debug_xmem_total_size_fops);
-	if (IS_ERR(file)) {
-		ret = PTR_ERR(file);
-		goto err_debugfs_create_file;
-	}
-
-	platform_set_drvdata(pdev, dir);
 
 	return 0;
 
-err_debugfs_create_file:
-	debugfs_remove_recursive(dir);
-err_debugfs_create_dir:
 err_gh_register:
 	gh_unregister_vm_notifier(&vm_nb);
 err_dev_create:
@@ -427,9 +413,7 @@ err_cdev_add:
 
 static void mem_buf_msgq_remove(struct platform_device *pdev)
 {
-	struct dentry *dir = platform_get_drvdata(pdev);
-
-	debugfs_remove_recursive(dir);
+	debugfs_lookup_and_remove("xmem_total_size", mem_buf_debugfs_root);
 	gh_unregister_vm_notifier(&vm_nb);
 	device_destroy(mem_buf_class, mem_buf_dev_no);
 	cdev_del(&mem_buf_char_dev);

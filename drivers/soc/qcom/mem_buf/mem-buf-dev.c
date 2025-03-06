@@ -5,6 +5,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -29,6 +30,9 @@ EXPORT_SYMBOL_GPL(mem_buf_capability);
 
 struct gen_pool *dmabuf_mem_pool;
 EXPORT_SYMBOL_GPL(dmabuf_mem_pool);
+
+struct dentry *mem_buf_debugfs_root;
+EXPORT_SYMBOL_GPL(mem_buf_debugfs_root);
 
 #define POOL_MIN_ALLOC_ORDER SECTION_SIZE_BITS
 
@@ -240,6 +244,9 @@ static struct platform_driver mem_buf_driver = {
 
 static int __init mem_buf_dev_init(void)
 {
+	/* This returns an error if CONFIG_DEBUG_FS is disabled. Ignore it. */
+	mem_buf_debugfs_root = debugfs_create_dir("mem_buf", NULL);
+
 	return platform_driver_register(&mem_buf_driver);
 }
 module_init(mem_buf_dev_init);
@@ -248,6 +255,7 @@ static void __exit mem_buf_dev_exit(void)
 {
 	mem_buf_vm_exit();
 	platform_driver_unregister(&mem_buf_driver);
+	debugfs_remove_recursive(mem_buf_debugfs_root);
 }
 module_exit(mem_buf_dev_exit);
 
