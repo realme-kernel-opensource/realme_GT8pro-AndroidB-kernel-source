@@ -112,7 +112,7 @@ config GH_MEM_NOTIFIER
 
 config GH_SECURE_VM_LOADER
 	tristate "Gunyah Secure Virtual Machine Loader Driver"
-	depends on GUNYAH
+	depends on GUNYAH && !QTVM_WITH_AVF
 	select QCOM_MDT_LOADER
 	help
 	  This driver invokes mdt Loader to load images of
@@ -122,12 +122,21 @@ config GH_SECURE_VM_LOADER
 
 config GH_PROXY_SCHED
 	tristate "PROXY Scheduling for Secondary VMs"
-	depends on GUNYAH
+	depends on GUNYAH && !QTVM_WITH_AVF
 	help
 	  Gunyah Proxy Scheduler provides framework to schedule/run VCPUs
 	  of Secondary VMs by exposing required functionality which can be
 	  invoked by the Gunyah driver. Gunyah Proxy Scheduler communicates
 	  with Gunyah hypervisor to run the VCPUs as needed.
+
+config QTVM_WITH_AVF
+	bool "Vendor support for QTVMs being launched with AVF"
+	depends on GUNYAH
+	help
+	  This helps identify platforms that support launching Qualcomm
+	  Trusted VMs using AVF. If This is enabled, /dev/gunyah will be used
+	  to load a QTVM.
+	  If unsure, say n.
 
 config GH_PANIC_NOTIFIER
 	tristate "Nofity other VM to do error handle when Primary VM panic"
