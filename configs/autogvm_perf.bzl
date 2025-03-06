@@ -25,6 +25,7 @@ autogvm_perf_config = {
     "CONFIG_MODULE_SIG_ALL": "n",
     "CONFIG_MSM_BOOT_STATS": "m",
     "CONFIG_MSM_QMP": "m",
+    "CONFIG_PINCTRL_DIREWOLF": "m",
     "CONFIG_PINCTRL_LEMANS": "m",
     "CONFIG_PINCTRL_MONACO_AUTO": "m",
     "CONFIG_POWER_RESET_QCOM_VM": "m",
