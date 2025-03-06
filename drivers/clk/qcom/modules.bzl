@@ -1058,8 +1058,20 @@ def register_modules(registry):
         ],
         deps = [
             # do not sort
+            "drivers/clk/qcom/virtio_clk_direwolf",
             "drivers/clk/qcom/virtio_clk_lemans",
             "drivers/clk/qcom/virtio_clk_monaco",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/clk/qcom/virtio_clk_direwolf",
+        out = "virtio_clk_direwolf.ko",
+        config = "CONFIG_VIRTIO_CLK",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/virtio_clk_direwolf.c",
+            "drivers/clk/qcom/virtio_clk_common.h",
         ],
     )
 
