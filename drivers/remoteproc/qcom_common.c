@@ -385,7 +385,7 @@ static int glink_early_ssr_notifier_event(struct notifier_block *this,
 
 	trace_rproc_qcom_event(dev_name(glink->dev->parent), GLINK_SUBDEV_NAME, "prepare");
 
-	qcom_glink_early_ssr_notify(glink->edge);
+	qcom_glink_smem_early_ssr_notify(glink->edge);
 	return NOTIFY_DONE;
 }
 
