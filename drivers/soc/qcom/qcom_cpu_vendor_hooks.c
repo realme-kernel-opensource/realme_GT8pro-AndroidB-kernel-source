@@ -138,15 +138,15 @@ static void store_kaslr_offset(void)
 	iounmap(mem);
 }
 
+#else
+static void store_kaslr_offset(void) {}
+#endif /* CONFIG_RANDOMIZE_BASE */
+
 #if defined(CONFIG_HIBERNATION)
 static struct syscore_ops kaslr_offset_restore_syscore_ops = {
 	.resume = store_kaslr_offset,
 };
 #endif /* CONFIG_HIBERNATION */
-
-#else
-static void store_kaslr_offset(void) {}
-#endif /* CONFIG_RANDOMIZE_BASE */
 
 static int cpu_vendor_hooks_driver_probe(struct platform_device *pdev)
 {
