@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (c) 2012, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Description: CoreSight Trace Memory Controller driver
  */
@@ -1089,10 +1089,43 @@ static const struct amba_id tmc_ids[] = {
 
 MODULE_DEVICE_TABLE(amba, tmc_ids);
 
+#ifdef CONFIG_PM
+static int tmc_runtime_suspend(struct device *dev)
+{
+	struct tmc_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (drvdata) {
+		if (!IS_ERR_OR_NULL(drvdata->pclk))
+			clk_disable_unprepare(drvdata->pclk);
+		if (!IS_ERR(drvdata->atclk))
+			clk_disable_unprepare(drvdata->atclk);
+	}
+	return 0;
+}
+
+static int tmc_runtime_resume(struct device *dev)
+{
+	struct tmc_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (drvdata) {
+		if (!IS_ERR_OR_NULL(drvdata->pclk))
+			clk_prepare_enable(drvdata->pclk);
+		if (!IS_ERR(drvdata->atclk))
+			clk_prepare_enable(drvdata->atclk);
+	}
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops tmc_dev_pm_ops = {
+	SET_RUNTIME_PM_OPS(tmc_runtime_suspend, tmc_runtime_resume, NULL)
+};
+
 static struct amba_driver tmc_driver = {
 	.drv = {
 		.name   = "coresight-tmc",
 		.suppress_bind_attrs = true,
+		.pm = &tmc_dev_pm_ops,
 	},
 	.probe		= tmc_probe,
 	.shutdown	= tmc_shutdown,
@@ -1140,38 +1173,6 @@ static void tmc_platform_remove(struct platform_device *pdev)
 	if (!IS_ERR_OR_NULL(drvdata->pclk))
 		clk_put(drvdata->pclk);
 }
-
-#ifdef CONFIG_PM
-static int tmc_runtime_suspend(struct device *dev)
-{
-	struct tmc_drvdata *drvdata = dev_get_drvdata(dev);
-
-	if (drvdata) {
-		if (!IS_ERR_OR_NULL(drvdata->pclk))
-			clk_disable_unprepare(drvdata->pclk);
-		if (!IS_ERR(drvdata->atclk))
-			clk_disable_unprepare(drvdata->atclk);
-	}
-	return 0;
-}
-
-static int tmc_runtime_resume(struct device *dev)
-{
-	struct tmc_drvdata *drvdata = dev_get_drvdata(dev);
-
-	if (drvdata) {
-		if (!IS_ERR_OR_NULL(drvdata->pclk))
-			clk_prepare_enable(drvdata->pclk);
-		if (!IS_ERR(drvdata->atclk))
-			clk_prepare_enable(drvdata->atclk);
-	}
-	return 0;
-}
-#endif
-
-static const struct dev_pm_ops tmc_dev_pm_ops = {
-	SET_RUNTIME_PM_OPS(tmc_runtime_suspend, tmc_runtime_resume, NULL)
-};
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id tmc_acpi_ids[] = {
