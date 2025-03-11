@@ -24,7 +24,7 @@
 
 #include "qrtr.h"
 
-#define QRTR_LOG_PAGE_CNT 4
+#define QRTR_LOG_PAGE_CNT 64
 #define QRTR_INFO(ctx, x, ...)				\
 	ipc_log_string(ctx, x, ##__VA_ARGS__)
 
@@ -548,7 +548,7 @@ static void qrtr_tx_resume(struct qrtr_node *node, struct sk_buff *skb)
 	spin_lock_irqsave(&flow->lock, flags);
 	flow->pending = 0;
 	wake_up_interruptible_all(&flow->resume_tx);
-
+	QRTR_INFO(node->ilc,"Sched resume tx for address: [0x%x 0x%x]",src.sq_node, src.sq_port);
 	list_for_each_entry_safe(waiter, temp, &flow->waiters, node) {
 		list_del(&waiter->node);
 
