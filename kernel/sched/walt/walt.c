@@ -23,6 +23,7 @@
 #include <trace/events/power.h>
 #include "walt.h"
 #include "trace.h"
+#include "sysctl_walt_stats.h"
 
 const char *task_event_names[] = {
 	"PUT_PREV_TASK",
@@ -5558,6 +5559,8 @@ static void walt_init(struct work_struct *work)
 	}
 
 	topology_clear_scale_freq_source(SCALE_FREQ_SOURCE_ARCH, cpu_online_mask);
+
+	walt_stats_sysctl_init();
 }
 
 static DECLARE_WORK(walt_init_work, walt_init);
