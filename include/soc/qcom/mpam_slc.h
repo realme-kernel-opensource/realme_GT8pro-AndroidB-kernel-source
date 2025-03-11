@@ -27,9 +27,11 @@ static char gear_index[][25] = {
 	"",
 };
 
+#define CLIENT_NAME_LEN         16
+
 #define QCOM_SLC_MPAM_SCMI_STR	0x534c434d50414d /* SLCMPAM */
 #define SLC_INVALID_PARTID      ((1 << 16) - 1)
-#define SLC_NUM_PARTIDS			5
+#define SLC_NUM_PARTIDS		5
 
 enum mpam_slc_get_param_ids {
 	PARAM_GET_CLIENT_INFO_MSC = 1,
@@ -94,6 +96,13 @@ struct slc_mon_config {
 } __packed;
 
 /* PARAM_SET_CONFIG_SLC_MPAM_START_STOP */
+enum mpam_enable_val {
+	mpam_slc_reset = 0,
+	mpam_slc_mpam_init_v0 = 1,
+	mpam_slc_client_info_v1 = 2,
+	mpam_slc_mon_init_v1 = 3,
+};
+
 struct mpam_enable {
 	uint32_t value;
 } __packed;
@@ -118,6 +127,24 @@ struct slc_read_miss_cntr {
 struct slc_partid_info {
 	uint32_t client_id;
 	uint32_t part_id;
+} __packed;
+
+struct slc_client_details {
+	uint16_t client_id;
+	char client_name[CLIENT_NAME_LEN];
+} __packed;
+
+struct slc_mon_details {
+	uint32_t num_cap_monitor;
+	uint32_t num_miss_monitor;
+	uint32_t num_slc_fe_bw_mnitor;
+	uint32_t num_slc_be_bw_mnitor;
+} __packed;
+
+struct slc_sct_client_info {
+	uint32_t num_clients;
+	struct slc_mon_details slc_mon_info;
+	struct slc_client_details client;
 } __packed;
 
 struct qcom_slc_mon_data {
@@ -150,7 +177,7 @@ struct slc_client_capability {
 	struct slc_client_info client_info;
 	struct slc_partid_capability *slc_partid_cap;
 	uint8_t enabled;
-	const char *client_name;
+	char *client_name;
 } __packed;
 
 struct qcom_slc_capability {

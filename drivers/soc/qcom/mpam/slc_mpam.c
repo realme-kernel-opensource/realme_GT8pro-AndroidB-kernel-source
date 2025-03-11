@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
  #define pr_fmt(fmt) "mpam_slc: " fmt
 
@@ -313,25 +313,85 @@ static int create_config_node(const char *name,
 	return 0;
 }
 
+static int slc_config_fs_register(struct  device *dev, bool firmware_based)
+{
+	int clientid, partid;
+	char buf[CONFIGFS_ITEM_NAME_LEN];
+	const char *msc_name_dt;
+	struct qcom_mpam_msc *qcom_msc;
+	struct config_group *p_group, *sub_group;
+	struct device_node *np = dev->of_node;
+	struct qcom_slc_capability *slc_capability;
+	struct slc_client_capability *slc_client_cap;
+
+	p_group = platform_mpam_get_root_group();
+	if (!p_group)
+		return -EINVAL;
+
+	of_property_read_string(np, "qcom,msc-name", &msc_name_dt);
+
+	root_group = configfs_register_default_group(p_group, msc_name_dt, &slc_mpam_base_type);
+	if (IS_ERR(root_group)) {
+		dev_err(dev, "Error register group %s\n", msc_name_dt);
+		return PTR_ERR(root_group);
+	}
+
+	qcom_msc = qcom_msc_lookup(SLC);
+	if (qcom_msc->qcom_msc_id.qcom_msc_type != SLC)
+		return -EINVAL;
+
+	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
+	for (clientid = 0; clientid < slc_capability->num_clients; clientid++) {
+		slc_client_cap = &(slc_capability->slc_client_cap[clientid]);
+
+		if (slc_client_cap->enabled == false)
+			continue;
+
+		if (slc_client_cap->client_info.num_part_id > 1) {
+			sub_group = configfs_register_default_group(root_group,
+				slc_client_cap->client_name, &slc_mpam_base_type);
+			for (partid = 0; partid < slc_client_cap->client_info.num_part_id;
+					partid++) {
+				snprintf(buf, sizeof(buf), "partid%d", partid);
+				if (create_config_node(buf, dev, clientid,
+						partid, sub_group))
+					continue;
+			}
+		} else {
+			if (create_config_node(slc_client_cap->client_name, dev,
+					clientid, 0, root_group))
+				continue;
+		}
+	}
+
+	return 0;
+}
+
 static int slc_mpam_probe(struct platform_device *pdev)
 {
-	int ret, clientid, partid;
-	char buf[CONFIGFS_ITEM_NAME_LEN];
 	int client_cnt;
-	const char *msc_name_dt;
-	struct qcom_mpam_msc *qcom_mpam_msc;
-	struct device_node *node, *sub_node;
-	struct config_group *p_group, *sub_group;
+	struct qcom_mpam_msc *qcom_msc;
+	struct config_group *p_group;
+	struct qcom_slc_capability *slc_capability;
+	struct slc_client_capability *slc_client_cap;
 	struct device_node *np = pdev->dev.of_node;
-
-	qcom_mpam_msc = qcom_msc_lookup(SLC);
-	if (!qcom_mpam_msc ||
-		qcom_mpam_msc->mpam_available != MPAM_MONITRS_AVAILABLE)
-		return -EPROBE_DEFER;
+	struct device_node *node;
+	int clientid, ret = -EINVAL;
+	const char *msc_name_dt;
 
 	p_group = platform_mpam_get_root_group();
 	if (!p_group)
 		return -EPROBE_DEFER;
+
+	/* Wait for mpam_msc_slc probe to finish */
+	qcom_msc = qcom_msc_lookup(SLC);
+	if (!qcom_msc ||
+		qcom_msc->mpam_available != MPAM_MONITRS_AVAILABLE)
+		return -EPROBE_DEFER;
+
+	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
+	if (slc_capability->firmware_ver.firmware_version != 0)
+		return slc_config_fs_register(&pdev->dev, false);
 
 	client_cnt = of_get_child_count(np);
 	if (!client_cnt) {
@@ -339,36 +399,23 @@ static int slc_mpam_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	of_property_read_string(np, "qcom,msc-name", &msc_name_dt);
-	root_group = configfs_register_default_group(p_group,
-		msc_name_dt, &slc_mpam_base_type);
-	if (IS_ERR(root_group)) {
-		dev_err(&pdev->dev, "Error register group %s\n", msc_name_dt);
-		return PTR_ERR(root_group);
-	}
-
+	clientid = 0;
 	for_each_child_of_node(np, node) {
+		slc_client_cap = &(slc_capability->slc_client_cap[clientid]);
 		ret = of_property_read_u32(node, "qcom,client-id", &clientid);
 		of_property_read_string(node, "qcom,client-name", &msc_name_dt);
 		if (ret || IS_ERR_OR_NULL(msc_name_dt))
 			continue;
 
-		if (of_get_child_count(node) > 0) {
-			sub_group = configfs_register_default_group(root_group,
-				msc_name_dt, &slc_mpam_base_type);
-			for_each_child_of_node(node, sub_node) {
-				ret = of_property_read_u32(sub_node, "qcom,part-id", &partid);
-				snprintf(buf, sizeof(buf), "partid%d", partid);
-				if (create_config_node(buf, &pdev->dev, clientid,
-						partid, sub_group))
-					continue;
-			}
-		} else
-			if (create_config_node(msc_name_dt, &pdev->dev,
-					clientid, 0, root_group))
-				continue;
+		slc_client_cap->client_name = devm_kzalloc(&pdev->dev, CLIENT_NAME_LEN, GFP_KERNEL);
+		if (slc_client_cap->client_name == NULL)
+			return -ENOMEM;
+
+		strscpy(slc_client_cap->client_name, msc_name_dt, strlen(msc_name_dt) + 1);
+		clientid++;
 	}
 
+	slc_config_fs_register(&pdev->dev, false);
 	return 0;
 }
 
