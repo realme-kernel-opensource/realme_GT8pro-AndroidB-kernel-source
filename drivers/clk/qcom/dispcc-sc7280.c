@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021-2022, The Linux Foundation. All rights reserved.
- * Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk-provider.h>
@@ -86,7 +86,7 @@ static const struct parent_map disp_cc_parent_map_0[] = {
 };
 
 static const struct clk_parent_data disp_cc_parent_data_0[] = {
-	{ .fw_name = "bi_tcxo" },
+	{ .fw_name = "bi_tcxo", .name = "bi_tcxo" },
 };
 
 static const struct parent_map disp_cc_parent_map_1[] = {
@@ -96,9 +96,9 @@ static const struct parent_map disp_cc_parent_map_1[] = {
 };
 
 static const struct clk_parent_data disp_cc_parent_data_1[] = {
-	{ .fw_name = "bi_tcxo" },
-	{ .fw_name = "dp_phy_pll_link_clk" },
-	{ .fw_name = "dp_phy_pll_vco_div_clk" },
+	{ .fw_name = "bi_tcxo", .name = "bi_tcxo" },
+	{ .fw_name = "dp_phy_pll_link_clk", .name = "dp_phy_pll_link_clk" },
+	{ .fw_name = "dp_phy_pll_vco_div_clk", .name = "dp_phy_pll_vco_div_clk" },
 };
 
 static const struct parent_map disp_cc_parent_map_2[] = {
@@ -107,8 +107,8 @@ static const struct parent_map disp_cc_parent_map_2[] = {
 };
 
 static const struct clk_parent_data disp_cc_parent_data_2[] = {
-	{ .fw_name = "bi_tcxo" },
-	{ .fw_name = "dsi0_phy_pll_out_byteclk" },
+	{ .fw_name = "bi_tcxo", .name = "bi_tcxo" },
+	{ .fw_name = "dsi0_phy_pll_out_byteclk", .name = "dsi0_phy_pll_out_byteclk" },
 };
 
 static const struct parent_map disp_cc_parent_map_3[] = {
@@ -118,9 +118,9 @@ static const struct parent_map disp_cc_parent_map_3[] = {
 };
 
 static const struct clk_parent_data disp_cc_parent_data_3[] = {
-	{ .fw_name = "bi_tcxo" },
-	{ .fw_name = "edp_phy_pll_link_clk" },
-	{ .fw_name = "edp_phy_pll_vco_div_clk" },
+	{ .fw_name = "bi_tcxo", .name = "bi_tcxo" },
+	{ .fw_name = "edp_phy_pll_link_clk", .name = "edp_phy_pll_link_clk" },
+	{ .fw_name = "edp_phy_pll_vco_div_clk", .name = "edp_phy_pll_vco_div_clk" },
 };
 
 static const struct parent_map disp_cc_parent_map_4[] = {
@@ -131,9 +131,9 @@ static const struct parent_map disp_cc_parent_map_4[] = {
 };
 
 static const struct clk_parent_data disp_cc_parent_data_4[] = {
-	{ .fw_name = "bi_tcxo" },
+	{ .fw_name = "bi_tcxo", .name = "bi_tcxo" },
 	{ .hw = &disp_cc_pll0.clkr.hw },
-	{ .fw_name = "gcc_disp_gpll0_clk" },
+	{ .fw_name = "gcc_disp_gpll0_clk", .name = "gcc_disp_gpll0_clk" },
 	{ .hw = &disp_cc_pll0.clkr.hw },
 };
 
@@ -143,8 +143,8 @@ static const struct parent_map disp_cc_parent_map_5[] = {
 };
 
 static const struct clk_parent_data disp_cc_parent_data_5[] = {
-	{ .fw_name = "bi_tcxo" },
-	{ .fw_name = "gcc_disp_gpll0_clk" },
+	{ .fw_name = "bi_tcxo", .name = "bi_tcxo" },
+	{ .fw_name = "gcc_disp_gpll0_clk", .name = "gcc_disp_gpll0_clk" },
 };
 
 static const struct parent_map disp_cc_parent_map_6[] = {
@@ -153,8 +153,8 @@ static const struct parent_map disp_cc_parent_map_6[] = {
 };
 
 static const struct clk_parent_data disp_cc_parent_data_6[] = {
-	{ .fw_name = "bi_tcxo" },
-	{ .fw_name = "dsi0_phy_pll_out_dsiclk" },
+	{ .fw_name = "bi_tcxo", .name = "bi_tcxo" },
+	{ .fw_name = "dsi0_phy_pll_out_dsiclk", .name = "dsi0_phy_pll_out_dsiclk" },
 };
 
 static const struct freq_tbl ftbl_disp_cc_mdss_ahb_clk_src[] = {
