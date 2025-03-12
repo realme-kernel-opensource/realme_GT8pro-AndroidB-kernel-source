@@ -63,6 +63,8 @@ qcom_edac.ko
 kryo_arm64_edac.ko
 llcc-qcom.ko
 mdt_loader.ko
+governor_gpubw_mon.ko
+governor_msm_adreno_tz.ko
 qcom_ipc_logging.ko
 dwc3-msm.ko
 phy-generic.ko
