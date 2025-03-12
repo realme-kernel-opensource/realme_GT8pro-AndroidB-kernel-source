@@ -621,7 +621,8 @@ should_apply_suh_freq_boost(struct walt_sched_cluster *cluster)
 	return is_cluster_hosting_top_app(cluster);
 }
 
-static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason, bool trace)
+static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
+		bool trace, u64 *non_boosted_load)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_sched_cluster *cluster = wrq->cluster;
@@ -660,6 +661,8 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason, bool tra
 		*reason = CPUFREQ_REASON_SUH_BIT;
 	}
 
+	*non_boosted_load = load;
+
 	if (wrq->ed_task) {
 		load = mult_frac(load, 100 + sysctl_ed_boost_pct, 100);
 		*reason = CPUFREQ_REASON_EARLY_DET_BIT;
@@ -682,7 +685,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason, bool tra
 
 	if (trace)
 		trace_sched_load_to_gov(rq, aggr_grp_load, tt_load, sched_freq_aggr_en,
-				load, 0, walt_rotation_enabled,
+				*non_boosted_load, load, 0, walt_rotation_enabled,
 				sysctl_sched_user_hint, wrq, *reason);
 	return load;
 }
@@ -692,13 +695,12 @@ static bool rtgb_active;
 static inline unsigned long
 __cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *reason, bool trace)
 {
-	u64 util;
+	u64 util, non_boosted_load;
 	struct rq *rq = cpu_rq(cpu);
 	unsigned long capacity = capacity_orig_of(cpu);
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
-	util = scale_time_to_util(freq_policy_load(rq, reason, trace));
-
+	util = scale_time_to_util(freq_policy_load(rq, reason, trace, &non_boosted_load));
 	/*
 	 * util is on a scale of 0 to 1024.  this is the utilization
 	 * of the cpu in the last window
@@ -723,6 +725,7 @@ __cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *rea
 		else
 			walt_load->ed_active = false;
 		walt_load->trailblazer_state = trailblazer_state;
+		walt_load->non_boosted_load = non_boosted_load;
 	}
 
 	return (util >= capacity) ? capacity : util;

@@ -119,6 +119,7 @@ extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 struct walt_cpu_load {
 	unsigned long	nl;
 	unsigned long	pl;
+	unsigned long	non_boosted_load;
 	bool		rtgb_active;
 	u64		ws;
 	bool		ed_active;

@@ -494,6 +494,7 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	bool is_hiload;
 	bool employ_ed_boost = wg_cpu->walt_load.ed_active && sysctl_ed_boost_pct;
 	unsigned long pl = wg_cpu->walt_load.pl;
+	unsigned long nbl = scale_time_to_util(wg_cpu->walt_load.non_boosted_load);
 	unsigned long min_util = *util;
 
 	if (is_rtg_boost && (!cpumask_test_cpu(wg_cpu->cpu, cpu_partial_halt_mask) ||
@@ -502,9 +503,9 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 		wg_cpu->rtg_boost_flag = true;
 	}
 
-	is_hiload = (cpu_util >= mult_frac(wg_policy->avg_cap,
-					   wg_policy->tunables->hispeed_load,
-					   100));
+	is_hiload = (nbl >= mult_frac(wg_policy->avg_cap,
+				   wg_policy->tunables->hispeed_load,
+				   100));
 
 	if (cpumask_test_cpu(wg_cpu->cpu, cpu_partial_halt_mask) &&
 			is_state1())
