@@ -1018,6 +1018,16 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qfprom-sys",
+        out = "qfprom-sys.ko",
+        config = "CONFIG_QCOM_QFPROM_SYS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qfprom-sys.c",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qmi_helpers",
         out = "qmi_helpers.ko",
         config = "CONFIG_QCOM_QMI_HELPERS",
