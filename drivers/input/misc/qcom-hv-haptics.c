@@ -1486,8 +1486,10 @@ static int haptics_check_hpwr_status(struct haptics_chip *chip)
 			/*
 			 * Haptics VNDRV LDO has already been disabled when HPWR_DISABLED
 			 * status is set, delay 500us here to discharge the VNDRV voltage.
+			 * Bail out from the HPWR_STS waiting loop for the driver to
+			 * continue to respond to any vibration request if HPWR_READY.
 			 */
-			if (val == HPWR_DISABLED) {
+			if ((val == HPWR_DISABLED) || (val == HPWR_READY)) {
 				usleep_range(500, 501);
 				break;
 			}
