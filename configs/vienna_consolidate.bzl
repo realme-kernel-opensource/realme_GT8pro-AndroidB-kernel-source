@@ -12,6 +12,7 @@ vienna_consolidate_config = {
     "CONFIG_LOCK_TORTURE_TEST": "m",
     "CONFIG_PAGE_OWNER": "y",
     "CONFIG_PAGE_POISONING": "y",
+    "CONFIG_QCOM_DYNAMIC_MEMORY_DUMP": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_RUNTIME_TESTING_MENU": "y",
     "CONFIG_NOP_USB_XCEIV": "m",
