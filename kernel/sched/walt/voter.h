@@ -9,7 +9,29 @@
 
 #include <linux/mutex.h>
 
-struct votable;
+#define NUM_MAX_CLIENTS		8
+
+struct client_vote {
+	bool	enabled;
+	int	value;
+};
+
+struct votable {
+	const char		*name;
+	struct list_head	list;
+	struct client_vote	votes[NUM_MAX_CLIENTS];
+	int			num_clients;
+	int			type;
+	int			effective_client_id;
+	int			effective_result;
+	raw_spinlock_t		vote_lock;
+	void			*data;
+	int			(*callback)(struct votable *votable,
+						void *data,
+						int effective_result,
+						int effective_client);
+	bool			voted_on;
+};
 
 enum votable_type {
 	VOTE_MIN,
