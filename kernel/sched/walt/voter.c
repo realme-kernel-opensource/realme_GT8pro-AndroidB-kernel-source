@@ -268,10 +268,14 @@ int get_effective_client(struct votable *votable)
  *
  * The callback is called only when there is a change in the election results or
  * if it is the first time someone is voting.
+ * Client needs to ensure that votes for client_id are serialized, votable
+ * framework does not serialize vote for a client. It however serializes
+ * election i.e. finding the effective result and calling the callback.
  *
  * Returns:
  *	The return from the callback when present and needs to be called
  *	or zero.
+ *
  */
 int vote(struct votable *votable, int client_id, bool enabled, int val)
 {
@@ -284,8 +288,6 @@ int vote(struct votable *votable, int client_id, bool enabled, int val)
 	if (!votable || (client_id < 0))
 		return -EINVAL;
 
-	trace_sched_client_vote(votable->name, client_id, enabled, val);
-	raw_spin_lock_irqsave(&votable->vote_lock, flags);
 
 	/*
 	 * for SET_ANY the val is to be ignored, set it
@@ -296,15 +298,18 @@ int vote(struct votable *votable, int client_id, bool enabled, int val)
 		val = enabled;
 
 	if ((votable->votes[client_id].enabled == enabled) &&
-		(votable->votes[client_id].value == val))
+		(votable->votes[client_id].value == val)) {
 		similar_vote = true;
-
-	votable->votes[client_id].enabled = enabled;
-	votable->votes[client_id].value = val;
+	} else {
+		votable->votes[client_id].enabled = enabled;
+		votable->votes[client_id].value = val;
+	}
 
 	if (similar_vote && votable->voted_on)
-		goto out;
+		return 0;
 
+	raw_spin_lock_irqsave(&votable->vote_lock, flags);
+	trace_sched_client_vote(votable->name, client_id, enabled, val);
 	switch (votable->type) {
 	case VOTE_MIN:
 		vote_min(votable, client_id, &effective_result, &effective_id);
@@ -317,7 +322,8 @@ int vote(struct votable *votable, int client_id, bool enabled, int val)
 				&effective_result, &effective_id);
 		break;
 	default:
-		return -EINVAL;
+		rc = -EINVAL;
+		goto out;
 	}
 
 	/*
