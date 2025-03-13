@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2010-2015,2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __QCOM_SCM_INT_H
 #define __QCOM_SCM_INT_H
@@ -211,6 +211,7 @@ struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
 /* OEM Services and Function IDs */
 #define QCOM_SCM_SVC_OEM_POWER			0x09
 #define QCOM_SCM_OEM_POWER_REBOOT		0x22
+#define QCOM_SCM_OEM_POWER_CUSTOM_REBOOT	0x23
 
 /* TOS Services and Function IDs */
 #define QCOM_SCM_SVC_QSEELOG			0x01
