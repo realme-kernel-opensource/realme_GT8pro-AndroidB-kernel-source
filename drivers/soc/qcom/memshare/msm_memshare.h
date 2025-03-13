@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _LINUX_MEM_SHARE_H
@@ -50,6 +50,8 @@ struct mem_blocks {
 	uint32_t size;
 	/* Available memory size for client */
 	uint32_t init_size;
+	/* Configurable Max Dynamic size*/
+	uint32_t dynamic_size_max;
 	/*
 	 * start address of the memory block reserved by server memory
 	 * subsystem to client
