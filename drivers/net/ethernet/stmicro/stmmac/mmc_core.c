@@ -198,6 +198,8 @@
 #define MMC_XGMAC_RX_FPE_FRAG		0x234
 #define MMC_XGMAC_RX_IPC_INTR_MASK	0x25c
 
+#define MMC_XGMAC_RX_IPC_INTR		0x260
+
 #define MMC_XGMAC_RX_IPV4_GD		0x264
 #define MMC_XGMAC_RX_IPV4_HDERR		0x26c
 #define MMC_XGMAC_RX_IPV4_NOPAY		0x274
@@ -510,6 +512,7 @@ static void dwxgmac_mmc_read(void __iomem *mmcaddr, struct stmmac_counters *mmc)
 	dwxgmac_read_mmc_reg(mmcaddr, MMC_XGMAC_RX_VLAN_PKT_GB,
 			     &mmc->mmc_rx_vlan_frames_gb);
 	mmc->mmc_rx_watchdog_error += readl(mmcaddr + MMC_XGMAC_RX_WATCHDOG_ERR);
+	mmc->mmc_rx_ipc_intr_mask = readl(mmcaddr + MMC_XGMAC_RX_IPC_INTR_MASK);
 	mmc->mmc_rx_lpi_usec += readl(mmcaddr + MMC_XGMAC_RX_LPI_USEC);
 	mmc->mmc_rx_lpi_tran += readl(mmcaddr + MMC_XGMAC_RX_LPI_TRAN);
 	dwxgmac_read_mmc_reg(mmcaddr, MMC_XGMAC_RX_DISCARD_PKT_GB,
@@ -536,6 +539,7 @@ static void dwxgmac_mmc_read(void __iomem *mmcaddr, struct stmmac_counters *mmc)
 	mmc->mmc_rx_fpe_fragment_cntr +=
 		readl(mmcaddr + MMC_XGMAC_RX_FPE_FRAG);
 
+	mmc->mmc_rx_ipc_intr = readl(mmcaddr + MMC_XGMAC_RX_IPC_INTR);
 	dwxgmac_read_mmc_reg(mmcaddr, MMC_XGMAC_RX_IPV4_GD,
 			     &mmc->mmc_rx_ipv4_gd);
 	dwxgmac_read_mmc_reg(mmcaddr, MMC_XGMAC_RX_IPV4_HDERR,
@@ -601,6 +605,26 @@ static void dwxgmac_mmc_read(void __iomem *mmcaddr, struct stmmac_counters *mmc)
 
 const struct stmmac_mmc_ops dwxgmac_mmc_ops = {
 	.ctrl = dwxgmac_mmc_ctrl,
+	.intr_all_mask = dwxgmac_mmc_intr_all_mask,
+	.read = dwxgmac_mmc_read,
+};
+
+static void dw25gmac_mmc_ctrl(void __iomem *mmcaddr, unsigned int mode)
+{
+	u32 value = readl(mmcaddr + MMC_CNTRL);
+
+	value |= (mode & 0x3F);
+	/* This field disables receive channels mapping for certain set of
+	 * Receive Frame/Priority/IPC MAC Management Counters.
+	 * Application should set this field to 1 to disable it.
+	 */
+	value |= (mode & 0x80000000);
+
+	writel(value, mmcaddr + MMC_CNTRL);
+}
+
+const struct stmmac_mmc_ops dw25gmac_mmc_ops = {
+	.ctrl = dw25gmac_mmc_ctrl,
 	.intr_all_mask = dwxgmac_mmc_intr_all_mask,
 	.read = dwxgmac_mmc_read,
 };
