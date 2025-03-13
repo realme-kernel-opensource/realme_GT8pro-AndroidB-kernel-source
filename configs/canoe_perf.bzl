@@ -255,6 +255,7 @@ canoe_perf_config = {
     "CONFIG_QRTR_GUNYAH": "m",
     "CONFIG_QRTR_MHI": "m",
     "CONFIG_QRTR_SMD": "m",
+    "CONFIG_QSEECOM_PROXY": "m",
     "CONFIG_QSEE_IPC_IRQ_BRIDGE": "m",
     "CONFIG_QTI_ALTMODE_GLINK": "m",
     "CONFIG_QTI_BATTERY_CHARGER": "m",
