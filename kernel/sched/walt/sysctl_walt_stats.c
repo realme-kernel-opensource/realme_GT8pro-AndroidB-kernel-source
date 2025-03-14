@@ -293,14 +293,15 @@ static int cpufreq_time_statistic_dump_handler(const struct ctl_table *table,
 					       int write, void *buffer,
 					       size_t *lenp, loff_t *ppos)
 {
-	struct ctl_table tmp = {
-		.data = &enable_stat_freq,
-		.maxlen = sizeof(int),
-		.mode = table->mode,
-	};
-
 	int cpu, pos = 0;
 	unsigned long flags;
+	struct ctl_table tmp = {
+		.data	= &enable_stat_freq,
+		.maxlen	= sizeof(int),
+		.mode	= table->mode,
+		.extra1	= SYSCTL_ZERO,
+		.extra2	= SYSCTL_ONE,
+	};
 
 	if (write) {
 		char *value = buffer;
@@ -311,14 +312,11 @@ static int cpufreq_time_statistic_dump_handler(const struct ctl_table *table,
 		} else if ('0' == value[0] && enable_stat_freq)
 			walt_stats_exit();
 
-		if ('1' == value[0] || '0' == value[0])
-			return proc_dointvec(&tmp, write, buffer, lenp, ppos);
-
-		return -EINVAL;
+		return proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
 	}
 
 	if (!enable_stat_freq)
-		return proc_dointvec(&tmp, write, buffer, lenp, ppos);
+		return proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
 
 	tmp.data = &statistic_dump;
 	tmp.maxlen = sizeof(statistic_dump);
@@ -382,19 +380,19 @@ static int cpufreq_reasons_dump_handler(const struct ctl_table *table,
 					int write, void *buffer, size_t *lenp,
 					loff_t *ppos)
 {
-	struct ctl_table tmp;
-
-	if (write || !enable_freq_reason) {
-		tmp.data = &enable_freq_reason;
-		tmp.maxlen = sizeof(int);
-		tmp.mode = table->mode;
-
-		return proc_dointvec(&tmp, write, buffer, lenp, ppos);
-	}
-
 	int len = 0;
 	int i = 0;
 	char counter_buffer[1024];
+	struct ctl_table tmp = {
+		.data	= &enable_freq_reason,
+		.maxlen	= sizeof(int),
+		.mode	= table->mode,
+		.extra1	= SYSCTL_ZERO,
+		.extra2	= SYSCTL_ONE,
+	};
+
+	if (write || !enable_freq_reason)
+		return proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
 
 	tmp.data = &counter_buffer;
 	tmp.maxlen = sizeof(counter_buffer);
@@ -574,19 +572,19 @@ atomic64_t walt_idle_balance_migration_counter[WALT_NR_CPUS];
 static int debug_counter_dump_handler(const struct ctl_table *table, int write,
 				      void *buffer, size_t *lenp, loff_t *ppos)
 {
-	struct ctl_table tmp;
-
-	if (write || !enable_load_balance) {
-		tmp.data = &enable_load_balance;
-		tmp.maxlen = sizeof(int);
-		tmp.mode = table->mode;
-
-		return proc_dointvec(&tmp, write, buffer, lenp, ppos);
-	}
-
 	int len = 0;
 	int i = 0;
 	char debug_buffer[1024];
+	struct ctl_table tmp = {
+		.data	= &enable_load_balance,
+		.maxlen	= sizeof(int),
+		.mode	= table->mode,
+		.extra1	= SYSCTL_ZERO,
+		.extra2	= SYSCTL_ONE,
+	};
+
+	if (write || !enable_load_balance)
+		return proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
 
 	tmp.data = &debug_buffer;
 	tmp.maxlen = sizeof(debug_buffer);
@@ -649,22 +647,24 @@ void rollover_freq_ns_stats(u64 value)
 static int cal_freq_dump_handler(const struct ctl_table *table, int write,
 				 void *buffer, size_t *lenp, loff_t *ppos)
 {
-	struct ctl_table tmp;
+	struct ctl_table tmp = {
+		.data = &enable_cal_freq,
+		.maxlen = sizeof(int),
+		.mode = table->mode,
+		.extra1	= SYSCTL_ZERO,
+		.extra2	= SYSCTL_ONE,
+	};
 
-	if (write || !enable_cal_freq) {
-		tmp.data = &enable_cal_freq;
-		tmp.maxlen = sizeof(int);
-		tmp.mode = table->mode;
-
-		return proc_dointvec(&tmp, write, buffer, lenp, ppos);
-	}
+	if (write || !enable_cal_freq)
+		return proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
 
 	tmp.data = &calfreq_buffer;
 	tmp.maxlen = sizeof(calfreq_buffer);
 	tmp.mode = table->mode;
 
-	scnprintf(calfreq_buffer, PAGE_SIZE, "min_freq_ns: %llu\nmax_freq_ns: %llu\n",
-					freq_ns_stats.min_freq_ns, freq_ns_stats.max_freq_ns);
+	scnprintf(calfreq_buffer, PAGE_SIZE,
+		  "min_freq_ns: %llu\nmax_freq_ns: %llu\n",
+		  freq_ns_stats.min_freq_ns, freq_ns_stats.max_freq_ns);
 
 	return proc_dostring(&tmp, write, buffer, lenp, ppos);
 }
@@ -676,6 +676,8 @@ static struct ctl_table walt_stats_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= cpufreq_time_statistic_dump_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 	{
 		.procname	= "freq_reason",
@@ -683,6 +685,8 @@ static struct ctl_table walt_stats_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= cpufreq_reasons_dump_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 	{
 		.procname	= "lb_debug_counters",
@@ -690,6 +694,8 @@ static struct ctl_table walt_stats_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= debug_counter_dump_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 	{
 		.procname	= "cal_min_max_freq",
@@ -697,6 +703,8 @@ static struct ctl_table walt_stats_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= cal_freq_dump_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 };
 
