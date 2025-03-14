@@ -62,12 +62,24 @@ static struct qcom_icc_node qhm_qspi = {
 	.links = { SLAVE_A1NOC_SNOC },
 };
 
+static struct qcom_icc_qosbox qxm_crypto_qos = {
+	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
+	.num_ports = 1,
+	.offsets = { 0x36000 },
+	.config = &(struct qos_config) {
+		.prio = 2,
+		.urg_fwd = 1,
+		.prio_fwd_disable = 1,
+	},
+};
+
 static struct qcom_icc_node qxm_crypto = {
 	.name = "qxm_crypto",
 	.id = MASTER_CRYPTO,
 	.channels = 1,
 	.buswidth = 16,
 	.noc_ops = &qcom_qnoc4_ops,
+	.qosbox = &qxm_crypto_qos,
 	.num_links = 1,
 	.links = { SLAVE_A1NOC_SNOC },
 };
@@ -163,7 +175,7 @@ static struct qcom_icc_node xm_usb3 = {
 static struct qcom_icc_qosbox qhm_qup2_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 1,
-	.offsets = { 0x15000 },
+	.offsets = { 0x35000 },
 	.config = &(struct qos_config) {
 		.prio = 2,
 		.urg_fwd = 0,
@@ -185,7 +197,7 @@ static struct qcom_icc_node qhm_qup2 = {
 static struct qcom_icc_qosbox qhm_qup3_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 1,
-	.offsets = { 0x1c000 },
+	.offsets = { 0x3c000 },
 	.config = &(struct qos_config) {
 		.prio = 2,
 		.urg_fwd = 0,
@@ -207,7 +219,7 @@ static struct qcom_icc_node qhm_qup3 = {
 static struct qcom_icc_qosbox qhm_qup4_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 1,
-	.offsets = { 0x1d000 },
+	.offsets = { 0x3d000 },
 	.config = &(struct qos_config) {
 		.prio = 2,
 		.urg_fwd = 0,
@@ -229,7 +241,7 @@ static struct qcom_icc_node qhm_qup4 = {
 static struct qcom_icc_qosbox qxm_ipa_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 1,
-	.offsets = { 0x17000 },
+	.offsets = { 0x37000 },
 	.config = &(struct qos_config) {
 		.prio = 2,
 		.urg_fwd = 1,
@@ -271,7 +283,7 @@ static struct qcom_icc_node qxm_sp = {
 static struct qcom_icc_qosbox xm_qdss_etr_0_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 1,
-	.offsets = { 0x18000 },
+	.offsets = { 0x38000 },
 	.config = &(struct qos_config) {
 		.prio = 2,
 		.urg_fwd = 0,
@@ -293,7 +305,7 @@ static struct qcom_icc_node xm_qdss_etr_0 = {
 static struct qcom_icc_qosbox xm_qdss_etr_1_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 1,
-	.offsets = { 0x19000 },
+	.offsets = { 0x39000 },
 	.config = &(struct qos_config) {
 		.prio = 2,
 		.urg_fwd = 0,
@@ -315,7 +327,7 @@ static struct qcom_icc_node xm_qdss_etr_1 = {
 static struct qcom_icc_qosbox xm_sdc2_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 1,
-	.offsets = { 0x1a000 },
+	.offsets = { 0x3a000 },
 	.config = &(struct qos_config) {
 		.prio = 2,
 		.urg_fwd = 0,
@@ -3190,11 +3202,11 @@ static struct qcom_icc_bcm bcm_sh1_disp_crm_hw_5 = {
 	.nodes = { &qnm_mnoc_hf_disp_crm_hw_5 },
 };
 
-static struct qcom_icc_bcm *aggre1_noc_bcms[] = {
+static struct qcom_icc_bcm *aggre_noc_bcms[] = {
 	&bcm_ce0,
 };
 
-static struct qcom_icc_node *aggre1_noc_nodes[] = {
+static struct qcom_icc_node *aggre_noc_nodes[] = {
 	[MASTER_QSPI_0] = &qhm_qspi,
 	[MASTER_CRYPTO] = &qxm_crypto,
 	[MASTER_QUP_1] = &qxm_qup1,
@@ -3202,26 +3214,6 @@ static struct qcom_icc_node *aggre1_noc_nodes[] = {
 	[MASTER_UFS_MEM] = &xm_ufs_mem,
 	[MASTER_USB3] = &xm_usb3,
 	[SLAVE_A1NOC_SNOC] = &qns_a1noc_snoc,
-};
-
-static char *aggre1_noc_voters[] = {
-	[VOTER_IDX_HLOS] = "hlos",
-};
-
-static struct qcom_icc_desc canoe_aggre1_noc = {
-	.config = &icc_regmap_config,
-	.nodes = aggre1_noc_nodes,
-	.num_nodes = ARRAY_SIZE(aggre1_noc_nodes),
-	.bcms = aggre1_noc_bcms,
-	.num_bcms = ARRAY_SIZE(aggre1_noc_bcms),
-	.voters = aggre1_noc_voters,
-	.num_voters = ARRAY_SIZE(aggre1_noc_voters),
-};
-
-static struct qcom_icc_bcm *aggre2_noc_bcms[] = {
-};
-
-static struct qcom_icc_node *aggre2_noc_nodes[] = {
 	[MASTER_QUP_2] = &qhm_qup2,
 	[MASTER_QUP_3] = &qhm_qup3,
 	[MASTER_QUP_4] = &qhm_qup4,
@@ -3234,19 +3226,20 @@ static struct qcom_icc_node *aggre2_noc_nodes[] = {
 	[SLAVE_A2NOC_SNOC] = &qns_a2noc_snoc,
 };
 
-static char *aggre2_noc_voters[] = {
+static char *aggre_noc_voters[] = {
 	[VOTER_IDX_HLOS] = "hlos",
 };
 
-static struct qcom_icc_desc canoe_aggre2_noc = {
+static struct qcom_icc_desc canoe_aggre_noc = {
 	.config = &icc_regmap_config,
-	.nodes = aggre2_noc_nodes,
-	.num_nodes = ARRAY_SIZE(aggre2_noc_nodes),
-	.bcms = aggre2_noc_bcms,
-	.num_bcms = ARRAY_SIZE(aggre2_noc_bcms),
-	.voters = aggre2_noc_voters,
-	.num_voters = ARRAY_SIZE(aggre2_noc_voters),
+	.nodes = aggre_noc_nodes,
+	.num_nodes = ARRAY_SIZE(aggre_noc_nodes),
+	.bcms = aggre_noc_bcms,
+	.num_bcms = ARRAY_SIZE(aggre_noc_bcms),
+	.voters = aggre_noc_voters,
+	.num_voters = ARRAY_SIZE(aggre_noc_voters),
 };
+
 
 static struct qcom_icc_bcm *clk_virt_bcms[] = {
 	&bcm_qup0,
@@ -3807,10 +3800,8 @@ static int qnoc_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id qnoc_of_match[] = {
-	{ .compatible = "qcom,canoe-aggre1_noc",
-	  .data = &canoe_aggre1_noc},
-	{ .compatible = "qcom,canoe-aggre2_noc",
-	  .data = &canoe_aggre2_noc},
+	{ .compatible = "qcom,canoe-aggre_noc",
+	  .data = &canoe_aggre_noc},
 	{ .compatible = "qcom,canoe-clk_virt",
 	  .data = &canoe_clk_virt},
 	{ .compatible = "qcom,canoe-cnoc_cfg",
