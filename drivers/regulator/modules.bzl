@@ -128,4 +128,8 @@ def register_modules(registry):
             # do not sort
             "drivers/regulator/virtio_regulator.c",
         ],
+        deps = [
+            # do not sort
+            "drivers/regulator/debug-regulator",
+        ],
     )

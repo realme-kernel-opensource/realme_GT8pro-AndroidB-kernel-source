@@ -30,6 +30,7 @@ boot_stats.ko
 virtio_clk_monaco.ko
 virtio_clk_lemans.ko
 virtio_clk.ko
+debug-regulator.ko
 virtio_regulator.ko
 iommu-logger.ko
 qcom_iommu_util.ko
