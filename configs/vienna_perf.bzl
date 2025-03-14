@@ -137,6 +137,7 @@ vienna_perf_config = {
     "CONFIG_STM_SOURCE_FTRACE": "m",
     "CONFIG_STM_SOURCE_HEARTBEAT": "m",
     "CONFIG_QCOM_TZMEM": "m",
+    "CONFIG_QTI_PMIC_LPM": "m",
     "CONFIG_VIRT_DRIVERS": "y",
     "CONFIG_NOP_USB_XCEIV": "m",
     "CONFIG_USB_DWC3_MSM": "m",
