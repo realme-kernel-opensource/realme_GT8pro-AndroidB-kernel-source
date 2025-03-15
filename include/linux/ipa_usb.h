@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _IPA_USB_H_
@@ -200,8 +200,11 @@ struct ipa_usb_ops {
 
 #if IS_ENABLED(CONFIG_USB_F_GSI)
 void ipa_ready_callback(void *ops);
+void ipa_exit_callback(void);
 #else
 static inline void ipa_ready_callback(void *ops)
+{ }
+static inline void ipa_exit_callback(void)
 { }
 #endif
 
