@@ -1218,6 +1218,8 @@ void sched_walt_oscillate(unsigned int busy_cpu)
 			wake_up_if_idle(dst_cpu);
 		}
 		goto out;
+	} else {
+		no_oscillate_reason = 103;
 	}
 unlock:
 	raw_spin_unlock_irqrestore(&src_rq->__lock, flags);

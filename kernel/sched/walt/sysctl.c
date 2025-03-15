@@ -35,6 +35,20 @@ static int max_nr_pipeline = MAX_NR_PIPELINE;
 static unsigned int min_cfs_boost_prio = 99;
 static unsigned int max_cfs_boost_prio = 119;
 
+char *cgroup_names[ANDROID_CGROUPS] = {"", "top-app", "foreground", "background"};
+unsigned int sysctl_sched_topapp_updownmigrate_0[NUM_UPDOWN_SETTINGS];
+unsigned int sysctl_sched_topapp_updownmigrate_1[NUM_UPDOWN_SETTINGS];
+unsigned int sysctl_sched_topapp_updownmigrate_2[NUM_UPDOWN_SETTINGS];
+unsigned int sysctl_sched_foreground_updownmigrate_0[NUM_UPDOWN_SETTINGS];
+unsigned int sysctl_sched_foreground_updownmigrate_1[NUM_UPDOWN_SETTINGS];
+unsigned int sysctl_sched_foreground_updownmigrate_2[NUM_UPDOWN_SETTINGS];
+unsigned int sysctl_sched_background_updownmigrate_0[NUM_UPDOWN_SETTINGS];
+unsigned int sysctl_sched_background_updownmigrate_1[NUM_UPDOWN_SETTINGS];
+unsigned int sysctl_sched_background_updownmigrate_2[NUM_UPDOWN_SETTINGS];
+unsigned int sysctl_sched_other_cgroup_updownmigrate_0[NUM_UPDOWN_SETTINGS];
+unsigned int sysctl_sched_other_cgroup_updownmigrate_1[NUM_UPDOWN_SETTINGS];
+unsigned int sysctl_sched_other_cgroup_updownmigrate_2[NUM_UPDOWN_SETTINGS];
+unsigned int use_cgroup_margin;
 unsigned int sysctl_sched_capacity_margin_up_pct[MAX_MARGIN_LEVELS];
 unsigned int sysctl_sched_capacity_margin_dn_pct[MAX_MARGIN_LEVELS];
 unsigned int sysctl_sched_busy_hyst_enable_cpus;
@@ -614,7 +628,7 @@ unlock_mutex:
 #ifdef CONFIG_PROC_SYSCTL
 static void sched_update_updown_migrate_values(bool up)
 {
-	int i = 0, cpu;
+	int i = 0;
 	struct walt_sched_cluster *cluster;
 
 	for_each_sched_cluster(cluster) {
@@ -622,30 +636,28 @@ static void sched_update_updown_migrate_values(bool up)
 		 * No need to worry about CPUs in last cluster
 		 * if there are more than 2 clusters in the system
 		 */
-		for_each_cpu(cpu, &cluster->cpus) {
-			if (up)
-				sched_capacity_margin_up[cpu] =
-				SCHED_FIXEDPOINT_SCALE * 100 /
-				sysctl_sched_capacity_margin_up_pct[i];
-			else
-				sched_capacity_margin_down[cpu] =
-				SCHED_FIXEDPOINT_SCALE * 100 /
-				sysctl_sched_capacity_margin_dn_pct[i];
-		}
+		if (up)
+			sched_capacity_margin_up[ANDROID_CGROUP_OTHER][cluster->id] =
+			SCHED_FIXEDPOINT_SCALE * 100 /
+			sysctl_sched_capacity_margin_up_pct[i];
+		else
+			sched_capacity_margin_down[ANDROID_CGROUP_OTHER][cluster->id] =
+			SCHED_FIXEDPOINT_SCALE * 100 /
+			sysctl_sched_capacity_margin_dn_pct[i];
 
-		trace_sched_update_updown_migrate_values(up, i);
+		trace_sched_update_updown_migrate_values(i, ANDROID_CGROUP_OTHER);
 		if (++i >= num_sched_clusters - 1)
 			break;
 	}
 }
 
+static DEFINE_MUTEX(sysctl_cgroup_mutex);
 int sched_updown_migrate_handler(const struct ctl_table *table, int write,
 				void __user *buffer, size_t *lenp,
 				loff_t *ppos)
 {
 	int ret, i;
 	unsigned int *data = (unsigned int *)table->data;
-	static DEFINE_MUTEX(mutex);
 	int cap_margin_levels = num_sched_clusters ? num_sched_clusters - 1 : 0;
 	int val[MAX_MARGIN_LEVELS];
 	struct ctl_table tmp = {
@@ -657,7 +669,13 @@ int sched_updown_migrate_handler(const struct ctl_table *table, int write,
 	if (cap_margin_levels <= 0)
 		return -EINVAL;
 
-	mutex_lock(&mutex);
+	mutex_lock(&sysctl_cgroup_mutex);
+
+	if (use_cgroup_margin == 1) {
+		ret = -EINVAL;
+		goto unlock_mutex;
+	}
+	use_cgroup_margin = 2;
 
 	if (!write) {
 		tmp.maxlen = sizeof(int) * cap_margin_levels;
@@ -699,18 +717,125 @@ int sched_updown_migrate_handler(const struct ctl_table *table, int write,
 	for (i = 0; i < cap_margin_levels; i++)
 		data[i] = val[i];
 
-	/* update individual cpu thresholds */
+	/* update individual cluster thresholds */
 	sched_update_updown_migrate_values(data == &sysctl_sched_capacity_margin_up_pct[0]);
 
 unlock_mutex:
-	mutex_unlock(&mutex);
+	mutex_unlock(&sysctl_cgroup_mutex);
+
+	return ret;
+}
+
+
+int sched_cgroup_updown_migrate_handler(const struct ctl_table *table, int write,
+				void __user *buffer, size_t *lenp,
+				loff_t *ppos)
+{
+	int ret, i;
+	unsigned int *data = (unsigned int *)table->data;
+	int val[NUM_UPDOWN_SETTINGS];
+	struct ctl_table tmp = {
+		.data	= &val,
+		.maxlen	= sizeof(unsigned int) * NUM_UPDOWN_SETTINGS,
+		.mode	= table->mode,
+	};
+	unsigned int cgroup, cluster;
+
+	mutex_lock(&sysctl_cgroup_mutex);
+
+	if (use_cgroup_margin == 2) {
+		ret = -EINVAL;
+		goto unlock_mutex;
+	}
+	use_cgroup_margin = 1;
+
+	if (!write) {
+		tmp.maxlen = sizeof(int) * NUM_UPDOWN_SETTINGS;
+		tmp.data = table->data;
+		ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
+		goto unlock_mutex;
+	}
+
+	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
+	if (ret)
+		goto unlock_mutex;
+
+	/* check if valid pct values are passed in */
+	for (i = 0; i < NUM_UPDOWN_SETTINGS; i++) {
+		if (val[i] <= 0 || val[i] > 100) {
+			ret = -EINVAL;
+			goto unlock_mutex;
+		}
+	}
+
+	if (data == &sysctl_sched_topapp_updownmigrate_0[0]) {
+		cluster = 0;
+		cgroup = ANDROID_CGROUP_TOPAPP;
+	} else if (data == &sysctl_sched_topapp_updownmigrate_1[0]) {
+		cluster = 1;
+		cgroup = ANDROID_CGROUP_TOPAPP;
+	} else if (data == &sysctl_sched_topapp_updownmigrate_2[0]) {
+		cluster = 2;
+		cgroup = ANDROID_CGROUP_TOPAPP;
+	} else if (data == &sysctl_sched_foreground_updownmigrate_0[0]) {
+		cluster = 0;
+		cgroup = ANDROID_CGROUP_FOREGROUND;
+	} else if (data == &sysctl_sched_foreground_updownmigrate_1[0]) {
+		cluster = 1;
+		cgroup = ANDROID_CGROUP_FOREGROUND;
+	} else if (data == &sysctl_sched_foreground_updownmigrate_2[0]) {
+		cluster = 2;
+		cgroup = ANDROID_CGROUP_FOREGROUND;
+	} else if (data == &sysctl_sched_background_updownmigrate_0[0]) {
+		cluster = 0;
+		cgroup = ANDROID_CGROUP_BACKGROUND;
+	} else if (data == &sysctl_sched_background_updownmigrate_1[0]) {
+		cluster = 1;
+		cgroup = ANDROID_CGROUP_BACKGROUND;
+	} else if (data == &sysctl_sched_background_updownmigrate_2[0]) {
+		cluster = 2;
+		cgroup = ANDROID_CGROUP_BACKGROUND;
+	} else if (data == &sysctl_sched_other_cgroup_updownmigrate_0[0]) {
+		cluster = 0;
+		cgroup = ANDROID_CGROUP_OTHER;
+	} else if (data == &sysctl_sched_other_cgroup_updownmigrate_1[0]) {
+		cluster = 1;
+		cgroup = ANDROID_CGROUP_OTHER;
+	} else if (data == &sysctl_sched_other_cgroup_updownmigrate_2[0]) {
+		cluster = 2;
+		cgroup = ANDROID_CGROUP_OTHER;
+	} else {
+		ret = -EINVAL;
+		goto unlock_mutex;
+	}
+
+	/* ensure up pct is greater than dn pct */
+	if (val[0] < val[1]) {
+		ret = -EINVAL;
+		goto unlock_mutex;
+	}
+
+	/* all things checkout update the value */
+	for (i = 0; i < NUM_UPDOWN_SETTINGS; i++)
+		data[i] = val[i];
+
+	/* update individual cluster thresholds */
+	sched_capacity_margin_up[cgroup][cluster] =
+		SCHED_FIXEDPOINT_SCALE * 100 / val[0];
+	sched_capacity_margin_down[cgroup][cluster] =
+		SCHED_FIXEDPOINT_SCALE * 100 / val[1];
+
+	trace_sched_update_updown_migrate_values(cluster, cgroup);
+
+unlock_mutex:
+	mutex_unlock(&sysctl_cgroup_mutex);
 
 	return ret;
 }
 
 static void sched_update_updown_early_migrate_values(bool up)
 {
-	int i = 0, cpu;
+	int i = 0;
 	struct walt_sched_cluster *cluster;
 
 	for_each_sched_cluster(cluster) {
@@ -718,14 +843,15 @@ static void sched_update_updown_early_migrate_values(bool up)
 		 * No need to worry about CPUs in last cluster
 		 * if there are more than 2 clusters in the system
 		 */
-		for_each_cpu(cpu, &cluster->cpus) {
-			if (up)
-				sched_capacity_margin_early_up[cpu] = sysctl_sched_early_up[i];
-			else
-				sched_capacity_margin_early_down[cpu] = sysctl_sched_early_down[i];
-		}
+		if (up)
+			sched_capacity_margin_up[ANDROID_CGROUP_TOPAPP][cluster->id] =
+				sysctl_sched_early_up[i];
+		else
+			sched_capacity_margin_down[ANDROID_CGROUP_TOPAPP][cluster->id] =
+				sysctl_sched_early_down[i];
 
-		trace_sched_update_updown_early_migrate_values(up, i);
+		trace_sched_update_updown_migrate_values(i, ANDROID_CGROUP_TOPAPP);
+
 		if (++i >= num_sched_clusters - 1)
 			break;
 	}
@@ -737,7 +863,6 @@ int sched_updown_early_migrate_handler(const struct ctl_table *table, int write,
 {
 	int ret, i;
 	unsigned int *data = (unsigned int *)table->data;
-	static DEFINE_MUTEX(mutex);
 	int cap_margin_levels = num_sched_clusters ? num_sched_clusters - 1 : 0;
 	int val[MAX_MARGIN_LEVELS];
 	struct ctl_table tmp = {
@@ -749,7 +874,13 @@ int sched_updown_early_migrate_handler(const struct ctl_table *table, int write,
 	if (cap_margin_levels <= 0)
 		return -EINVAL;
 
-	mutex_lock(&mutex);
+	mutex_lock(&sysctl_cgroup_mutex);
+
+	if (use_cgroup_margin == 1) {
+		ret = -EINVAL;
+		goto unlock_mutex;
+	}
+	use_cgroup_margin = 2;
 
 	if (!write) {
 		tmp.maxlen = sizeof(int) * cap_margin_levels;
@@ -790,10 +921,10 @@ int sched_updown_early_migrate_handler(const struct ctl_table *table, int write,
 	for (i = 0; i < cap_margin_levels; i++)
 		data[i] = val[i];
 
-	/* update individual cpu thresholds */
+	/* update individual cluster thresholds */
 	sched_update_updown_early_migrate_values(data == &sysctl_sched_early_up[0]);
 unlock_mutex:
-	mutex_unlock(&mutex);
+	mutex_unlock(&sysctl_cgroup_mutex);
 
 	return ret;
 }
@@ -1066,6 +1197,98 @@ static int sched_sibling_cluster_handler(const struct ctl_table *table, int writ
 	return ret;
 }
 
+static struct ctl_table cluster_0[] = {
+	{
+		.procname	= "sched_topapp_updownmigrate",
+		.data		= &sysctl_sched_topapp_updownmigrate_0,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+	{
+		.procname	= "sched_foreground_updownmigrate",
+		.data		= &sysctl_sched_foreground_updownmigrate_0,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+	{
+		.procname	= "sched_background_updownmigrate",
+		.data		= &sysctl_sched_background_updownmigrate_0,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+	{
+		.procname	= "sched_other_cgroup_updownmigrate",
+		.data		= &sysctl_sched_other_cgroup_updownmigrate_0,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+};
+
+static struct ctl_table cluster_1[] = {
+	{
+		.procname	= "sched_topapp_updownmigrate",
+		.data		= &sysctl_sched_topapp_updownmigrate_1,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+	{
+		.procname	= "sched_foreground_updownmigrate",
+		.data		= &sysctl_sched_foreground_updownmigrate_1,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+	{
+		.procname	= "sched_background_updownmigrate",
+		.data		= &sysctl_sched_background_updownmigrate_1,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+	{
+		.procname	= "sched_other_cgroup_updownmigrate",
+		.data		= &sysctl_sched_other_cgroup_updownmigrate_1,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+};
+
+static struct ctl_table cluster_2[] = {
+	{
+		.procname	= "sched_topapp_updownmigrate",
+		.data		= &sysctl_sched_topapp_updownmigrate_2,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+	{
+		.procname	= "sched_foreground_updownmigrate",
+		.data		= &sysctl_sched_foreground_updownmigrate_2,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+	{
+		.procname	= "sched_background_updownmigrate",
+		.data		= &sysctl_sched_background_updownmigrate_2,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+	{
+		.procname	= "sched_other_cgroup_updownmigrate",
+		.data		= &sysctl_sched_other_cgroup_updownmigrate_2,
+		.maxlen		= NUM_UPDOWN_SETTINGS * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_cgroup_updown_migrate_handler,
+	},
+};
 static struct ctl_table cluster_01[] = {
 	{
 		.procname	= "load_sync_settings",
@@ -2040,7 +2263,9 @@ void walt_register_sysctl(void)
 		*hdr11 = NULL, *hdr12 = NULL,
 		*hdr13 = NULL, *hdr14 = NULL,
 		*hdr15 = NULL, *hdr16 = NULL,
-		*hdr17 = NULL, *hdr18 = NULL;
+		*hdr17 = NULL, *hdr18 = NULL,
+		*hdr19 = NULL, *hdr20 = NULL,
+		*hdr21 = NULL;
 
 	hdr = register_sysctl("walt", walt_table);
 	hdr2 = register_sysctl("walt/input_boost", input_boost_sysctls);
@@ -2053,9 +2278,11 @@ void walt_register_sysctl(void)
 		hdr4 = register_sysctl("walt/cluster1/smart_freq", smart_freq_cluster1);
 		hdr7 = register_sysctl("walt/cluster0/cluster1", cluster_01);
 		hdr8 = register_sysctl("walt/cluster1/cluster0", cluster_10);
+		hdr19 = register_sysctl("walt/cluster0", cluster_0);
 		kmemleak_not_leak(hdr4);
 		kmemleak_not_leak(hdr7);
 		kmemleak_not_leak(hdr8);
+		kmemleak_not_leak(hdr19);
 	}
 	if (num_sched_clusters >= 3) {
 		hdr5 = register_sysctl("walt/cluster2/smart_freq", smart_freq_cluster2);
@@ -2063,11 +2290,13 @@ void walt_register_sysctl(void)
 		hdr10 = register_sysctl("walt/cluster1/cluster2", cluster_12);
 		hdr11 = register_sysctl("walt/cluster2/cluster0", cluster_20);
 		hdr12 = register_sysctl("walt/cluster2/cluster1", cluster_21);
+		hdr20 = register_sysctl("walt/cluster1", cluster_1);
 		kmemleak_not_leak(hdr5);
 		kmemleak_not_leak(hdr9);
 		kmemleak_not_leak(hdr10);
 		kmemleak_not_leak(hdr11);
 		kmemleak_not_leak(hdr12);
+		kmemleak_not_leak(hdr20);
 	}
 	if (num_sched_clusters >= 4) {
 		hdr6 = register_sysctl("walt/cluster3/smart_freq", smart_freq_cluster3);
@@ -2077,6 +2306,7 @@ void walt_register_sysctl(void)
 		hdr16 = register_sysctl("walt/cluster3/cluster0", cluster_30);
 		hdr17 = register_sysctl("walt/cluster3/cluster1", cluster_31);
 		hdr18 = register_sysctl("walt/cluster3/cluster2", cluster_32);
+		hdr21 = register_sysctl("walt/cluster2", cluster_2);
 		kmemleak_not_leak(hdr6);
 		kmemleak_not_leak(hdr13);
 		kmemleak_not_leak(hdr14);
@@ -2084,6 +2314,7 @@ void walt_register_sysctl(void)
 		kmemleak_not_leak(hdr16);
 		kmemleak_not_leak(hdr17);
 		kmemleak_not_leak(hdr18);
+		kmemleak_not_leak(hdr21);
 	}
 
 	kmemleak_not_leak(hdr);
