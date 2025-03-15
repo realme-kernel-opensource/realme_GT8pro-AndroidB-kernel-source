@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"io-pgtable-fast: " fmt
@@ -19,6 +19,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/qcom-iommu-util.h>
 #include <linux/qcom-io-pgtable.h>
+#include "drivers/iommu/iommu-pages.h"
 
 #define AV8L_FAST_MAX_ADDR_BITS		48
 
@@ -475,7 +476,7 @@ av8l_fast_prepopulate_pgtables(struct av8l_fast_io_pgtable *data,
 	if (!pages)
 		return -ENOMEM;
 
-	page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	page = __iommu_alloc_pages((GFP_KERNEL | __GFP_ZERO), 0);
 	if (!page)
 		goto err_free_pages_arr;
 	pages[pg++] = page;
@@ -489,7 +490,7 @@ av8l_fast_prepopulate_pgtables(struct av8l_fast_io_pgtable *data,
 			++i, pud = pud_next(pud, end)) {
 		av8l_fast_iopte pte, *ptep;
 
-		page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+		page = __iommu_alloc_pages((GFP_KERNEL | __GFP_ZERO), 0);
 		if (!page)
 			goto err_free_pages;
 		pages[pg++] = page;
@@ -513,7 +514,7 @@ av8l_fast_prepopulate_pgtables(struct av8l_fast_io_pgtable *data,
 			av8l_fast_iopte pte, *pudp;
 			void *addr;
 
-			page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+			page = __iommu_alloc_pages((GFP_KERNEL | __GFP_ZERO), 0);
 			if (!page)
 				goto err_free_pages;
 			pages[pg++] = page;
@@ -547,7 +548,7 @@ av8l_fast_prepopulate_pgtables(struct av8l_fast_io_pgtable *data,
 
 err_free_pages:
 	for (i = 0; i < pg; ++i)
-		__free_page(pages[i]);
+		__iommu_free_pages(pages[i], 0);
 err_free_pages_arr:
 	kvfree(pages);
 	return -ENOMEM;
@@ -643,7 +644,7 @@ static void av8l_fast_free_pgtable(struct io_pgtable *iop)
 
 	vunmap(data->pmds);
 	for (i = 0; i < data->nr_pages; ++i)
-		__free_page(data->pages[i]);
+		__iommu_free_pages(data->pages[i], 0);
 	kvfree(data->pages);
 	kfree(data);
 }
