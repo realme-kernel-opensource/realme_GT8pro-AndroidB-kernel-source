@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "dmesg_dumper_crypto: " fmt
@@ -288,7 +288,8 @@ void qcom_ddump_encrypt_exit(void)
 	init_done = false;
 }
 
-int qcom_ddump_encrypt_init(struct device_node *node)
+int qcom_ddump_encrypt_init(struct device_node *node,
+	struct ddump_shm_hdr *hdr)
 {
 	int ret;
 
@@ -318,6 +319,7 @@ int qcom_ddump_encrypt_init(struct device_node *node)
 		goto free_pubkey;
 	}
 
+	hdr->log_is_encrypted = true;
 	init_done = true;
 	return ret;
 
