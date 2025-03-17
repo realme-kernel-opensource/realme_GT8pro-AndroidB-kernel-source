@@ -46,6 +46,9 @@ static char *md_dma_buf_info_addr;
 static size_t md_dma_buf_procs_size = SZ_256K;
 static char *md_dma_buf_procs_addr;
 
+static size_t md_task_memstat_size = SZ_256K;
+static char *md_task_memstat_addr;
+
 static unsigned long *md_debug_totalcma_pages;
 static struct list_head *md_debug_slab_caches;
 static struct mutex *md_debug_slab_mutex;
@@ -307,6 +310,8 @@ bool md_register_memory_dump(int size, char *name)
 		WRITE_ONCE(md_dma_buf_info_addr, buffer_start);
 	if (!strcmp(name, "DMA_PROC"))
 		WRITE_ONCE(md_dma_buf_procs_addr, buffer_start);
+	if (!strcmp(name, "TASK_MEMSTAT"))
+		WRITE_ONCE(md_task_memstat_addr, buffer_start);
 	return true;
 }
 
@@ -1347,6 +1352,89 @@ static void md_debugfs_dmabufprocs(struct dentry *minidump_dir)
 			&proc_dma_buf_procs_size_ops);
 }
 
+static void md_task_memstat(char *m, size_t dump_size)
+{
+	struct task_struct *task;
+	struct priv_buf buf;
+
+	buf.buf = m;
+	buf.size = dump_size;
+	buf.offset = 0;
+
+	buf.offset += scnprintf(buf.buf + buf.offset,
+				buf.size - buf.offset,
+				"%-8s %-8s %-10s %-8s %-16s %-16s %-16s %s\n",
+				"PID",
+				"RSS(KB)",
+				"SWAP(KB)",
+				"ADJ",
+				"anon_rss(KB)",
+				"file_rss(KB)",
+				"shmem_rss(KB)",
+				"TaskName");
+
+	rcu_read_lock();
+	for_each_process(task) {
+		if (task->mm) {
+			buf.offset += scnprintf(buf.buf + buf.offset,
+					buf.size - buf.offset,
+					"%-8d %-8lu %-10lu %-8d %-16lu %-16lu %-16lu %s\n",
+					task->pid,
+					K(get_mm_rss(task->mm)),
+					K(get_mm_counter(task->mm, MM_SWAPENTS)),
+					task->signal->oom_score_adj,
+					K(get_mm_counter(task->mm, MM_ANONPAGES)),
+					K(get_mm_counter(task->mm, MM_FILEPAGES)),
+					K(get_mm_counter(task->mm, MM_SHMEMPAGES)),
+					task->comm);
+			if (buf.offset == buf.size - 1)
+				goto err;
+		}
+	}
+	rcu_read_unlock();
+
+	return;
+err:
+	rcu_read_unlock();
+	pr_err("TASK_MEMSTAT Minidump region exhausted\n");
+}
+
+static ssize_t task_memstat_size_write(struct file *file,
+					  const char __user *ubuf,
+					  size_t count, loff_t *offset)
+{
+	unsigned long long size;
+
+	if (kstrtoull_from_user(ubuf, count, 0, &size)) {
+		pr_err_ratelimited("Invalid format for size\n");
+		return -EINVAL;
+	}
+	update_dump_size("TASK_MEMSTAT", size,
+			&md_task_memstat_addr, &md_task_memstat_size);
+	return count;
+}
+
+static ssize_t task_memstat_size_read(struct file *file, char __user *ubuf,
+				       size_t count, loff_t *offset)
+{
+	char buf[100];
+
+	snprintf(buf, sizeof(buf), "%zu MB\n", md_task_memstat_size/SZ_1M);
+	return simple_read_from_buffer(ubuf, count, offset, buf, strlen(buf));
+}
+
+static const struct file_operations proc_task_memstat_size_ops = {
+	.open   = simple_open,
+	.write  = task_memstat_size_write,
+	.read   = task_memstat_size_read,
+};
+
+static void md_debugfs_task_memstat(struct dentry *minidump_dir)
+{
+	debugfs_create_file("task_memstat_size_mb", 0400, minidump_dir, NULL,
+			&proc_task_memstat_size_ops);
+}
+
 void md_dump_memory(void)
 {
 	if (md_meminfo_seq_buf)
@@ -1368,6 +1456,8 @@ void md_dump_memory(void)
 	if (md_dma_buf_procs_addr)
 		md_dma_buf_procs(md_dma_buf_procs_addr, md_dma_buf_procs_size);
 
+	if (md_task_memstat_addr)
+		md_task_memstat(md_task_memstat_addr, md_task_memstat_size);
 }
 
 #define MD_DEBUG_LOOKUP(_var, type) \
@@ -1419,6 +1509,9 @@ int md_minidump_memory_init(void)
 	md_debugfs_dmabufinfo(minidump_dir);
 	md_register_memory_dump(md_dma_buf_procs_size, "DMA_PROC");
 	md_debugfs_dmabufprocs(minidump_dir);
+
+	md_register_memory_dump(md_task_memstat_size, "TASK_MEMSTAT");
+	md_debugfs_task_memstat(minidump_dir);
 
 	return error;
 }
