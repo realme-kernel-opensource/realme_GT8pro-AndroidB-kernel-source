@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -134,7 +134,7 @@ static int uetm_scmi_get_uetm_config(struct uetm_drvdata *drvdata)
 			sizeof(struct uetm_config));
 
 		if (ret)
-			return ret;
+			continue;
 
 		if (drvdata->uncore_uetm) {
 			if (rx_value.cluster_id == drvdata->cluster_id
