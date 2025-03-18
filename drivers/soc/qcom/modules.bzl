@@ -1411,3 +1411,13 @@ def register_modules(registry):
             "drivers/soc/qcom/qcom-pmic-ecid.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/rq_stats",
+        out = "rq_stats.ko",
+        config = "CONFIG_QCOM_RUN_QUEUE_STATS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/rq_stats.c",
+        ],
+    )
