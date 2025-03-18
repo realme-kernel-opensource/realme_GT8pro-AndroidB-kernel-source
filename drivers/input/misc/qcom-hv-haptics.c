@@ -848,6 +848,7 @@ struct haptics_chip {
 	bool				hboost_enabled;
 	bool				visense_enabled;
 	bool				visense_hs_disabled;
+	bool				swr_play;
 	ktime_t				pattern_start_time;
 	void				*lpass_ssr_handle;
 };
@@ -6424,6 +6425,38 @@ static ssize_t i_gain_error_show(const struct class *c,
 }
 static const CLASS_ATTR_RO(i_gain_error);
 
+static ssize_t swr_play_show(const struct class *c,
+		const struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", chip->swr_play);
+}
+
+static ssize_t swr_play_store(const struct class *c,
+		const struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	bool val;
+	int rc;
+
+	if (kstrtobool(buf, &val))
+		return -EINVAL;
+
+	if (val) {
+		rc = haptics_clear_fault(chip);
+		if (rc < 0)
+			return rc;
+	}
+
+	chip->swr_play = val;
+
+	return count;
+}
+static CLASS_ATTR_RW(swr_play);
+
 static struct attribute *hap_class_attrs[] = {
 	&class_attr_lra_calibration.attr,
 	&class_attr_lra_frequency_hz.attr,
@@ -6431,6 +6464,7 @@ static struct attribute *hap_class_attrs[] = {
 	&class_attr_lra_impedance.attr,
 	&class_attr_primitive_duration.attr,
 	&class_attr_visense_enabled.attr,
+	&class_attr_swr_play.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(hap_class);
