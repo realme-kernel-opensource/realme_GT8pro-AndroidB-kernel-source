@@ -246,3 +246,18 @@ def register_modules(registry):
             "drivers/thermal/qcom/trace_lmh_stats.h",
         ],
     )
+
+    registry.register(
+        name = "drivers/thermal/qcom/qcom-spmi-adc-tm5",
+        out = "qcom-spmi-adc-tm5.ko",
+        config = "CONFIG_QCOM_SPMI_ADC_TM5",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/qcom-spmi-adc-tm5.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/thermal/qcom/qcom-spmi-adc5",
+            "drivers/iio/adc/qcom-vadc-common",
+        ],
+    )
