@@ -50,11 +50,11 @@ static const struct pll_vco taycan_eko_t_vco[] = {
 	{ 249600000, 2500000000, 0 },
 };
 
-/* 250.0 MHz Configuration */
+/* 360.0 MHz Configuration */
 static const struct alpha_pll_config gpu_cc_pll0_config = {
-	.l = 0xd,
+	.l = 0x12,
 	.cal_l = 0x48,
-	.alpha = 0x555,
+	.alpha = 0xc000,
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
 	.config_ctl_hi1_val = 0xf51dea20,
@@ -80,7 +80,7 @@ static struct clk_alpha_pll gpu_cc_pll0 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -119,7 +119,7 @@ static struct clk_alpha_pll gpu_cc_pll1 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -233,12 +233,18 @@ static struct clk_rcg2 gpu_cc_gmu_clk_src = {
 	},
 };
 
+static const struct freq_tbl ftbl_gpu_cc_hub_clk_src[] = {
+	F(120000000, P_GPLL0_OUT_MAIN_DIV, 2.5, 0, 0),
+	F(200000000, P_GPLL0_OUT_MAIN_DIV, 1.5, 0, 0),
+	{ }
+};
+
 static struct clk_rcg2 gpu_cc_hub_clk_src = {
 	.cmd_rcgr = 0x9408,
 	.mnd_width = 0,
 	.hid_width = 5,
 	.parent_map = gpu_cc_parent_map_2,
-	.freq_tbl = ftbl_gpu_cc_ff_clk_src,
+	.freq_tbl = ftbl_gpu_cc_hub_clk_src,
 	.enable_safe_config = true,
 	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &(const struct clk_init_data) {
@@ -252,7 +258,7 @@ static struct clk_rcg2 gpu_cc_hub_clk_src = {
 		.vdd_class = &vdd_cx,
 		.num_rate_max = VDD_NUM,
 		.rate_max = (unsigned long[VDD_NUM]) {
-			[VDD_LOWER_D3] = 19200000,
+			[VDD_LOWER_D3] = 120000000,
 			[VDD_LOWER_D2] = 200000000},
 	},
 };
@@ -369,37 +375,6 @@ static struct clk_branch gpu_cc_freq_measure_clk = {
 	},
 };
 
-static struct clk_branch gpu_cc_gx_accu_shift_clk = {
-	.halt_reg = 0x947c,
-	.halt_check = BRANCH_HALT_VOTED,
-	.clkr = {
-		.enable_reg = 0x947c,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gpu_cc_gx_accu_shift_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gpu_cc_gx_gmu_clk = {
-	.halt_reg = 0x90c4,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0x90c4,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gpu_cc_gx_gmu_clk",
-			.parent_hws = (const struct clk_hw*[]) {
-				&gpu_cc_gmu_clk_src.clkr.hw,
-			},
-			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch gpu_cc_hlos1_vote_gpu_smmu_clk = {
 	.halt_reg = 0x7000,
 	.halt_check = BRANCH_VOTED,
@@ -498,8 +473,6 @@ static struct clk_regmap *gpu_cc_vienna_clocks[] = {
 	[GPU_CC_FF_CLK_SRC] = &gpu_cc_ff_clk_src.clkr,
 	[GPU_CC_FREQ_MEASURE_CLK] = &gpu_cc_freq_measure_clk.clkr,
 	[GPU_CC_GMU_CLK_SRC] = &gpu_cc_gmu_clk_src.clkr,
-	[GPU_CC_GX_ACCU_SHIFT_CLK] = &gpu_cc_gx_accu_shift_clk.clkr,
-	[GPU_CC_GX_GMU_CLK] = &gpu_cc_gx_gmu_clk.clkr,
 	[GPU_CC_HLOS1_VOTE_GPU_SMMU_CLK] = &gpu_cc_hlos1_vote_gpu_smmu_clk.clkr,
 	[GPU_CC_HUB_AON_CLK] = &gpu_cc_hub_aon_clk.clkr,
 	[GPU_CC_HUB_CLK_SRC] = &gpu_cc_hub_clk_src.clkr,
