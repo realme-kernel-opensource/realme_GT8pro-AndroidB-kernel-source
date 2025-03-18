@@ -2614,6 +2614,26 @@ static const struct adsp_data alor_wpss_resource = {
 	.ssctl_id = 0x19,
 };
 
+static const struct adsp_data alor_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.dtb_firmware_name = "modem_dtb.mdt",
+	.pas_id = 4,
+	.dtb_pas_id = 0x26,
+	.minidump_id = 3,
+	.decrypt_shutdown = true,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.region_assign_idx = 3,
+	.region_assign_count = 2,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+	.dma_phys_below_32b = true,
+	.both_dumps = true,
+};
+
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
 	{ .compatible = "qcom,msm8953-adsp-pil", .data = &msm8996_adsp_resource},
@@ -2693,6 +2713,7 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,yupik-cdsp-pas", .data = &yupik_cdsp_resource},
 	{ .compatible = "qcom,yupik-modem-pas", .data = &yupik_mpss_resource},
 	{ .compatible = "qcom,alor-wpss-pas", .data = &alor_wpss_resource},
+	{ .compatible = "qcom,alor-modem-pas", .data = &alor_mpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);
