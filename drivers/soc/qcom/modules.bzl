@@ -450,6 +450,19 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/mem-hooks",
+        out = "mem-hooks.ko",
+        config = "CONFIG_QCOM_MEM_HOOKS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/mem-hooks.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/memory_dump_v2",
         out = "memory_dump_v2.ko",
         config = "CONFIG_QCOM_MEMORY_DUMP_V2",

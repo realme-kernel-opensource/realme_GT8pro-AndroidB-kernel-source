@@ -192,6 +192,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_MEM_BUF_DEV_GH": "y",
     "CONFIG_QCOM_MEM_BUF_GH": "y",
     "CONFIG_QCOM_MEM_BUF_MSGQ": "m",
+    "CONFIG_QCOM_MEM_HOOKS": "m",
     "CONFIG_QCOM_MEM_OFFLINE": "m",
     "CONFIG_QCOM_MEM_OFFLINE_ZONE_BALANCING": "n",
     "CONFIG_QCOM_MINIDUMP": "m",
