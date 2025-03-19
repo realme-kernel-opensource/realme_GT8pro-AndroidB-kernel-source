@@ -21,6 +21,7 @@
 #include <linux/property.h>
 #include <linux/spinlock.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/suspend.h>
 
 #include "coresight-priv.h"
 #include "coresight-cti.h"
@@ -1153,6 +1154,62 @@ pm_release:
 	return ret;
 }
 
+#ifdef CONFIG_DEEPSLEEP
+static int cti_suspend(struct device *dev)
+{
+	int rc = 0;
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (pm_suspend_via_firmware()
+		&& drvdata->config.hw_enabled) {
+		drvdata->config.hw_enabled_store = drvdata->config.hw_enabled;
+		rc = cti_disable(drvdata->csdev, NULL);
+	}
+	return rc;
+}
+
+static int cti_resume(struct device *dev)
+{
+	int rc = 0;
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (pm_suspend_via_firmware()
+		&& drvdata->config.hw_enabled_store) {
+		rc = cti_enable(drvdata->csdev, CS_MODE_SYSFS, NULL);
+		drvdata->config.hw_enabled_store = false;
+	}
+	return rc;
+}
+#endif
+
+#ifdef CONFIG_HIBERNATION
+static int cti_freeze(struct device *dev)
+{
+	int rc = 0;
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (drvdata->config.hw_enabled) {
+		drvdata->config.hw_enabled_store = drvdata->config.hw_enabled;
+		rc = cti_disable(drvdata->csdev, NULL);
+	}
+
+	return rc;
+}
+
+static int cti_restore(struct device *dev)
+{
+	int rc = 0;
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (drvdata->config.hw_enabled_store) {
+		rc = cti_enable(drvdata->csdev, CS_MODE_SYSFS, NULL);
+		drvdata->config.hw_enabled_store = false;
+	}
+
+	return rc;
+}
+#endif
+
 #ifdef CONFIG_PM
 static int cti_runtime_suspend(struct device *dev)
 {
@@ -1176,6 +1233,14 @@ static int cti_runtime_resume(struct device *dev)
 #endif
 
 static const struct dev_pm_ops cti_dev_pm_ops = {
+#ifdef CONFIG_DEEPSLEEP
+	.suspend = cti_suspend,
+	.resume  = cti_resume,
+#endif
+#ifdef CONFIG_HIBERNATION
+	.freeze  = cti_freeze,
+	.restore = cti_restore,
+#endif
 	SET_RUNTIME_PM_OPS(cti_runtime_suspend, cti_runtime_resume, NULL)
 };
 
