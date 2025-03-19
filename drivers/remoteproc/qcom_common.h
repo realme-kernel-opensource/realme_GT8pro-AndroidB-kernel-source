@@ -82,7 +82,7 @@ void qcom_add_ssr_subdev(struct rproc *rproc, struct qcom_rproc_ssr *ssr,
 			 const char *ssr_name);
 void qcom_notify_early_ssr_clients(struct rproc_subdev *subdev);
 void qcom_remove_ssr_subdev(struct rproc *rproc, struct qcom_rproc_ssr *ssr);
-void qcom_rproc_update_recovery_status(struct rproc *rproc, bool enable);
+void qcom_rproc_update_recovery_status(struct rproc *rproc, bool enable, bool locked);
 
 void qcom_add_pdm_subdev(struct rproc *rproc, struct qcom_rproc_pdm *pdm);
 void qcom_remove_pdm_subdev(struct rproc *rproc, struct qcom_rproc_pdm *pdm);

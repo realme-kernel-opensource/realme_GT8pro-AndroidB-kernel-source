@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -44,6 +44,9 @@
 #define QRTR_STATE_INIT		-1
 
 #define AID_VENDOR_QRTR	KGIDT_INIT(2906)
+
+#define QRTR_LOCAL_PVM_NODE_ID	0x1
+#define QRTR_LOCAL_MDM_NODE_ID	0x2
 
 /**
  * struct qrtr_hdr_v1 - (I|R)PCrouter packet header version 1
@@ -119,6 +122,11 @@ struct qrtr_sock {
 	/* protect above signal variables */
 	spinlock_t signal_lock;
 };
+
+static inline int is_primary(int __nid)
+{
+	return ((__nid) == QRTR_LOCAL_PVM_NODE_ID) || ((__nid) == QRTR_LOCAL_MDM_NODE_ID);
+}
 
 static inline struct qrtr_sock *qrtr_sk(struct sock *sk)
 {
@@ -233,48 +241,18 @@ static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 			      struct sockaddr_qrtr *to, unsigned int flags);
 static struct qrtr_sock *qrtr_port_lookup(int port);
 static void qrtr_port_put(struct qrtr_sock *ipc);
+static int qrtr_parse_header(struct qrtr_cb *cb, size_t *hdrlen, unsigned int *size,
+			     const void *data);
 
 void qrtr_print_wakeup_reason(const void *data)
 {
-	const struct qrtr_hdr_v1 *v1;
-	const struct qrtr_hdr_v2 *v2;
 	struct qrtr_cb cb;
 	unsigned int size;
-	unsigned int ver;
 	int service_id;
 	size_t hdrlen;
 	u64 preview = 0;
 
-	ver = *(u8 *)data;
-	switch (ver) {
-	case QRTR_PROTO_VER_1:
-		v1 = data;
-		hdrlen = sizeof(*v1);
-		cb.src_node = le32_to_cpu(v1->src_node_id);
-		cb.src_port = le32_to_cpu(v1->src_port_id);
-		cb.dst_node = le32_to_cpu(v1->dst_node_id);
-		cb.dst_port = le32_to_cpu(v1->dst_port_id);
-
-		size = le32_to_cpu(v1->size);
-		break;
-	case QRTR_PROTO_VER_2:
-		v2 = data;
-		hdrlen = sizeof(*v2) + v2->optlen;
-		cb.src_node = le16_to_cpu(v2->src_node_id);
-		cb.src_port = le16_to_cpu(v2->src_port_id);
-		cb.dst_node = le16_to_cpu(v2->dst_node_id);
-		cb.dst_port = le16_to_cpu(v2->dst_port_id);
-
-		if (cb.src_port == (u16)QRTR_PORT_CTRL)
-			cb.src_port = QRTR_PORT_CTRL;
-		if (cb.dst_port == (u16)QRTR_PORT_CTRL)
-			cb.dst_port = QRTR_PORT_CTRL;
-
-		size = le32_to_cpu(v2->size);
-		break;
-	default:
-		return;
-	}
+	qrtr_parse_header(&cb, &hdrlen, &size, data);
 
 	service_id = qrtr_get_service_id(cb.src_node, cb.src_port);
 	if (service_id < 0)
@@ -291,6 +269,67 @@ void qrtr_print_wakeup_reason(const void *data)
 		service_id);
 }
 EXPORT_SYMBOL_GPL(qrtr_print_wakeup_reason);
+
+static int qrtr_parse_header(struct qrtr_cb *cb, size_t *hdrlen, unsigned int *size,
+			     const void *data)
+{
+	const struct qrtr_hdr_v1 *v1;
+	const struct qrtr_hdr_v2 *v2;
+	unsigned int ver;
+
+	ver = *(u8 *)data;
+	switch (ver) {
+	case QRTR_PROTO_VER_1:
+		v1 = data;
+		*hdrlen = sizeof(*v1);
+		cb->src_node = le32_to_cpu(v1->src_node_id);
+		cb->src_port = le32_to_cpu(v1->src_port_id);
+		cb->dst_node = le32_to_cpu(v1->dst_node_id);
+		cb->dst_port = le32_to_cpu(v1->dst_port_id);
+
+		*size = le32_to_cpu(v1->size);
+		break;
+	case QRTR_PROTO_VER_2:
+		v2 = data;
+		*hdrlen = sizeof(*v2) + v2->optlen;
+		cb->src_node = le16_to_cpu(v2->src_node_id);
+		cb->src_port = le16_to_cpu(v2->src_port_id);
+		cb->dst_node = le16_to_cpu(v2->dst_node_id);
+		cb->dst_port = le16_to_cpu(v2->dst_port_id);
+
+		if (cb->src_port == (u16)QRTR_PORT_CTRL)
+			cb->src_port = QRTR_PORT_CTRL;
+		if (cb->dst_port == (u16)QRTR_PORT_CTRL)
+			cb->dst_port = QRTR_PORT_CTRL;
+
+		*size = le32_to_cpu(v2->size);
+		break;
+	default:
+		return -1;
+	}
+
+	return 0;
+}
+
+static void qrtr_print_skb_failure_reason(size_t skb_len, const void *data)
+{
+	struct qrtr_cb cb;
+	unsigned int size;
+	int service_id;
+	size_t hdrlen;
+
+	qrtr_parse_header(&cb, &hdrlen, &size, data);
+
+	service_id = qrtr_get_service_id(cb.src_node, cb.src_port);
+	if (service_id < 0)
+		service_id = qrtr_get_service_id(cb.dst_node, cb.dst_port);
+
+	pr_err("%s: skb_len[%zu], src[0x%x:0x%x] dst[0x%x:0x%x] service[0x%x]\n",
+	       __func__, skb_len,
+	       cb.src_node, cb.src_port,
+	       cb.dst_node, cb.dst_port,
+	       service_id);
+}
 
 static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 			    struct sk_buff *skb)
@@ -982,20 +1021,22 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 	struct qrtr_sock *ipc;
 	struct sk_buff *skb;
 	struct qrtr_cb *cb;
-	size_t size;
 	unsigned int ver;
 	size_t hdrlen;
+	size_t size;
 	int errcode;
 	int svc_id;
+	gfp_t flag;
 
 	if (len == 0 || len & 3)
 		return -EINVAL;
 
-	skb = alloc_skb_with_frags(sizeof(*v1), len, 0, &errcode, GFP_ATOMIC |  __GFP_NOWARN);
+	flag = (ep->in_thread ? GFP_KERNEL : GFP_ATOMIC) | __GFP_NOWARN;
+	skb = alloc_skb_with_frags(sizeof(*v1), len, 0, &errcode, flag);
 	if (!skb) {
 		skb = qrtr_get_backup(len);
 		if (!skb) {
-			pr_err("qrtr: Unable to get skb with len:%lu\n", len);
+			qrtr_print_skb_failure_reason(len, data);
 			return -ENOMEM;
 		}
 	}
@@ -1775,6 +1816,101 @@ static int qrtr_local_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	return 0;
 }
 
+static struct sk_buff *qrtr_sock_alloc_skb_send(struct sock *sk,
+						struct msghdr *msg,
+						size_t len, int *rc)
+{
+	struct sk_buff *skb;
+	int pdata_len = 0;
+	int data_len = 0;
+	size_t plen;
+
+	plen = (len + 3) & ~3;
+
+	/* When PVM (node id is 1) communicating with other edges via RPMSG transport and
+	 * able to handle fragmented data if the size of the packet is more that 16kb.
+	 * So data allocation part placed in the QRTR header will benefit to accommodate
+	 * qrtr msg up to 64kb as PVM has enough memory.
+	 * When TUIVM communicating with PVM, keep ONLY QRTR header as the header part and
+	 * move all the data allocations of qrtr msg to data allocation argument of the
+	 * sock_alloc_send_pskb api to not allocate huge contiguous memory in skb.
+	 * This can be removed once we add support for the rpmsg and MHI to take
+	 * iovec structures.
+	 */
+
+	if (is_primary(qrtr_local_nid)) {
+		if (plen > SKB_MAX_ALLOC) {
+			data_len = min_t(size_t,
+					 plen - SKB_MAX_ALLOC,
+					 MAX_SKB_FRAGS * PAGE_SIZE);
+			pdata_len = PAGE_ALIGN(data_len);
+
+			BUILD_BUG_ON(SKB_MAX_ALLOC < PAGE_SIZE);
+		}
+
+		skb = sock_alloc_send_pskb(sk, QRTR_HDR_MAX_SIZE + (plen - data_len),
+					   pdata_len, msg->msg_flags & MSG_DONTWAIT,
+					   rc, PAGE_ALLOC_COSTLY_ORDER);
+		if (!skb) {
+			*rc = -ENOMEM;
+			return NULL;
+		}
+
+		skb_reserve(skb, QRTR_HDR_MAX_SIZE);
+
+		/* len is used by the enqueue functions and should remain accurate
+		 * regardless of padding or allocation size
+		 */
+		skb_put(skb, len - data_len);
+		skb->data_len = data_len;
+		skb->len = len;
+	} else {
+		if (plen > PAGE_SIZE) {
+			data_len = min_t(size_t,
+					 plen - PAGE_SIZE, MAX_SKB_FRAGS * PAGE_SIZE);
+			pdata_len = PAGE_ALIGN(data_len);
+
+			BUILD_BUG_ON(SKB_MAX_ALLOC < PAGE_SIZE);
+		}
+
+		if (data_len) {
+			skb = sock_alloc_send_pskb(sk, QRTR_HDR_MAX_SIZE,
+						   (plen - data_len) + pdata_len,
+						   msg->msg_flags & MSG_DONTWAIT,
+						   rc, PAGE_ALLOC_COSTLY_ORDER);
+			if (!skb) {
+				*rc = -ENOMEM;
+				return NULL;
+			}
+
+			/* len is used by the enqueue functions and should remain accurate
+			 * regardless of padding or allocation size
+			 */
+			skb_reserve(skb, QRTR_HDR_MAX_SIZE);
+			skb->data_len = (((plen - data_len) + pdata_len) - QRTR_HDR_MAX_SIZE);
+			skb->len = (plen - data_len) + pdata_len;
+		} else {
+			skb = sock_alloc_send_pskb(sk, QRTR_HDR_MAX_SIZE + (plen - data_len),
+						   pdata_len, msg->msg_flags & MSG_DONTWAIT,
+						   rc, PAGE_ALLOC_COSTLY_ORDER);
+			if (!skb) {
+				*rc = -ENOMEM;
+				return NULL;
+			}
+
+			/* len is used by the enqueue functions and should remain accurate
+			 * regardless of padding or allocation size
+			 */
+			skb_reserve(skb, QRTR_HDR_MAX_SIZE);
+			skb_put(skb, len - data_len);
+			skb->data_len = data_len;
+			skb->len = len;
+		}
+	}
+
+	return skb;
+}
+
 /* Queue packet for broadcast. */
 static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 			      int type, struct sockaddr_qrtr *from,
@@ -1813,9 +1949,6 @@ static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	struct qrtr_node *node;
 	struct qrtr_node *srv_node;
 	struct sk_buff *skb;
-	int pdata_len = 0;
-	int data_len = 0;
-	size_t plen;
 	u32 type;
 	int rc;
 
@@ -1875,31 +2008,10 @@ static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 			ipc->state = node->nid;
 	}
 
-	plen = (len + 3) & ~3;
-	if (plen > SKB_MAX_ALLOC) {
-		data_len = min_t(size_t,
-				 plen - SKB_MAX_ALLOC,
-				 MAX_SKB_FRAGS * PAGE_SIZE);
-		pdata_len = PAGE_ALIGN(data_len);
-
-		BUILD_BUG_ON(SKB_MAX_ALLOC < PAGE_SIZE);
-	}
-	skb = sock_alloc_send_pskb(sk, QRTR_HDR_MAX_SIZE + (plen - data_len),
-				   pdata_len, msg->msg_flags & MSG_DONTWAIT,
-				   &rc, PAGE_ALLOC_COSTLY_ORDER);
-	if (!skb) {
-		rc = -ENOMEM;
+	skb = qrtr_sock_alloc_skb_send(sk, msg, len, &rc);
+	if (!skb)
 		goto out_node;
-	}
 
-	skb_reserve(skb, QRTR_HDR_MAX_SIZE);
-
-	/* len is used by the enqueue functions and should remain accurate
-	 * regardless of padding or allocation size
-	 */
-	skb_put(skb, len - data_len);
-	skb->data_len = data_len;
-	skb->len = len;
 	rc = skb_copy_datagram_from_iter(skb, 0, &msg->msg_iter, len);
 	if (rc) {
 		kfree_skb(skb);
@@ -2160,6 +2272,31 @@ static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return rc;
 }
 
+static int qrtr_shutdown(struct socket *sock, int mode)
+{
+	struct sock *sk;
+
+	/* This maps:
+	 * SHUT_RD   (0) -> RCV_SHUTDOWN  (1)
+	 * SHUT_WR   (1) -> SEND_SHUTDOWN (2)
+	 * SHUT_RDWR (2) -> SHUTDOWN_MASK (3)
+	 */
+	mode++;
+	if ((mode & ~SHUTDOWN_MASK) || !mode)
+		return -EINVAL;
+
+	sk = sock->sk;
+
+	lock_sock(sk);
+	if (mode) {
+		sk->sk_shutdown |= mode;
+		sk->sk_state_change(sk);
+	}
+	release_sock(sk);
+
+	return 0;
+}
+
 static int qrtr_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
@@ -2216,7 +2353,7 @@ static const struct proto_ops qrtr_proto_ops = {
 	.ioctl		= qrtr_ioctl,
 	.gettstamp	= sock_gettstamp,
 	.poll		= datagram_poll,
-	.shutdown	= sock_no_shutdown,
+	.shutdown	= qrtr_shutdown,
 	.release	= qrtr_release,
 	.mmap		= sock_no_mmap,
 };
@@ -2241,6 +2378,7 @@ static int qrtr_create(struct net *net, struct socket *sock,
 		return -ENOMEM;
 
 	sock_set_flag(sk, SOCK_ZAPPED);
+	sk->sk_allocation |= __GFP_RETRY_MAYFAIL;
 
 	sock_init_data(sock, sk);
 	sock->ops = &qrtr_proto_ops;

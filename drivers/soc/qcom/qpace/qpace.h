@@ -113,7 +113,7 @@ int qpace_urgent_decompress(phys_addr_t input_addr,
  *
  * Queue a copy request to a chosen transfer ring
  */
-void qpace_queue_copy(int tr_num, phys_addr_t src_addr,
+int qpace_queue_copy(int tr_num, phys_addr_t src_addr,
 		      phys_addr_t dst_addr, size_t copy_size);
 
 /*
@@ -124,7 +124,7 @@ void qpace_queue_copy(int tr_num, phys_addr_t src_addr,
  *
  * Queue a compression request to a chosen transfer ring
  */
-void qpace_queue_compress(int tr_num, phys_addr_t src_addr,
+int qpace_queue_compress(int tr_num, phys_addr_t src_addr,
 			  phys_addr_t dst_addr);
 
 /*
@@ -185,16 +185,16 @@ static inline int qpace_urgent_decompress(phys_addr_t input_addr,
 	return -EINVAL;
 }
 
-static inline void qpace_queue_copy(int tr_num, phys_addr_t src_addr,
+static inline int qpace_queue_copy(int tr_num, phys_addr_t src_addr,
 				    phys_addr_t dst_addr, size_t copy_size)
 {
-
+	return -EINVAL;
 }
 
-static inline void qpace_queue_compress(int tr_num, phys_addr_t src_addr,
+static inline int qpace_queue_compress(int tr_num, phys_addr_t src_addr,
 					phys_addr_t dst_addr)
 {
-
+	return -EINVAL;
 }
 
 static inline bool qpace_trigger_tr(int tr_num)

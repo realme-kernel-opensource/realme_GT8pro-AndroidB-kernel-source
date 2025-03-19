@@ -13,9 +13,6 @@ def register_modules(registry):
             "drivers/pinctrl/qcom/pinctrl-msm",
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
@@ -35,9 +32,6 @@ def register_modules(registry):
             # do not sort
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
@@ -112,6 +106,61 @@ def register_modules(registry):
             # do not sort
             "drivers/pinctrl/qcom/pinctrl-alor.c",
             "drivers/pinctrl/qcom/pinctrl-msm.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-yupik",
+        out = "pinctrl-yupik.ko",
+        config = "CONFIG_PINCTRL_YUPIK",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+            "drivers/pinctrl/qcom/pinctrl-yupik.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-lemans",
+        out = "pinctrl-lemans.ko",
+        config = "CONFIG_PINCTRL_LEMANS",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+            "drivers/pinctrl/qcom/pinctrl-lemans.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-monaco_auto",
+        out = "pinctrl-monaco_auto.ko",
+        config = "CONFIG_PINCTRL_MONACO_AUTO",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+            "drivers/pinctrl/qcom/pinctrl-monaco_auto.c",
         ],
         deps = [
             # do not sort

@@ -92,10 +92,10 @@ struct lpm_cluster {
 	struct hrtimer histtimer;
 	ktime_t entry_time;
 	ktime_t next_wakeup;
+	ktime_t __percpu *cpu_next_wakeup;
 	ktime_t pred_wakeup;
 	ktime_t now;
 	u64 pred_residency;
-	ktime_t cpu_next_wakeup[MAX_LPM_CPUS];
 	bool state_allowed[MAX_CLUSTER_STATES];
 	struct list_head list;
 	spinlock_t lock;
@@ -103,6 +103,7 @@ struct lpm_cluster {
 	bool initialized;
 	bool is_timer_expired;
 	bool is_timer_queued;
+	bool need_timer_requeue;
 	bool use_bias_timer;
 };
 
@@ -110,14 +111,13 @@ struct cluster_governor {
 	void (*select)(struct lpm_cpu *cpu_gov);
 	void (*enable)(void);
 	void (*disable)(void);
-	void (*reflect)(void);
+	void (*reflect)(struct lpm_cpu *cpu_gov);
 };
 
 DECLARE_PER_CPU(struct lpm_cpu, lpm_cpu_data);
 
 int qcom_cluster_lpm_governor_init(void);
 void qcom_cluster_lpm_governor_deinit(void);
-void update_cluster_select(struct lpm_cpu *cpu_gov);
 void clear_cpu_predict_history(void);
 int create_global_sysfs_nodes(void);
 int create_cluster_sysfs_nodes(struct lpm_cluster *cluster_gov);

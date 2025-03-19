@@ -55,7 +55,7 @@
 #define WLS_FW_WAIT_TIME_MS		500
 #define WLS_FW_UPDATE_TIME_MS		1000
 #define WLS_FW_BUF_SIZE			128
-#define CPS_WLS_FW_BUF_SIZE		1024
+#define CPS_WLS_FW_BUF_SIZE		256
 #define DEFAULT_RESTRICT_FCC_UA		1000000
 
 enum psy_type {
@@ -189,7 +189,7 @@ struct wireless_fw_check_resp {
 
 struct wireless_fw_push_buf_req {
 	struct pmic_glink_hdr	hdr;
-	u8			buf[WLS_FW_BUF_SIZE];
+	u8			buf[CPS_WLS_FW_BUF_SIZE];
 	u32			fw_chunk_id;
 };
 
@@ -1582,12 +1582,13 @@ static int wireless_fw_check_for_update(struct battery_chg_dev *bcdev,
 #define IDT9415_FW_MINOR_VER_OFFSET		0x86
 #define IDT_FW_MAJOR_VER_OFFSET		0x94
 #define IDT_FW_MINOR_VER_OFFSET		0x96
-#define CPS_FW_MAJOR_VER_OFFSET		0xC2
-#define CPS_FW_MINOR_VER_OFFSET		0xC3
+#define CPS_FW_MAJOR_VER_OFFSET		0xC4
+#define CPS_FW_MINOR_VER_OFFSET		0xC5
 
 static u32 wireless_fw_version_get(struct battery_chg_dev *bcdev, const u8 *data, bool force)
 {
 	u16 maj_ver = 0, min_ver = 0;
+	u32 version = 0;
 
 	if (force)
 		return UINT_MAX;
@@ -1595,15 +1596,15 @@ static u32 wireless_fw_version_get(struct battery_chg_dev *bcdev, const u8 *data
 	if (strstr(bcdev->wls_fw_name, "idt9412")) {
 		maj_ver = le16_to_cpu(*(__le16 *)(data + IDT_FW_MAJOR_VER_OFFSET));
 		min_ver = le16_to_cpu(*(__le16 *)(data + IDT_FW_MINOR_VER_OFFSET));
+		version = (maj_ver << 16 | min_ver);
 	} else if (strstr(bcdev->wls_fw_name, "idt")) {
 		maj_ver = le16_to_cpu(*(__le16 *)(data + IDT9415_FW_MAJOR_VER_OFFSET));
 		min_ver = le16_to_cpu(*(__le16 *)(data + IDT9415_FW_MINOR_VER_OFFSET));
-	} else if (strstr(bcdev->wls_fw_name, "cps")) {
-		maj_ver = le16_to_cpu(*(__le16 *)(data + CPS_FW_MAJOR_VER_OFFSET));
-		min_ver = le16_to_cpu(*(__le16 *)(data + CPS_FW_MINOR_VER_OFFSET));
-	}
+		version = (maj_ver << 16 | min_ver);
+	} else if (strstr(bcdev->wls_fw_name, "cps"))
+		version = be16_to_cpu(*(__be16 *)(data + CPS_FW_MAJOR_VER_OFFSET));
 
-	return (maj_ver << 16 | min_ver);
+	return version;
 }
 
 static int wireless_fw_update(struct battery_chg_dev *bcdev, bool force)

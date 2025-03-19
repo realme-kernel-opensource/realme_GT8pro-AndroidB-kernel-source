@@ -700,10 +700,14 @@ void walt_lb_tick(struct rq *rq)
 		clear_reserved(prev_cpu);
 	raw_spin_unlock(&rq->__lock);
 
-	if (rq->cpu == 0 && is_storage_boost()) {
-		raw_spin_lock_irqsave(&walt_lb_migration_lock, flags);
-		storage_balance = move_storage_load(rq);
-		raw_spin_unlock_irqrestore(&walt_lb_migration_lock, flags);
+	if (is_storage_boost()) {
+		if (rq->cpu == 0) {
+			raw_spin_lock_irqsave(&walt_lb_migration_lock, flags);
+			storage_balance = move_storage_load(rq);
+			raw_spin_unlock_irqrestore(&walt_lb_migration_lock, flags);
+		} else if (cpumask_test_cpu(rq->cpu, &walt_enforce_high_irq_cpu_mask)) {
+			return;
+		}
 	}
 
 	if (!walt_fair_task(p))
@@ -1138,6 +1142,9 @@ static void walt_sched_newidle_balance(void *unused, struct rq *this_rq,
 	 * Also set done to 0, such that this_rq misfit status is updated by
 	 * newidle_balance()
 	 */
+	if (unlikely(walt_disabled))
+		return;
+
 	if (this_rq->ttwu_pending)
 		done = 0;
 	else
@@ -1219,6 +1226,38 @@ out:
 }
 EXPORT_SYMBOL_GPL(sched_walt_oscillate);
 
+static void walt_find_new_ilb(void *unused, struct cpumask *nohz_idle_cpus_mask,
+		int *ilb)
+{
+	int cpu, i;
+
+	if (unlikely(walt_disabled))
+		return;
+
+	*ilb = nr_cpu_ids;
+	for (i = 0; i < num_sched_clusters - 1; i++) {
+		for_each_cpu_and(cpu, nohz_idle_cpus_mask, &cpu_array[0][i]) {
+			if (cpu == smp_processor_id())
+				continue;
+			if (available_idle_cpu(cpu) && cpu_online(cpu)) {
+				*ilb = cpu;
+				return;
+			}
+		}
+	}
+
+	for (i = 0; i < num_sched_clusters - 1; i++) {
+		for_each_cpu(cpu, &cpu_array[0][i]) {
+			if (cpu == smp_processor_id())
+				continue;
+			if (available_idle_cpu(cpu) && cpu_online(cpu)) {
+				*ilb = cpu;
+				return;
+			}
+		}
+	}
+}
+
 void walt_lb_init(void)
 {
 	int cpu;
@@ -1229,6 +1268,7 @@ void walt_lb_init(void)
 	register_trace_android_rvh_can_migrate_task(walt_can_migrate_task, NULL);
 	register_trace_android_rvh_find_busiest_queue(walt_find_busiest_queue, NULL);
 	register_trace_android_rvh_sched_newidle_balance(walt_sched_newidle_balance, NULL);
+	register_trace_android_rvh_find_new_ilb(walt_find_new_ilb, NULL);
 
 	for_each_cpu(cpu, cpu_possible_mask) {
 		call_single_data_t *csd;

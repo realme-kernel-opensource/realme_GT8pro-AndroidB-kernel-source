@@ -33,7 +33,8 @@ def define_qcom_dtb_setup():
 def define_qcom_dtbs(
         stem,
         target,
-        defconfig):
+        defconfig,
+        cmdline = [""]):
     """Build a the dtbs for a target/variant.
 
     Args:
@@ -47,6 +48,20 @@ def define_qcom_dtbs(
         - the second item is the list of DTBOs to be built
     """
 
+    write_file(
+        name = "{}_cmdline_extras".format(stem),
+        out = "{}.cmdline.extras".format(stem),
+        content = ["KERNEL_VENDOR_CMDLINE='{}'".format(" ".join(cmdline)), ""],
+    )
+
+    kernel_build_config(
+        name = "{}.build.config.qcom.dtb".format(stem),
+        srcs = [
+            ":{}_cmdline_extras".format(stem),
+            ":build.config.qcom.dtb",
+        ],
+    )
+
     dtb_list = get_dtb_list(target)
     dtbo_list = get_dtbo_list(target)
 
@@ -57,7 +72,7 @@ def define_qcom_dtbs(
             ":additional_msm_headers_aarch64_globs",
             "//common:kernel_aarch64_sources",
         ],
-        build_config = "build.config.qcom.dtb",
+        build_config = ":{}.build.config.qcom.dtb".format(stem),
         dtstree = get_dtstree(target),
         outs = dtb_list + dtbo_list + ["vmlinux", "Module.symvers", "Image", "System.map", ".config"],
         base_kernel = ":{}_base_kernel".format(stem),

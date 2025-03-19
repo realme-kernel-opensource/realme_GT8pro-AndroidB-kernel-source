@@ -1422,6 +1422,11 @@
   gro_cells_destroy
   gro_cells_init
   gro_cells_receive
+  gunyah_rm_call
+  gunyah_rm_notifier_register
+  gunyah_rm_notifier_unregister
+  gunyah_rm_register_platform_ops
+  gunyah_rm_unregister_platform_ops
   h4_recv_buf
   handle_bad_irq
   handle_edge_irq
@@ -2177,6 +2182,7 @@
   __media_device_register
   media_device_unregister
   media_entity_pads_init
+  mem_alloc_profiling_key
   memblock_end_of_DRAM
   __memcat_p
   memchr
@@ -2228,8 +2234,8 @@
   mmc_regulator_set_vqmmc
   mmc_send_tuning
   __mmdrop
-  mmput
   mm_get_unmapped_area
+  mmput
   mod_delayed_work_on
   mod_node_page_state
   mod_timer
@@ -2833,6 +2839,7 @@
   qcom_smem_state_register
   qcom_smem_state_unregister
   qcom_smem_state_update_bits
+  qcom_tzmem_alloc
   queue_delayed_work_on
   queue_work_on
   radix_tree_delete
@@ -3672,6 +3679,9 @@
   __traceiter_android_rvh_flush_task
   __traceiter_android_rvh_get_nohz_timer_target
   __traceiter_android_rvh_gic_v3_set_affinity
+  __traceiter_android_rvh_iommu_alloc_insert_iova
+  __traceiter_android_rvh_iommu_iovad_init_alloc_algo
+  __traceiter_android_rvh_iommu_limit_align_shift
   __traceiter_android_rvh_iommu_setup_dma_ops
   __traceiter_android_rvh_is_cpu_allowed
   __traceiter_android_rvh_migrate_queued_task
@@ -3791,6 +3801,9 @@
   __tracepoint_android_rvh_flush_task
   __tracepoint_android_rvh_get_nohz_timer_target
   __tracepoint_android_rvh_gic_v3_set_affinity
+  __tracepoint_android_rvh_iommu_alloc_insert_iova
+  __tracepoint_android_rvh_iommu_iovad_init_alloc_algo
+  __tracepoint_android_rvh_iommu_limit_align_shift
   __tracepoint_android_rvh_iommu_setup_dma_ops
   __tracepoint_android_rvh_is_cpu_allowed
   __tracepoint_android_rvh_migrate_queued_task
@@ -4418,4 +4431,3 @@
   zs_map_object
   zs_pool_stats
   zs_unmap_object
-  qcom_tzmem_alloc

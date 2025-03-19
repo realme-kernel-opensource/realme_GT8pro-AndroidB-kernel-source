@@ -31,7 +31,7 @@ static bool lb_ignore_cpus(int cpu, cpumask_t *dst_cpu_mask_to_avoid)
 }
 
 /*
- * target cpu slection for pushing tasks from high irq cpus.
+ * target cpu selection for pushing tasks from high irq cpus.
  * select any least loaded cpus valid for storage tasks placement.
  */
 static int find_least_util_any_cpu(int src_cpu, cpumask_t *dst_cpu_mask_to_avoid,
@@ -70,6 +70,11 @@ static bool move_task(int src_cpu, int dst_cpu, cpumask_t *dst_cpu_mask_to_avoid
 	unsigned long util, max_task_util = 0;
 
 	raw_spin_lock_irqsave(&src_rq->__lock, flags);
+
+	if (src_rq->active_balance) {
+		raw_spin_unlock_irqrestore(&src_rq->__lock, flags);
+		goto out;
+	}
 
 	list_for_each_entry_reverse(p, &src_rq->cfs_tasks, se.group_node) {
 		if (p->se.sched_delayed)
@@ -173,8 +178,5 @@ bool move_storage_load(struct rq *rq)
 
 	/* try to migrate task form high irq cpus */
 	ret = migrate_high_irq_cpus(&dst_cpu_mask_to_avoid);
-	if (ret)
-		return ret;
-
 	return ret;
 }

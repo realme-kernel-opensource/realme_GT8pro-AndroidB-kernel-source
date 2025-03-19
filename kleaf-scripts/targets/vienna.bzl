@@ -7,10 +7,10 @@ load(":target_variants.bzl", "la_variants")
 target_name = "vienna"
 
 def define_vienna():
-    kernel_vendor_cmdline_extras = ["bootconfig"]
     for variant in la_variants:
         board_kernel_cmdline_extras = []
         board_bootconfig_extras = []
+        kernel_vendor_cmdline_extras = ["bootconfig"]
 
         if variant == "consolidate":
             board_bootconfig_extras += ["androidboot.serialconsole=1"]
@@ -50,4 +50,6 @@ def define_vienna():
         name = "vienna",
         consolidate_config = vienna_perf_config | vienna_consolidate_config,
         perf_config = vienna_perf_config,
+        consolidate_build_img_opts = consolidate_build_img_opts,
+        perf_build_img_opts = perf_build_img_opts,
     )

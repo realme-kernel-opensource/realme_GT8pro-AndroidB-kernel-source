@@ -5,8 +5,9 @@
  * Copyright (C) 2016-2018 Linaro Ltd.
  * Copyright (C) 2014 Sony Mobile Communications AB
  * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
+#include <linux/glob.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/interconnect.h>
@@ -50,6 +51,11 @@ static int q6v5_load_state_toggle(struct qcom_q6v5 *q6v5, bool enable)
 int qcom_q6v5_prepare(struct qcom_q6v5 *q6v5)
 {
 	int ret;
+
+	if (q6v5->always_ssr) {
+		q6v5->rproc->recovery_disabled = true;
+		q6v5->always_ssr = false;
+	}
 
 	ret = icc_set_bw(q6v5->path, UINT_MAX, UINT_MAX);
 	if (ret < 0) {
@@ -128,6 +134,22 @@ static void qcom_q6v5_crash_handler_work(struct work_struct *work)
 	mutex_unlock(&rproc->lock);
 }
 
+static inline void qcom_q6v5_conditional_recovery(struct qcom_q6v5 *q6v5, const char *msg)
+{
+	struct string_node *cur;
+
+	if (q6v5->rproc->recovery_disabled) {
+		list_for_each_entry(cur, &q6v5->always_ssr_reasons->list, list) {
+			if (!strcmp(cur->str, msg) || glob_match(cur->str, msg)) {
+				q6v5->rproc->recovery_disabled = false;
+				q6v5->always_ssr = true;
+				return;
+			}
+		}
+		dev_info(q6v5->dev, "Crash message not matched, crashing device!\n");
+	}
+}
+
 static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 {
 	struct qcom_q6v5 *q6v5 = data;
@@ -150,9 +172,10 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 
 	q6v5->crash_seq = q6v5->seq;
 	msg = qcom_smem_get(QCOM_SMEM_HOST_ANY, q6v5->crash_reason, &len);
-	if (!IS_ERR(msg) && len > 0 && msg[0])
+	if (!IS_ERR(msg) && len > 0 && msg[0]) {
 		dev_err(q6v5->dev, "watchdog received: %s\n", msg);
-	else
+		qcom_q6v5_conditional_recovery(q6v5, msg);
+	} else
 		dev_err(q6v5->dev, "watchdog without message\n");
 
 	if (q6v5->crash_stack) {
@@ -194,9 +217,10 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 
 	q6v5->crash_seq = q6v5->seq;
 	msg = qcom_smem_get(QCOM_SMEM_HOST_ANY, q6v5->crash_reason, &len);
-	if (!IS_ERR(msg) && len > 0 && msg[0])
+	if (!IS_ERR(msg) && len > 0 && msg[0]) {
 		dev_err(q6v5->dev, "fatal error received: %s\n", msg);
-	else
+		qcom_q6v5_conditional_recovery(q6v5, msg);
+	} else
 		dev_err(q6v5->dev, "fatal error without message\n");
 
 	if (q6v5->crash_stack) {

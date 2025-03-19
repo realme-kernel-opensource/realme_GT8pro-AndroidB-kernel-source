@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("//build:msm_kernel_extensions.bzl", "define_extras", "get_gki_ramdisk_prebuilt_binary", "get_vendor_ramdisk_binaries")
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
@@ -49,8 +50,8 @@ def define_single_android_build(
         variant,
         config_fragment,
         base_kernel,
-        dtb_target = None,
-        build_img_opts = None):
+        build_img_opts = None,
+        dtb_target = None):
     stem = "{}_{}".format(name, variant)
     modules = registry.define_modules(stem, config_fragment, base_kernel)
 
@@ -71,6 +72,7 @@ def define_single_android_build(
             stem = stem,
             target = dtb_target,
             defconfig = "//common:arch/arm64/configs/gki_defconfig",
+            cmdline = build_img_opts.kernel_vendor_cmdline_extras if build_img_opts else [""],
         )
     else:
         dtb_list = None
@@ -115,6 +117,12 @@ def define_single_android_build(
                 """.format(board_bc_extras),
             )
 
+    copy_file(
+        name = "{}_system_dlkm_blocklist".format(stem),
+        src = "modules-lists/modules.systemdlkm_blocklist.msm.{}".format(name),
+        out = "{}/system_dlkm.modules.blocklist".format(stem),
+    )
+
     kernel_images(
         name = "{}_images".format(stem),
         kernel_modules_install = ":{}_modules_install".format(stem),
@@ -148,6 +156,7 @@ def define_single_android_build(
             "com.android.build.boot.os_version:13",
             "com.android.build.boot.security_patch:2023-05-05",
         ],
+        boot_partition_size = build_img_opts.boot_partition_size,
     )
 
     native.filegroup(
@@ -166,7 +175,7 @@ def define_single_android_build(
         name = "{}_super_image".format(stem),
         system_dlkm_image = ":{}_system_dlkm_image_file".format(stem),
         vendor_dlkm_image = ":{}_vendor_dlkm_image_file".format(stem),
-        super_img_size = 0x11000000,
+        super_img_size = 0x22000000,
     )
 
     unsparsed_image(
@@ -249,6 +258,7 @@ def define_single_android_build(
         "{}_merge_msm_uapi_headers".format(stem),
         "{}_dtb_build_config".format(stem),
         "{}_tar_kernel_headers".format(stem),
+        "{}_system_dlkm_blocklist".format(stem),
     ] + [
         ":{}/{}".format(stem, module)
         for module in modules

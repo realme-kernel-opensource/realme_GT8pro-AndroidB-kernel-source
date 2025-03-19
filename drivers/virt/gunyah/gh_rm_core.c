@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -27,7 +27,7 @@
 #include <linux/gunyah.h>
 #include <linux/vmalloc.h>
 
-#include "rsc_mgr.h"
+#include "drivers/virt/gunyah/rsc_mgr.h"
 #include "gh_rm_drv_private.h"
 
 #define GH_RM_MAX_NUM_FRAGMENTS	62
@@ -400,6 +400,175 @@ int gh_rm_get_vm_id_info(gh_vmid_t vmid)
 }
 EXPORT_SYMBOL_GPL(gh_rm_get_vm_id_info);
 
+static void
+gh_rm_put_irq(struct gh_vm_get_hyp_res_resp_entry *res_entry, int irq)
+{
+	if (!gh_put_irq(irq))
+		gh_rm_vm_irq_release(res_entry->virq_handle);
+
+}
+
+/**
+ * gh_rm_unpopulate_hyp_res: Unpopulate the resources that we got from
+ *				gh_rm_populate_hyp_res().
+ * @vmid: The vmid of resources to be queried.
+ * @vm_name: The name of the VM
+ *
+ * Returns 0 on success and a negative error code upon failure.
+ */
+int gh_rm_unpopulate_hyp_res(gh_vmid_t vmid, const char *vm_name)
+{
+	struct gh_vm_get_hyp_res_resp_entry *res_entries = NULL;
+	gh_label_t label;
+	u32 n_res, i;
+	int ret = 0, irq = -1;
+	gh_capid_t cap_id;
+
+	res_entries = gh_rm_vm_get_hyp_res(vmid, &n_res);
+	if (IS_ERR_OR_NULL(res_entries))
+		return PTR_ERR(res_entries);
+
+	for (i = 0; i < n_res; i++) {
+		label = res_entries[i].resource_label;
+		cap_id = (u64) res_entries[i].cap_id_high << 32 |
+				res_entries[i].cap_id_low;
+
+		switch (res_entries[i].res_type) {
+		case GH_RM_RES_TYPE_MQ_TX:
+			ret = gh_msgq_reset_cap_info(label,
+						GH_MSGQ_DIRECTION_TX, &irq);
+			break;
+		case GH_RM_RES_TYPE_MQ_RX:
+			ret = gh_msgq_reset_cap_info(label,
+						GH_MSGQ_DIRECTION_RX, &irq);
+			break;
+		case GH_RM_RES_TYPE_DB_TX:
+			ret = gh_dbl_reset_cap_info(label,
+						GH_RM_RES_TYPE_DB_TX, &irq);
+			break;
+		case GH_RM_RES_TYPE_DB_RX:
+			ret = gh_dbl_reset_cap_info(label,
+						GH_RM_RES_TYPE_DB_RX, &irq);
+			break;
+		case GH_RM_RES_TYPE_VCPU:
+			if (gh_vcpu_affinity_reset_fn)
+				ret = (*gh_vcpu_affinity_reset_fn)(vmid,
+							label, cap_id, &irq);
+			break;
+		case GH_RM_RES_TYPE_VIRTIO_MMIO:
+			/* Virtio cleanup is handled in gh_virtio_mmio_exit() */
+			break;
+		case GH_RM_RES_TYPE_VPMGRP:
+			if (gh_vpm_grp_reset_fn)
+				ret = (*gh_vpm_grp_reset_fn)(vmid, &irq);
+			break;
+		case GH_RM_RES_TYPE_WATCHDOG:
+			if (gh_wdog_manage_fn)
+				ret = (*gh_wdog_manage_fn)(vmid, cap_id, false);
+			break;
+		default:
+			pr_err("%s: Unknown resource type: %u\n",
+				__func__, res_entries[i].res_type);
+			ret = -EINVAL;
+		}
+
+		if (ret < 0)
+			goto out;
+
+		if (irq >= 0)
+			gh_rm_put_irq(&res_entries[i], irq);
+	}
+
+	if (gh_all_res_populated_fn)
+		(*gh_all_res_populated_fn)(vmid, false);
+out:
+	kfree(res_entries);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(gh_rm_unpopulate_hyp_res);
+
+static int gh_rm_unpopulate_target_hyp_res(struct gh_vm_get_hyp_res_resp_entry *res_entries,
+		u32 n_res, u32 n_target_res, gh_vmid_t vmid, const char *vm_name)
+{
+	gh_label_t label;
+	u32 i;
+	int ret = 0, irq = -1;
+	gh_capid_t cap_id;
+
+	for (i = 0; i < n_target_res; i++) {
+		label = res_entries[i].resource_label;
+		cap_id = (u64) res_entries[i].cap_id_high << 32 |
+				res_entries[i].cap_id_low;
+
+		switch (res_entries[i].res_type) {
+		case GH_RM_RES_TYPE_MQ_TX:
+			ret = gh_msgq_reset_cap_info(label,
+						GH_MSGQ_DIRECTION_TX, &irq);
+			break;
+		case GH_RM_RES_TYPE_MQ_RX:
+			ret = gh_msgq_reset_cap_info(label,
+						GH_MSGQ_DIRECTION_RX, &irq);
+			break;
+		case GH_RM_RES_TYPE_DB_TX:
+			ret = gh_dbl_reset_cap_info(label,
+						GH_RM_RES_TYPE_DB_TX, &irq);
+			break;
+		case GH_RM_RES_TYPE_DB_RX:
+			ret = gh_dbl_reset_cap_info(label,
+						GH_RM_RES_TYPE_DB_RX, &irq);
+			break;
+		case GH_RM_RES_TYPE_VCPU:
+			/* Unpoulate VCPU resource later */
+			break;
+		case GH_RM_RES_TYPE_VIRTIO_MMIO:
+			/* Virtio cleanup is handled in gh_virtio_mmio_exit() */
+			break;
+		case GH_RM_RES_TYPE_VPMGRP:
+			if (gh_vpm_grp_reset_fn)
+				ret = (*gh_vpm_grp_reset_fn)(vmid, &irq);
+			break;
+		case GH_RM_RES_TYPE_WATCHDOG:
+			if (gh_wdog_manage_fn)
+				ret = (*gh_wdog_manage_fn)(vmid, cap_id, false);
+			break;
+		default:
+			pr_err("%s: Unknown resource type: %u\n",
+				__func__, res_entries[i].res_type);
+			ret = -EINVAL;
+		}
+
+		if (ret < 0)
+			goto out;
+
+		if (irq >= 0)
+			gh_rm_put_irq(&res_entries[i], irq);
+	}
+
+	/* Unpolulate VCPU resource */
+	for (i = 0; i < n_res; i++) {
+		label = res_entries[i].resource_label;
+		cap_id = (u64) res_entries[i].cap_id_high << 32 |
+				res_entries[i].cap_id_low;
+		if (res_entries[i].res_type == GH_RM_RES_TYPE_VCPU) {
+			if (gh_vcpu_affinity_reset_fn) {
+				ret = (*gh_vcpu_affinity_reset_fn)(vmid,
+							label, cap_id, &irq);
+				if (ret < 0)
+					goto out;
+
+				if (irq >= 0)
+					gh_rm_put_irq(&res_entries[i], irq);
+			}
+		}
+	}
+
+	if (gh_all_res_populated_fn)
+		(*gh_all_res_populated_fn)(vmid, false);
+out:
+	kfree(res_entries);
+	return ret;
+}
+
 /**
  * gh_rm_populate_hyp_res: Query Resource Manager VM to get hyp resources.
  * @vmid: The vmid of resources to be queried.
@@ -410,7 +579,7 @@ EXPORT_SYMBOL_GPL(gh_rm_get_vm_id_info);
 int gh_rm_populate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 {
 	struct gh_vm_get_hyp_res_resp_entry *res_entries = NULL;
-	int linux_irq, ret = 0;
+	int linux_irq, ret = 0, ret_unpopulate;
 	gh_capid_t cap_id;
 	gh_label_t label;
 	u32 n_res, i;
@@ -520,8 +689,15 @@ int gh_rm_populate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 			}
 		} while (ret == -EAGAIN);
 
-		if (ret < 0)
-			goto out;
+		if (ret < 0) {
+			ret_unpopulate = gh_rm_unpopulate_target_hyp_res(res_entries,
+								n_res, i, vmid, vm_name);
+			if (ret_unpopulate < 0)
+				pr_err("Failed to unpopulate target resource %d!\n",
+					ret_unpopulate);
+
+			return ret;
+		}
 	}
 
 	if (gh_all_res_populated_fn)
@@ -531,93 +707,6 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(gh_rm_populate_hyp_res);
-
-static void
-gh_rm_put_irq(struct gh_vm_get_hyp_res_resp_entry *res_entry, int irq)
-{
-	if (!gh_put_irq(irq))
-		gh_rm_vm_irq_release(res_entry->virq_handle);
-
-}
-
-/**
- * gh_rm_unpopulate_hyp_res: Unpopulate the resources that we got from
- *				gh_rm_populate_hyp_res().
- * @vmid: The vmid of resources to be queried.
- * @vm_name: The name of the VM
- *
- * Returns 0 on success and a negative error code upon failure.
- */
-int gh_rm_unpopulate_hyp_res(gh_vmid_t vmid, const char *vm_name)
-{
-	struct gh_vm_get_hyp_res_resp_entry *res_entries = NULL;
-	gh_label_t label;
-	u32 n_res, i;
-	int ret = 0, irq = -1;
-	gh_capid_t cap_id;
-
-	res_entries = gh_rm_vm_get_hyp_res(vmid, &n_res);
-	if (IS_ERR_OR_NULL(res_entries))
-		return PTR_ERR(res_entries);
-
-	for (i = 0; i < n_res; i++) {
-		label = res_entries[i].resource_label;
-		cap_id = (u64) res_entries[i].cap_id_high << 32 |
-				res_entries[i].cap_id_low;
-
-		switch (res_entries[i].res_type) {
-		case GH_RM_RES_TYPE_MQ_TX:
-			ret = gh_msgq_reset_cap_info(label,
-						GH_MSGQ_DIRECTION_TX, &irq);
-			break;
-		case GH_RM_RES_TYPE_MQ_RX:
-			ret = gh_msgq_reset_cap_info(label,
-						GH_MSGQ_DIRECTION_RX, &irq);
-			break;
-		case GH_RM_RES_TYPE_DB_TX:
-			ret = gh_dbl_reset_cap_info(label,
-						GH_RM_RES_TYPE_DB_TX, &irq);
-			break;
-		case GH_RM_RES_TYPE_DB_RX:
-			ret = gh_dbl_reset_cap_info(label,
-						GH_RM_RES_TYPE_DB_RX, &irq);
-			break;
-		case GH_RM_RES_TYPE_VCPU:
-			if (gh_vcpu_affinity_reset_fn)
-				ret = (*gh_vcpu_affinity_reset_fn)(vmid,
-							label, cap_id, &irq);
-			break;
-		case GH_RM_RES_TYPE_VIRTIO_MMIO:
-			/* Virtio cleanup is handled in gh_virtio_mmio_exit() */
-			break;
-		case GH_RM_RES_TYPE_VPMGRP:
-			if (gh_vpm_grp_reset_fn)
-				ret = (*gh_vpm_grp_reset_fn)(vmid, &irq);
-			break;
-		case GH_RM_RES_TYPE_WATCHDOG:
-			if (gh_wdog_manage_fn)
-				ret = (*gh_wdog_manage_fn)(vmid, cap_id, false);
-			break;
-		default:
-			pr_err("%s: Unknown resource type: %u\n",
-				__func__, res_entries[i].res_type);
-			ret = -EINVAL;
-		}
-
-		if (ret < 0)
-			goto out;
-
-		if (irq >= 0)
-			gh_rm_put_irq(&res_entries[i], irq);
-	}
-
-	if (gh_all_res_populated_fn)
-		(*gh_all_res_populated_fn)(vmid, false);
-out:
-	kfree(res_entries);
-	return ret;
-}
-EXPORT_SYMBOL_GPL(gh_rm_unpopulate_hyp_res);
 
 /**
  * gh_rm_set_virtio_mmio_cb: Set callback that handles virtio MMIO resource

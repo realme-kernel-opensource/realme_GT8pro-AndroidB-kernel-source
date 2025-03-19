@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/tick.h>
@@ -84,6 +84,13 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 	if (!smart_freq_init_done)
 		return -EINVAL;
 
+	if (!write) {
+		tmp.data = reason_dump;
+		tmp.maxlen = sizeof(reason_dump);
+		return sched_smart_freq_legacy_dump_handler(&tmp,
+				write, buffer, lenp, ppos);
+	}
+
 	mutex_lock(&freq_reason_mutex);
 
 	if (data == &sysctl_legacy_freq_levels_cluster0[0])
@@ -94,7 +101,6 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 		id = 2;
 	else if (data == &sysctl_legacy_freq_levels_cluster3[0])
 		id = 3;
-
 
 	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
 	if (ret)

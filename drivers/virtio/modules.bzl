@@ -31,3 +31,17 @@ def register_modules(registry):
             "drivers/virtio/virtio_ring",
         ],
     )
+
+    registry.register(
+        name = "drivers/virtio/virtio_input",
+        out = "virtio_input.ko",
+        config = "CONFIG_VIRTIO_INPUT",
+        srcs = [
+            # do not sort
+            "drivers/virtio/virtio_input.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/virtio/virtio_mmio",
+        ],
+    )

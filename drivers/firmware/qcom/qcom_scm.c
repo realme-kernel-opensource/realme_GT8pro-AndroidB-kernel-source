@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2010,2015,2019 The Linux Foundation. All rights reserved.
  * Copyright (C) 2015 Linaro Ltd.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt)     "qcom-scm: %s: " fmt, __func__
 
@@ -164,6 +164,8 @@ static const char * const qcom_scm_convention_names[] = {
 };
 
 static struct qcom_scm *__scm;
+
+#define SCM_NOT_INITIALIZED()  (unlikely(!__scm) ? pr_err("SCM not initialized\n") : 0)
 
 static int qcom_scm_clk_enable(void)
 {
@@ -692,6 +694,31 @@ EXPORT_SYMBOL(qcom_scm_config_cpu_errata);
  * track the metadata allocation, this needs to be released by invoking
  * qcom_scm_pas_metadata_release() by the caller.
  */
+
+void qcom_scm_phy_update_scm_level_shifter(u32 val)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_BOOT,
+		.cmd = QCOM_SCM_QUSB2PHY_LVL_SHIFTER_CMD_ID,
+		.owner = ARM_SMCCC_OWNER_SIP
+	};
+
+	if (SCM_NOT_INITIALIZED())
+		return;
+
+	desc.args[0] = val;
+	desc.args[1] = 0;
+	desc.arginfo = QCOM_SCM_ARGS(2);
+
+	ret = qcom_scm_call(__scm->dev, &desc, NULL);
+	if (ret)
+		pr_err("Failed to update scm level shifter=0x%x\n", ret);
+
+}
+EXPORT_SYMBOL_GPL(qcom_scm_phy_update_scm_level_shifter);
+
+
 int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
 			    struct qcom_scm_pas_metadata *ctx, struct device *dev_32bit)
 {
@@ -2901,6 +2928,21 @@ static int qcom_scm_query_wq_queue_info(struct qcom_scm *scm)
 
 	return ret;
 }
+
+int qcom_scm_set_gic_cpuclass(u32 mpidr, u32 clss)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_GIC,
+		.cmd =  QCOM_SCM_GIC_SET_CPUCLASS,
+		.arginfo = QCOM_SCM_ARGS(2),
+		.args[0] = mpidr,
+		.args[1] = clss,
+		.owner = ARM_SMCCC_OWNER_SIP
+	};
+
+	return qcom_scm_call_atomic(__scm->dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_set_gic_cpuclass);
 
 bool qcom_scm_multi_call_allow(struct device *dev, bool multicall_allowed)
 {

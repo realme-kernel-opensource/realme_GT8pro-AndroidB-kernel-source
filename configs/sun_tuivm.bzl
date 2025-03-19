@@ -31,6 +31,7 @@ sun_tuivm_config = {
     "CONFIG_QCOM_LAZY_MAPPING": "m",
     "CONFIG_QCOM_MEM_BUF": "m",
     "CONFIG_QCOM_MEM_BUF_DEV": "m",
+    "CONFIG_QCOM_MEM_BUF_DEV_GH": "y",
     "CONFIG_QCOM_MEM_BUF_GH": "y",
     "CONFIG_QCOM_MEM_BUF_IPA_RESERVE": "y",
     "CONFIG_QCOM_MEM_BUF_MSGQ": "m",

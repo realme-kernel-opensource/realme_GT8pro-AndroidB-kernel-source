@@ -17,6 +17,7 @@
 #include <linux/usb/typec_mux.h>
 #include <linux/sched.h>
 #include <linux/soc/qcom/wcd939x-i2c.h>
+#include "wcd-usbss-registers.h"
 
 #define WCD_USBSS_SUPPLY_MAX 4
 
@@ -45,15 +46,19 @@ struct wcd_usbss_ctxt {
 	bool standby_enable;
 	bool is_in_standby;
 	struct mutex switch_update_lock;
+	struct mutex runtime_env_counter_lock;
 	unsigned int version;
 	int wcd_standby_status;
+	int runtime_env_counter;
 	struct nvmem_cell *nvmem_cell;
+	bool suspended;
 	bool defer_writes;
 	int req_state;
-	bool suspended;
+	bool usb_sbu_compliance;
 };
 
 extern struct regmap *wcd_usbss_regmap_init(struct device *dev,
 				   const struct regmap_config *config);
 extern struct regmap_config wcd_usbss_regmap_config;
+extern const u8 wcd_usbss_reg_access[WCD_USBSS_NUM_REGISTERS];
 #endif /* WCD_USBSS_PRIV_H */

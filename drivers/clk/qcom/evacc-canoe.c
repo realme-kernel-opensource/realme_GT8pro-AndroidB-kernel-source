@@ -413,7 +413,7 @@ static int eva_cc_canoe_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = pm_runtime_get_sync(&pdev->dev);
+	ret = pm_runtime_resume_and_get(&pdev->dev);
 	if (ret)
 		return ret;
 

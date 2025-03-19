@@ -65,11 +65,7 @@ gh_arm_drv.ko
 gh_dbl.ko
 gh_msgq.ko
 gh_rm_drv.ko
-gunyah.ko
-gunyah-msgq.ko
-gunyah_hypercall.ko
 gunyah_loader.ko
-gunyah_platform_hooks.ko
 mdt_loader.ko
 qcom_ipc_logging.ko
 qrtr.ko

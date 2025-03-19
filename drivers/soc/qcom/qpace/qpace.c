@@ -10,9 +10,12 @@
 #include <linux/interrupt.h>
 #include <linux/mm.h>
 #include <linux/delay.h>
+#include <linux/pm_qos.h>
+#include <linux/cpu.h>
 #include <linux/interconnect.h>
 #include <linux/qtee_shmbridge.h>
 #include <linux/firmware/qcom/si_object.h>
+#include <dt-bindings/interconnect/qcom,icc.h>
 
 #include "qpace-constants.h"
 #include "qpace-reg-accessors.h"
@@ -85,6 +88,7 @@ static void __iomem *qpace_gen_cmd_regs;
 
 static struct icc_path *qpace_interconnect;
 static struct device *qpace_dev;
+static struct dev_pm_qos_request qos_req;
 
 /*
  * =============================================================================
@@ -298,6 +302,8 @@ struct transfer_ring {
 
 	struct qpace_transfer_descriptor *hw_read_ptr;
 	struct qpace_transfer_descriptor *hw_write_ptr;
+
+	size_t item_count;
 };
 
 struct event_ring {
@@ -318,7 +324,7 @@ static inline void deinit_transfer_ring(int tr_num)
 	__free_pages(virt_to_page(tr_rings[tr_num].ring_buffer_start), RING_SIZE_ORDER);
 }
 
-static inline int init_transfer_ring(int tr_num)
+static inline int init_transfer_ring(int tr_num, bool reinit_ring)
 {
 	struct page *page_ptr;
 	u32 tr_ring_reg_val;
@@ -326,13 +332,15 @@ static inline int init_transfer_ring(int tr_num)
 
 	BUILD_BUG_ON(sizeof(struct qpace_transfer_descriptor) != DESCRIPTOR_SIZE);
 
-	/* Allocate TR buffer */
-	page_ptr = alloc_pages(GFP_KERNEL | __GFP_ZERO,
-			       RING_SIZE_ORDER);
-	if (!page_ptr)
-		return -ENOMEM;
+	if (!reinit_ring) {
+		/* Allocate TR buffer */
+		page_ptr = alloc_pages(GFP_KERNEL | __GFP_ZERO,
+					RING_SIZE_ORDER);
+		if (!page_ptr)
+			return -ENOMEM;
 
-	tr_rings[tr_num].ring_buffer_start = page_to_virt(page_ptr);
+		tr_rings[tr_num].ring_buffer_start = page_to_virt(page_ptr);
+	}
 
 	/*
 	 * Set block-event-interrupt on all TDs by default. We will set bei = 0
@@ -392,9 +400,9 @@ static int init_transfer_rings(void)
 				 GFP_KERNEL | __GFP_ZERO);
 	if (!tr_rings)
 		return -ENOMEM;
-
+pr_err("transfer rings initialized\n");
 	for (int tr_num = 0; tr_num < NUM_RINGS; tr_num++) {
-		ret = init_transfer_ring(tr_num);
+		ret = init_transfer_ring(tr_num, false);
 		if (ret) {
 			deinit_transfer_rings(tr_num);
 			return ret;
@@ -409,7 +417,7 @@ static inline void deinit_event_ring(int er_num)
 	__free_pages(virt_to_page(ev_rings[er_num].ring_buffer_start), RING_SIZE_ORDER);
 }
 
-static inline int init_event_ring(int er_num)
+static inline int init_event_ring(int er_num, bool reinit_ring)
 {
 	struct page *page_ptr;
 	u32 ev_ring_reg_val;
@@ -419,13 +427,15 @@ static inline int init_event_ring(int er_num)
 
 	init_completion(&ev_rings[er_num].ring_has_events);
 
-	/* Allocate EV buffer */
-	page_ptr = alloc_pages(GFP_KERNEL | __GFP_ZERO,
-			       RING_SIZE_ORDER);
-	if (!page_ptr)
-		return -ENOMEM;
+	if (!reinit_ring) {
+		/* Allocate EV buffer */
+		page_ptr = alloc_pages(GFP_KERNEL | __GFP_ZERO,
+					RING_SIZE_ORDER);
+		if (!page_ptr)
+			return -ENOMEM;
 
-	ev_rings[er_num].ring_buffer_start = page_to_virt(page_ptr);
+		ev_rings[er_num].ring_buffer_start = page_to_virt(page_ptr);
+	}
 
 	/* Configure the ring registers */
 	ev_ring_reg_val = FIELD_PREP(DMA_ER_MGR_0_CFG_CACHEALLOC, LLC_ALLOC);
@@ -488,7 +498,7 @@ static int init_event_rings(void)
 		return -ENOMEM;
 
 	for (int er_num = 0; er_num < NUM_RINGS; er_num++) {
-		ret = init_event_ring(er_num);
+		ret = init_event_ring(er_num, false);
 		if (ret) {
 			deinit_event_rings(er_num);
 			return ret;
@@ -500,6 +510,48 @@ static int init_event_rings(void)
 				(1 << NUM_RINGS) - 1);
 
 	return 0;
+}
+
+static DEFINE_SPINLOCK(qpace_ref_lock);
+static int active_rings;
+
+static void get_qpace(int ring_num)
+{
+	struct transfer_ring *tr = &tr_rings[ring_num];
+
+	spin_lock(&qpace_ref_lock);
+	if (!active_rings) {
+		pm_stay_awake(qpace_dev);
+		dev_pm_qos_update_request(&qos_req, 300);
+	}
+
+	if (!tr->item_count) {
+		init_event_ring(ring_num, true);
+		init_transfer_ring(ring_num, true);
+
+		active_rings++;
+	}
+	tr->item_count++;
+
+	spin_unlock(&qpace_ref_lock);
+}
+
+static void put_qpace(int ring_num, int  n_consumed_entries)
+{
+	struct transfer_ring *tr = &tr_rings[ring_num];
+
+	spin_lock(&qpace_ref_lock);
+	tr->item_count -= n_consumed_entries;
+
+	if (!tr->item_count)
+		active_rings--;
+
+	if (!active_rings) {
+		dev_pm_qos_update_request(&qos_req, PM_QOS_RESUME_LATENCY_DEFAULT_VALUE);
+		pm_relax(qpace_dev);
+	}
+
+	spin_unlock(&qpace_ref_lock);
 }
 
 /*
@@ -525,10 +577,15 @@ static inline void transfer_ring_increment(struct transfer_ring *ring)
  *
  * Queue a copy request to a chosen transfer ring
  */
-void qpace_queue_copy(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr, size_t copy_size)
+int qpace_queue_copy(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr, size_t copy_size)
 {
 	struct transfer_ring *ring = &tr_rings[tr_num];
-	struct qpace_transfer_descriptor *td = ring->hw_write_ptr;
+	struct qpace_transfer_descriptor *td;
+	int ret;
+
+	get_qpace(tr_num);
+
+	td = ring->hw_write_ptr;
 
 	td->src_addr = src_addr;
 	td->dst_addr = dst_addr;
@@ -545,8 +602,10 @@ void qpace_queue_copy(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr, si
 
 	/* We pair each transfer ring with a unique event ring */
 	td->event_ring_id = tr_num;
-
+	ret = ring->hw_write_ptr - ring->ring_buffer_start;
 	transfer_ring_increment(ring);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(qpace_queue_copy);
 
@@ -558,10 +617,15 @@ EXPORT_SYMBOL_GPL(qpace_queue_copy);
  *
  * Queue a compression request to a chosen transfer ring
  */
-void qpace_queue_compress(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr)
+int qpace_queue_compress(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr)
 {
 	struct transfer_ring *ring = &tr_rings[tr_num];
-	struct qpace_transfer_descriptor *td = ring->hw_write_ptr;
+	struct qpace_transfer_descriptor *td;
+	int ret;
+
+	get_qpace(tr_num);
+
+	td = ring->hw_write_ptr;
 
 	td->src_addr = src_addr;
 	td->dst_addr = dst_addr;
@@ -579,7 +643,11 @@ void qpace_queue_compress(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr
 	/* We pair each transfer ring with a single event ring */
 	td->event_ring_id = tr_num;
 
+	ret = ring->hw_write_ptr - ring->ring_buffer_start;
+
 	transfer_ring_increment(ring);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(qpace_queue_compress);
 
@@ -637,8 +705,6 @@ bool qpace_trigger_tr(int tr_num)
 
 	last_processed_td->bei = 0;
 
-	pm_stay_awake(qpace_dev);
-
 	write_ptr_addr = virt_to_phys(ring->hw_write_ptr);
 
 	QPACE_WRITE_TR_REG(tr_num, QPACE_DMA_TR_MGR_0_WR_PTR_H_OFFSET,
@@ -684,12 +750,11 @@ retry:
 	if (first_ed_to_consume->cycle_bit != ev_ring->cycle_bit)
 		goto retry;
 
-	pm_relax(qpace_dev);
 	qpace_free_tr_entries(tr_num);
 }
 EXPORT_SYMBOL_GPL(qpace_wait_for_tr_consumption);
 
-static inline void qpace_free_er_entries(int er_num)
+static inline void qpace_free_er_entries(int er_num, int n_consumed_entries)
 {
 	struct event_ring *ring = &ev_rings[er_num];
 	phys_addr_t last_processed_ed_phys_addr;
@@ -706,6 +771,8 @@ static inline void qpace_free_er_entries(int er_num)
 			   FIELD_GET(GENMASK(63, 32), last_processed_ed_phys_addr));
 	QPACE_WRITE_ER_REG(er_num, QPACE_DMA_ER_MGR_0_RD_PTR_L_OFFSET,
 			   FIELD_GET(GENMASK(31, 0), last_processed_ed_phys_addr));
+
+	put_qpace(er_num, n_consumed_entries);
 }
 
 static inline void consume_ed(struct qpace_event_descriptor *ed, int ed_index,
@@ -764,7 +831,7 @@ loop_again:
 
 	ring->hw_write_ptr = ed;
 
-	qpace_free_er_entries(er_num);
+	qpace_free_er_entries(er_num, n_consumed_entries);
 
 	return n_consumed_entries;
 }
@@ -794,8 +861,15 @@ static irqreturn_t event_or_word_error_interrupt_handler(int irq, void *unused)
 						1 << er_num);
 
 			complete(&ev_rings[er_num].ring_has_events);
+
+			goto exit;
 		}
 
+	if (status_reg & (COMMON_EE_DMA_ER_COMPL_S_DMA_ER_BUS_ERR_STAT |
+			  COMMON_EE_DMA_ER_COMPL_S_DMA_TR_BUS_ERR_STAT))
+		panic("%s: word error detected, unrecoverable\n", __func__);
+
+exit:
 	return IRQ_HANDLED;
 }
 
@@ -831,7 +905,7 @@ static inline bool _qpace_power_on(void)
 
 static int qpace_power_on(struct device *dev)
 {
-	int ret;
+	int ret, ret2;
 
 	qpace_interconnect = devm_of_icc_get(dev, NULL);
 	if (IS_ERR_OR_NULL(qpace_interconnect)) {
@@ -841,18 +915,47 @@ static int qpace_power_on(struct device *dev)
 		return qpace_interconnect ? ret : -EINVAL;
 	}
 
+	ret = device_init_wakeup(dev, true);
+	if (ret) {
+		pr_err("%s: device_init_wakeup() failed with %d\n", __func__, ret);
+		return ret;
+	}
+
+	ret = dev_pm_qos_add_request(get_cpu_device(0), &qos_req,
+				     DEV_PM_QOS_RESUME_LATENCY,
+				     PM_QOS_RESUME_LATENCY_DEFAULT_VALUE);
+	if (ret != 0 && ret != 1) {
+		pr_err("%s: dev_pm_qos_add_request() failed with %d\n", __func__, ret);
+		goto rm_wakeup_capable;
+	}
+
+	icc_set_tag(qpace_interconnect, QCOM_ICC_TAG_ACTIVE_ONLY);
 	ret = icc_set_bw(qpace_interconnect, 0, 1);
 	if (ret) {
 		pr_err("Failed to turn on QPaCE VCD: %d\n", ret);
-		return ret;
+		goto rm_qos;
 	}
 
 	if (!_qpace_power_on()) {
 		pr_err("Failed to start QPaCE\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto rm_bw;
 	}
 
 	return 0;
+
+rm_bw:
+	ret2 = icc_set_bw(qpace_interconnect, 0, 0);
+	if (ret2)
+		pr_err("Failed to remove QPaCE VCD vote: %d\n", ret2);
+rm_qos:
+	ret2 = dev_pm_qos_remove_request(&qos_req);
+	if (ret2 != 0 && ret2 != 1)
+		pr_err("Failed change QoS vote for CPUs: %d\n", ret2);
+rm_wakeup_capable:
+	device_init_wakeup(dev, false);
+
+	return ret;
 }
 
 static inline bool _qpace_power_off(void)
@@ -879,7 +982,7 @@ static inline bool _qpace_power_off(void)
 	return true;
 }
 
-static void qpace_power_off(void)
+static void qpace_power_off(struct device *dev)
 {
 	int ret;
 
@@ -888,10 +991,14 @@ static void qpace_power_off(void)
 		pr_err("Failed to stop QPaCE\n");
 
 	ret = icc_set_bw(qpace_interconnect, 0, 0);
-	if (ret) {
+	if (ret)
 		pr_err("Failed to turn off QPaCE VCD: %d\n", ret);
-		return;
-	}
+
+	ret = dev_pm_qos_remove_request(&qos_req);
+	if (ret != 0 && ret != 1)
+		pr_err("Failed change QoS vote for CPUs: %d\n", ret);
+
+	device_init_wakeup(dev, false);
 }
 
 /*
@@ -969,6 +1076,11 @@ static int qpace_init(void)
 		   COMP_CORE_BULK_MODE_CORE_2 | COMP_CORE_BULK_MODE_CORE_3 |
 		   COMP_CORE_BULK_MODE_CORE_4;
 	QPACE_WRITE_COMP_CORE_REG(QPACE_COMP_CORE_BULK_MODE_OFFSET, reg_val);
+
+	reg_val = QPACE_READ_GEN_CORE_REG(QPACE_CORE_OPER_CORE_READY_OFFSET);
+	reg_val |= CORE_OPER_CFG_COMP_MEM_PWR_DWN_1;
+	QPACE_WRITE_GEN_CORE_REG(QPACE_CORE_OPER_CFG_OFFSET,
+				 reg_val);
 
 	program_urg_command_contexts();
 
@@ -1129,9 +1241,19 @@ static int qpace_probe(struct platform_device *pdev)
 	return ret;
 
 power_off:
-	qpace_power_off();
+	qpace_power_off(dev);
 
 	return ret;
+}
+
+static void qpace_remove(struct platform_device *pdev)
+{
+	if (!is_qpace_enabled())
+		return;
+
+	deinit_transfer_rings(NUM_RINGS);
+	deinit_event_rings(NUM_RINGS);
+	qpace_power_off(&pdev->dev);
 }
 
 static const struct of_device_id qpace_match_table[] = {
@@ -1141,6 +1263,7 @@ static const struct of_device_id qpace_match_table[] = {
 
 static struct platform_driver qpace_driver = {
 	.probe = qpace_probe,
+	.remove = qpace_remove,
 	.driver = {
 		.name = "qcom-qpace",
 		.of_match_table = qpace_match_table,
@@ -1152,7 +1275,13 @@ static int __init qpace_module_init(void)
 	return platform_driver_register(&qpace_driver);
 }
 
+static void __exit qpace_module_exit(void)
+{
+	platform_driver_unregister(&qpace_driver);
+}
+
 module_init(qpace_module_init);
+module_exit(qpace_module_exit);
 
 MODULE_LICENSE("GPL");
 

@@ -39,9 +39,9 @@ def register_modules(registry):
         config = "CONFIG_REGULATOR_QTI_FIXED_VOLTAGE",
         srcs = [
             # do not sort
-            "drivers/regulator/qti-fixed-regulator.c",
-            "drivers/regulator/fixed.h",
+            "drivers/regulator/qti_fixed_regulator.c",
         ],
+        copts = ["-DQTI_FIXED_REGULATOR"],
         deps = [
             # do not sort
             "drivers/regulator/debug-regulator",
@@ -117,5 +117,15 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/regulator/debug-regulator",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/regulator/virtio_regulator",
+        out = "virtio_regulator.ko",
+        config = "CONFIG_VIRTIO_REGULATOR",
+        srcs = [
+            # do not sort
+            "drivers/regulator/virtio_regulator.c",
         ],
     )

@@ -282,9 +282,6 @@ def register_modules(registry):
             # do not sort
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
@@ -302,12 +299,12 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/virt/gunyah/gh_mem_notifier",
+            "drivers/virt/gunyah/gunyah_loader",
             "drivers/pinctrl/qcom/pinctrl-msm",
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
-            "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
 
@@ -319,6 +316,24 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/gic_intr_routing.c",
             "drivers/soc/qcom/irq_internals.h",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/glink_probe",
+        out = "glink_probe.ko",
+        config = "CONFIG_QCOM_GLINK",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/glink_probe.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/rpmsg/qcom_glink_smem",
+            "drivers/rpmsg/qcom_glink_spss",
+            "drivers/rpmsg/qcom_glink",
+            "drivers/remoteproc/rproc_qcom_common",
+            "kernel/trace/qcom_ipc_logging",
         ],
     )
 
@@ -366,9 +381,6 @@ def register_modules(registry):
             # do not sort
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
@@ -461,6 +473,16 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/msm_show_epoch",
+        out = "msm_show_epoch.ko",
+        config = "CONFIG_SHOW_SUSPEND_EPOCH",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/msm_show_epoch.c",
         ],
     )
 
@@ -654,6 +676,21 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qcom_cache_allocation",
+        out = "qcom_cache_allocation.ko",
+        config = "CONFIG_QCOM_CACHE_ALLOCATION",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_cache_allocation.c",
+            "drivers/soc/qcom/trace-cache_allocation.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/mpam/mpam_msc",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom_cpucp",
         out = "qcom_cpucp.ko",
         config = "CONFIG_QCOM_CPUCP",
@@ -685,6 +722,19 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/soc/qcom/qcom_cpuss_sleep_stats_v4.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom_cpuss_sleep_stats",
+        out = "qcom_cpuss_sleep_stats.ko",
+        config = "CONFIG_QCOM_CPUSS_SLEEP_STATS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_cpuss_sleep_stats.c",
+        ],
+        deps = [
+            "drivers/firmware/qcom/qcom-scm",
         ],
     )
 
@@ -737,9 +787,6 @@ def register_modules(registry):
             # do not sort
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
@@ -1231,5 +1278,19 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/rename_devices",
+        out = "rename_devices.ko",
+        config = "CONFIG_RENAME_DEVICES",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/rename_devices.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/block/virtio_blk",
         ],
     )

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -34,6 +34,21 @@ static DEFINE_VDD_REGULATORS(vdd_mx, VDD_HIGH + 1, 1, vdd_corner);
 static struct clk_vdd_class *disp_cc_canoe_regulators[] = {
 	&vdd_mm,
 	&vdd_mx,
+};
+
+static struct clk_crm disp_crm = {
+	.name = "disp_crm",
+	.num_perf_ol = 10,
+	.client_idx = 1,
+	.regs = {
+		.cfg_rcgr = 0xd8,
+		.l_val = 0xdc,
+		.curr_perf = 0x18,
+	},
+	.offsets = {
+		.vcd = 0x268,
+		.level = 0x28,
+	},
 };
 
 enum {
@@ -90,7 +105,7 @@ static struct clk_alpha_pll disp_cc_pll0 = {
 			},
 			.num_parents = 1,
 			.flags = CLK_GET_RATE_NOCACHE,
-			.ops = &clk_alpha_pll_taycan_eko_t_ops,
+			.ops = &clk_alpha_pll_crm_taycan_eko_t_ops,
 		},
 		.vdd_data = {
 			.vdd_class = &vdd_mm,
@@ -897,12 +912,17 @@ static struct clk_rcg2 disp_cc_mdss_mdp_clk_src = {
 	.freq_tbl = ftbl_disp_cc_mdss_mdp_clk_src,
 	.enable_safe_config = true,
 	.flags = HW_CLK_CTRL_MODE,
+	.clkr = {
+		.crm = &disp_crm,
+		.crm_vcd = 1,
+		.crm_num_node = 1,
+	},
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "disp_cc_mdss_mdp_clk_src",
 		.parent_data = disp_cc_parent_data_9,
 		.num_parents = ARRAY_SIZE(disp_cc_parent_data_9),
-		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_ops,
+		.flags = CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT,
+		.ops = &clk_rcg2_crmb_ops,
 	},
 	.clkr.vdd_data = {
 		.vdd_classes = disp_cc_canoe_regulators,
@@ -1335,7 +1355,7 @@ static struct clk_branch disp_cc_mdss_dptx0_aux_clk = {
 
 static struct clk_branch disp_cc_mdss_dptx0_crypto_clk = {
 	.halt_reg = 0x8068,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.clkr = {
 		.enable_reg = 0x8068,
 		.enable_mask = BIT(0),
@@ -1461,7 +1481,7 @@ static struct clk_branch disp_cc_mdss_dptx1_aux_clk = {
 
 static struct clk_branch disp_cc_mdss_dptx1_crypto_clk = {
 	.halt_reg = 0x808c,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.clkr = {
 		.enable_reg = 0x808c,
 		.enable_mask = BIT(0),
@@ -1587,7 +1607,7 @@ static struct clk_branch disp_cc_mdss_dptx2_aux_clk = {
 
 static struct clk_branch disp_cc_mdss_dptx2_crypto_clk = {
 	.halt_reg = 0x80a4,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.clkr = {
 		.enable_reg = 0x80a4,
 		.enable_mask = BIT(0),
@@ -1695,7 +1715,7 @@ static struct clk_branch disp_cc_mdss_dptx3_aux_clk = {
 
 static struct clk_branch disp_cc_mdss_dptx3_crypto_clk = {
 	.halt_reg = 0x80bc,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.clkr = {
 		.enable_reg = 0x80bc,
 		.enable_mask = BIT(0),
@@ -1875,7 +1895,7 @@ static struct clk_branch disp_cc_mdss_mdp_lut_clk = {
 
 static struct clk_branch disp_cc_mdss_mdp_ss_ip_clk = {
 	.halt_reg = 0x8030,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.clkr = {
 		.enable_reg = 0x8030,
 		.enable_mask = BIT(0),
@@ -2118,7 +2138,7 @@ static struct gdsc disp_cc_mdss_core_gdsc = {
 		.name = "disp_cc_mdss_core_gdsc",
 	},
 	.pwrsts = PWRSTS_OFF_ON,
-	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_SKIP_DIS | HW_CTRL_TRIGGER,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_SKIP_DIS | HW_CTRL_TRIGGER | HW_CTRL,
 	.supply = "vdd_mm",
 };
 
@@ -2185,7 +2205,7 @@ static int disp_cc_canoe_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = pm_runtime_get_sync(&pdev->dev);
+	ret = pm_runtime_resume_and_get(&pdev->dev);
 	if (ret)
 		return ret;
 
@@ -2206,7 +2226,7 @@ static int disp_cc_canoe_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0xe064, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0xe05c, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0xc00c, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0xe008, BIT(0), BIT(0));
+	regmap_update_bits(regmap, 0xc008, BIT(0), BIT(0));
 
 	ret = qcom_cc_really_probe(&pdev->dev, &disp_cc_canoe_desc, regmap);
 	if (ret) {

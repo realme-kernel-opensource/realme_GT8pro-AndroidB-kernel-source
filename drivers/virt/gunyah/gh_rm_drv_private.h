@@ -13,7 +13,7 @@
 #include <linux/gunyah/gh_rm_drv.h>
 #include <linux/gunyah/gh_common.h>
 
-#include "rsc_mgr.h"
+#include "drivers/virt/gunyah/rsc_mgr.h"
 
 extern bool gh_rm_core_initialized;
 extern struct gunyah_rm *rm;

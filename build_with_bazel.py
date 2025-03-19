@@ -147,7 +147,7 @@ class BazelBuilder:
                     re.compile(r"//{}:{}_{}_{}_dist".format(self.kernel_dir, t, v, s))
                     for s in self.skip_list
                 ]
-                query = 'filter("{}_{}.*_dist$", attr(generator_function, define_{}, {}/...))'.format(
+                query = 'filter("{}_{}(.*_dist)?$", attr(generator_function, define_{}, {}/...))'.format(
                     t, v, t.replace("-", "_"), self.kernel_dir
                 )
 
@@ -195,6 +195,7 @@ class BazelBuilder:
                 targets.append(
                     Target(self.workspace, t, real_variant, label, self.out_dir)
                 )
+                logging.debug("Adding target %s", label)
 
         # Sort build targets by label string length to guarantee the base target goes
         # first when copying to output directory
@@ -305,8 +306,10 @@ class BazelBuilder:
                         sys.exit(1)
             else:
                 logging.info('Re-entering this function; Hence instrumentation is already done')
+            cmdline = [self.bazel_bin, "--max_idle_secs=%s" % (os.environ.get("IDLE_TIMEOUT")), self.bazel_cache, bazel_subcommand]
+        else:
+            cmdline = [self.bazel_bin, self.bazel_cache, bazel_subcommand]
         logging.info('targets = "%s"', [t.bazel_label for t in targets])
-        cmdline = [self.bazel_bin, self.bazel_cache, bazel_subcommand]
         if extra_options:
             cmdline.extend(extra_options)
         cmdline.extend([t.bazel_label for t in targets])

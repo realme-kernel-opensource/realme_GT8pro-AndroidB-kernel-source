@@ -29,7 +29,6 @@ def register_modules(registry):
             # do not sort
             "drivers/virt/gunyah/gh_irq_lend.c",
             "drivers/virt/gunyah/gh_rm_drv_private.h",
-            "drivers/virt/gunyah/rsc_mgr.h",
         ],
         deps = [
             # do not sort
@@ -38,9 +37,6 @@ def register_modules(registry):
             "drivers/soc/qcom/secure_buffer",
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
@@ -58,9 +54,6 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
@@ -108,7 +101,6 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_rm_booster.c",
             "drivers/virt/gunyah/gh_rm_booster.h",
             "drivers/virt/gunyah/gh_rm_drv_private.h",
-            "drivers/virt/gunyah/rsc_mgr.h",
         ],
         deps = [
             # do not sort
@@ -128,13 +120,9 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_rm_core.c",
             "drivers/virt/gunyah/gh_rm_drv_private.h",
             "drivers/virt/gunyah/gh_rm_iface.c",
-            "drivers/virt/gunyah/rsc_mgr.h",
         ],
         deps = [
             # do not sort
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
@@ -182,52 +170,6 @@ def register_modules(registry):
     )
 
     registry.register(
-        name = "drivers/virt/gunyah/gunyah_ioeventfd",
-        out = "gunyah_ioeventfd.ko",
-        config = "CONFIG_GUNYAH_IOEVENTFD",
-        srcs = [
-            # do not sort
-            "drivers/virt/gunyah/gunyah_ioeventfd.c",
-        ],
-        deps = [
-            # do not sort
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
-        ],
-    )
-
-    registry.register(
-        name = "drivers/virt/gunyah/gunyah_irqfd",
-        out = "gunyah_irqfd.ko",
-        config = "CONFIG_GUNYAH_IRQFD",
-        srcs = [
-            # do not sort
-            "drivers/virt/gunyah/gunyah_irqfd.c",
-        ],
-        deps = [
-            # do not sort
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
-        ],
-    )
-
-    registry.register(
-        name = "drivers/virt/gunyah/gunyah",
-        out = "gunyah.ko",
-        config = "CONFIG_GUNYAH",
-        srcs = [
-            # do not sort
-            "drivers/virt/gunyah/gunyah.c",
-        ],
-        deps = [
-            # do not sort
-            "arch/arm64/gunyah/gunyah_hypercall",
-        ],
-    )
-
-    registry.register(
         name = "drivers/virt/gunyah/gunyah_loader",
         out = "gunyah_loader.ko",
         config = "CONFIG_GH_SECURE_VM_LOADER",
@@ -262,23 +204,9 @@ def register_modules(registry):
             "drivers/soc/qcom/secure_buffer",
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
-        ],
-    )
-
-    registry.register(
-        name = "drivers/virt/gunyah/gunyah_platform_hooks",
-        out = "gunyah_platform_hooks.ko",
-        config = "CONFIG_GUNYAH_PLATFORM_HOOKS",
-        srcs = [
-            # do not sort
-            "drivers/virt/gunyah/gunyah_platform_hooks.c",
-            "drivers/virt/gunyah/rsc_mgr.h",
         ],
     )
 
@@ -294,49 +222,8 @@ def register_modules(registry):
             # do not sort
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
-        ],
-    )
-
-    registry.register(
-        name = "drivers/virt/gunyah/gunyah_rsc_mgr",
-        out = "gunyah_rsc_mgr.ko",
-        config = "CONFIG_GUNYAH",
-        srcs = [
-            # do not sort
-            "drivers/virt/gunyah/rsc_mgr.c",
-            "drivers/virt/gunyah/rsc_mgr.h",
-            "drivers/virt/gunyah/rsc_mgr_rpc.c",
-            "drivers/virt/gunyah/vm_mgr.c",
-            "drivers/virt/gunyah/vm_mgr.h",
-            "drivers/virt/gunyah/vm_mgr_mem.c",
-        ],
-        deps = [
-            # do not sort
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
-        ],
-    )
-
-    registry.register(
-        name = "drivers/virt/gunyah/gunyah_vcpu",
-        out = "gunyah_vcpu.ko",
-        config = "CONFIG_GUNYAH",
-        srcs = [
-            # do not sort
-            "drivers/virt/gunyah/gunyah_vcpu.c",
-            "drivers/virt/gunyah/rsc_mgr.h",
-            "drivers/virt/gunyah/vm_mgr.h",
-        ],
-        deps = [
-            # do not sort
-            "drivers/virt/gunyah/gunyah_rsc_mgr",
-            "drivers/virt/gunyah/gunyah_platform_hooks",
-            "arch/arm64/gunyah/gunyah_hypercall",
         ],
     )

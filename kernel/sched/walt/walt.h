@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _WALT_H
@@ -93,6 +93,7 @@ enum freq_caps {
 #define SOC_ENABLE_EXPERIMENT3						BIT(9)
 #define SOC_ENABLE_PIPELINE_SWAPPING_BIT		BIT(10)
 #define SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT		BIT(11)
+#define SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING	BIT(12)
 
 extern int soc_sched_lib_name_capacity;
 
@@ -507,7 +508,7 @@ extern cpumask_t cpus_for_pipeline;
 #define WALT_CPUFREQ_PIPELINE_BUSY_BIT		BIT(11)
 
 /* CPUFREQ_REASON_LOAD is unused. If reasons value is 0, this indicates
- * that no extra features were enforcd, and the frequency alligns with
+ * that no extra features were enforced, and the frequency aligns with
  * the highest raw workload executing on one of the CPUs within the
  * corresponding cluster
  */
@@ -1387,7 +1388,7 @@ enum WALT_DEBUG_FEAT {
 	}						\
 })
 
-/* the least signifcant byte is the bitmask for features and printk */
+/* the least significant byte is the bitmask for features and printk */
 #define WALT_PANIC_SENTINEL	0x4544DE00
 
 #define walt_debug_bitmask_panic(x) (1UL << x)
@@ -1455,6 +1456,7 @@ static inline void walt_lockdep_assert(int cond, int cpu, struct task_struct *p)
 
 extern bool pipeline_check(struct walt_rq *wrq);
 extern void pipeline_rearrange(struct walt_rq *wrq, bool need_assign_heavy);
+extern void walt_configure_single_thread_pipeline(unsigned int val);
 extern bool enable_load_sync(int cpu);
 extern struct walt_related_thread_group *lookup_related_thread_group(unsigned int group_id);
 extern bool prev_is_sbt;
@@ -1551,10 +1553,13 @@ extern unsigned int load_sync_low_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_high_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_high_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int sysctl_pipeline_special_task_util_thres;
+extern unsigned int sysctl_single_thread_pipeline;
 extern unsigned int sysctl_pipeline_non_special_task_util_thres;
 extern unsigned int sysctl_pipeline_pin_thres_low_pct;
 extern unsigned int sysctl_pipeline_pin_thres_high_pct;
+extern unsigned int sysctl_pipeline_rearrange_delay_ms[2];
 DECLARE_PER_CPU(unsigned int, walt_yield_to_sleep);
 extern unsigned int walt_sched_yield_counter;
+extern unsigned int sysctl_force_frequent_yielder;
 void account_yields(u64 window_start);
 #endif /* _WALT_H */

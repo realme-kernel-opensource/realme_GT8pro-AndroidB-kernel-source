@@ -12,6 +12,8 @@ clk-scmi.ko
 sched-walt.ko
 sched-walt-debug.ko
 qcom_cpu_vendor_hooks.ko
+thermal_pause.ko
+cpu_hotplug.ko
 cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko
@@ -53,6 +55,8 @@ qcom-pdc.ko
 qcom-dload-mode.ko
 memory_dump_v2.ko
 minidump.ko
+qcom_logbuf_vendor_hooks.ko
+qcom_logbuf_boot_log.ko
 pinctrl-msm.ko
 pinctrl-alor.ko
 pinctrl-canoe.ko
@@ -87,11 +91,7 @@ gh_arm_drv.ko
 gh_dbl.ko
 gh_msgq.ko
 gh_rm_drv.ko
-gunyah.ko
-gunyah_hypercall.ko
 gunyah_loader.ko
-gunyah_platform_hooks.ko
-gunyah_rsc_mgr.ko
 mdt_loader.ko
 qcom_wdt_core.ko
 gh_virt_wdt.ko
@@ -99,3 +99,5 @@ qcom_tzmem.ko
 icc-clk.ko
 cqhci.ko
 sdhci-msm.ko
+bcl_pmic5.ko
+arm_smmu_pmu.ko

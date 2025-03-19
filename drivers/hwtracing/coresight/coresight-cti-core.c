@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2018 Linaro Limited, All rights reserved.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Author: Mike Leach <mike.leach@linaro.org>
  */
 
@@ -719,7 +719,6 @@ static void cti_add_assoc_to_csdev(struct coresight_device *csdev)
 			 * association pointer for the device with this CTI.
 			 */
 			coresight_add_helper(csdev, ect_item->csdev);
-			break;
 		}
 	}
 cti_add_done:

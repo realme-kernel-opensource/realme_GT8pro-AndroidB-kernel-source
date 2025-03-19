@@ -632,6 +632,8 @@ static int _crm_dump_drv_regs(struct crm_drv *drv, struct crm_drv_top *crm)
 	u32 phy_base, data, offset;
 	int m, j, k;
 	int ret = 0;
+	bool gic_irq_sts;
+	struct irq_data *gic_irq_data;
 
 	phy_base = get_crm_phy_addr(drv->base);
 	pr_warn("%s DRV%d Regs\n", drv->drv_type ? "SW" : "HW", drv->drv_id);
@@ -686,6 +688,11 @@ static int _crm_dump_drv_regs(struct crm_drv *drv, struct crm_drv_top *crm)
 	return ret;
 
 skip_channel:
+	gic_irq_data = irq_get_irq_data(drv->irq);
+	irq_get_irqchip_state(drv->irq, IRQCHIP_STATE_PENDING, &gic_irq_sts);
+	pr_warn("HW IRQ %lu is %s at GIC\n", gic_irq_data->hwirq,
+		 gic_irq_sts ? "PENDING" : "NOT PENDING");
+
 	for (m = 0; m < MAX_VCD_TYPE; m++) {
 		if (!(crm->desc->crm_capability & BIT(m)))
 			continue;

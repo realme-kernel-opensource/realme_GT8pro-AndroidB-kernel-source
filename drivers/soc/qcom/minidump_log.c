@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cache.h>
@@ -104,19 +104,25 @@ static bool is_vmap_stack __read_mostly;
 #include <linux/trace_seq.h>
 
 #define MD_FTRACE_BUF_SIZE	SZ_2M
+#define MD_FTRACE_BUF_MARKER	"==END=="
 
 static char *md_ftrace_buf_addr;
 static size_t md_ftrace_buf_current;
 static bool minidump_ftrace_in_oops;
-static bool minidump_ftrace_dump = true;
 #endif
 
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_DUMP
 /* Rnqueue information */
-#ifndef CONFIG_MINIDUMP_ALL_TASK_INFO
-#define MD_RUNQUEUE_PAGES	8
+#define MD_RUNQUEUE_PAGES_FULL	150
+#define MD_RUNQUEUE_PAGES_PART	8
+#define MD_RUNQUEUE_MODE_FULL	1
+#define MD_RUNQUEUE_MODE_PART	0
+#ifdef CONFIG_MINIDUMP_ALL_TASK_INFO
+#define MD_RUNQUEUE_PAGES	MD_RUNQUEUE_PAGES_FULL
+#define MD_RUNQUEUE_MODE	MD_RUNQUEUE_MODE_FULL
 #else
-#define MD_RUNQUEUE_PAGES	150
+#define MD_RUNQUEUE_PAGES	MD_RUNQUEUE_PAGES_PART
+#define MD_RUNQUEUE_MODE	MD_RUNQUEUE_MODE_PART
 #endif
 
 static bool md_in_oops_handler;
@@ -591,16 +597,22 @@ static inline void register_irq_stack(void) {}
 static void minidump_add_trace_event(char *buf, size_t size)
 {
 	char *addr;
+	size_t wrap_size = 0;
 
 	if (!READ_ONCE(md_ftrace_buf_addr) ||
 	    (size > (size_t)MD_FTRACE_BUF_SIZE))
 		return;
 
-	if ((md_ftrace_buf_current + size) > (size_t)MD_FTRACE_BUF_SIZE)
+	if ((md_ftrace_buf_current + size) > (size_t)MD_FTRACE_BUF_SIZE) {
+		wrap_size = MD_FTRACE_BUF_SIZE - md_ftrace_buf_current;
+		addr = md_ftrace_buf_addr + md_ftrace_buf_current;
+		memcpy(addr, buf, wrap_size);
 		md_ftrace_buf_current = 0;
+	}
+
 	addr = md_ftrace_buf_addr + md_ftrace_buf_current;
-	memcpy(addr, buf, size);
-	md_ftrace_buf_current += size;
+	memcpy(addr, buf + wrap_size, size - wrap_size);
+	md_ftrace_buf_current += size - wrap_size;
 }
 
 static void md_trace_oops_enter(void *unused, bool *enter_check)
@@ -615,6 +627,8 @@ static void md_trace_oops_enter(void *unused, bool *enter_check)
 
 static void md_trace_oops_exit(void *unused, bool *exit_check)
 {
+	minidump_add_trace_event(MD_FTRACE_BUF_MARKER,
+		sizeof(MD_FTRACE_BUF_MARKER));
 	minidump_ftrace_in_oops = false;
 }
 
@@ -623,25 +637,10 @@ static void md_update_trace_fmt(void *unused, bool *format_check)
 	*format_check = false;
 }
 
-static void md_buf_size_check(void *unused, unsigned long buffer_size,
-			      bool *size_check)
-{
-	if (!minidump_ftrace_dump) {
-		*size_check = true;
-		return;
-	}
-
-	if (buffer_size > (SZ_256K + PAGE_SIZE)) {
-		pr_err("Skip md ftrace buffer dump for: %#lx\n", buffer_size);
-		minidump_ftrace_dump = false;
-		*size_check = true;
-	}
-}
-
 static void md_dump_trace_buf(void *unused, struct trace_seq *trace_buf,
 			      bool *printk_check)
 {
-	if (minidump_ftrace_in_oops && minidump_ftrace_dump) {
+	if (minidump_ftrace_in_oops) {
 		minidump_add_trace_event(trace_buf->buffer,
 					 trace_buf->seq.len);
 		*printk_check = false;
@@ -669,8 +668,6 @@ static void md_register_trace_buf(void)
 							 NULL);
 	register_trace_android_vh_ftrace_oops_exit(md_trace_oops_exit,
 							 NULL);
-	register_trace_android_vh_ftrace_size_check(md_buf_size_check,
-						    NULL);
 	register_trace_android_vh_ftrace_format_check(md_update_trace_fmt,
 						      NULL);
 	register_trace_android_vh_ftrace_dump_buffer(md_dump_trace_buf,
@@ -859,6 +856,123 @@ static void md_dump_next_event(void)
 	}
 }
 
+static int task_info = MD_RUNQUEUE_MODE;
+static int task_info_pages = MD_RUNQUEUE_PAGES;
+
+static int update_task_info_entry(size_t new_size)
+{
+	int ret;
+	char *buf;
+	struct md_region md_entry;
+
+	scnprintf(md_entry.name, sizeof(md_entry.name), "KRUNQUEUE");
+	md_entry.virt_addr = (u64)md_runq_seq_buf->buffer;
+	md_entry.phys_addr = virt_to_phys((uintptr_t *)md_runq_seq_buf->buffer);
+	md_entry.size = md_runq_seq_buf->size;
+
+	ret = msm_minidump_remove_region(&md_entry);
+	if (ret < 0) {
+		pr_err("Failed to remove entry\n");
+		return ret;
+	}
+
+	buf = kzalloc(new_size, GFP_KERNEL);
+	if (!buf) {
+		msm_minidump_add_region(&md_entry);
+		return -ENOMEM;
+	}
+
+	md_entry.virt_addr = (u64)buf;
+	md_entry.phys_addr = virt_to_phys((uintptr_t *)buf);
+	md_entry.size = new_size;
+
+	ret = msm_minidump_add_region(&md_entry);
+	if (ret < 0) {
+		pr_err("Failed to add entry\n");
+		kfree(buf);
+		return ret;
+	}
+
+	kfree(md_runq_seq_buf->buffer);
+	md_runq_seq_buf->buffer = buf;
+	md_runq_seq_buf->size = new_size;
+	seq_buf_clear(md_runq_seq_buf);
+
+	return 0;
+}
+
+static int task_info_set(const char *val, const struct kernel_param *kp)
+{
+	int ret, old_val, pages;
+
+	old_val = task_info;
+	ret = param_set_int(val, kp);
+
+	if (ret || task_info > 1 || task_info < 0) {
+		task_info = old_val;
+		return -EINVAL;
+	}
+
+	if (old_val == task_info)
+		return 0;
+
+	if (task_info == MD_RUNQUEUE_MODE_FULL)
+		pages = MD_RUNQUEUE_PAGES_FULL;
+	else
+		pages = MD_RUNQUEUE_PAGES_PART;
+
+	ret = update_task_info_entry(pages * PAGE_SIZE);
+	if (ret) {
+		task_info = old_val;
+		return ret;
+	}
+
+	task_info_pages = pages;
+	return 0;
+}
+
+static int task_info_get(char *buffer, const struct kernel_param *kp)
+{
+	return scnprintf(buffer, PAGE_SIZE, "%s\n",
+		task_info ? "1 - Full" : "0 - Part");
+}
+
+static const struct kernel_param_ops task_info_ops = {
+	.set = task_info_set,
+	.get = task_info_get,
+};
+module_param_cb(task_info, &task_info_ops, &task_info, 0644);
+
+static int task_info_pages_set(const char *val, const struct kernel_param *kp)
+{
+	int ret, old_val;
+
+	old_val = task_info_pages;
+	ret = param_set_int(val, kp);
+	if (ret || task_info_pages > KMALLOC_MAX_SIZE / PAGE_SIZE
+			|| task_info_pages < 0) {
+		task_info_pages = old_val;
+		return -EINVAL;
+	}
+
+	if (old_val == task_info_pages)
+		return 0;
+
+	ret = update_task_info_entry(task_info_pages * PAGE_SIZE);
+	if (ret) {
+		task_info_pages = old_val;
+		return ret;
+	}
+
+	return 0;
+}
+
+static const struct kernel_param_ops task_info_pages_ops = {
+	.set = task_info_pages_set,
+	.get = param_get_int,
+};
+module_param_cb(task_info_pages, &task_info_pages_ops, &task_info_pages, 0644);
+
 static void md_dump_runqueues(void)
 {
 	int cpu;
@@ -907,10 +1021,8 @@ static void md_dump_runqueues(void)
 	seq_buf_printf(md_runq_seq_buf, "\n");
 
 	for_each_process_thread(p, t) {
-#ifndef CONFIG_MINIDUMP_ALL_TASK_INFO
-		if (READ_ONCE(t->__state))
+		if (task_info == 0 && READ_ONCE(t->__state))
 			continue;
-#endif
 		seq_buf_printf(md_runq_seq_buf, "%-15s", t->comm);
 		seq_buf_printf(md_runq_seq_buf, "%6d", t->pid);
 		seq_buf_printf(md_runq_seq_buf, "%16lld", t->sched_info.last_arrival);

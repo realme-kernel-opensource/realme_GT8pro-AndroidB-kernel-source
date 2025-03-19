@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef UFS_QCOM_H_
@@ -469,15 +469,20 @@ struct ufs_qcom_regs {
 };
 
 /**
- * struct cpu_freq_info - keep CPUs frequency info
+ * struct cpu_freq_info - keep cpu cluster's info
  * @cpu: the cpu to bump up when requests on perf core exceeds the threshold
  * @min_cpu_scale_freq: the minimal frequency of the cpu
  * @max_cpu_scale_freq: the maximal frequency of the cpu
+ * @default_cluster_mask : the deafault cluster mask
+ * @available_cluster_mask: the available cluster mask
  */
 struct cpu_freq_info {
-	u32 cpu;
+	u32 first_cpu;
+	u32 last_cpu;
 	unsigned int min_cpu_scale_freq;
 	unsigned int max_cpu_scale_freq;
+	cpumask_t default_cluster_mask;
+	cpumask_t available_cluster_mask;
 };
 
 struct ufs_qcom_dev_params {
@@ -563,8 +568,8 @@ struct ufs_qcom_host {
 	atomic_t scale_up;
 	atomic_t clks_on;
 	unsigned long load_delay_ms;
-#define NUM_REQS_HIGH_THRESH 64
-#define NUM_REQS_LOW_THRESH 32
+#define NUM_REQS_HIGH_THRESH 128
+#define NUM_REQS_LOW_THRESH 64
 	atomic_t num_reqs_threshold;
 	bool cur_freq_vote;
 	struct delayed_work fwork;
@@ -582,13 +587,19 @@ struct ufs_qcom_host {
 	atomic_t therm_mitigation;
 	cpumask_t perf_mask;
 	cpumask_t def_mask;
-	cpumask_t esi_affinity_mask;
+	cpumask_t esi_mask;
+	u32 *esi_affinity_mask;
+	cpumask_t qos_perf_mask;
+	cpumask_t qos_non_perf_mask;
+	bool is_qultivate_support;
+#define MAX_NUM_CLUSTERS 4
 	bool disable_wb_support;
 	struct ufs_qcom_ber_hist ber_hist[UFS_QCOM_BER_MODE_MAX];
 	struct list_head regs_list_head;
 	bool ber_th_exceeded;
 	bool irq_affinity_support;
 	bool esi_enabled;
+	bool enforce_high_irq_cpus;
 
 	bool bypass_pbl_rst_wa;
 	atomic_t cqhp_update_pending;
@@ -598,6 +609,9 @@ struct ufs_qcom_host {
 	unsigned long active_cmds;
 	u32 max_cpus;
 	u32 device_id;
+	unsigned int boost_monitor_timer;
+	u32 min_boost_thres;
+	u32 max_boost_thres;
 };
 
 static inline u32

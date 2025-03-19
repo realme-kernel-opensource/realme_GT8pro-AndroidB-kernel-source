@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -21,6 +21,7 @@
 #include "clk-regmap-divider.h"
 #include "clk-regmap-mux.h"
 #include "common.h"
+#include "gdsc.h"
 #include "reset.h"
 #include "vdd-level.h"
 
@@ -2912,6 +2913,98 @@ static struct clk_regmap *cam_cc_canoe_clocks[] = {
 	[CAM_CC_XO_CLK_SRC] = &cam_cc_xo_clk_src.clkr,
 };
 
+static struct gdsc cam_cc_titan_top_gdsc = {
+	.gdscr = 0x21334,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_titan_top_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_mm_mxc_voter",
+};
+
+static struct gdsc cam_cc_ipe_0_gdsc = {
+	.gdscr = 0x20174,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_ipe_0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_TRIGGER,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_mm_mxc_voter",
+};
+
+static struct gdsc cam_cc_ofe_gdsc = {
+	.gdscr = 0x200c8,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_ofe_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_TRIGGER,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_mm_mxc_voter",
+};
+
+static struct gdsc cam_cc_tfe_0_gdsc = {
+	.gdscr = 0x21004,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_tfe_0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_mm_mxc_voter",
+};
+
+static struct gdsc cam_cc_tfe_1_gdsc = {
+	.gdscr = 0x21080,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_tfe_1_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_mm_mxc_voter",
+};
+
+static struct gdsc cam_cc_tfe_2_gdsc = {
+	.gdscr = 0x210e4,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_tfe_2_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_mm_mxc_voter",
+};
+
+static struct gdsc *cam_cc_canoe_gdscs[] = {
+	[CAM_CC_IPE_0_GDSC] = &cam_cc_ipe_0_gdsc,
+	[CAM_CC_OFE_GDSC] = &cam_cc_ofe_gdsc,
+	[CAM_CC_TFE_0_GDSC] = &cam_cc_tfe_0_gdsc,
+	[CAM_CC_TFE_1_GDSC] = &cam_cc_tfe_1_gdsc,
+	[CAM_CC_TFE_2_GDSC] = &cam_cc_tfe_2_gdsc,
+	[CAM_CC_TITAN_TOP_GDSC] = &cam_cc_titan_top_gdsc,
+};
+
 static const struct qcom_reset_map cam_cc_canoe_resets[] = {
 	[CAM_CC_DRV_BCR] = { 0x2138c },
 	[CAM_CC_ICP_BCR] = { 0x211f4 },
@@ -2939,6 +3032,8 @@ static struct qcom_cc_desc cam_cc_canoe_desc = {
 	.num_resets = ARRAY_SIZE(cam_cc_canoe_resets),
 	.clk_regulators = cam_cc_canoe_regulators,
 	.num_clk_regulators = ARRAY_SIZE(cam_cc_canoe_regulators),
+	.gdscs = cam_cc_canoe_gdscs,
+	.num_gdscs = ARRAY_SIZE(cam_cc_canoe_gdscs),
 };
 
 static const struct of_device_id cam_cc_canoe_match_table[] = {
@@ -2960,7 +3055,7 @@ static int cam_cc_canoe_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = pm_runtime_get_sync(&pdev->dev);
+	ret = pm_runtime_resume_and_get(&pdev->dev);
 	if (ret)
 		return ret;
 

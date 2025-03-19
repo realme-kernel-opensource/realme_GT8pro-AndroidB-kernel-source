@@ -61,7 +61,7 @@ static int qcom_cpucp_fast_probe(struct platform_device *pdev)
 		ret = PTR_ERR(data->ch);
 		if (ret != -EPROBE_DEFER) {
 			dev_err(dev, "Error getting mailbox %d\n", ret);
-			goto err;
+			goto err_ch;
 		}
 	}
 
@@ -86,10 +86,12 @@ static int qcom_cpucp_fast_probe(struct platform_device *pdev)
 	cpumask_copy(&data->fast_cpus, policy->related_cpus);
 	cpufreq_cpu_put(policy);
 
-	dev_info(dev, "Probe successful\n");
+	dev_info(dev, "Probe successful, FAST cpus=0x%lx\n", cpumask_bits(&data->fast_cpus)[0]);
 	return 0;
 
 err:
+	mbox_free_channel(data->ch);
+err_ch:
 	return ret;
 }
 

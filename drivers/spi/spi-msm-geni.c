@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -80,7 +80,10 @@
 #define SPI_TX_ONLY		(1)
 #define SPI_RX_ONLY		(2)
 #define SPI_FULL_DUPLEX		(3)
+
+/* SPI Tx followed by Rx transfer */
 #define SPI_TX_RX		(7)
+
 #define SPI_CS_ASSERT		(8)
 #define SPI_CS_DEASSERT		(9)
 #define SPI_SCK_ONLY		(10)
@@ -117,6 +120,23 @@
 #define DATA_BYTES_PER_LINE	(32)
 #define MAX_IPC_NAME_BUF	(36)
 #define SPI_DATA_DUMP_SIZE	(16)
+
+#define	SPI_SUPPORTED_MODES	(SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH)
+
+#define	QSPI_SUPPORTED_MODES	(SPI_CPOL | SPI_CPHA | SPI_CS_HIGH | \
+				 SPI_TX_DUAL | SPI_RX_DUAL | SPI_TX_QUAD | SPI_RX_QUAD)
+#define	QSPI_SINGLE_LANE	0x1
+#define	QSPI_DUAL_LANE		0x2
+#define	QSPI_QUAD_LANE		0x4
+
+#define	QSPI_SINGLE_SDR		0x0
+#define	QSPI_QUAD_DDR		0x1
+#define	QSPI_QUAD_SDR		0x2
+#define	QSPI_DUAL_SDR		0x4
+#define	QSPI_DUAL_DDR		0x6
+#define	QSPI_SINGLE_DDR		0xc
+
+#define QSPI_DUMMY_CLK_CNT	0x8
 
 #define SPI_LOG_DBG(log_ctx, print, dev, x...) do { \
 GENI_SE_DBG(log_ctx, print, dev, x); \
@@ -235,6 +255,8 @@ struct spi_geni_master {
 	bool is_xfer_in_progress;
 	u32 xfer_timeout_offset;
 	int max_data_dump_size;
+	unsigned int proto;
+	bool qspi_ddr_support;
 };
 
 /**
@@ -817,7 +839,8 @@ static struct msm_gpi_tre *setup_lock_tre(struct spi_geni_master *mas)
 
 static struct msm_gpi_tre *setup_config0_tre(struct spi_transfer *xfer,
 				struct spi_geni_master *mas, u16 mode,
-				u32 cs_clk_delay, u32 inter_words_delay)
+				u32 cs_clk_delay, u32 inter_words_delay,
+				u8 dummy_clk_cnt)
 {
 	struct msm_gpi_tre *c0_tre = &mas->gsi[mas->num_xfers].config0_tre;
 	u8 flags = 0;
@@ -855,8 +878,8 @@ static struct msm_gpi_tre *setup_config0_tre(struct spi_transfer *xfer,
 		}
 	}
 
-	c0_tre->dword[0] = MSM_GPI_SPI_CONFIG0_TRE_DWORD0(pack, flags,
-								word_len);
+	c0_tre->dword[0] = MSM_GPI_SPI_CONFIG0_TRE_DWORD0(pack, flags, word_len,
+							  dummy_clk_cnt);
 	c0_tre->dword[1] = MSM_GPI_SPI_CONFIG0_TRE_DWORD1(0, cs_clk_delay,
 							inter_words_delay);
 	c0_tre->dword[2] = MSM_GPI_SPI_CONFIG0_TRE_DWORD2(idx, div);
@@ -865,8 +888,8 @@ static struct msm_gpi_tre *setup_config0_tre(struct spi_transfer *xfer,
 		"%s: flags 0x%x word %d pack %d freq %d idx %d div %d\n",
 		__func__, flags, word_len, pack, mas->cur_speed_hz, idx, div);
 	SPI_LOG_DBG(mas->ipc, false, mas->dev,
-		"%s: cs_clk_delay %d inter_words_delay %d\n", __func__,
-				 cs_clk_delay, inter_words_delay);
+		"%s: cs_clk_delay %d inter_words_delay %d dummy_clk_cnt %d\n", __func__,
+				 cs_clk_delay, inter_words_delay, dummy_clk_cnt);
 	return c0_tre;
 }
 
@@ -1202,14 +1225,161 @@ err_spi_geni_unlock_bus:
 		dmaengine_terminate_all(mas->tx);
 }
 
+/**
+ * qspi_gsi_xfer_prepare() - Prepare QSPI GSI mode transfer
+ * @xfer: Pointer to spi transfer
+ * @mas: Pointer to spi_geni_master
+ * @dummy_clk_cnt: Dummy clock cycles used in between Tx and Rx phases of the transfer
+ * @flags: Flags for qspi config0 support
+ *
+ * Return: 0 on success, or a negative error code upon failure.
+ */
+static int qspi_gsi_xfer_prepare(struct spi_transfer *xfer, struct spi_geni_master *mas,
+				 u8 *dummy_clk_cnt, int *flags)
+{
+	int qspi_lanes = 0;
+
+	if (xfer->tx_buf && xfer->rx_buf) {
+		if (xfer->tx_nbits != xfer->rx_nbits)
+			return -EINVAL;
+
+		qspi_lanes = xfer->tx_nbits;
+		*dummy_clk_cnt = QSPI_DUMMY_CLK_CNT;
+	} else if (xfer->tx_buf) {
+		qspi_lanes = xfer->tx_nbits;
+	} else if (xfer->rx_buf) {
+		qspi_lanes = xfer->rx_nbits;
+		*dummy_clk_cnt = QSPI_DUMMY_CLK_CNT;
+	}
+
+	switch (qspi_lanes) {
+	case QSPI_SINGLE_LANE:
+		*flags |=  QSPI_SINGLE_SDR;
+		if (mas->qspi_ddr_support)
+			*flags |=  QSPI_SINGLE_DDR;
+		break;
+	case QSPI_DUAL_LANE:
+		return -EINVAL;
+
+	case QSPI_QUAD_LANE:
+		*flags |=  QSPI_QUAD_SDR;
+		if (mas->qspi_ddr_support)
+			*flags |=  QSPI_QUAD_DDR;
+		break;
+	default:
+		SPI_LOG_ERR(mas->ipc, true, mas->dev,
+			    "%s: Not have support of selected lane configuration.\n", __func__);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/**
+ * spi_xfer_cmd_update() - Update spi transfer command
+ * @xfer: pointer to spi transfer
+ * @mas: pointer to spi_geni_master
+ * @tx_nent: number of tx entries
+ * @rx_nent: number ox rx entries
+ * @rx_len: length of rx buffer
+ * @cmd: spi transfer opcode for go tre
+ *
+ * Return: void
+ */
+static void spi_xfer_cmd_update(struct spi_transfer *xfer, struct spi_geni_master *mas,
+				int *tx_nent, int *rx_nent, u32 *rx_len, u8 *cmd)
+{
+	if (xfer->tx_buf && xfer->rx_buf) {
+		if (mas->proto == GENI_SE_SPI)
+			*cmd = SPI_FULL_DUPLEX;
+		else
+			*cmd = SPI_TX_RX;
+
+		*tx_nent += 2;
+		*rx_nent += 1;
+	} else if (xfer->tx_buf) {
+		*cmd = SPI_TX_ONLY;
+		*tx_nent += 2;
+		*rx_len = 0;
+	} else if (xfer->rx_buf) {
+		*cmd = SPI_RX_ONLY;
+		*tx_nent += 1;
+		*rx_nent += 1;
+	}
+}
+
+/**
+ * spi_gsi_rx_xfer() - SPI GSI Rx transfer
+ * @xfer: pointer to spi transfer
+ * @mas: pointer to spi_geni_master
+ * @xfer_rx_sg: pointer to Rx transfer scatterlist
+ * @rx_nent: number of Rx scatter-gather entries
+ * @flags: flags specific to dma engine
+ *
+ * Return: 0 on success, or a negative error code upon failure.
+ */
+static int spi_gsi_rx_xfer(struct spi_transfer *xfer, struct spi_geni_master *mas,
+			   struct scatterlist *xfer_rx_sg, int rx_nent, unsigned long flags)
+{
+	struct msm_gpi_tre *rx_tre = NULL;
+
+	rx_tre = &mas->gsi[mas->num_xfers].rx_dma_tre;
+	rx_tre = setup_dma_tre(rx_tre, xfer->rx_dma, xfer->len, mas, 0);
+	if (IS_ERR_OR_NULL(rx_tre)) {
+		dev_err(mas->dev, "Err setting up rx tre\n");
+		return PTR_ERR(rx_tre);
+	}
+
+	sg_set_buf(xfer_rx_sg, rx_tre, sizeof(*rx_tre));
+	mas->gsi[mas->num_xfers].rx_desc =
+		dmaengine_prep_slave_sg(mas->rx,
+					&mas->gsi[mas->num_xfers].rx_sg, rx_nent,
+					DMA_DEV_TO_MEM, flags);
+	if (IS_ERR_OR_NULL(mas->gsi[mas->num_xfers].rx_desc)) {
+		dev_err(mas->dev, "Err setting up rx desc\n");
+		return -EIO;
+	}
+
+	mas->gsi[mas->num_xfers].rx_desc->callback = spi_gsi_rx_callback;
+	mas->gsi[mas->num_xfers].rx_desc->callback_param =
+			&mas->gsi[mas->num_xfers].rx_cb_param;
+	mas->gsi[mas->num_xfers].rx_cb_param.userdata =
+			&mas->gsi[mas->num_xfers].desc_cb;
+	mas->num_rx_eot++;
+
+	return 0;
+}
+
+/**
+ * spi_gsi_tx_xfer() - SPI GSI Tx transfer
+ * @xfer: pointer to spi transfer
+ * @mas: pointer to spi_geni_master
+ * @xfer_tx_sg: pointer to Tx transfer scatterlist
+ *
+ * Return: 0 on success, or a negative error code upon failure.
+ */
+static int spi_gsi_tx_xfer(struct spi_transfer *xfer, struct spi_geni_master *mas,
+			   struct scatterlist *xfer_tx_sg)
+{
+	struct msm_gpi_tre *tx_tre = NULL;
+
+	tx_tre = &mas->gsi[mas->num_xfers].tx_dma_tre;
+	tx_tre = setup_dma_tre(tx_tre, xfer->tx_dma, xfer->len, mas, 1);
+	if (IS_ERR_OR_NULL(tx_tre)) {
+		dev_err(mas->dev, "Err setting up tx tre\n");
+		return PTR_ERR(tx_tre);
+	}
+	sg_set_buf(xfer_tx_sg++, tx_tre, sizeof(*tx_tre));
+	mas->num_tx_eot++;
+
+	return 0;
+}
 static int setup_gsi_xfer(struct spi_transfer *xfer, struct spi_geni_master *mas,
 			  struct spi_device *spi_slv, struct spi_controller *spi)
 {
 	int ret = 0;
 	struct msm_gpi_tre *c0_tre = NULL;
 	struct msm_gpi_tre *go_tre = NULL;
-	struct msm_gpi_tre *tx_tre = NULL;
-	struct msm_gpi_tre *rx_tre = NULL;
 	struct scatterlist *xfer_tx_sg = mas->gsi[mas->num_xfers].tx_sg;
 	struct scatterlist *xfer_rx_sg = &mas->gsi[mas->num_xfers].rx_sg;
 	int rx_nent = 0;
@@ -1223,6 +1393,7 @@ static int setup_gsi_xfer(struct spi_transfer *xfer, struct spi_geni_master *mas
 	struct spi_geni_qcom_ctrl_data *delay_params = NULL;
 	u32 cs_clk_delay = 0;
 	u32 inter_words_delay = 0;
+	u8 dummy_inf_clk_cnt = 0;
 
 	ret = spi_geni_get_chip_select_num(spi_slv, &chip_select);
 	if (ret) {
@@ -1253,13 +1424,20 @@ static int setup_gsi_xfer(struct spi_transfer *xfer, struct spi_geni_master *mas
 			delay_params->spi_inter_words_delay;
 	}
 
+	if (mas->proto == GENI_SE_QSPI) {
+		ret = qspi_gsi_xfer_prepare(xfer, mas, &dummy_inf_clk_cnt, &go_flags);
+		if (ret)
+			return ret;
+	}
+
 	if ((xfer->bits_per_word != mas->cur_word_len) ||
 		(xfer->speed_hz != mas->cur_speed_hz)) {
 		mas->cur_word_len = xfer->bits_per_word;
 		mas->cur_speed_hz = xfer->speed_hz;
 		tx_nent++;
 		c0_tre = setup_config0_tre(xfer, mas, spi_slv->mode,
-					cs_clk_delay, inter_words_delay);
+					   cs_clk_delay, inter_words_delay,
+					   dummy_inf_clk_cnt);
 		if (IS_ERR_OR_NULL(c0_tre)) {
 			dev_err(mas->dev, "%s:Err setting c0tre:%d\n",
 							__func__, ret);
@@ -1275,19 +1453,7 @@ static int setup_gsi_xfer(struct spi_transfer *xfer, struct spi_geni_master *mas
 		rx_len = (xfer->len / bytes_per_word);
 	}
 
-	if (xfer->tx_buf && xfer->rx_buf) {
-		cmd = SPI_FULL_DUPLEX;
-		tx_nent += 2;
-		rx_nent++;
-	} else if (xfer->tx_buf) {
-		cmd = SPI_TX_ONLY;
-		tx_nent += 2;
-		rx_len = 0;
-	} else if (xfer->rx_buf) {
-		cmd = SPI_RX_ONLY;
-		tx_nent++;
-		rx_nent++;
-	}
+	spi_xfer_cmd_update(xfer, mas, &tx_nent, &rx_nent, &rx_len, &cmd);
 
 	cs |= chip_select;
 	if (!xfer->cs_change) {
@@ -1308,39 +1474,15 @@ static int setup_gsi_xfer(struct spi_transfer *xfer, struct spi_geni_master *mas
 	mas->gsi[mas->num_xfers].desc_cb.spi = spi;
 	mas->gsi[mas->num_xfers].desc_cb.xfer = xfer;
 	if (cmd & SPI_RX_ONLY) {
-		rx_tre = &mas->gsi[mas->num_xfers].rx_dma_tre;
-		rx_tre = setup_dma_tre(rx_tre, xfer->rx_dma, xfer->len, mas, 0);
-		if (IS_ERR_OR_NULL(rx_tre)) {
-			dev_err(mas->dev, "Err setting up rx tre\n");
-			return PTR_ERR(rx_tre);
-		}
-		sg_set_buf(xfer_rx_sg, rx_tre, sizeof(*rx_tre));
-		mas->gsi[mas->num_xfers].rx_desc =
-			dmaengine_prep_slave_sg(mas->rx,
-				&mas->gsi[mas->num_xfers].rx_sg, rx_nent,
-						DMA_DEV_TO_MEM, flags);
-		if (IS_ERR_OR_NULL(mas->gsi[mas->num_xfers].rx_desc)) {
-			dev_err(mas->dev, "Err setting up rx desc\n");
-			return -EIO;
-		}
-		mas->gsi[mas->num_xfers].rx_desc->callback =
-					spi_gsi_rx_callback;
-		mas->gsi[mas->num_xfers].rx_desc->callback_param =
-					&mas->gsi[mas->num_xfers].rx_cb_param;
-		mas->gsi[mas->num_xfers].rx_cb_param.userdata =
-					&mas->gsi[mas->num_xfers].desc_cb;
-		mas->num_rx_eot++;
+		ret = spi_gsi_rx_xfer(xfer, mas, xfer_rx_sg, rx_nent, flags);
+		if (ret)
+			return ret;
 	}
 
 	if (cmd & SPI_TX_ONLY) {
-		tx_tre = &mas->gsi[mas->num_xfers].tx_dma_tre;
-		tx_tre = setup_dma_tre(tx_tre, xfer->tx_dma, xfer->len, mas, 1);
-		if (IS_ERR_OR_NULL(tx_tre)) {
-			dev_err(mas->dev, "Err setting up tx tre\n");
-			return PTR_ERR(tx_tre);
-		}
-		sg_set_buf(xfer_tx_sg++, tx_tre, sizeof(*tx_tre));
-		mas->num_tx_eot++;
+		ret = spi_gsi_tx_xfer(xfer, mas, xfer_tx_sg);
+		if (ret)
+			return ret;
 	}
 	mas->gsi[mas->num_xfers].tx_desc = dmaengine_prep_slave_sg(mas->tx,
 					mas->gsi[mas->num_xfers].tx_sg, tx_nent,
@@ -1611,6 +1753,44 @@ static void spi_geni_set_sampling_rate(struct spi_geni_master *mas,
 		__func__, cfg_reg108, cfg_reg109, cfg_seq_start);
 }
 
+/**
+ * spi_verify_proto() - Checks protocol configured in SE engine
+ * @mas: pointer to spi_geni_master
+ *
+ * Return:0 on success, or a negative error code upon failure.
+ */
+static int spi_verify_proto(struct spi_geni_master *mas)
+{
+	struct spi_controller *spi = dev_get_drvdata(mas->dev);
+	int ret;
+
+	if (!mas->is_le_vm) {
+		ret = geni_se_resources_on(&mas->spi_rsc);
+		if (ret < 0) {
+			dev_err(mas->dev, "%s: geni_se_resources_on failed %d\n",
+				__func__, ret);
+			return ret;
+		}
+	}
+
+	mas->proto = geni_se_read_proto(&mas->spi_rsc);
+
+	if (spi->target) {
+		if (mas->proto != GENI_SE_SPI_SLAVE) {
+			dev_err(mas->dev, "Invalid proto %d\n", mas->proto);
+			ret = -ENXIO;
+		}
+	} else if (mas->proto != GENI_SE_SPI && mas->proto != GENI_SE_QSPI) {
+		dev_err(mas->dev, "Invalid proto %d\n", mas->proto);
+		ret = -ENXIO;
+	}
+
+	if (!mas->is_le_vm)
+		geni_se_resources_off(&mas->spi_rsc);
+
+	return ret;
+}
+
 /*
  * spi_geni_mas_setup is done once per spi session.
  * In LA, it is called in prepare_transfer_hardware whereas
@@ -1621,27 +1801,18 @@ static void spi_geni_set_sampling_rate(struct spi_geni_master *mas,
 static int spi_geni_mas_setup(struct spi_controller *spi)
 {
 	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
-	int proto = geni_se_read_proto(&mas->spi_rsc);
 	unsigned int major;
 	unsigned int minor;
 	int hw_ver;
 	int ret = 0;
 
-	if (spi->target) {
-		if (mas->slave_setup)
-			goto setup_ipc;
-		if (unlikely(proto != GENI_SE_SPI_SLAVE)) {
-			dev_err(mas->dev, "Invalid proto %d\n", proto);
-			return -ENXIO;
-		}
+	if (mas->is_le_vm && !mas->setup) {
+		ret = spi_verify_proto(mas);
+		if (ret)
+			return ret;
 	}
 
 	if (unlikely(!mas->setup)) {
-		if ((unlikely(proto != GENI_SE_SPI)) && !spi->target) {
-			dev_err(mas->dev, "Invalid proto %d\n", proto);
-			return -ENXIO;
-		}
-
 		if (spi->target)
 			spi_slv_setup(mas);
 
@@ -2447,14 +2618,15 @@ exit_geni_spi_irq:
  * spi_get_dt_property: To read DTSI property.
  * @pdev: structure to platform device.
  * @geni_mas: structure to spi geni master.
- * @spi: structure to spi master.
+ * @spi: structure to spi controller.
+ * @res: pointer to resource structure.
  *
  * This function will read SPI DTSI property.
  *
- * return: None.
+ * Return: 0 on success, or a negative error code for failure.
  */
-static void spi_get_dt_property(struct platform_device *pdev, struct spi_geni_master *geni_mas,
-				struct spi_controller *spi)
+static int spi_get_dt_property(struct platform_device *pdev, struct spi_geni_master *geni_mas,
+			       struct spi_controller *spi, struct resource *res)
 {
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,le-vm")) {
 		geni_mas->is_le_vm = true;
@@ -2510,6 +2682,28 @@ static void spi_get_dt_property(struct platform_device *pdev, struct spi_geni_ma
 
 	geni_mas->slave_cross_connected =
 		of_property_read_bool(pdev->dev.of_node, "slv-cross-connected");
+
+	if (of_property_read_u32(pdev->dev.of_node, "spi-max-frequency",
+				 &spi->max_speed_hz)) {
+		dev_err(&pdev->dev, "Max frequency not specified.\n");
+		return -ENXIO;
+	}
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "se_phys");
+	if (!res) {
+		dev_err(&pdev->dev, "Err getting IO region\n");
+		return -ENXIO;
+	}
+	geni_mas->phys_addr = res->start;
+	geni_mas->size = resource_size(res);
+	geni_mas->base = devm_ioremap(&pdev->dev, res->start,
+				      resource_size(res));
+	if (!geni_mas->base) {
+		dev_err(&pdev->dev, "Err IO mapping iomem\n");
+		return -ENOMEM;
+	}
+
+	return 0;
 }
 
 void create_ipc_context(struct spi_geni_master *geni_mas, struct device *dev)
@@ -2526,12 +2720,122 @@ void create_ipc_context(struct spi_geni_master *geni_mas, struct device *dev)
 		dev_err(dev, "Error creating IPC TX/RX logs\n");
 }
 
+/**
+ * geni_spi_resources_init: Initialize SPI resources like clk, icc vote, pin control, irq
+ * @pdev: structure to platform device
+ * @geni_mas: pointer to spi geni master
+ * @spi: pointer to spi controller
+ * @spi_rsc: pointer to geni se
+ *
+ * Return: 0 on success, or a negative error code for failure.
+ */
+static int geni_spi_resources_init(struct platform_device *pdev, struct spi_geni_master *geni_mas,
+				   struct spi_controller *spi, struct geni_se *spi_rsc)
+{
+	int ret;
+	struct device *dev = &pdev->dev;
+
+	ret = geni_se_common_resources_init(spi_rsc, SPI_CORE2X_VOTE,
+					    APPS_PROC_TO_QUP_VOTE,
+					    (DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
+	if (ret) {
+		dev_err(&pdev->dev, "Error geni_se_resources_init\n");
+		return ret;
+	}
+
+	/* call set_bw for once, then do icc_enable/disable */
+	ret = geni_icc_set_bw(spi_rsc);
+	if (ret) {
+		dev_err(&pdev->dev, "%s: icc set bw failed ret:%d\n",
+			__func__, ret);
+		return ret;
+	}
+
+	/* to remove the votes doing icc enable/disable */
+	ret = geni_icc_enable(spi_rsc);
+	if (ret) {
+		dev_err(&pdev->dev, "%s: icc enable failed ret:%d\n",
+			__func__, ret);
+		return ret;
+	}
+
+	geni_mas->geni_pinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR_OR_NULL(geni_mas->geni_pinctrl)) {
+		dev_err(&pdev->dev, "No pinctrl config specified!\n");
+		ret = PTR_ERR(geni_mas->geni_pinctrl);
+		return ret;
+	}
+
+	geni_mas->geni_gpio_active = pinctrl_lookup_state(geni_mas->geni_pinctrl,
+							  PINCTRL_DEFAULT);
+	if (IS_ERR_OR_NULL(geni_mas->geni_gpio_active)) {
+		dev_err(&pdev->dev, "No default config specified!\n");
+		ret = PTR_ERR(geni_mas->geni_gpio_active);
+		return ret;
+	}
+
+	geni_mas->geni_gpio_sleep = pinctrl_lookup_state(geni_mas->geni_pinctrl,
+							 PINCTRL_SLEEP);
+	if (IS_ERR_OR_NULL(geni_mas->geni_gpio_sleep)) {
+		dev_err(&pdev->dev, "No sleep config specified!\n");
+		ret = PTR_ERR(geni_mas->geni_gpio_sleep);
+		return ret;
+	}
+
+	ret = pinctrl_select_state(geni_mas->geni_pinctrl,
+				   geni_mas->geni_gpio_sleep);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to set sleep configuration\n");
+		return ret;
+	}
+
+	geni_mas->spi_rsc.clk = devm_clk_get(&pdev->dev, "se-clk");
+	if (IS_ERR(geni_mas->spi_rsc.clk)) {
+		ret = PTR_ERR(geni_mas->spi_rsc.clk);
+		dev_err(&pdev->dev,
+			"Err getting SE Core clk %d\n", ret);
+		return ret;
+	}
+
+	geni_mas->m_ahb_clk = devm_clk_get(dev->parent, "m-ahb");
+	if (IS_ERR(geni_mas->m_ahb_clk)) {
+		ret = PTR_ERR(geni_mas->m_ahb_clk);
+		dev_err(&pdev->dev, "Err getting M AHB clk %d\n", ret);
+		return ret;
+	}
+
+	geni_mas->s_ahb_clk = devm_clk_get(dev->parent, "s-ahb");
+	if (IS_ERR(geni_mas->s_ahb_clk)) {
+		ret = PTR_ERR(geni_mas->s_ahb_clk);
+		dev_err(&pdev->dev, "Err getting S AHB clk %d\n", ret);
+		return ret;
+	}
+
+	geni_mas->irq = platform_get_irq(pdev, 0);
+	if (geni_mas->irq < 0) {
+		dev_err(&pdev->dev, "Err getting IRQ\n");
+		ret = geni_mas->irq;
+		return ret;
+	}
+
+	irq_set_status_flags(geni_mas->irq, IRQ_NOAUTOEN);
+	ret = devm_request_irq(&pdev->dev, geni_mas->irq,
+			       geni_spi_irq, IRQF_TRIGGER_HIGH, "spi_geni", geni_mas);
+	if (ret) {
+		dev_err(&pdev->dev, "Request_irq failed:%d: err:%d\n",
+			geni_mas->irq, ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int spi_geni_probe(struct platform_device *pdev)
 {
 	int ret;
 	struct spi_controller *spi;
 	struct spi_geni_master *geni_mas;
-	struct resource *res;
+	struct resource *res = NULL;
 	bool slave_en;
 	struct device *dev = &pdev->dev;
 	struct geni_se *spi_rsc;
@@ -2563,8 +2867,12 @@ static int spi_geni_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
-	spi_get_dt_property(pdev, geni_mas, spi);
+	ret = spi_get_dt_property(pdev, geni_mas, spi, res);
+	if (ret)
+		goto spi_geni_probe_err;
+
 	geni_mas->wrapper_dev = dev->parent;
+
 	/*
 	 * For LE, clocks, gpio and icb voting will be provided by
 	 * LA. The SPI operates in GSI mode only for LE usecase,
@@ -2574,97 +2882,10 @@ static int spi_geni_probe(struct platform_device *pdev)
 	if (!geni_mas->is_le_vm) {
 		/* set voting values for path: core, config and DDR */
 		spi_rsc = &geni_mas->spi_rsc;
-		ret = geni_se_common_resources_init(spi_rsc,
-			SPI_CORE2X_VOTE, APPS_PROC_TO_QUP_VOTE,
-			(DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
-		if (ret) {
-			dev_err(&pdev->dev, "Error geni_se_resources_init\n");
+
+		ret = geni_spi_resources_init(pdev, geni_mas, spi, spi_rsc);
+		if (ret)
 			goto spi_geni_probe_err;
-		}
-
-		/* call set_bw for once, then do icc_enable/disable */
-		ret = geni_icc_set_bw(spi_rsc);
-		if (ret) {
-			dev_err(&pdev->dev, "%s: icc set bw failed ret:%d\n",
-				__func__, ret);
-			return ret;
-		}
-
-		/* to remove the votes doing icc enable/disable */
-		ret = geni_icc_enable(spi_rsc);
-		if (ret) {
-			dev_err(&pdev->dev, "%s: icc enable failed ret:%d\n",
-				__func__, ret);
-			return ret;
-		}
-
-		geni_mas->geni_pinctrl = devm_pinctrl_get(&pdev->dev);
-		if (IS_ERR_OR_NULL(geni_mas->geni_pinctrl)) {
-			dev_err(&pdev->dev, "No pinctrl config specified!\n");
-			ret = PTR_ERR(geni_mas->geni_pinctrl);
-			goto spi_geni_probe_err;
-		}
-
-		geni_mas->geni_gpio_active = pinctrl_lookup_state(geni_mas->geni_pinctrl,
-							PINCTRL_DEFAULT);
-		if (IS_ERR_OR_NULL(geni_mas->geni_gpio_active)) {
-			dev_err(&pdev->dev, "No default config specified!\n");
-			ret = PTR_ERR(geni_mas->geni_gpio_active);
-			goto spi_geni_probe_err;
-		}
-
-		geni_mas->geni_gpio_sleep = pinctrl_lookup_state(geni_mas->geni_pinctrl,
-							PINCTRL_SLEEP);
-		if (IS_ERR_OR_NULL(geni_mas->geni_gpio_sleep)) {
-			dev_err(&pdev->dev, "No sleep config specified!\n");
-			ret = PTR_ERR(geni_mas->geni_gpio_sleep);
-			goto spi_geni_probe_err;
-		}
-
-		ret = pinctrl_select_state(geni_mas->geni_pinctrl,
-						geni_mas->geni_gpio_sleep);
-		if (ret) {
-			dev_err(&pdev->dev, "Failed to set sleep configuration\n");
-			goto spi_geni_probe_err;
-		}
-
-		geni_mas->spi_rsc.clk = devm_clk_get(&pdev->dev, "se-clk");
-		if (IS_ERR(geni_mas->spi_rsc.clk)) {
-			ret = PTR_ERR(geni_mas->spi_rsc.clk);
-			dev_err(&pdev->dev,
-			"Err getting SE Core clk %d\n", ret);
-			goto spi_geni_probe_err;
-		}
-
-		geni_mas->m_ahb_clk = devm_clk_get(dev->parent, "m-ahb");
-		if (IS_ERR(geni_mas->m_ahb_clk)) {
-			ret = PTR_ERR(geni_mas->m_ahb_clk);
-			dev_err(&pdev->dev, "Err getting M AHB clk %d\n", ret);
-			goto spi_geni_probe_err;
-		}
-
-		geni_mas->s_ahb_clk = devm_clk_get(dev->parent, "s-ahb");
-		if (IS_ERR(geni_mas->s_ahb_clk)) {
-			ret = PTR_ERR(geni_mas->s_ahb_clk);
-			dev_err(&pdev->dev, "Err getting S AHB clk %d\n", ret);
-			goto spi_geni_probe_err;
-		}
-
-		geni_mas->irq = platform_get_irq(pdev, 0);
-		if (geni_mas->irq < 0) {
-			dev_err(&pdev->dev, "Err getting IRQ\n");
-			ret = geni_mas->irq;
-			goto spi_geni_probe_err;
-		}
-
-		irq_set_status_flags(geni_mas->irq, IRQ_NOAUTOEN);
-		ret = devm_request_irq(&pdev->dev, geni_mas->irq,
-			geni_spi_irq, IRQF_TRIGGER_HIGH, "spi_geni", geni_mas);
-		if (ret) {
-			dev_err(&pdev->dev, "Request_irq failed:%d: err:%d\n",
-					   geni_mas->irq, ret);
-			goto spi_geni_probe_err;
-		}
 	}
 
 	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
@@ -2675,33 +2896,23 @@ static int spi_geni_probe(struct platform_device *pdev)
 			goto spi_geni_probe_err;
 		}
 	}
-
-	if (of_property_read_u32(pdev->dev.of_node, "spi-max-frequency",
-				&spi->max_speed_hz)) {
-		dev_err(&pdev->dev, "Max frequency not specified.\n");
-		ret = -ENXIO;
-		goto spi_geni_probe_err;
-	}
-
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "se_phys");
-	if (!res) {
-		ret = -ENXIO;
-		dev_err(&pdev->dev, "Err getting IO region\n");
-		goto spi_geni_probe_err;
-	}
-
-	geni_mas->phys_addr = res->start;
-	geni_mas->size = resource_size(res);
-	geni_mas->base = devm_ioremap(&pdev->dev, res->start,
-						resource_size(res));
-	if (!geni_mas->base) {
-		ret = -ENOMEM;
-		dev_err(&pdev->dev, "Err IO mapping iomem\n");
-		goto spi_geni_probe_err;
-	}
 	geni_mas->spi_rsc.base = geni_mas->base;
 
-	spi->mode_bits = (SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH);
+	if (!geni_mas->is_le_vm) {
+		ret = spi_verify_proto(geni_mas);
+		if (ret)
+			goto spi_geni_probe_err;
+	}
+
+	if (geni_mas->proto == GENI_SE_QSPI) {
+		spi->mode_bits = QSPI_SUPPORTED_MODES;
+
+		/* Enable support of Double data rate (DDR) for QSPI */
+		geni_mas->qspi_ddr_support = true;
+	} else {
+		spi->mode_bits = SPI_SUPPORTED_MODES;
+	}
+
 	spi->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 32);
 	spi->num_chipselect = SPI_NUM_CHIPSELECT;
 	spi->prepare_transfer_hardware = spi_geni_prepare_transfer_hardware;
@@ -3105,6 +3316,7 @@ static const struct dev_pm_ops spi_geni_pm_ops = {
 
 static const struct of_device_id spi_geni_dt_match[] = {
 	{ .compatible = "qcom,spi-geni" },
+	{ .compatible = "qcom,qspi-geni" },
 	{}
 };
 

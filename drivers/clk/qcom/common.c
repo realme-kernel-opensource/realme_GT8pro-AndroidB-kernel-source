@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2014, 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/export.h>
@@ -690,11 +690,13 @@ int qcom_cc_runtime_init(struct platform_device *pdev,
 	}
 
 	platform_set_drvdata(pdev, desc);
-	pm_runtime_enable(dev);
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		goto disable_icc;
 
 	ret = pm_clk_create(dev);
 	if (ret)
-		goto disable_pm_runtime;
+		goto disable_icc;
 
 	ret = pm_clk_add(dev, "iface");
 	if (ret < 0) {
@@ -706,9 +708,7 @@ int qcom_cc_runtime_init(struct platform_device *pdev,
 
 destroy_pm_clk:
 	pm_clk_destroy(dev);
-
-disable_pm_runtime:
-	pm_runtime_disable(dev);
+disable_icc:
 	icc_put(desc->path);
 deinit_clk_regulator:
 	clk_regulator_deinit(desc);

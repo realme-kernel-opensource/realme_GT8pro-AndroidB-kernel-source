@@ -11,11 +11,10 @@ load(":target_variants.bzl", "la_variants")
 target_name = "canoe"
 
 def define_canoe():
-    kernel_vendor_cmdline_extras = ["bootconfig"]
-
     for variant in la_variants:
         board_kernel_cmdline_extras = []
         board_bootconfig_extras = []
+        kernel_vendor_cmdline_extras = ["bootconfig"]
 
         if variant == "consolidate":
             board_bootconfig_extras += ["androidboot.serialconsole=1"]

@@ -22,6 +22,7 @@
 #include <linux/regmap.h>
 #include <linux/workqueue.h>
 #include <linux/list.h>
+#include <linux/ipc_logging.h>
 
 #include <linux/rpmsg/qcom_glink.h>
 
@@ -47,6 +48,12 @@ struct qcom_glink_smem {
 
 	u32 remote_pid;
 };
+/* Define IPC Logging Macros */
+#define GLINK_SMEM_IPC_LOG_PAGE_CNT 32
+static void *glink_ilctxt;
+
+#define GLINK_SMEM_INFO(x, ...)						\
+ipc_log_string(glink_ilctxt, "[%s]: "x, __func__, ##__VA_ARGS__)
 
 struct glink_smem_pipe {
 	struct qcom_glink_pipe native;
@@ -101,6 +108,8 @@ static void glink_smem_rx_peek(struct qcom_glink_pipe *np,
 			       void *data, unsigned int offset, size_t count)
 {
 	struct glink_smem_pipe *pipe = to_smem_pipe(np);
+	unsigned char *bytedata = (unsigned char *)data;
+	struct qcom_glink_smem *smem = pipe->smem;
 	size_t len;
 	u32 tail;
 
@@ -113,12 +122,25 @@ static void glink_smem_rx_peek(struct qcom_glink_pipe *np,
 	if (tail >= pipe->native.length)
 		tail -= pipe->native.length;
 
+	/* Update the tail pointer and add a memory barrier to ensure
+	 * consistent read/write between the APPS and the remote.
+	 * This prevents the APPS from reading stale data from the FIFO.
+	 */
+	mb();
+
 	len = min_t(size_t, count, pipe->native.length - tail);
 	if (len)
 		memcpy_fromio(data, pipe->fifo + tail, len);
 
 	if (len != count)
 		memcpy_fromio(data + len, pipe->fifo, (count - len));
+
+	if (count == 1)
+		GLINK_SMEM_INFO("RX: remote-pid=%d, head=0x%x, tail=0x%x, [%02x]\n",
+			smem->remote_pid, le32_to_cpu(*pipe->head), tail, bytedata[0]);
+	if (count > 1)
+		GLINK_SMEM_INFO("RX: remote-pid=%d, head=0x%x, tail=0x%x, [%02x %02x]\n",
+			smem->remote_pid, le32_to_cpu(*pipe->head), tail, bytedata[1], bytedata[0]);
 }
 
 static void glink_smem_rx_advance(struct qcom_glink_pipe *np,
@@ -190,6 +212,7 @@ static void glink_smem_tx_write(struct qcom_glink_pipe *glink_pipe,
 				const void *data, size_t dlen)
 {
 	struct glink_smem_pipe *pipe = to_smem_pipe(glink_pipe);
+	struct qcom_glink_smem *smem = pipe->smem;
 	unsigned int head;
 
 	head = le32_to_cpu(*pipe->head);
@@ -205,6 +228,8 @@ static void glink_smem_tx_write(struct qcom_glink_pipe *glink_pipe,
 	/* Ensure ordering of fifo and head update */
 	wmb();
 
+	GLINK_SMEM_INFO("TX: remote-pid=%d, head=0x%x, tail=0x%x\n",
+			 smem->remote_pid, head, le32_to_cpu(*pipe->tail));
 	*pipe->head = cpu_to_le32(head);
 }
 
@@ -361,6 +386,9 @@ struct qcom_glink_smem *qcom_glink_smem_register(struct device *parent,
 		goto err_free_mbox;
 	}
 
+	if (!glink_ilctxt)
+		glink_ilctxt = ipc_log_context_create(GLINK_SMEM_IPC_LOG_PAGE_CNT,
+								"glink_smem", 0);
 	smem->glink = glink;
 
 	enable_irq(smem->irq);

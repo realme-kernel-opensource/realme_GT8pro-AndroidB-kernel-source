@@ -100,6 +100,7 @@ def register_modules(registry):
             "drivers/clk/qcom/reset.h",
             "drivers/clk/qcom/vdd-class.h",
             "drivers/clk/qcom/vdd-level.h",
+            "drivers/clk/qcom/gdsc.h",
         ],
         deps = [
             # do not sort
@@ -1012,5 +1013,43 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/clk/qcom/virtio_clk",
+        out = "virtio_clk.ko",
+        config = "CONFIG_VIRTIO_CLK",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/virtio_clk.c",
+            "drivers/clk/qcom/virtio_clk_common.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/virtio_clk_lemans",
+            "drivers/clk/qcom/virtio_clk_monaco",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/clk/qcom/virtio_clk_lemans",
+        out = "virtio_clk_lemans.ko",
+        config = "CONFIG_VIRTIO_CLK",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/virtio_clk_lemans.c",
+            "drivers/clk/qcom/virtio_clk_common.h",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/clk/qcom/virtio_clk_monaco",
+        out = "virtio_clk_monaco.ko",
+        config = "CONFIG_VIRTIO_CLK",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/virtio_clk_monaco.c",
+            "drivers/clk/qcom/virtio_clk_common.h",
         ],
     )

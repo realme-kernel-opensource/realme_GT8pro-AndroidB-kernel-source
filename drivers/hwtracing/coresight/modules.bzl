@@ -193,6 +193,9 @@ def register_modules(registry):
             "drivers/hwtracing/coresight/coresight-csr",
             "drivers/hwtracing/coresight/coresight",
         ],
+        copts = [
+            "-D__DISABLE_TRACE_MMIO__",
+        ],
     )
 
     registry.register(

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -145,9 +145,12 @@ static void gh_vm_cleanup(struct gh_vm *vm)
 	case GH_RM_VM_STATUS_EXITED:
 	case GH_RM_VM_STATUS_RUNNING:
 	case GH_RM_VM_STATUS_READY:
-		ret = gh_rm_unpopulate_hyp_res(vmid, vm->fw_name);
-		if (ret)
-			pr_warn("Failed to unpopulate hyp resources: %d\n", ret);
+		if (vm->is_populate_hyp_res) {
+			ret = gh_rm_unpopulate_hyp_res(vmid, vm->fw_name);
+			if (ret)
+				pr_warn("Failed to unpopulate hyp resources: %d\n", ret);
+		}
+
 		fallthrough;
 	case GH_RM_VM_STATUS_INIT:
 	case GH_RM_VM_STATUS_AUTH:
@@ -162,16 +165,12 @@ static void gh_vm_cleanup(struct gh_vm *vm)
 		if (ret)
 			pr_warn("Failed to free virtio resources : %d\n", ret);
 
-		if (vm->is_secure_vm) {
-			ret = gh_secure_vm_loader_reclaim_fw(vm);
-			if (ret)
-				pr_warn("Failed to reclaim mem VMID: %d: %d\n", vmid, ret);
-		}
 		fallthrough;
 	case GH_RM_VM_STATUS_LOAD:
-		ret = gh_rm_vm_dealloc_vmid(vmid);
+		ret = gh_secure_vm_loader_reclaim_fw(vm);
 		if (ret)
-			pr_warn("Failed to dealloc VMID: %d: %d\n", vmid, ret);
+			pr_warn("Failed to reclaim mem VMID: %d: %d\n", vmid,
+					ret);
 	}
 
 	vm->status.vm_status = GH_RM_VM_STATUS_NO_STATE;
@@ -246,20 +245,20 @@ void gh_destroy_vcpu(struct gh_vcpu *vcpu)
 
 int gh_destroy_vm(struct gh_vm *vm)
 {
-	int vcpu_id = 0, ret;
+	int vcpu_id, ret;
 
 	if (vm->status.vm_status == GH_RM_VM_STATUS_NO_STATE)
 		goto clean_vm;
 
 	ret = gh_stop_vm(vm);
-	if (ret)
+	/* When returen -ENODEV means VM early bring up fail, need to do error handing */
+	if (ret && ret != -ENODEV)
 		return ret;
 
-	while (vm->created_vcpus && vcpu_id < GH_MAX_VCPUS) {
+	for (vcpu_id = 0; vm->created_vcpus && vcpu_id < GH_MAX_VCPUS; vcpu_id++) {
 		if (!vm->vcpus[vcpu_id])
 			continue;
 		gh_destroy_vcpu(vm->vcpus[vcpu_id]);
-		vcpu_id++;
 	}
 
 	gh_vm_cleanup(vm);
@@ -752,6 +751,7 @@ long gh_vm_init(const char *fw_name, struct gh_vm *vm)
 		pr_err("Failed to populate resources %ld\n", ret);
 		return ret;
 	}
+	vm->is_populate_hyp_res = true;
 
 	if (vm->is_secure_vm) {
 		nr_vcpus = gh_get_nr_vcpus(vm->vmid);
