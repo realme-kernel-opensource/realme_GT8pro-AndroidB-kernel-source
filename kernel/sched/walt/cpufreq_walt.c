@@ -489,7 +489,7 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 				unsigned long *max)
 {
 	struct waltgov_policy *wg_policy = wg_cpu->wg_policy;
-	bool is_migration = wg_cpu->flags & WALT_CPUFREQ_IC_MIGRATION_BIT;
+	bool is_rollover = wg_cpu->flags & WALT_CPUFREQ_ROLLOVER_BIT;
 	bool is_rtg_boost = wg_cpu->walt_load.rtgb_active;
 	bool is_hiload;
 	bool employ_ed_boost = wg_cpu->walt_load.ed_active && sysctl_ed_boost_pct;
@@ -514,13 +514,12 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	if (wg_policy->avg_cap < wg_policy->hispeed_cond_util)
 		is_hiload = false;
 
-	if (is_hiload && !is_migration) {
+	if (is_hiload && is_rollover) {
 		wg_policy->hispeed_flag = true;
 		wg_cpu->hispeed_flag = true;
+		if (nl >= mult_frac(cpu_util, NL_RATIO, 100))
+			max_and_reason(util, *max, wg_cpu, CPUFREQ_REASON_NWD_BIT);
 	}
-
-	if (is_hiload && nl >= mult_frac(cpu_util, NL_RATIO, 100))
-		max_and_reason(util, *max, wg_cpu, CPUFREQ_REASON_NWD_BIT);
 
 	/*
 	 * For conservative PL, 2 cases may arise, if we have set
