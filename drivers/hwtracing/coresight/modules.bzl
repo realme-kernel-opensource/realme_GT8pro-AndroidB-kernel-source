@@ -186,6 +186,7 @@ def register_modules(registry):
             "drivers/hwtracing/coresight/coresight-priv.h",
             "drivers/hwtracing/coresight/coresight-stm.c",
             "drivers/hwtracing/coresight/coresight-trace-id.h",
+            "drivers/hwtracing/stm/stm.h",
         ],
         deps = [
             # do not sort
