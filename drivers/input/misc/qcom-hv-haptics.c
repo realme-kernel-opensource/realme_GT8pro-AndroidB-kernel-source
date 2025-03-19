@@ -371,9 +371,21 @@
 /* For HAP530_HV */
 #define HAP_PTN_VISENSE_ADC_CFG			0x47
 #define EN_VISENSE_PD_PROT_BIT			BIT(3)
+#define ADC_CLK_DIV_MASK			GENMASK(1, 0)
+/* definitions for VIsense ADC clock divider */
+#define ADC_CLK_RATE_4P8MHZ			0x00
+#define ADC_CLK_RATE_2P4MHZ			0x01
+#define ADC_CLK_RATE_1P2MHZ			0x02
+#define ADC_CLK_RATE_600KHZ			0x03
 
 #define HAP_PTN_CL_VDRIVE_CTL_REG		0x4A
 #define EN_CL_VDRIVE_BIT			BIT(7)
+#define VISENSE_DECIM_CTL_MASK			GENMASK(3, 2)
+#define VISENSE_DECIMATION_4			0x00
+#define VISENSE_DECIMATION_8			0x01
+#define VISENSE_DECIMATION_16			0x02
+#define VISENSE_DECIMATION_32			0x03
+
 /* End for HAP530_HV */
 
 #define HAP_PTN_PTRN2_CFG_REG			0x50
@@ -775,6 +787,7 @@ struct haptics_hw_config {
 	u32			preload_effect;
 	u32			fifo_empty_thresh;
 	u32			over_drive_mv;
+	u32			adc_clk_rate;
 	u16			rc_clk_cal_count;
 	enum drv_sig_shape	drv_wf;
 	bool			is_erm;
@@ -884,6 +897,13 @@ static const struct fifo_hw_info hap530_fifo = {
 	.fifo_empty_threshold	= 320,
 	.fifo_threshold_per_bit	= 64,
 	.fifo_empty_threshold_mask = HAP530_EMPTY_THRESH_MASK,
+};
+
+static const u8 adc_clk_to_decim_ctl[] = {
+	[ADC_CLK_RATE_4P8MHZ] = VISENSE_DECIMATION_32,
+	[ADC_CLK_RATE_2P4MHZ] = VISENSE_DECIMATION_16,
+	[ADC_CLK_RATE_1P2MHZ] = VISENSE_DECIMATION_8,
+	[ADC_CLK_RATE_600KHZ] = VISENSE_DECIMATION_4,
 };
 
 static struct haptics_chip *phapchip;
@@ -2073,6 +2093,33 @@ static int haptics_visense_handshake_enable(struct haptics_chip *chip, bool enab
 
 	chip->visense_hs_disabled = !enable;
 	return 0;
+}
+
+#define ADC_CLK_RATE_INVALID		0xFF
+static int haptics_init_visense_adc(struct haptics_chip *chip)
+{
+	u8 mask, val;
+	int rc;
+
+	if (chip->config.adc_clk_rate == ADC_CLK_RATE_INVALID)
+		return 0;
+
+	if (chip->hw_type < HAP530_HV) {
+		dev_warn(chip->dev, "ADC_CLK config is not supported in HAP revision 0x%x\n",
+			chip->hw_type);
+		return 0;
+	}
+
+	mask = ADC_CLK_DIV_MASK;
+	val = chip->config.adc_clk_rate;
+	rc = haptics_masked_write(chip, chip->ptn_addr_base, HAP_PTN_VISENSE_ADC_CFG, mask, val);
+	if (rc < 0)
+		return rc;
+
+	mask = VISENSE_DECIM_CTL_MASK;
+	val = FIELD_PREP(VISENSE_DECIM_CTL_MASK, adc_clk_to_decim_ctl[chip->config.adc_clk_rate]);
+	return haptics_masked_write(chip, chip->ptn_addr_base,
+					HAP_PTN_CL_VDRIVE_CTL_REG, mask, val);
 }
 
 static int haptics_wait_brake_complete(struct haptics_chip *chip)
@@ -4192,6 +4239,10 @@ static int haptics_init_visense_config(struct haptics_chip *chip)
 		chip->visense_enabled = val & HAP_PTN_VISENSE_EN_BIT;
 
 	if (chip->visense_enabled) {
+		rc = haptics_init_visense_adc(chip);
+		if (rc < 0)
+			return rc;
+
 		rc = haptics_visense_enable(chip, true);
 		if (rc < 0)
 			return rc;
@@ -5084,6 +5135,32 @@ static int haptics_parse_brake_dt(struct haptics_chip *chip)
 	return rc;
 }
 
+static int haptics_parse_visense_adc_dt(struct haptics_chip *chip)
+{
+	struct haptics_hw_config *config = &chip->config;
+	struct device_node *node = chip->dev->of_node;
+	int rc;
+
+	rc = of_property_read_u32(node, "qcom,adc-clk-rate", &config->adc_clk_rate);
+	if (rc < 0) {
+		if (rc != -EINVAL) {
+			dev_err(chip->dev, "read qcom,adc-clk-rate property failed, rc=%d\n", rc);
+			return rc;
+		}
+
+		config->adc_clk_rate = ADC_CLK_RATE_INVALID;
+		return 0;
+	}
+
+	if (config->adc_clk_rate > ADC_CLK_RATE_600KHZ) {
+		dev_err(chip->dev, "qcom,adc-clk-rate (%d) is not supported\n",
+				config->adc_clk_rate);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int haptics_parse_dt(struct haptics_chip *chip)
 {
 	struct haptics_hw_config *config = &chip->config;
@@ -5157,6 +5234,12 @@ static int haptics_parse_dt(struct haptics_chip *chip)
 		dev_err(chip->dev, "FIFO empty threshold (%d) should be less than %d\n",
 			config->fifo_empty_thresh, get_max_fifo_samples(chip));
 		rc = -EINVAL;
+		goto free_pbs;
+	}
+
+	rc = haptics_parse_visense_adc_dt(chip);
+	if (rc < 0) {
+		dev_err(chip->dev, "Parse device-tree for visense ADC failed, rc=%d\n", rc);
 		goto free_pbs;
 	}
 
