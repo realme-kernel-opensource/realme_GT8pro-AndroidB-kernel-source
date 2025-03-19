@@ -75,3 +75,4 @@ clk-rpmh.ko
 qcom-cpufreq-hw.ko
 dcc_v2.ko
 memory_dump_v2.ko
+sched-walt.ko

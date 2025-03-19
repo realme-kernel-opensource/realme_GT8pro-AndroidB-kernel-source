@@ -126,6 +126,7 @@ vienna_perf_config = {
     "CONFIG_RPMSG_QCOM_GLINK": "m",
     "CONFIG_RPMSG_QCOM_GLINK_SMEM": "m",
     "CONFIG_RTC_DRV_PM8XXX": "m",
+    "CONFIG_SCHED_WALT": "m",
     "CONFIG_SDW_DEBUGCC_VIENNA": "m",
     "CONFIG_SDW_GCC_VIENNA": "m",
     "CONFIG_SDW_GPUCC_VIENNA": "m",

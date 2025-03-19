@@ -16,6 +16,7 @@ vienna_consolidate_config = {
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_RUNTIME_TESTING_MENU": "y",
     "CONFIG_NOP_USB_XCEIV": "m",
+    "CONFIG_SCHED_WALT_DEBUG": "m",
     "CONFIG_USB_DWC3_MSM": "m",
     "CONFIG_USB_QCOM_EMU_PHY": "m",
     "CONFIG_USB_CONFIGFS_F_CCID": "m",
