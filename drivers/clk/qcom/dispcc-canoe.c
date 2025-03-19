@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -1335,7 +1335,7 @@ static struct clk_branch disp_cc_mdss_dptx0_aux_clk = {
 
 static struct clk_branch disp_cc_mdss_dptx0_crypto_clk = {
 	.halt_reg = 0x8068,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT,
 	.clkr = {
 		.enable_reg = 0x8068,
 		.enable_mask = BIT(0),
@@ -1461,7 +1461,7 @@ static struct clk_branch disp_cc_mdss_dptx1_aux_clk = {
 
 static struct clk_branch disp_cc_mdss_dptx1_crypto_clk = {
 	.halt_reg = 0x808c,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT,
 	.clkr = {
 		.enable_reg = 0x808c,
 		.enable_mask = BIT(0),
@@ -1587,7 +1587,7 @@ static struct clk_branch disp_cc_mdss_dptx2_aux_clk = {
 
 static struct clk_branch disp_cc_mdss_dptx2_crypto_clk = {
 	.halt_reg = 0x80a4,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT,
 	.clkr = {
 		.enable_reg = 0x80a4,
 		.enable_mask = BIT(0),
@@ -1695,7 +1695,7 @@ static struct clk_branch disp_cc_mdss_dptx3_aux_clk = {
 
 static struct clk_branch disp_cc_mdss_dptx3_crypto_clk = {
 	.halt_reg = 0x80bc,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT,
 	.clkr = {
 		.enable_reg = 0x80bc,
 		.enable_mask = BIT(0),
@@ -1875,7 +1875,7 @@ static struct clk_branch disp_cc_mdss_mdp_lut_clk = {
 
 static struct clk_branch disp_cc_mdss_mdp_ss_ip_clk = {
 	.halt_reg = 0x8030,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT,
 	.clkr = {
 		.enable_reg = 0x8030,
 		.enable_mask = BIT(0),
