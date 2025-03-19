@@ -973,7 +973,7 @@ static ssize_t store_anon_migrate(struct kobject *kobj,
 	return size;
 }
 
-#ifdef CONFIG_MEM_OFFLINE_ZONE_BALANCING
+#ifdef CONFIG_QCOM_MEM_OFFLINE_ZONE_BALANCING
 
 static unsigned long get_anon_movable_pages(
 			struct movable_zone_fill_control *fc,
