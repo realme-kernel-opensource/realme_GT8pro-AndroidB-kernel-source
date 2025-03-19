@@ -337,7 +337,7 @@ static void adsp_pds_disable(struct qcom_adsp *adsp, struct device **pds,
 
 static int adsp_shutdown_poll_decrypt(struct qcom_adsp *adsp)
 {
-	unsigned int retry_num = 65;
+	unsigned int retry_num = 50;
 	int ret;
 
 	do {
