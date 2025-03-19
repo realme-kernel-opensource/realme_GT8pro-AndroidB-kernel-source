@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/mhi.h>
@@ -183,7 +183,6 @@ static const struct mhi_device_id qcom_mhi_qrtr_id_table[] = {
 };
 MODULE_DEVICE_TABLE(mhi, qcom_mhi_qrtr_id_table);
 
-#if IS_ENABLED(CONFIG_QRTR_MHI_SUSPEND)
 static int __maybe_unused qcom_mhi_qrtr_pm_suspend_late(struct device *dev)
 {
 	struct mhi_device *mhi_dev = container_of(dev, struct mhi_device, dev);
@@ -223,17 +222,6 @@ static int __maybe_unused qcom_mhi_qrtr_pm_resume_early(struct device *dev)
 
 	return rc;
 }
-#else
-static int __maybe_unused qcom_mhi_qrtr_pm_suspend_late(struct device *dev)
-{
-	return 0;
-}
-
-static int __maybe_unused qcom_mhi_qrtr_pm_resume_early(struct device *dev)
-{
-	return 0;
-}
-#endif
 
 static const struct dev_pm_ops qcom_mhi_qrtr_pm_ops = {
 	SET_LATE_SYSTEM_SLEEP_PM_OPS(qcom_mhi_qrtr_pm_suspend_late,
