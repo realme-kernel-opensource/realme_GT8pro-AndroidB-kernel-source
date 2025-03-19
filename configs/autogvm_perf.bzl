@@ -94,6 +94,8 @@ autogvm_perf_config = {
     "CONFIG_INTERCONNECT_CLK": "m",
     "CONFIG_MMC_SDHCI_MSM": "m",
     "CONFIG_PCI_MSM": "m",
+    "CONFIG_REGULATOR_DEBUG_CONTROL": "m",
+    "CONFIG_REGULATOR_STUB": "m",
     "CONFIG_VIRTIO_REGULATOR": "m",
     "CONFIG_NOP_USB_XCEIV": "m",
     "CONFIG_USB_CONFIGFS_F_CDEV": "m",
