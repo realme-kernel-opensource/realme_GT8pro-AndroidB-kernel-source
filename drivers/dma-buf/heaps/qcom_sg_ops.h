@@ -8,7 +8,7 @@
  *	Andrew F. Davis <afd@ti.com>
  *
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _QCOM_SG_OPS_H
@@ -17,6 +17,7 @@
 #include <linux/scatterlist.h>
 #include <linux/dma-heap.h>
 #include <linux/device.h>
+#include <linux/kref.h>
 #include "qcom_dma_heap_priv.h"
 
 struct qcom_sg_buffer {
@@ -30,6 +31,7 @@ struct qcom_sg_buffer {
 	bool uncached;
 	struct mem_buf_vmperm *vmperm;
 	void (*free)(struct qcom_sg_buffer *buffer);
+	struct kref kref;
 };
 
 struct dma_heap_attachment {
@@ -38,6 +40,8 @@ struct dma_heap_attachment {
 	struct list_head list;
 	bool mapped;
 };
+
+void qcom_sg_buffer_init(struct qcom_sg_buffer *buffer);
 
 int qcom_sg_attach(struct dma_buf *dmabuf,
 		   struct dma_buf_attachment *attachment);
@@ -76,7 +80,9 @@ int qcom_sg_vmap(struct dma_buf *dmabuf, struct iosys_map *map);
 
 void qcom_sg_vunmap(struct dma_buf *dmabuf, struct iosys_map *map);
 
-void qcom_sg_release(struct dma_buf *dmabuf);
+void qcom_sg_release(struct kref *kref);
+
+void qcom_sg_dmabuf_release(struct dma_buf *dmabuf);
 
 struct mem_buf_vmperm *qcom_sg_lookup_vmperm(struct dma_buf *dmabuf);
 
