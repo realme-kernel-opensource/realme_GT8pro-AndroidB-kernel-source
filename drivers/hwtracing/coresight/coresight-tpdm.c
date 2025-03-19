@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/amba/bus.h>
@@ -17,6 +17,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/suspend.h>
 
 #include "coresight-priv.h"
 #include "coresight-common.h"
@@ -1498,6 +1499,29 @@ static void tpdm_remove(struct amba_device *adev)
 	coresight_unregister(drvdata->csdev);
 }
 
+#ifdef CONFIG_DEEPSLEEP
+static int tpdm_suspend(struct device *dev)
+{
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (pm_suspend_via_firmware())
+		coresight_disable_sysfs(drvdata->csdev);
+
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_HIBERNATION
+static int tpdm_freeze(struct device *dev)
+{
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev);
+
+	coresight_disable_sysfs(drvdata->csdev);
+
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_PM
 static int tpdm_runtime_suspend(struct device *dev)
 {
@@ -1521,6 +1545,12 @@ static int tpdm_runtime_resume(struct device *dev)
 #endif
 
 static const struct dev_pm_ops tpdm_dev_pm_ops = {
+#ifdef CONFIG_DEEPSLEEP
+	.suspend = tpdm_suspend,
+#endif
+#ifdef CONFIG_HIBERNATION
+	.freeze  = tpdm_freeze,
+#endif
 	SET_RUNTIME_PM_OPS(tpdm_runtime_suspend, tpdm_runtime_resume, NULL)
 
 };
