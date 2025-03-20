@@ -30,6 +30,7 @@ def define_autogvm():
             ]
 
             consolidate_build_img_opts = boot_image_opts(
+                boot_partition_size = 0x4000000,
                 kernel_vendor_cmdline_extras = kernel_vendor_cmdline_extras,
                 board_kernel_cmdline_extras = board_kernel_cmdline_extras,
                 board_bootconfig_extras = board_bootconfig_extras,
