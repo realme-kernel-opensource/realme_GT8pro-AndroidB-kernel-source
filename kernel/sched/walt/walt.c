@@ -694,7 +694,9 @@ __cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *rea
 {
 	u64 util;
 	struct rq *rq = cpu_rq(cpu);
-	unsigned long capacity = capacity_orig_of(cpu);
+	struct walt_sched_cluster *cluster = cpu_cluster(cpu);
+	unsigned long capacity = cluster_in_smart_lrpb(cluster) ?
+					cluster->pre_smart_freq_capacity : capacity_orig_of(cpu);
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
 	util = scale_time_to_util(freq_policy_load(rq, reason, trace));
@@ -785,10 +787,12 @@ cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *reaso
 	struct walt_cpu_load wl_other = {0};
 	struct walt_cpu_load wl_prime = {0};
 	unsigned long util = 0, util_other = 0, util_prime = 0;
-	unsigned long capacity = capacity_orig_of(cpu);
 	int i, mpct_other, mpct_prime;
 	unsigned long max_nl_other = 0, max_pl_other = 0;
 	unsigned long max_nl_prime = 0, max_pl_prime = 0;
+	struct walt_sched_cluster *cluster = cpu_cluster(cpu);
+	unsigned long capacity = cluster_in_smart_lrpb(cluster) ?
+					cluster->pre_smart_freq_capacity : capacity_orig_of(cpu);
 
 	util =  __cpu_util_freq_walt(cpu, walt_load, reason, true);
 
@@ -4209,6 +4213,7 @@ void update_cpu_capacity_helper(int cpu)
 
 	old = capacity_orig_of(cpu);
 	wrq->cpu_capacity_orig = min(fmax_capacity, thermal_cap);
+	cluster->pre_smart_freq_capacity = thermal_cap;
 
 	if (old != wrq->cpu_capacity_orig)
 		trace_update_cpu_capacity(cpu, fmax_capacity, wrq->cpu_capacity_orig);
