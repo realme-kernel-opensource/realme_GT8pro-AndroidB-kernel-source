@@ -69,7 +69,6 @@ struct qmsgq_gh_recv_buf {
  * @item: list item of all vm devices
  * @dev: device from platform_device.
  * @peer_cid: remote cid
- * @master: primary vm indicator
  * @msgq_label: msgq label
  * @msgq_hdl: msgq handle
  * @rm_nb: notifier block for vm status from rm
@@ -84,7 +83,6 @@ struct qmsgq_gh_device {
 	struct qmsgq_endpoint ep;
 
 	unsigned int peer_cid;
-	bool master;
 	enum gh_msgq_label msgq_label;
 	void *msgq_hdl;
 	struct notifier_block rm_nb;
@@ -410,6 +408,34 @@ static int qmsgq_gh_rm_cb(struct notifier_block *nb, unsigned long cmd, void *da
 	return NOTIFY_DONE;
 }
 
+static int qmsgq_gh_peer_lookup(struct qmsgq_gh_device *qdev)
+{
+	struct device_node *node;
+	u32 peer_vmid;
+	int rc;
+
+	node = of_get_child_by_name(of_find_node_by_path("/hypervisor"),
+				    "msgqsock-msgq-pair");
+	if (!node) {
+		dev_err(qdev->dev, "failed to get msgqsock-msgq-pair node\n");
+		return -EINVAL;
+	}
+
+	/* The peer_vimid indicates both VMs are ready to communicate */
+	rc = of_property_read_u32(node, "qcom,peer-vmid", &peer_vmid);
+	if (!rc) {
+		rc = qmsgq_gh_msgq_start(qdev);
+		if (rc) {
+			dev_err(qdev->dev, "msgq start failed rc[%d]\n", rc);
+			of_node_put(node);
+			return rc;
+		}
+	}
+
+	of_node_put(node);
+	return 0;
+}
+
 static int qmsgq_gh_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -449,24 +475,24 @@ static int qmsgq_gh_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-	qdev->master = of_property_read_bool(np, "qcom,master");
-	if (qdev->master) {
-		qdev->rm_nb.notifier_call = qmsgq_gh_rm_cb;
-		gh_rm_register_notifier(&qdev->rm_nb);
-	} else {
-		rc = qmsgq_gh_msgq_start(qdev);
-	}
-	qmsgq_endpoint_register(&qdev->ep);
+	qdev->rm_nb.notifier_call = qmsgq_gh_rm_cb;
+	gh_rm_register_notifier(&qdev->rm_nb);
 
-	return rc;
+	rc = qmsgq_gh_peer_lookup(qdev);
+	if (rc) {
+		gh_rm_unregister_notifier(&qdev->rm_nb);
+		return rc;
+	}
+
+	qmsgq_endpoint_register(&qdev->ep);
+	return 0;
 }
 
 static void qmsgq_gh_remove(struct platform_device *pdev)
 {
 	struct qmsgq_gh_device *qdev = dev_get_drvdata(&pdev->dev);
 
-	if (qdev->master)
-		gh_rm_unregister_notifier(&qdev->rm_nb);
+	gh_rm_unregister_notifier(&qdev->rm_nb);
 
 	if (qdev->rx_thread)
 		kthread_stop(qdev->rx_thread);
