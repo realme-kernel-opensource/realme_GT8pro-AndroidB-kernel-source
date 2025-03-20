@@ -200,10 +200,12 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 	if (q6v5->ssr_subdev)
 		qcom_notify_early_ssr_clients(q6v5->ssr_subdev);
 
-	if (q6v5->rproc->recovery_disabled)
+	if (q6v5->rproc->recovery_disabled) {
 		queue_work(system_unbound_wq, &q6v5->crash_handler);
-	else
+	} else {
+		__pm_stay_awake(q6v5->ws);
 		rproc_report_crash(q6v5->rproc, RPROC_WATCHDOG);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -246,10 +248,12 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	if (q6v5->ssr_subdev)
 		qcom_notify_early_ssr_clients(q6v5->ssr_subdev);
 
-	if (q6v5->rproc->recovery_disabled)
+	if (q6v5->rproc->recovery_disabled) {
 		queue_work(system_unbound_wq, &q6v5->crash_handler);
-	else
+	} else {
+		__pm_stay_awake(q6v5->ws);
 		rproc_report_crash(q6v5->rproc, RPROC_FATAL_ERROR);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -262,6 +266,9 @@ static irqreturn_t q6v5_ready_interrupt(int irq, void *data)
 
 	if (q6v5->early_boot && !completion_done(&q6v5->subsys_booted))
 		complete(&q6v5->subsys_booted);
+
+	if (!q6v5->rproc->recovery_disabled)
+		__pm_relax(q6v5->ws);
 
 	return IRQ_HANDLED;
 }
@@ -478,6 +485,11 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 
 	init_completion(&q6v5->start_done);
 	init_completion(&q6v5->stop_done);
+	q6v5->ws = wakeup_source_register(q6v5->dev, "remoteproc SSR wake lock");
+	if (!q6v5->ws) {
+		dev_err(&pdev->dev, "failed to allocate wakeup source\n");
+		return -ENOMEM;
+	}
 
 	q6v5->wdog_irq = platform_get_irq_byname(pdev, "wdog");
 	if (q6v5->wdog_irq < 0)
@@ -583,6 +595,7 @@ EXPORT_SYMBOL_GPL(qcom_q6v5_init);
  */
 void qcom_q6v5_deinit(struct qcom_q6v5 *q6v5)
 {
+	wakeup_source_unregister(q6v5->ws);
 	qmp_put(q6v5->qmp);
 }
 EXPORT_SYMBOL_GPL(qcom_q6v5_deinit);

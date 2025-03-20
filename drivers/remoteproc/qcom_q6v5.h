@@ -67,6 +67,7 @@ struct qcom_q6v5 {
 
 	bool always_ssr;
 	struct string_node *always_ssr_reasons;
+	struct wakeup_source *ws;
 };
 
 int ping_subsystem(struct qcom_q6v5 *q6v5);
