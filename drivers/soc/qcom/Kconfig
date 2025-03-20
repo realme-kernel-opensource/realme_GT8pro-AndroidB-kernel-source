@@ -1001,4 +1001,12 @@ config QCOM_CPUSS_TELEMETRY
 	  exposed in shared memory location from CPUCP. This data is the LPM statistics
 	  of cpu cores, clusters and cpu subsystem. And the data is exposed via debugfs
 	  nodes for utilization.
+
+config QCOM_PMIC_ECID
+	tristate "QCOM PMIC ECID driver"
+	help
+	  This driver provides information on PMIC chipset ECID (Exclusive Chip Identifier).
+	  This driver reads the chipset ECID details from the respective address and
+	  exposes the details via sysfs interface.
+	  This helps in identification of PMIC part information.
 endmenu

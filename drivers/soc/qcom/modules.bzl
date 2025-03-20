@@ -1347,3 +1347,13 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom-pmic-ecid",
+        out = "qcom-pmic-ecid.ko",
+        config = "CONFIG_QCOM_PMIC_ECID",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom-pmic-ecid.c",
+        ],
+    )

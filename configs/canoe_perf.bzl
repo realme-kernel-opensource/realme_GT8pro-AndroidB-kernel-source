@@ -207,6 +207,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_PDR_HELPERS": "m",
     "CONFIG_QCOM_PDR_MSG": "m",
     "CONFIG_QCOM_PIL_INFO": "m",
+    "CONFIG_QCOM_PMIC_ECID": "m",
     "CONFIG_QCOM_PMU_LIB": "m",
     "CONFIG_QCOM_POWER_TELEMETRY_FRAMEWORK": "m",
     "CONFIG_QCOM_POWER_TELEMETRY_HW": "m",
