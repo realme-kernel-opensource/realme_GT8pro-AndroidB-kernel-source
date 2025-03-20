@@ -192,10 +192,7 @@ static const struct __ufs_qcom_bw_table {
 static struct ufs_qcom_host *ufs_qcom_hosts[MAX_UFS_QCOM_HOSTS];
 
 static void ufs_qcom_get_default_testbus_cfg(struct ufs_qcom_host *host);
-static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
-						       u32 clk_1us_cycles,
-						       u32 clk_40ns_cycles,
-						       bool scale_up);
+static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, unsigned long freq);
 static void ufs_qcom_parse_limits(struct ufs_qcom_host *host);
 static void ufs_qcom_parse_lpm(struct ufs_qcom_host *host);
 static void ufs_qcom_parse_wb(struct ufs_qcom_host *host);
@@ -1269,8 +1266,7 @@ static int ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(struct ufs_hba *hba)
 {
 	struct ufs_clk_info *clki;
 	struct list_head *head = &hba->clk_list_head;
-	u32 max_freq = 0;
-	int err = 0;
+	unsigned long max_freq = 0;
 
 	list_for_each_entry(clki, head, list) {
 		if (!IS_ERR_OR_NULL(clki->clk) &&
@@ -1280,32 +1276,7 @@ static int ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(struct ufs_hba *hba)
 		}
 	}
 
-	switch (max_freq) {
-	case 403000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 403, 16, true);
-		break;
-	case 300000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 300, 12, true);
-		break;
-	case 201500000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 202, 8, true);
-		break;
-	case 150000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 150, 6, true);
-		break;
-	case 100000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 100, 4, true);
-		break;
-	default:
-		err = -EINVAL;
-		break;
-	}
-
-	if (err) {
-		dev_err(hba->dev, "unipro max_freq=%u entry missing\n", max_freq);
-		dump_stack();
-	}
-	return err;
+	return ufs_qcom_core_clk_ctrl(hba, max_freq);
 }
 
 /**
@@ -1445,8 +1416,7 @@ static int ufs_qcom_link_startup_notify(struct ufs_hba *hba,
 
 		ufs_qcom_phy_ctrl_rx_linecfg(phy, true);
 
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(
-			hba);
+		err = ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(hba);
 		if (err)
 			goto out;
 
@@ -3993,10 +3963,8 @@ static void ufs_qcom_exit(struct ufs_hba *hba)
 	phy_exit(host->generic_phy);
 }
 
-static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
-						       u32 clk_1us_cycles,
-						       u32 clk_40ns_cycles,
-						       bool scale_up)
+static int __ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, u32 clk_1us_cycles,
+				    u32 clk_40ns_cycles)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int err;
@@ -4021,12 +3989,6 @@ static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
 
 	core_clk_ctrl_reg &= ~(mask << offset);
 	core_clk_ctrl_reg |= clk_1us_cycles << offset;
-
-	/* Clear CORE_CLK_DIV_EN */
-	if (scale_up && !host->disable_lpm)
-		core_clk_ctrl_reg |= DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT;
-	else
-		core_clk_ctrl_reg &= ~DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT;
 
 	err = ufshcd_dme_set(hba,
 			     UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
@@ -4057,6 +4019,52 @@ static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
 	return err;
 }
 
+static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, unsigned long freq)
+{
+	u32 clk_1us_cycles, clk_40ns_cycles;
+	int ret = 0;
+
+	switch (freq) {
+	case 403000000:
+		clk_40ns_cycles = 16;
+		break;
+	case 300000000:
+		clk_40ns_cycles = 12;
+		break;
+	case 201500000:
+		clk_40ns_cycles = 8;
+		break;
+	case 150000000:
+		clk_40ns_cycles = 6;
+		break;
+	case 100000000:
+		clk_40ns_cycles = 4;
+		break;
+	case 75000000:
+		clk_40ns_cycles = 3;
+		break;
+	case 37500000:
+		clk_40ns_cycles = 2;
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	if (ret) {
+		dev_err(hba->dev, "freq %lu entry missing\n", freq);
+		dump_stack();
+		return ret;
+	}
+
+	clk_1us_cycles = freq_ceil(freq, (1000 * 1000));
+	ret = __ufs_qcom_core_clk_ctrl(hba, clk_1us_cycles, clk_40ns_cycles);
+	if (ret)
+		dev_err(hba->dev, "failed to set core clk ctrl for freq %lu, err %d\n", freq, ret);
+
+	return ret;
+}
+
 static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba)
 {
 	int err;
@@ -4084,33 +4092,16 @@ static int ufs_qcom_clk_scale_up_post_change(struct ufs_hba *hba)
 
 static int ufs_qcom_clk_scale_down_pre_change(struct ufs_hba *hba)
 {
-	int err;
-	u32 core_clk_ctrl_reg;
-
-	err = ufshcd_dme_get(hba,
-			    UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
-			    &core_clk_ctrl_reg);
-
-	/* make sure CORE_CLK_DIV_EN is cleared */
-	if (!err &&
-	    (core_clk_ctrl_reg & DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT)) {
-		core_clk_ctrl_reg &= ~DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT;
-		err = ufshcd_dme_set(hba,
-				    UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
-				    core_clk_ctrl_reg);
-	}
-
-	return err;
+	return 0;
 }
 
 static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufs_pa_layer_attr *attr = &host->dev_req_params;
-	int err = 0;
 	struct ufs_clk_info *clki;
 	struct list_head *head = &hba->clk_list_head;
-	u32 curr_freq = 0;
+	unsigned long curr_freq = 0;
 	unsigned long flags;
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
@@ -4128,23 +4119,7 @@ static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
 		}
 	}
 
-	switch (curr_freq) {
-	case 37500000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 38, 2, false);
-		break;
-	case 75000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 75, 3, false);
-		break;
-	case 100000000:
-		err = ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(hba, 100, 4, false);
-		break;
-	default:
-		err = -EINVAL;
-		dev_err(hba->dev, "unipro curr_freq=%u entry missing\n", curr_freq);
-		break;
-	}
-
-	return err;
+	return ufs_qcom_core_clk_ctrl(hba, curr_freq);
 }
 
 static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
@@ -4996,10 +4971,17 @@ static void ufs_qcom_config_scaling_param(struct ufs_hba *hba,
 					struct devfreq_dev_profile *p,
 					struct devfreq_simple_ondemand_data *d)
 {
+	struct device *dev = hba->dev;
+	struct device_node *np = dev->of_node;
+
 	p->polling_ms = 60;
 	p->timer = DEVFREQ_TIMER_DELAYED;
 	d->upthreshold = 70;
 	d->downdifferential = 65;
+
+	of_property_read_u32(np, "qcom,devfreq_polling_ms", &p->polling_ms);
+	of_property_read_u32(np, "qcom,devfreq_upthreshold", &d->upthreshold);
+	of_property_read_u32(np, "qcom,devfreq_downdifferential", &d->downdifferential);
 
 	hba->clk_scaling.suspend_on_no_request = true;
 }
