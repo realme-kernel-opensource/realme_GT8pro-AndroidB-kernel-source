@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/memory.h>
@@ -980,7 +980,7 @@ static unsigned long get_anon_movable_pages(
 			unsigned long start_pfn,
 			unsigned long end_pfn, struct list_head *list)
 {
-	int found = 0, pfn, ret;
+	int found = 0, pfn;
 	int limit = min_t(int, fc->target, (int)pageblock_nr_pages);
 
 	fc->nr_migrate_pages = 0;
@@ -1003,7 +1003,7 @@ static unsigned long get_anon_movable_pages(
 			unsigned long freepage_order;
 
 			freepage_order = READ_ONCE(page_private(page));
-			if (freepage_order > 0 && freepage_order < MAX_ORDER)
+			if (freepage_order > 0 && freepage_order < MAX_PAGE_ORDER)
 				pfn += (1 << page_private(page)) - 1;
 			continue;
 		}
@@ -1120,10 +1120,11 @@ out:
 	spin_unlock_irqrestore(&fc->zone->lock, flags);
 }
 
-static struct page *movable_page_alloc(struct page *page, unsigned long data)
+static struct folio *movable_page_alloc(struct folio *folio, unsigned long data)
 {
 	struct movable_zone_fill_control *fc;
 	struct page *freepage;
+	struct folio *freefolio;
 
 	fc = (struct movable_zone_fill_control *)data;
 	if (list_empty(&fc->freepages)) {
@@ -1133,15 +1134,17 @@ static struct page *movable_page_alloc(struct page *page, unsigned long data)
 	}
 
 	freepage = list_entry(fc->freepages.next, struct page, lru);
+	freefolio = page_folio(freepage);
 	list_del(&freepage->lru);
 	fc->nr_free_pages--;
 
-	return freepage;
+	return freefolio;
 }
 
-static void movable_page_free(struct page *page, unsigned long data)
+static void movable_page_free(struct folio *folio, unsigned long data)
 {
 	struct movable_zone_fill_control *fc;
+	struct page *page = folio_page(folio, 0);
 
 	fc = (struct movable_zone_fill_control *)data;
 	list_add(&page->lru, &fc->freepages);
