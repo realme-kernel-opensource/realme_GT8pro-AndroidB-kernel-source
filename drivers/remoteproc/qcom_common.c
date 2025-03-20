@@ -588,7 +588,7 @@ void qcom_remove_smd_subdev(struct rproc *rproc, struct qcom_rproc_subdev *smd)
 }
 EXPORT_SYMBOL_GPL(qcom_remove_smd_subdev);
 
-static struct qcom_ssr_subsystem *qcom_ssr_get_subsys(const char *name)
+struct qcom_ssr_subsystem *qcom_ssr_get_subsys(const char *name)
 {
 	struct qcom_ssr_subsystem *info;
 
@@ -614,6 +614,7 @@ out:
 	mutex_unlock(&qcom_ssr_subsys_lock);
 	return info;
 }
+EXPORT_SYMBOL_GPL(qcom_ssr_get_subsys);
 
 void *qcom_register_early_ssr_notifier(const char *name, struct notifier_block *nb)
 {
@@ -700,6 +701,21 @@ int qcom_unregister_ssr_notifier(void *notify, struct notifier_block *nb)
 	return srcu_notifier_chain_unregister(notify, nb);
 }
 EXPORT_SYMBOL_GPL(qcom_unregister_ssr_notifier);
+
+int qcom_notify_ssr_clients(struct qcom_ssr_subsystem *info, int state,
+			struct qcom_ssr_notify_data *data)
+{
+	struct qcom_ssr_subsystem *subsys = info;
+
+	if (!subsys)
+		return -EINVAL;
+
+	if (state < 0)
+		return -EINVAL;
+
+	return srcu_notifier_call_chain(&info->notifier_list, state, data);
+}
+EXPORT_SYMBOL_GPL(qcom_notify_ssr_clients);
 
 static inline void notify_ssr_clients(struct qcom_rproc_ssr *ssr, struct qcom_ssr_notify_data *data)
 {
@@ -925,7 +941,7 @@ static void rproc_recovery_notifier(void *data, struct rproc *rproc)
 		(rproc_recovery_set_fn)(rproc);
 }
 
-static int __init qcom_common_init(void)
+int qcom_common_init(void)
 {
 	int ret = 0;
 
@@ -975,7 +991,7 @@ remove_kobject:
 }
 module_init(qcom_common_init);
 
-static void __exit qcom_common_exit(void)
+void qcom_common_exit(void)
 {
 	sysfs_remove_file(sysfs_kobject, &both_coredumps_attr.attr);
 	sysfs_remove_file(sysfs_kobject, &shutdown_requested_attr.attr);
