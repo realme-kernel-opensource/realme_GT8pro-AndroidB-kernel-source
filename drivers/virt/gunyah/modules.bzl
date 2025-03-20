@@ -227,3 +227,20 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/virt/gunyah/gh_vcpu_mgr",
+        out = "gh_vcpu_mgr.ko",
+        config = "CONFIG_GH_VCPU_MGR",
+        srcs = [
+            # do not sort
+            "drivers/virt/gunyah/gh_vcpu_mgr.c",
+            "drivers/virt/gunyah/gh_vcpu_mgr.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )

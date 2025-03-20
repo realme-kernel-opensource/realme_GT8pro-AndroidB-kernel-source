@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -420,8 +420,11 @@ void *gh_msgq_register(int label)
 	struct gh_msgq_cap_table *cap_table_entry = NULL, *tmp_entry;
 	struct gh_msgq_desc *client_desc;
 
-	if (label < 0)
+	if (label < GUNYAH_QCOM_MIN_MSGQ || label >= GH_MSGQ_LABEL_MAX) {
+		pr_err("MSGQ label needs to be within %d and %d\n",
+			GUNYAH_QCOM_MIN_MSGQ, GH_MSGQ_LABEL_MAX);
 		return ERR_PTR(-EINVAL);
+	}
 
 	spin_lock(&gh_msgq_cap_list_lock);
 	list_for_each_entry(tmp_entry, &gh_msgq_cap_list, entry) {
@@ -513,7 +516,7 @@ int gh_msgq_populate_cap_info(int label, u64 cap_id, int direction, int irq)
 	struct gh_msgq_cap_table *cap_table_entry = NULL, *tmp_entry;
 	int ret;
 
-	if (label < 0) {
+	if (label < GUNYAH_QCOM_MIN_MSGQ) {
 		pr_err("%s: Invalid label passed\n", __func__);
 		return -EINVAL;
 	}

@@ -24,6 +24,7 @@
 #include <linux/gunyah/gh_msgq.h>
 #include <linux/gunyah/gh_common.h>
 #include <linux/gunyah/gh_rm_drv.h>
+#include <linux/gunyah/gh_vm.h>
 #include <linux/gunyah.h>
 #include <linux/vmalloc.h>
 
@@ -79,7 +80,7 @@ const static struct {
 	{GH_PRIMARY_VM, "pvm", ""},
 	{GH_TRUSTED_VM, "trustedvm", "qcom,trustedvm"},
 	{GH_CPUSYS_VM, "cpusys_vm", "qcom,cpusysvm"},
-	{GH_OEM_VM, "oem_vm", "qcom,oemvm"},
+	{GH_OEM_VM, "oemvm", "qcom,oemvm"},
 };
 
 static gh_virtio_mmio_cb_t gh_virtio_mmio_fn;
@@ -144,6 +145,28 @@ int gh_rm_unregister_notifier(struct notifier_block *nb)
 	return srcu_notifier_chain_unregister(&gh_rm_notifier, nb);
 }
 EXPORT_SYMBOL_GPL(gh_rm_unregister_notifier);
+
+static void gh_rm_complete_vm_setup(unsigned long action, void *msg)
+{
+	enum gh_vm_names vm_name;
+	int ret;
+
+	if (action == GH_RM_NOTIF_VM_STATUS) {
+		struct gh_rm_notif_vm_status_payload *payload = msg;
+
+		if (payload->vmid > QCOM_SCM_MAX_MANAGED_VMID)
+			return;
+		if (payload->vm_status == GH_RM_VM_STATUS_READY) {
+			ret = gh_rm_get_vm_name(payload->vmid, &vm_name);
+			if (ret < 0) {
+				pr_err("Failed to get vm name for vmid = %d ret = %d\n",
+						payload->vmid, ret);
+				return;
+			}
+			gh_complete_vm_setup(vm_name);
+		}
+	}
+}
 
 static size_t gh_rm_exited_notif_size(void *payload)
 {
@@ -217,6 +240,7 @@ static void gh_rm_notif_work(struct work_struct *notify_work)
 	struct gh_rm_notif_work *notify = container_of(notify_work, struct gh_rm_notif_work, work);
 
 	srcu_notifier_call_chain(&gh_rm_notifier, notify->action, notify->msg);
+	gh_rm_complete_vm_setup(notify->action, notify->msg);
 	vfree(notify->msg);
 	kfree(notify);
 }
@@ -375,6 +399,8 @@ int gh_rm_get_vm_id_info(gh_vmid_t vmid)
 			ret = -EINVAL;
 		} else {
 			ret = gh_update_vm_prop_table(vm_name, &vm_prop);
+			if (ret == -EEXIST)
+				ret = 0;
 		}
 	}
 
@@ -389,6 +415,20 @@ gh_rm_put_irq(struct gh_vm_get_hyp_res_resp_entry *res_entry, int irq)
 	if (!gh_put_irq(irq))
 		gh_rm_vm_irq_release(res_entry->virq_handle);
 
+}
+
+static inline bool is_valid_dbl_msgq(struct gh_vm_get_hyp_res_resp_entry *res_entry)
+{
+	if ((res_entry->res_type == GH_RM_RES_TYPE_MQ_TX ||
+		res_entry->res_type == GH_RM_RES_TYPE_MQ_RX) &&
+		(res_entry->resource_label < GUNYAH_QCOM_MIN_MSGQ))
+		return false;
+	else if ((res_entry->res_type == GH_RM_RES_TYPE_DB_TX ||
+		res_entry->res_type == GH_RM_RES_TYPE_DB_RX) &&
+		(res_entry->resource_label < GUNYAH_QCOM_MIN_BELL))
+		return false;
+	else
+		return true;
 }
 
 /**
@@ -412,6 +452,8 @@ int gh_rm_unpopulate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 		return PTR_ERR(res_entries);
 
 	for (i = 0; i < n_res; i++) {
+		if (!is_valid_dbl_msgq(&res_entries[i]))
+			continue;
 		label = res_entries[i].resource_label;
 		cap_id = (u64) res_entries[i].cap_id_high << 32 |
 				res_entries[i].cap_id_low;
@@ -479,6 +521,8 @@ static int gh_rm_unpopulate_target_hyp_res(struct gh_vm_get_hyp_res_resp_entry *
 	gh_capid_t cap_id;
 
 	for (i = 0; i < n_target_res; i++) {
+		if (!is_valid_dbl_msgq(&res_entries[i]))
+			continue;
 		label = res_entries[i].resource_label;
 		cap_id = (u64) res_entries[i].cap_id_high << 32 |
 				res_entries[i].cap_id_low;
@@ -585,11 +629,14 @@ int gh_rm_populate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 			cap_id = (u64) res_entries[i].cap_id_high << 32 |
 					res_entries[i].cap_id_low;
 			label = res_entries[i].resource_label;
-			if (gh_vcpu_affinity_set_fn)
+			if (gh_vcpu_affinity_set_fn) {
 				do {
 					ret = (*gh_vcpu_affinity_set_fn)(
 						vmid, label, cap_id, linux_irq);
 				} while (ret == -EAGAIN);
+			} else {
+				gh_rm_put_irq(&res_entries[i], linux_irq);
+			}
 			if (ret < 0)
 				goto out;
 		}
@@ -611,6 +658,8 @@ int gh_rm_populate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 			res_entries[i].size_high,
 			res_entries[i].size_low);
 
+		if (!is_valid_dbl_msgq(&res_entries[i]))
+			continue;
 		ret = linux_irq = gh_rm_get_irq(&res_entries[i]);
 		if (ret < 0)
 			goto out;
@@ -899,7 +948,7 @@ static void gh_rm_get_svm_res_work_fn(struct work_struct *work)
 		gh_rm_populate_hyp_res(vmid, NULL);
 }
 
-static int gh_vm_status_nb_handler(struct notifier_block *this,
+static int gh_rm_status_nb_handler(struct notifier_block *this,
 					unsigned long cmd, void *data)
 {
 	struct gh_rm_notif_vm_status_payload *vm_status_payload = data;
@@ -908,7 +957,7 @@ static int gh_vm_status_nb_handler(struct notifier_block *this,
 	u8 vm_status = vm_status_payload->vm_status;
 	int ret;
 
-	if (cmd != GH_RM_NOTIF_VM_STATUS)
+	if (cmd != GH_RM_NOTIF_VM_STATUS || vm_status_payload->vmid > QCOM_SCM_MAX_MANAGED_VMID)
 		return NOTIFY_DONE;
 
 	switch (vm_status) {
@@ -940,6 +989,27 @@ static int gh_vm_status_nb_handler(struct notifier_block *this,
 	case GH_RM_VM_STATUS_RUNNING:
 		pr_err("vm(%d) started running\n", vm_status_payload->vmid);
 		break;
+	case GH_RM_VM_STATUS_EXITED:
+		pr_err("vm(%d) exited\n", vm_status_payload->vmid);
+		ret = gh_rm_get_vm_name(vm_status_payload->vmid, &vm_name);
+		if (ret < 0) {
+			pr_err("Failed to get vm name for vmid = %d ret = %d\n",
+					vm_status_payload->vmid, ret);
+			return NOTIFY_DONE;
+		}
+		ret = gh_rm_get_vminfo(vm_name, &vm_info);
+		if (ret < 0)
+			pr_err("Failed to get vminfo of vmname = %u\n", vm_name);
+
+		pr_err("unpopulating vm(%d) exited\n", vm_status_payload->vmid);
+		ret = gh_rm_unpopulate_hyp_res(vm_status_payload->vmid,
+				    vm_info.name);
+		if (ret < 0)
+			pr_err("Failed to unpopulate hyp resources for vmid = %d vmname = %u ret = %d\n",
+				vm_status_payload->vmid, vm_name, ret);
+
+		gh_complete_vm_cleanup(vm_name);
+		break;
 	default:
 		pr_err("Unknown notification receieved for vmid = %d vm_status = %d\n",
 				vm_status_payload->vmid, vm_status);
@@ -948,11 +1018,84 @@ static int gh_vm_status_nb_handler(struct notifier_block *this,
 	return NOTIFY_DONE;
 }
 
-
-static struct notifier_block gh_vm_status_nb = {
-	.notifier_call = gh_vm_status_nb_handler
+/*
+ * Clients need to use VM IDs that is setup by this call back.
+ * Assign highest priority to RM core so that all clients listening
+ * to RM notification receives it after this driver completes the setup.
+ */
+static struct notifier_block gh_rm_status_nb = {
+	.notifier_call = gh_rm_status_nb_handler,
+	.priority = INT_MAX,
 };
 
+#ifdef CONFIG_QTVM_WITH_AVF
+static int gh_vm_status_nb_handler(struct notifier_block *this,
+					unsigned long cmd, void *data)
+{
+	struct gh_vminfo vm_info = {0};
+	enum gh_vm_names vm_name;
+	gh_vmid_t *vmid = data;
+	int ret;
+
+	switch (cmd) {
+	case GH_VM_BEFORE_POWERUP: {
+		ret = gh_rm_get_vm_id_info(*vmid);
+		if (ret < 0) {
+			pr_err("Failed to get vmid info for vmid = %d ret = %d\n",
+				*vmid, ret);
+			return NOTIFY_DONE;
+		}
+		ret = gh_rm_get_vm_name(*vmid, &vm_name);
+		if (ret < 0) {
+			pr_err("Failed to get vm name for vmid = %d ret = %d\n",
+			       *vmid, ret);
+			return NOTIFY_DONE;
+		}
+
+		/*
+		 * RM notifictions are running asynchronously to this notifier chain. We need
+		 * vm_mgr to wait till all the clients have completed their setup as part of
+		 * READY RM notification. Completion is set by RM once the RM notifier call back
+		 * is complete. Once this happens, vm_mgr will continue with the rest of the
+		 * setup of the VM eventually starting it.
+		 */
+		gh_wait_for_vm_setup(vm_name);
+		break;
+	}
+	case GH_VM_EXITED: {
+		ret = gh_rm_get_vm_name(*vmid, &vm_name);
+		if (ret < 0) {
+			pr_err("Failed to get vm name for vmid = %d ret = %d\n", *vmid, ret);
+			return NOTIFY_DONE;
+		}
+		ret = gh_rm_get_vminfo(vm_name, &vm_info);
+		if (ret < 0) {
+			pr_err("Failed to get vminfo of vmname = %u\n", vm_name);
+			return NOTIFY_DONE;
+		}
+
+		gh_wait_for_vm_cleanup(vm_name);
+		break;
+	}
+	case GH_VM_POWEROFF:
+		gh_reset_vm_prop_table_entry(*vmid);
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+/*
+ * As clients need to use VM IDs, assign highest priority to this notification so that all clients
+ * listening to this notification chain receives it after this driver has init'ed the VM_ID_INFO.
+ */
+static struct notifier_block gh_vm_status_nb = {
+	.notifier_call = gh_vm_status_nb_handler,
+	.priority = INT_MAX,
+};
+#endif
 
 static void gh_vm_check_peer(struct device *dev, struct device_node *rm_root)
 {
@@ -1076,6 +1219,10 @@ static int gh_vm_probe(struct device *dev, struct device_node *hyp_root)
 		/* We must be GH_PRIMARY_VM */
 		temp_property.vmid = vmid;
 		gh_update_vm_prop_table(GH_PRIMARY_VM, &temp_property);
+#ifdef CONFIG_QTVM_WITH_AVF
+		gh_rm_register_notifier(&gh_rm_status_nb);
+		gh_register_vm_notifier(&gh_vm_status_nb);
+#endif
 		gh_rm_core_initialized = true;
 	} else {
 		ret = of_property_read_string(node, "qcom,image-name",
@@ -1105,7 +1252,7 @@ static int gh_vm_probe(struct device *dev, struct device_node *hyp_root)
 
 		/* check peer to see if any VM has been bootup */
 		gh_vm_check_peer(dev, node);
-		gh_rm_register_notifier(&gh_vm_status_nb);
+		gh_rm_register_notifier(&gh_rm_status_nb);
 		gh_rm_core_initialized = true;
 		/* Query RM for available resources */
 		schedule_work(&gh_rm_get_svm_res_work);

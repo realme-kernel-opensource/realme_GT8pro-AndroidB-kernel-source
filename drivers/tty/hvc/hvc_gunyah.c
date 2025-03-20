@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "hvc_gunyah: " fmt
@@ -227,6 +227,7 @@ static void gh_hvc_notify_del(struct hvc_struct *hp, int vm_name)
 
 static struct notifier_block gh_hvc_nb = {
 	.notifier_call = gh_hvc_notify_console_chars,
+	.priority = INT_MAX - 1,
 };
 
 static const struct hv_ops gh_hv_ops = {
