@@ -35,6 +35,7 @@ enum mpam_slc_get_param_ids {
 	PARAM_GET_CLIENT_INFO_MSC = 1,
 	PARAM_GET_CACHE_CAPABILITY_MSC = 2,
 	PARAM_GET_CACHE_PARTITION_MSC = 3,
+	PARAM_GET_SLC_MPAM_VERSION = 4,
 };
 
 enum mpam_slc_set_param_ids {
@@ -61,6 +62,11 @@ struct slc_partid_capability {
 /* PARAM_GET_CACHE_PARTITION_MSC */
 struct qcom_slc_gear_val {
 	uint32_t gear_val;
+} __packed;
+
+/* PARAM_GET_SLC_MPAM_VERSION */
+struct qcom_slc_firmware_version {
+	uint32_t firmware_version;
 } __packed;
 
 /* SET_PARAM */
@@ -152,6 +158,7 @@ struct qcom_slc_capability {
 	struct slc_client_capability *slc_client_cap;
 	struct slc_mon_capability slc_mon_list;
 	struct slc_mon_configured slc_mon_configured;
+	struct qcom_slc_firmware_version firmware_ver;
 } __packed;
 
 /* slc mon API parameters */

@@ -149,6 +149,21 @@ static int slc_reset_cache_partition(struct device *dev, void *msc_partid, void 
 			PARAM_RESET_CACHE_PARTITION_MSC);
 }
 
+static int slc_firmware_version_query(struct device *dev, void *msc_partid, void *msc_partconfig)
+{
+	struct qcom_mpam_msc *qcom_msc;
+	struct msc_query query;
+	struct qcom_slc_firmware_version *firmware_ver;
+
+	firmware_ver = (struct qcom_slc_firmware_version *)msc_partconfig;
+	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
+	if (qcom_msc == NULL)
+		return -EINVAL;
+
+	return mpam_msc_slc_get_params(dev, &query, sizeof(struct msc_query), firmware_ver,
+			sizeof(struct qcom_slc_firmware_version), PARAM_GET_SLC_MPAM_VERSION);
+}
+
 static int slc_client_query(struct device *dev, void *msc_partid, void *msc_partconfig)
 {
 	struct qcom_mpam_msc *qcom_msc;
@@ -525,7 +540,7 @@ static int slc_mpam_start_stop(struct device *dev, bool start)
 static int mpam_msc_slc_probe(struct platform_device *pdev)
 {
 	int ret = -EINVAL;
-	uint32_t val;
+	uint32_t val, firmware_ver;
 	struct device_node *node;
 	struct qcom_mpam_msc *qcom_msc;
 	struct qcom_slc_capability *qcom_slc_capability;
@@ -570,6 +585,9 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, ret, "qcom,msc-id Node failed!\n");
 
 	platform_set_drvdata(pdev, qcom_msc);
+	if (slc_firmware_version_query(&pdev->dev, NULL, &firmware_ver))
+		firmware_ver = 0;
+
 	if (slc_mpam_start_stop(&pdev->dev, true))
 		return dev_err_probe(&pdev->dev, -EINVAL, "MAPM SCMI failure!\n");
 
@@ -596,6 +614,7 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 	}
 
 	qcom_slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
+	qcom_slc_capability->firmware_ver.firmware_version = firmware_ver;
 	qcom_slc_capability->num_clients = of_property_count_strings(node, "qcom,slc-clients");
 	qcom_slc_capability->slc_client_cap = devm_kcalloc(&pdev->dev,
 			qcom_slc_capability->num_clients, sizeof(struct  slc_client_capability),
