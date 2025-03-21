@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _WALT_H
@@ -236,6 +237,8 @@ struct walt_sched_cluster {
 	u64			found_ts;
 	struct smart_freq_cluster_info *smart_freq_info;
 	int8_t			sibling_cluster;
+	u64			cal_freq_begin[2];
+	bool			cal_freq_flag[2];
 };
 
 struct walt_rq {
