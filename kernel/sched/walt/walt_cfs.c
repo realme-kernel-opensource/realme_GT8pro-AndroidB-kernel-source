@@ -126,7 +126,8 @@ struct find_best_target_env {
 static unsigned long cpu_util_without(int cpu, struct task_struct *p)
 {
 	unsigned int util;
-
+	struct walt_rq *wrq;
+	u64 walt_cpu_util;
 	/*
 	 * WALT does not decay idle tasks in the same manner
 	 * as PELT, so it makes little sense to subtract task
@@ -140,7 +141,9 @@ static unsigned long cpu_util_without(int cpu, struct task_struct *p)
 	if (cpu != task_cpu(p) || !READ_ONCE(p->se.avg.last_update_time))
 		return cpu_util(cpu);
 
-	util = max_t(long, cpu_util(cpu) - task_util(p), 0);
+	wrq = &per_cpu(walt_rq, cpu);
+	walt_cpu_util = wrq->walt_stats.cumulative_runnable_avg_scaled;
+	util = max_t(long, walt_cpu_util - task_util(p), 0);
 
 	/*
 	 * Utilization (estimated) can exceed the CPU capacity, thus let's
