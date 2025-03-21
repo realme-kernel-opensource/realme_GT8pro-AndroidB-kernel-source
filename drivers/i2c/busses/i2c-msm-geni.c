@@ -2549,7 +2549,7 @@ static int geni_i2c_execute_xfer(struct geni_i2c_dev *gi2c,
 		if (msgs[i].flags & I2C_M_RD) {
 			I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
 				"msgs[%d].len:%d R\n", i, gi2c->cur->len);
-			geni_write_reg(msgs[i].len, gi2c->base, SE_I2C_TX_TRANS_LEN);
+			geni_write_reg(msgs[i].len, gi2c->base, SE_I2C_RX_TRANS_LEN);
 			m_cmd = (gi2c->clk_freq_out == I2C_HS_MODE_FREQ) ? I2C_HS_READ : I2C_READ;
 			geni_se_setup_m_cmd(&gi2c->i2c_rsc, m_cmd, m_param);
 			if (mode == GENI_SE_DMA) {
