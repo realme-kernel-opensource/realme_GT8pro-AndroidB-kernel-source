@@ -115,7 +115,9 @@
 #define PCIE20_PARF_INT_ALL_2_STATUS (0x500)
 #define PCIE20_PARF_INT_ALL_2_CLEAR (0x504)
 #define PCIE20_PARF_INT_ALL_2_MASK (0X508)
+#define PCIE20_PARF_INT_ALL_2_TYPE (0X50c)
 #define MSM_PCIE_BW_MGT_INT_STATUS (BIT(25))
+#define PCIE_LINK_AUTO_BW_INT_STATUS (BIT(26))
 
 #define PCIE20_PARF_DEBUG_CNT_IN_L0S (0xc10)
 #define PCIE20_PARF_DEBUG_CNT_IN_L1 (0xc0c)
@@ -6086,6 +6088,16 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 		readl_relaxed(dev->parf + PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT);
 	msm_pcie_write_reg(dev->parf, PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT,
 				BIT(31) | val);
+
+	/*
+	 * Clear PCIE_BW_MGT_INT_STATUS and PCIE_LINK_AUTO_BW_INT_STATUS to get
+	 * bandwidth change interrupt functionality. Those bits are by default set
+	 * with PCIe Gen 4 capable controller related PCIe wrapper (PARF).
+	 */
+	msm_pcie_write_mask(dev->parf + PCIE20_PARF_INT_ALL_2_TYPE,
+			MSM_PCIE_BW_MGT_INT_STATUS | PCIE_LINK_AUTO_BW_INT_STATUS, 0);
+	PCIE_INFO(dev, "PCIe: RC:%d PARF_INT_ALL_2_TYPE:0x%x\n",
+			dev->rc_idx, readl_relaxed(dev->parf + PCIE20_PARF_INT_ALL_2_TYPE));
 
 	/* init tcsr */
 	if (dev->tcsr_config)
