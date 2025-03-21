@@ -8,6 +8,35 @@ load(
 )
 load(":kleaf-scripts/defconfig_fragment.bzl", "define_defconfig_fragment")
 
+def signing_genrule(name, module, base_kernel, target_variant):
+    native.genrule(
+        name = name,
+        srcs = [
+            "{}/certs/signing_key.x509".format(base_kernel),
+            "{}/scripts/sign-file".format(base_kernel),
+            "signing_key.pem",
+            module,
+        ],
+        outs = ["signed_" + name + ".ko"],
+        cmd = """
+        for file in $(locations {module}); do
+            case $$file in
+                *.ko)
+                 $(location {kernel_name}/scripts/sign-file) sha1 $(location signing_key.pem) $(location {kernel_name}/certs/signing_key.x509) $$file
+                 cp $$file $(OUTS)
+                 ;;
+            esac
+        done
+        touch $(OUTS)
+        """.format(kernel_name = base_kernel, module = module),
+    )
+
+def create_signed_modules_group(name, signed_modules):
+    native.filegroup(
+        name = name,
+        srcs = signed_modules,
+    )
+
 def _generate_ddk_target(
         module_map,
         target_variant,
@@ -81,6 +110,17 @@ def _generate_ddk_target(
         name = "{}_compile_commands".format(target_variant),
         deps = [":{}_all_modules".format(target_variant)],
     )
+
+    signed_modules = []
+    if "kernel_aarch64_qtvm" in base_kernel:
+        for module in module_names.values():
+            signing_genrule(name = "sign_" + module, module = module, base_kernel = base_kernel, target_variant = target_variant)
+            signed_modules.append("sign_" + module)
+
+        create_signed_modules_group(
+            name = "{}_signed_modules".format(target_variant),
+            signed_modules = signed_modules,
+        )
 
     return [module.name for module in matched_configurations]
 
