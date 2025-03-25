@@ -461,9 +461,33 @@ static struct qcom_cc_desc cam_bist_mclk_cc_canoe_desc = {
 
 static const struct of_device_id cam_bist_mclk_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-cambistmclkcc" },
+	{ .compatible = "qcom,alor-cambistmclkcc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, cam_bist_mclk_cc_canoe_match_table);
+
+static void cam_bist_mclk_cc_canoe_fixup_alor(struct regmap *regmap)
+{
+	cam_bist_mclk_cc_canoe_clocks[CAM_BIST_MCLK_CC_MCLK6_CLK] = NULL;
+	cam_bist_mclk_cc_canoe_clocks[CAM_BIST_MCLK_CC_MCLK6_CLK_SRC] = NULL;
+	cam_bist_mclk_cc_canoe_clocks[CAM_BIST_MCLK_CC_MCLK7_CLK] = NULL;
+	cam_bist_mclk_cc_canoe_clocks[CAM_BIST_MCLK_CC_MCLK7_CLK_SRC] = NULL;
+}
+
+static int cam_bist_mclk_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,alor-cambistmclkcc"))
+		cam_bist_mclk_cc_canoe_fixup_alor(regmap);
+
+	return 0;
+}
 
 static int cam_bist_mclk_cc_canoe_probe(struct platform_device *pdev)
 {
@@ -479,6 +503,10 @@ static int cam_bist_mclk_cc_canoe_probe(struct platform_device *pdev)
 		return ret;
 
 	ret = pm_runtime_resume_and_get(&pdev->dev);
+	if (ret)
+		return ret;
+
+	ret = cam_bist_mclk_cc_canoe_fixup(pdev, regmap);
 	if (ret)
 		return ret;
 
