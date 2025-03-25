@@ -2208,6 +2208,11 @@ static void geni_i2c_err_prep_sg(struct geni_i2c_dev *gi2c)
 static void geni_i2c_gsi_cancel_pending(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
 					u32 num, u32 msg_idx, u32 wr_idx, u8 *rd_dma_buf)
 {
+	if (gi2c->is_shared && gi2c->err) {
+		I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "Unlock bus\n");
+		geni_i2c_unlock_bus(gi2c);
+	}
+
 	if (msg->flags & I2C_M_RD) {
 		geni_se_common_iommu_unmap_buf(gi2c->wrapper_dev, &gi2c->rx_ph,
 					       msg->len, DMA_FROM_DEVICE);
@@ -2549,7 +2554,7 @@ static int geni_i2c_execute_xfer(struct geni_i2c_dev *gi2c,
 		if (msgs[i].flags & I2C_M_RD) {
 			I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
 				"msgs[%d].len:%d R\n", i, gi2c->cur->len);
-			geni_write_reg(msgs[i].len, gi2c->base, SE_I2C_TX_TRANS_LEN);
+			geni_write_reg(msgs[i].len, gi2c->base, SE_I2C_RX_TRANS_LEN);
 			m_cmd = (gi2c->clk_freq_out == I2C_HS_MODE_FREQ) ? I2C_HS_READ : I2C_READ;
 			geni_se_setup_m_cmd(&gi2c->i2c_rsc, m_cmd, m_param);
 			if (mode == GENI_SE_DMA) {
