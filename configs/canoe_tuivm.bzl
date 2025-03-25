@@ -61,8 +61,6 @@ canoe_tuivm_config = {
     "CONFIG_QTI_IOMMU_SUPPORT": "y",
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_VIRTIO_MEM": "y",
-    "CONFIG_VIRTIO_MMIO": "m",
-    "CONFIG_VIRTIO_MMIO_SWIOTLB": "y",
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_INTERCONNECT_CLK": "m",
     "CONFIG_PSI": "y",
