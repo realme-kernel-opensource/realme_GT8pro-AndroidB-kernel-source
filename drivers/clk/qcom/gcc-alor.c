@@ -4015,8 +4015,6 @@ static int gcc_alor_probe(struct platform_device *pdev)
 
 	gcc_alor_gdscs[GCC_USB30_PRIM_GDSC] = NULL;
 	gcc_alor_gdscs[GCC_USB3_PHY_GDSC] = NULL;
-	gcc_alor_gdscs[GCC_UFS_PHY_GDSC] = NULL;
-	gcc_alor_gdscs[GCC_UFS_MEM_PHY_GDSC] = NULL;
 
 	/*
 	 * Keep clocks always enabled:
