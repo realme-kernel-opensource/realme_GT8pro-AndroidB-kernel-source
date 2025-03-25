@@ -1256,6 +1256,9 @@ static int enable_audio_stream(struct snd_usb_substream *subs,
 	snd_interval_setinteger(i);
 	i->min = i->max = cur_rate;
 
+	if (!chip->intf[0])
+		return -ENODEV;
+
 	pm_runtime_barrier(&chip->intf[0]->dev);
 	snd_usb_autoresume(chip);
 
