@@ -124,6 +124,35 @@ static const char * const hw_platform_feature_code[] = {
 	[SOCINFO_FC_AH] = "AH",
 };
 
+static const char * const hw_platform_lfeature_code[] = {
+	[SOCINFO_FC_LA - SOCINFO_FC_LA] = "LA",
+	[SOCINFO_FC_LB - SOCINFO_FC_LA] = "LB",
+	[SOCINFO_FC_LC - SOCINFO_FC_LA] = "LC",
+	[SOCINFO_FC_LD - SOCINFO_FC_LA] = "LD",
+	[SOCINFO_FC_LE - SOCINFO_FC_LA] = "LE",
+	[SOCINFO_FC_LF - SOCINFO_FC_LA] = "LF",
+	[SOCINFO_FC_LG - SOCINFO_FC_LA] = "LG",
+	[SOCINFO_FC_LH - SOCINFO_FC_LA] = "LH",
+	[SOCINFO_FC_LI - SOCINFO_FC_LA] = "LI",
+	[SOCINFO_FC_LJ - SOCINFO_FC_LA] = "LJ",
+	[SOCINFO_FC_LK - SOCINFO_FC_LA] = "LK",
+	[SOCINFO_FC_LL - SOCINFO_FC_LA] = "LL",
+	[SOCINFO_FC_LM - SOCINFO_FC_LA] = "LM",
+	[SOCINFO_FC_LN - SOCINFO_FC_LA] = "LN",
+	[SOCINFO_FC_LO - SOCINFO_FC_LA] = "LO",
+	[SOCINFO_FC_LP - SOCINFO_FC_LA] = "LP",
+	[SOCINFO_FC_LQ - SOCINFO_FC_LA] = "LQ",
+	[SOCINFO_FC_LR - SOCINFO_FC_LA] = "LR",
+	[SOCINFO_FC_LS - SOCINFO_FC_LA] = "LS",
+	[SOCINFO_FC_LT - SOCINFO_FC_LA] = "LT",
+	[SOCINFO_FC_LU - SOCINFO_FC_LA] = "LU",
+	[SOCINFO_FC_LV - SOCINFO_FC_LA] = "LV",
+	[SOCINFO_FC_LW - SOCINFO_FC_LA] = "LW",
+	[SOCINFO_FC_LX - SOCINFO_FC_LA] = "LX",
+	[SOCINFO_FC_LY - SOCINFO_FC_LA] = "LY",
+	[SOCINFO_FC_LZ - SOCINFO_FC_LA] = "LZ",
+};
+
 static const char * const hw_platform_wfeature_code[] = {
 	[SOCINFO_FC_W0 - SOCINFO_FC_W0] = "W0",
 	[SOCINFO_FC_W1 - SOCINFO_FC_W0] = "W1",
@@ -774,6 +803,8 @@ static const char *socinfo_get_feature_code_mapping(void)
 
 	if (id > SOCINFO_FC_UNKNOWN && id < SOCINFO_FC_EXT_RESERVE)
 		return hw_platform_feature_code[id];
+	else if (id >= SOCINFO_FC_LA && id < SOCINFO_FC_LEAPPART_RESERVE)
+		return hw_platform_lfeature_code[id - SOCINFO_FC_LA];
 	else if (id >= SOCINFO_FC_W0 && id < SOCINFO_FC_SUBPART_RESERVE)
 		return hw_platform_wfeature_code[id - SOCINFO_FC_W0];
 	else if (id >= SOCINFO_FC_Y0 && id < SOCINFO_FC_INT_RESERVE)
