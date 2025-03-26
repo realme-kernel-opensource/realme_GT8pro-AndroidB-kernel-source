@@ -45,3 +45,4 @@ pinctrl-spmi-gpio.ko
 pinctrl-spmi-mpp.ko
 qcom_wdt_core.ko
 smem.ko
+deferred-free-helper.ko
