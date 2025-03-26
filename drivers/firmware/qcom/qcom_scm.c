@@ -2381,6 +2381,26 @@ int qcom_scm_query_log_status(u64 *status)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_query_log_status);
 
+int qcom_scm_query_tz_time(u64 *ticks, u32 *frequency)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_QSEELOG,
+		.cmd = QCOM_SCM_QUERY_TZ_TIME_ID,
+		.owner = ARM_SMCCC_OWNER_TRUSTED_OS
+	};
+	struct qcom_scm_res res;
+
+	ret = qcom_scm_call(__scm->dev, &desc, &res);
+	if (!ret) {
+		*ticks = ((uint64_t)res.result[0] << 32) | (uint64_t)res.result[1];
+		*frequency = (uint32_t)res.result[2];
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_query_tz_time);
+
 int qcom_scm_request_encrypted_log(phys_addr_t buf,
 				   size_t len,
 				   uint32_t log_id,
