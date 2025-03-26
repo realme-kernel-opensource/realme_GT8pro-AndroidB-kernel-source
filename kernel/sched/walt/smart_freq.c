@@ -548,6 +548,22 @@ void smart_freq_update_reason_common(u64 wallclock, int nr_big, u32 wakeup_ctr_s
 				cluster_reasons |= BIT(THERMAL_ROTATION_SMART_FREQ);
 		}
 
+		/*
+		 * LRPB
+		 */
+		if (cluster_participation_mask & BIT(LRPB_SMART_FREQ)) {
+			int cpu;
+			struct walt_rq *wrq;
+
+			for_each_cpu(cpu, &cluster->cpus) {
+				wrq = &per_cpu(walt_rq, cpu);
+				if (wrq->lrb_pipeline_start_time) {
+					cluster_reasons |= BIT(LRPB_SMART_FREQ);
+					break;
+				}
+			}
+		}
+
 		cluster_active_reason = cluster->smart_freq_info->cluster_active_reason;
 out:
 		/* update the reasons for all the clusters */
