@@ -331,27 +331,35 @@ static void smart_freq_update_one_cluster(struct walt_sched_cluster *cluster,
 			smart_freq_info->legacy_reason_status[i].deactivate_ns = 0;
 			smart_freq_info->cluster_active_reason |= BIT(i);
 		} else if (cluster_active_reason) {
-			if (!smart_freq_info->legacy_reason_status[i].deactivate_ns)
+			if (!smart_freq_info->legacy_reason_status[i].deactivate_ns) {
 				smart_freq_info->legacy_reason_status[i].deactivate_ns = wallclock;
-		}
-
-		if (cluster_active_reason) {
-			/*
-			 * For reasons with deactivation hysteresis, check here if we have
-			 * crossed the hysteresis time and then deactivate the reason.
-			 * We are relying on scheduler tick path to call this function
-			 * thus deactivation of reason is only at tick
-			 * boundary.
-			 */
-			if (smart_freq_info->legacy_reason_status[i].deactivate_ns) {
+			} else {
+				/*
+				 * For reasons with deactivation hysteresis, check here if we have
+				 * crossed the hysteresis time and then deactivate the reason.
+				 * We are relying on scheduler tick path to call this function
+				 * thus deactivation of reason is only at tick
+				 * boundary.
+				 */
 				u64 delta = wallclock -
 					smart_freq_info->legacy_reason_status[i].deactivate_ns;
 				if (delta >= smart_freq_info->legacy_reason_config[i].hyst_ns) {
 					smart_freq_info->legacy_reason_status[i].deactivate_ns = 0;
 					smart_freq_info->cluster_active_reason &= ~BIT(i);
-					continue;
+					cluster_active_reason &= ~BIT(i);
 				}
 			}
+		}
+
+		/*
+		 * Once we reach here reason which is not currently active can have two
+		 * possbilities:
+		 * 1. reason is within it's hysteresis time and in that case reason bit is
+		 * present in 'cluster_active_reason'.
+		 * 2. reason expired it's  hysteresis time and in that case reason bit already
+		 * cleared from 'cluster_active_reason'.
+		 */
+		if (cluster_active_reason || current_reason) {
 			if (max_cap < smart_freq_info->legacy_reason_config[i].freq_allowed) {
 				max_cap = smart_freq_info->legacy_reason_config[i].freq_allowed;
 				max_reason = i;
