@@ -88,6 +88,9 @@ struct socinfo {
 	__le32 nsubpart_feat_array_offset;
 	/* Version 22 */
 	__le32 ncluster_cores_array_offset;
+	/* Version 23 */
+	__le32 part_instances_offset;
+	__le32 num_part_instances;
 };
 
 /* Internal feature codes */

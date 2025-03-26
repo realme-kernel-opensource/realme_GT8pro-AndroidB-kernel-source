@@ -1266,6 +1266,7 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 	int i = 0;
 
 	switch (socinfo_format) {
+	case SOCINFO_VERSION(0, 23):
 	case SOCINFO_VERSION(0, 22):
 	case SOCINFO_VERSION(0, 21):
 	case SOCINFO_VERSION(0, 20):
@@ -1522,6 +1523,7 @@ static void socinfo_debugfs_init(struct qcom_socinfo *qcom_socinfo,
 			   &qcom_socinfo->info.fmt);
 
 	switch (qcom_socinfo->info.fmt) {
+	case SOCINFO_VERSION(0, 23):
 	case SOCINFO_VERSION(0, 22):
 	case SOCINFO_VERSION(0, 21):
 	case SOCINFO_VERSION(0, 20):
