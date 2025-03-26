@@ -75,6 +75,14 @@ struct qcom_scm_mem_map_info {
 	__le64 mem_size;
 };
 
+/**
+ * struct arm_smccc_args
+ * @args: The array of values used in registers in smc instruction
+ */
+struct arm_smccc_args {
+	unsigned long args[8];
+};
+
 enum qcom_scm_ice_cipher {
 	QCOM_SCM_ICE_CIPHER_AES_128_XTS = 0,
 	QCOM_SCM_ICE_CIPHER_AES_128_CBC = 1,
@@ -251,6 +259,10 @@ extern int qcom_scm_invoke_smc_legacy(phys_addr_t in_buf, size_t in_buf_size,
 extern int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 		size_t out_buf_size, int32_t *result, u64 *response_type,
 		unsigned int *data);
+
+extern void __qcom_scm_init(void);
+extern void __qcom_scm_qcpe_exit(void);
+
 
 int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
 			    struct qcom_scm_pas_metadata *ctx, struct device *dev);
