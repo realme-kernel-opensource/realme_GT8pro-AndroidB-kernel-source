@@ -332,6 +332,10 @@ def register_modules(registry):
             "drivers/soc/qcom/gic_intr_routing.c",
             "drivers/soc/qcom/irq_internals.h",
         ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
     )
 
     registry.register(
