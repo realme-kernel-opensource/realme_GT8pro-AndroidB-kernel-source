@@ -260,12 +260,24 @@ static struct qcom_icc_node qxm_ipa = {
 	.links = { SLAVE_A2NOC_SNOC },
 };
 
+static struct qcom_icc_qosbox qxm_soccp_qos = {
+	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
+	.num_ports = 1,
+	.offsets = { 0x3b000 },
+	.config = &(struct qos_config) {
+		.prio = 2,
+		.urg_fwd = 1,
+		.prio_fwd_disable = 1,
+	},
+};
+
 static struct qcom_icc_node qxm_soccp = {
 	.name = "qxm_soccp",
 	.id = MASTER_SOCCP_AGGR_NOC,
 	.channels = 1,
 	.buswidth = 8,
 	.noc_ops = &qcom_qnoc4_ops,
+	.qosbox = &qxm_soccp_qos,
 	.num_links = 1,
 	.links = { SLAVE_A2NOC_SNOC },
 };
@@ -1066,6 +1078,50 @@ static struct qcom_icc_node qnm_aggre2_noc = {
 	.channels = 1,
 	.buswidth = 16,
 	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { SLAVE_SNOC_GEM_NOC_SF },
+};
+
+static struct qcom_icc_qosbox qnm_apss_noc_qos = {
+	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
+	.num_ports = 1,
+	.offsets = { 0x1e000 },
+	.config = &(struct qos_config) {
+		.prio = 2,
+		.urg_fwd = 1,
+		.prio_fwd_disable = 1,
+	},
+};
+
+static struct qcom_icc_node qnm_apss_noc = {
+	.name = "qnm_apss_noc",
+	.id = MASTER_APSS_NOC,
+	.channels = 1,
+	.buswidth = 8,
+	.noc_ops = &qcom_qnoc4_ops,
+	.qosbox = &qnm_apss_noc_qos,
+	.num_links = 1,
+	.links = { SLAVE_SNOC_GEM_NOC_SF },
+};
+
+static struct qcom_icc_qosbox qnm_cnoc_data_qos = {
+	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
+	.num_ports = 1,
+	.offsets = { 0x1f000 },
+	.config = &(struct qos_config) {
+		.prio = 2,
+		.urg_fwd = 0,
+		.prio_fwd_disable = 1,
+	},
+};
+
+static struct qcom_icc_node qnm_cnoc_data = {
+	.name = "qnm_cnoc_data",
+	.id = MASTER_CNOC_SNOC,
+	.channels = 1,
+	.buswidth = 8,
+	.noc_ops = &qcom_qnoc4_ops,
+	.qosbox = &qnm_cnoc_data_qos,
 	.num_links = 1,
 	.links = { SLAVE_SNOC_GEM_NOC_SF },
 };
@@ -3769,6 +3825,8 @@ static struct qcom_icc_bcm *system_noc_bcms[] = {
 static struct qcom_icc_node *system_noc_nodes[] = {
 	[MASTER_A1NOC_SNOC] = &qnm_aggre1_noc,
 	[MASTER_A2NOC_SNOC] = &qnm_aggre2_noc,
+	[MASTER_APSS_NOC] = &qnm_apss_noc,
+	[MASTER_CNOC_SNOC] = &qnm_cnoc_data,
 	[SLAVE_SNOC_GEM_NOC_SF] = &qns_gemnoc_sf,
 };
 
