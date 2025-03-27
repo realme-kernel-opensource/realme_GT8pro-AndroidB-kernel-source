@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved. */
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
 #include <linux/bitops.h>
@@ -307,6 +307,7 @@ struct rpmh_vreg {
 #define RPMH_REGULATOR_MODE_PMIC4_BOB_AUTO	2
 #define RPMH_REGULATOR_MODE_PMIC4_BOB_PWM	3
 
+#define RPMH_REGULATOR_MODE_PMIC5_LDO_BYPASS	2
 #define RPMH_REGULATOR_MODE_PMIC5_LDO_RM	3
 #define RPMH_REGULATOR_MODE_PMIC5_LDO_LPM	4
 #define RPMH_REGULATOR_MODE_PMIC5_LDO_HPM	7
@@ -391,13 +392,17 @@ rpmh_regulator_mode_map_pmic4_bob[RPMH_REGULATOR_MODE_COUNT] = {
 
 static const struct rpmh_regulator_mode
 rpmh_regulator_mode_map_pmic5_ldo[RPMH_REGULATOR_MODE_COUNT] = {
+	[RPMH_REGULATOR_MODE_PASS] = {
+		.pmic_mode = RPMH_REGULATOR_MODE_PMIC5_LDO_BYPASS,
+		.framework_mode = REGULATOR_MODE_STANDBY,
+	},
 	[RPMH_REGULATOR_MODE_RET] = {
 		.pmic_mode = RPMH_REGULATOR_MODE_PMIC5_LDO_RM,
-		.framework_mode = REGULATOR_MODE_STANDBY,
+		.framework_mode = REGULATOR_MODE_IDLE,
 	},
 	[RPMH_REGULATOR_MODE_LPM] = {
 		.pmic_mode = RPMH_REGULATOR_MODE_PMIC5_LDO_LPM,
-		.framework_mode = REGULATOR_MODE_IDLE,
+		.framework_mode = REGULATOR_MODE_NORMAL,
 	},
 	[RPMH_REGULATOR_MODE_HPM] = {
 		.pmic_mode = RPMH_REGULATOR_MODE_PMIC5_LDO_HPM,
