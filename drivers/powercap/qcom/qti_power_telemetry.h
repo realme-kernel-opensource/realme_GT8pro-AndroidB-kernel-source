@@ -166,6 +166,7 @@ struct qpt_device {
  * @config_sdam_data:	Config sdam data dump collected at init
  * @ipc_log_data:	Handle to ipc_logging for data update buffer
  * @ipc_log_event:	Handle to ipc_logging for qpt events
+ * @adc_scaling_factor: ADC to power unit scaling factor
  * @tperiod:		channel pmic hardware time period
  * @bob_tperiod:	BoB channel pmic hardware time period
  * @data_update_sampling: Hardware data reporting period in milliseconds
@@ -201,6 +202,7 @@ struct qpt_priv {
 	uint8_t			*config_sdam_data;
 	void			*ipc_log_data;
 	void			*ipc_log_event;
+	u32			adc_scaling_factor;
 	u32			tperiod;
 	u32			bob_tperiod;
 	u32			data_update_sampling;
