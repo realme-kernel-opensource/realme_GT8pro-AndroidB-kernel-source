@@ -53,7 +53,6 @@ def _gen_qc_core_build_config(name):
             "export BUILDTOOLS_PREBUILT_BIN=build/kernel/build-tools/path/linux-x86",
             "VARIANTS=(debug-defconfig defconfig)",
             "VARIANT=defconfig",
-            "MSM_ARCH=sun_tuivm",
             "ARCH=arm64",
             "PREFERRED_USERSPACE={}".format(vm_opts.preferred_usespace),
             "VM_DTB_IMG_CREATE={}".format(vm_opts.vm_dtb_img_create),
