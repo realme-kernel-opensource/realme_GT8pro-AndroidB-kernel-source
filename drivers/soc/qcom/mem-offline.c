@@ -1014,7 +1014,7 @@ static unsigned long get_anon_movable_pages(
 			continue;
 		}
 
-		if (!isolate_anon_lru_page(page))
+		if (isolate_anon_lru_page(page) <= 0)
 			continue;
 
 		list_add_tail(&page->lru, list);
@@ -1056,7 +1056,7 @@ static void isolate_free_pages(struct movable_zone_fill_control *fc)
 	unsigned long flags;
 	unsigned long start_pfn = fc->start_pfn;
 	unsigned long end_pfn = fc->end_pfn;
-	LIST_HEAD(tmp);
+	struct list_head tmp[NR_PAGE_ORDERS];
 	struct zone *dst_zone;
 
 	if (!(start_pfn < end_pfn))
@@ -1066,6 +1066,8 @@ static void isolate_free_pages(struct movable_zone_fill_control *fc)
 	if (zone_page_state(dst_zone, NR_FREE_PAGES) < high_wmark_pages(dst_zone))
 		return;
 
+	for (int i = 0; i < NR_PAGE_ORDERS; ++i)
+		INIT_LIST_HEAD(&tmp[i]);
 	spin_lock_irqsave(&fc->zone->lock, flags);
 	for (; start_pfn < end_pfn; start_pfn++) {
 		unsigned long isolated;
@@ -1104,14 +1106,13 @@ static void isolate_free_pages(struct movable_zone_fill_control *fc)
 		if (!PageBuddy(page))
 			continue;
 
-		INIT_LIST_HEAD(&tmp);
-		isolated = isolate_and_split_free_page(page, &tmp);
+		isolated = isolate_and_split_free_page(page, tmp);
 		if (!isolated) {
 			fc->start_pfn = ALIGN(fc->start_pfn, pageblock_nr_pages);
 			goto out;
 		}
 
-		list_splice(&tmp, &fc->freepages);
+		list_splice_init(&tmp[0], &fc->freepages);
 		fc->nr_free_pages += isolated;
 		start_pfn += isolated - 1;
 	}
