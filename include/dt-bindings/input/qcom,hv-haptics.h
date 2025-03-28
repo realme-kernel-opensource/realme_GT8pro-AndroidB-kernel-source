@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023,2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* definitions for drive waveform shape */
@@ -36,3 +36,9 @@
 #define S_PERIOD_F_32KHZ		11
 #define S_PERIOD_F_44P1KHZ		12
 #define S_PERIOD_F_48KHZ		13
+
+/* definitions for VIsense ADC clock divider */
+#define ADC_CLK_RATE_4P8MHZ		0
+#define ADC_CLK_RATE_2P4MHZ		1
+#define ADC_CLK_RATE_1P2MHZ		2
+#define ADC_CLK_RATE_600KHZ		3
