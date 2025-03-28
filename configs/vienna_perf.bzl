@@ -44,6 +44,7 @@ vienna_perf_config = {
     "CONFIG_MODULE_SIG_ALL": "n",
     "CONFIG_MSM_BOOT_STATS": "m",
     "CONFIG_MSM_QMP": "m",
+    "CONFIG_MSM_RDBG": "m",
     "CONFIG_NVMEM_QCOM_QFPROM": "m",
     "CONFIG_NVMEM_SPMI_SDAM": "m",
     "CONFIG_PDR_INDICATION_NOTIF_TIMEOUT": "9000",
