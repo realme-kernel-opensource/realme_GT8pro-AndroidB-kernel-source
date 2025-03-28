@@ -980,8 +980,6 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 	}
 
 	ret = __tmc_probe(dev, &adev->res);
-	if (!ret)
-		pm_runtime_put_sync(dev);
 
 	return ret;
 }
