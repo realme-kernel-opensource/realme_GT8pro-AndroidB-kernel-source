@@ -179,4 +179,11 @@ config GH_GUEST_POPS
 	    one, it'll emulate a power key press action by sending an input
 	    notification to user-space.
 
+config GUNYAH_TRACE
+	tristate "Gunyah trace driver"
+	help
+	  Gunyah trace is used to output debug log for gunyah hypervisor.
+	  The driver can help to dump gunyah trace buffer continuously and
+	  provide interface to control gunyah trace.
+
 endif
