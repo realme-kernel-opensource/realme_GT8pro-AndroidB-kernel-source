@@ -174,3 +174,28 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/interconnect/qcom/qnoc-alor",
+        out = "qnoc-alor.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_ALOR",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/alor.c",
+            "drivers/interconnect/qcom/icc-rpmh.h",
+            "drivers/interconnect/qcom/qnoc-qos.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos",
+            "drivers/interconnect/qcom/icc-rpmh",
+            "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/icc-debug",
+            "drivers/interconnect/qcom/icc-bcm-voter",
+            "drivers/soc/qcom/qcom_rpmh",
+            "drivers/soc/qcom/cmd-db",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/crm-v2",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
