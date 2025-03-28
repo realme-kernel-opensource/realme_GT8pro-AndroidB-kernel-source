@@ -1636,7 +1636,7 @@ static void geni_i2c_unlock_bus(struct geni_i2c_dev *gi2c)
 	struct msm_gpi_tre *unlock_t = NULL;
 	int timeout = 0;
 	dma_cookie_t tx_cookie;
-	bool tx_chan = true;
+	bool err = false;
 	unsigned long long start_time;
 
 	start_time = geni_capture_start_time(&gi2c->i2c_rsc, gi2c->ipc_log_kpi, __func__,
@@ -1651,12 +1651,11 @@ static void geni_i2c_unlock_bus(struct geni_i2c_dev *gi2c)
 
 	unlock_t = setup_unlock_tre(gi2c);
 	sg_init_table(gi2c->tx_sg, 1);
-	sg_set_buf(&gi2c->tx_sg[0], unlock_t,
-					sizeof(gi2c->unlock_t));
+	sg_set_buf(&gi2c->tx_sg[0], unlock_t, sizeof(gi2c->unlock_t));
 
-	gi2c->tx_desc = geni_i2c_prep_desc(gi2c, gi2c->tx_c, 1, tx_chan);
+	gi2c->tx_desc = geni_i2c_prep_desc(gi2c, gi2c->tx_c, 1, true);
 	if (!gi2c->tx_desc) {
-		gi2c->err = -ENOMEM;
+		err = true;
 		goto geni_i2c_err_unlock_bus;
 	}
 
@@ -1667,7 +1666,7 @@ static void geni_i2c_unlock_bus(struct geni_i2c_dev *gi2c)
 	if (dma_submit_error(tx_cookie)) {
 		I2C_LOG_ERR(gi2c->ipcl, true, gi2c->dev,
 			    "%s: dmaengine_submit failed (%d)\n", __func__, tx_cookie);
-		gi2c->err = -EINVAL;
+		err = true;
 		goto geni_i2c_err_unlock_bus;
 	}
 
@@ -1675,19 +1674,15 @@ static void geni_i2c_unlock_bus(struct geni_i2c_dev *gi2c)
 
 	timeout = wait_for_completion_timeout(&gi2c->xfer, HZ);
 	if (!timeout) {
-		I2C_LOG_ERR(gi2c->ipcl, false, gi2c->dev,
-			    "%s failed\n", __func__);
-		geni_i2c_se_dump_dbg_regs(&gi2c->i2c_rsc, gi2c->base,
-					gi2c->ipcl);
-		gi2c->err = -ETIMEDOUT;
-		goto geni_i2c_err_unlock_bus;
+		I2C_LOG_ERR(gi2c->ipcl, false, gi2c->dev, "%s failed\n", __func__);
+		geni_i2c_se_dump_dbg_regs(&gi2c->i2c_rsc, gi2c->base, gi2c->ipcl);
+		err = true;
 	}
 
 geni_i2c_err_unlock_bus:
-	if (gi2c->err) {
+	if (err) {
 		dmaengine_terminate_all(gi2c->tx_c);
 		gi2c->cfg_sent = 0;
-		gi2c->err = 0;
 	}
 	gi2c->is_gsi_cmd = false;
 	geni_capture_stop_time(&gi2c->i2c_rsc, gi2c->ipc_log_kpi, __func__,
@@ -2208,6 +2203,11 @@ static void geni_i2c_err_prep_sg(struct geni_i2c_dev *gi2c)
 static void geni_i2c_gsi_cancel_pending(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
 					u32 num, u32 msg_idx, u32 wr_idx, u8 *rd_dma_buf)
 {
+	if (gi2c->is_shared && gi2c->err) {
+		I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "Unlock bus\n");
+		geni_i2c_unlock_bus(gi2c);
+	}
+
 	if (msg->flags & I2C_M_RD) {
 		geni_se_common_iommu_unmap_buf(gi2c->wrapper_dev, &gi2c->rx_ph,
 					       msg->len, DMA_FROM_DEVICE);
