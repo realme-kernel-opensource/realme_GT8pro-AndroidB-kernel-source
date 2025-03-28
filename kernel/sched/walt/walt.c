@@ -2553,17 +2553,18 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	struct walt_rq *wrq = &per_cpu(walt_rq, task_cpu(p));
-	u64 next_ms_boundary, delta;
+	u64 next_ms_boundary, delta, lrb_threshold_ns;
 	int periods;
 	bool running;
 	int no_boost_reason = 0;
 
 	/*
-	 * If it has been active for more than 4mS turn it off, the task that caused this activation
-	 * should have slept and if its still running it must have updated its load via
+	 * If it has been active for more than threshold mS turn it off, the task that caused this
+	 * activation should have slept and if its still running it must have updated its load via
 	 * prs. No need to continue boosting.
 	 */
-	if (wallclock > wrq->lrb_pipeline_start_time + 4000000)
+	lrb_threshold_ns = (sched_ravg_window <= SCHED_RAVG_8MS_WINDOW) ? 4000000 : 8000000;
+	if (wallclock > wrq->lrb_pipeline_start_time + lrb_threshold_ns)
 		wrq->lrb_pipeline_start_time = 0;
 
 	if (!pipeline_in_progress())
