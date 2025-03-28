@@ -97,7 +97,6 @@ gh_rm_drv.ko
 gunyah_loader.ko
 mdt_loader.ko
 qcom_wdt_core.ko
-gh_virt_wdt.ko
 qcom_tzmem.ko
 icc-clk.ko
 cqhci.ko
