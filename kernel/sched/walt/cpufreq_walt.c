@@ -508,7 +508,7 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 		wg_cpu->rtg_boost_flag = true;
 	}
 
-	is_hiload = (nbl >= mult_frac(wg_policy->avg_cap,
+	is_hiload = is_rollover && (nbl >= mult_frac(wg_policy->avg_cap,
 				   wg_policy->tunables->hispeed_load,
 				   100));
 
@@ -519,7 +519,7 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	if (wg_policy->avg_cap < wg_policy->hispeed_cond_util)
 		is_hiload = false;
 
-	if (is_hiload && is_rollover) {
+	if (is_hiload) {
 		wg_policy->hispeed_flag = true;
 		wg_cpu->hispeed_flag = true;
 		if (nl >= mult_frac(cpu_util, NL_RATIO, 100))
