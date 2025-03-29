@@ -230,6 +230,7 @@ struct walt_sched_cluster {
 	unsigned int		max_possible_freq;
 	unsigned int		max_freq;
 	unsigned int		walt_internal_freq_limit;
+	unsigned long		pre_smart_freq_capacity;
 	u64			aggr_grp_load;
 	unsigned long		util_to_cost[1024];
 	u64			found_ts;
@@ -1643,6 +1644,7 @@ extern bool move_storage_load(struct rq *rq);
 extern u8 contiguous_yielding_windows;
 #define NUM_PIPELINE_BUSY_THRES 3
 extern unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
+extern inline bool cluster_in_smart_lrpb(struct walt_sched_cluster *cluster);
 #define NUM_LOAD_SYNC_SETTINGS 3
 extern unsigned int sysctl_cluster01_load_sync[NUM_LOAD_SYNC_SETTINGS];
 extern unsigned int sysctl_cluster01_load_sync_60fps[NUM_LOAD_SYNC_SETTINGS];

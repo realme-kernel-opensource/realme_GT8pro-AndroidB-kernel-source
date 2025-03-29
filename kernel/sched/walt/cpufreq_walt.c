@@ -223,6 +223,10 @@ static unsigned int get_smart_freq_limit(unsigned int freq, struct waltgov_polic
 	unsigned int smart_freq = FREQ_QOS_MAX_DEFAULT_VALUE;
 	unsigned int smart_reason = 0;
 	struct walt_sched_cluster *cluster = cpu_cluster(wg_policy->policy->cpu);
+
+	if (cluster_in_smart_lrpb(cluster))
+		goto out;
+
 	/*
 	 * if ipc is enabled, then we update freq with respect to ipc and legacy both;
 	 * if ipc is disabled and legacy is enabled then we update freq with respect to legacy only;
@@ -250,6 +254,7 @@ static unsigned int get_smart_freq_limit(unsigned int freq, struct waltgov_polic
 		wg_driv_cpu->reasons |= smart_reason;
 	}
 
+out:
 	return freq;
 }
 

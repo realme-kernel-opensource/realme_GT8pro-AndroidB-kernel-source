@@ -11,6 +11,25 @@ bool smart_freq_init_done;
 char reason_dump[1024];
 static DEFINE_MUTEX(freq_reason_mutex);
 
+inline bool cluster_in_smart_lrpb(struct walt_sched_cluster *cluster)
+{
+	int cpu;
+	struct walt_rq *wrq;
+
+	if (!(default_freq_config[cluster->id].smart_freq_participation_mask &
+								BIT(LRPB_SMART_FREQ)))
+		return false;
+
+	for_each_cpu(cpu, &cluster->cpus) {
+		wrq = &per_cpu(walt_rq, cpu);
+		if (wrq->lrb_pipeline_start_time)
+			return true;
+	}
+
+	return false;
+}
+
+
 int sched_smart_freq_legacy_dump_handler(const struct ctl_table *table, int write,
 					 void __user *buffer, size_t *lenp,
 					 loff_t *ppos)
@@ -552,16 +571,9 @@ void smart_freq_update_reason_common(u64 wallclock, int nr_big, u32 wakeup_ctr_s
 		 * LRPB
 		 */
 		if (cluster_participation_mask & BIT(LRPB_SMART_FREQ)) {
-			int cpu;
-			struct walt_rq *wrq;
-
-			for_each_cpu(cpu, &cluster->cpus) {
-				wrq = &per_cpu(walt_rq, cpu);
-				if (wrq->lrb_pipeline_start_time) {
-					cluster_reasons |= BIT(LRPB_SMART_FREQ);
-					break;
-				}
-			}
+			current_state = cluster_in_smart_lrpb(cluster);
+			if (current_state)
+				cluster_reasons |= BIT(LRPB_SMART_FREQ);
 		}
 
 		cluster_active_reason = cluster->smart_freq_info->cluster_active_reason;
