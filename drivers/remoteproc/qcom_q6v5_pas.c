@@ -402,6 +402,7 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 	if (adsp->lite_pas_id)
 		ret = qcom_scm_pas_shutdown(adsp->lite_pas_id);
 
+	qcom_q6v5_pas_set_bw(&adsp->q6v5, UINT_MAX, UINT_MAX);
 	if (adsp->dtb_pas_id) {
 		ret = request_firmware(&adsp->dtb_firmware, adsp->dtb_firmware_name, adsp->dev);
 		if (ret) {
@@ -437,6 +438,7 @@ release_dtb_firmware:
 
 exit_load:
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_load", "exit");
+	qcom_q6v5_pas_set_bw(&adsp->q6v5, 0, 0);
 
 	return ret;
 }
@@ -621,6 +623,8 @@ static int adsp_start(struct rproc *rproc)
 	if (ret)
 		goto disable_px_supply;
 
+	qcom_q6v5_pas_set_bw(&adsp->q6v5, UINT_MAX, UINT_MAX);
+
 	trace_rproc_qcom_event(dev_name(adsp->dev), "dtb_auth_reset", "enter");
 
 	if (adsp->dtb_pas_id) {
@@ -716,6 +720,7 @@ exit_start:
 		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
 
 	release_firmware(adsp->dtb_firmware);
+	qcom_q6v5_pas_set_bw(&adsp->q6v5, 0, 0);
 	/* Remove pointer to the loaded firmware, only valid in adsp_load() & adsp_start() */
 	adsp->firmware = NULL;
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_start", "exit");
@@ -1091,6 +1096,7 @@ static int adsp_stop(struct rproc *rproc)
 	if (ret == -ETIMEDOUT)
 		dev_err(adsp->dev, "timed out on wait\n");
 
+	qcom_q6v5_pas_set_bw(&adsp->q6v5, UINT_MAX, UINT_MAX);
 	ret = qcom_scm_pas_shutdown(adsp->pas_id);
 	if (ret && adsp->decrypt_shutdown)
 		ret = adsp_shutdown_poll_decrypt(adsp);
@@ -1104,6 +1110,7 @@ static int adsp_stop(struct rproc *rproc)
 			panic("Panicking, remoteproc %s dtb failed to shutdown.\n", rproc->name);
 	}
 
+	qcom_q6v5_pas_set_bw(&adsp->q6v5, 0, 0);
 	handover = qcom_q6v5_unprepare(&adsp->q6v5);
 	if (handover)
 		qcom_pas_handover(&adsp->q6v5);

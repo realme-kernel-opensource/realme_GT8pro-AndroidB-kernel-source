@@ -566,10 +566,23 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 		return load_state ? -ENOMEM : -EINVAL;
 	}
 
-	q6v5->path = devm_of_icc_get(&pdev->dev, NULL);
-	if (IS_ERR(q6v5->path))
-		return dev_err_probe(&pdev->dev, PTR_ERR(q6v5->path),
-				     "failed to acquire interconnect path\n");
+	q6v5->path = devm_of_icc_get(&pdev->dev, "rproc_ddr");
+	if (IS_ERR(q6v5->path)) {
+		if (PTR_ERR(q6v5->path) != -ENODATA) {
+			return dev_err_probe(&pdev->dev, PTR_ERR(q6v5->path),
+				     "failed to acquire rproc_ddr interconnect path\n");
+		}
+		q6v5->path = NULL;
+	}
+
+	q6v5->crypto_path = devm_of_icc_get(&pdev->dev, "crypto_ddr");
+	if (IS_ERR(q6v5->crypto_path)) {
+		if (PTR_ERR(q6v5->crypto_path) != -ENODATA) {
+			return dev_err_probe(&pdev->dev, PTR_ERR(q6v5->crypto_path),
+				     "failed to acquire crypto_ddr interconnect path\n");
+		}
+		q6v5->crypto_path = NULL;
+	}
 
 	INIT_WORK(&q6v5->crash_handler, qcom_q6v5_crash_handler_work);
 

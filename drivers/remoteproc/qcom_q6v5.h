@@ -29,6 +29,7 @@ struct qcom_q6v5 {
 	struct qmp *qmp;
 
 	struct icc_path *path;
+	struct icc_path *crypto_path;
 
 	unsigned int stop_bit;
 	unsigned int ping_bit;
@@ -71,6 +72,21 @@ struct qcom_q6v5 {
 
 int ping_subsystem(struct qcom_q6v5 *q6v5);
 int ping_subsystem_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev);
+
+static inline void qcom_q6v5_pas_set_bw(struct qcom_q6v5 *q6v5, u32 avg_bw, u32 peak_bw)
+{
+	int ret;
+
+	if (!q6v5->crypto_path)
+		return;
+
+	ret = icc_set_bw(q6v5->crypto_path, avg_bw, peak_bw);
+	if (ret < 0) {
+		dev_err(q6v5->dev, "failed to set crypto_path bandwidth request\n");
+		icc_set_bw(q6v5->crypto_path, 0, 0);
+	}
+}
+
 int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 		   struct rproc *rproc, int crash_reason, int crash_stack,
 		   unsigned int smem_host_id, const char *load_state, bool early_boot,
