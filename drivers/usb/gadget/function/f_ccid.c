@@ -3,7 +3,7 @@
  * f_ccid.c -- CCID function Driver
  *
  * Copyright (c) 2011, 2013, 2017, 2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -15,6 +15,7 @@
 #include <linux/usb/composite.h>
 #include <linux/cdev.h>
 #include <linux/uaccess.h>
+#include <linux/compat.h>
 
 #include "f_ccid.h"
 
@@ -978,12 +979,22 @@ ccid_ctrl_ioctl(struct file *fp, unsigned int cmd, u_long arg)
 	return 0;
 }
 
+#ifdef CONFIG_COMPAT
+static long ccid_ctrl_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	return ccid_ctrl_ioctl(file, cmd, (unsigned long)compat_ptr(arg));
+}
+#endif
+
 static const struct file_operations ccid_ctrl_fops = {
 	.owner		= THIS_MODULE,
 	.open		= ccid_ctrl_open,
 	.release	= ccid_ctrl_release,
 	.read		= ccid_ctrl_read,
 	.unlocked_ioctl	= ccid_ctrl_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl   = ccid_ctrl_compat_ioctl,
+#endif
 };
 
 static int ccid_cdev_init(struct cdev *cdev, const struct file_operations *fops,
