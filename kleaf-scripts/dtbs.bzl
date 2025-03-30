@@ -80,7 +80,7 @@ def define_qcom_dtbs(
         makefile = "//common:Makefile",
         defconfig = defconfig,
         post_defconfig_fragments = [
-            ":{}_defconfig".format(stem),
+            ":{}_merged_defconfig".format(stem),
         ],
         make_goals = [
             "dtbs",

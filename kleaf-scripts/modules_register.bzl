@@ -1,12 +1,17 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load(
     "//build/kernel/kleaf:kernel.bzl",
+    "ddk_config",
     "ddk_module",
     "kernel_compile_commands",
     "kernel_module_group",
     "kernel_modules_install",
 )
-load(":kleaf-scripts/defconfig_fragment.bzl", "define_defconfig_fragment")
+load(
+    ":kleaf-scripts/defconfig_fragment.bzl",
+    "define_defconfig_fragment",
+    "fragment_menuconfig",
+)
 
 def signing_genrule(name, module, base_kernel, target_variant):
     native.genrule(
@@ -41,16 +46,49 @@ def _generate_ddk_target(
         module_map,
         target_variant,
         config_fragment,
-        base_kernel):
+        base_kernel,
+        ddk_config_deps,
+        implicit_config_fragment,
+        config_path):
     native.alias(
         name = "{}_base_kernel".format(target_variant),
         actual = base_kernel,
         visibility = ["//visibility:public"],
     )
 
+    if not ddk_config_deps:
+        ddk_config_deps = []
+
     define_defconfig_fragment(
         name = "{}_defconfig".format(target_variant),
         out = "{}.config".format(target_variant),
+        config = config_fragment,
+    )
+
+    ddk_config(
+        name = "{}_config".format(target_variant),
+        defconfig = ":{}_defconfig".format(target_variant),
+        kconfigs = [":kconfig.msm.generated"],
+        kernel_build = ":{}_base_kernel".format(target_variant),
+        deps = ddk_config_deps,
+    )
+
+    if config_path:
+        fragment_menuconfig(
+            name = "{}_menuconfig".format(target_variant),
+            ddk_config = ":{}_config".format(target_variant),
+            dest = config_path,
+        )
+
+    if implicit_config_fragment:
+        # config_fragment should come last so it takes priority
+        # over implicit_config_fragment.
+        config_fragment = implicit_config_fragment | config_fragment
+
+    # define a merged defconfig fragment for dtb_build :(
+    define_defconfig_fragment(
+        name = "{}_merged_defconfig".format(target_variant),
+        out = "{}_merged.config".format(target_variant),
         config = config_fragment,
     )
 
@@ -83,8 +121,7 @@ def _generate_ddk_target(
             ],
             includes = includes,
             kernel_build = ":{}_base_kernel".format(target_variant),
-            defconfig = ":{}_defconfig".format(target_variant),
-            kconfig = ":kconfig.msm.generated",
+            config = ":{}_config".format(target_variant),
             visibility = ["//visibility:public"],
             **module.extra_args
         )
@@ -194,7 +231,10 @@ def create_module_registry():
     def define_modules(
             target_variant,
             config_fragment,
-            base_kernel):
+            base_kernel,
+            ddk_config_deps = None,
+            implicit_config_fragment = None,
+            config_path = None):
         """Define register modules for a target/variant.
 
         Creates the following rules:
@@ -203,12 +243,27 @@ def create_module_registry():
           {target_variant}_config - ddk_config from the config_fragment and base_kernel
           {target_variant}/{module_name} - ddk_module for the target/variant
 
+        ddk_config_deps and implicit_config_fragment allow other (base) ddk
+        configurations to be applied. The example use case here is for the
+        "perf" and "debug" variants. The debug variant can add:
+          ddk_config_deps = ["target_perf_config"],
+          implicit_config_fragment = target_perf_config,
+        The ddk_config_deps ensures that the real .config is updated with the
+        perf configuration. implicit_config_fragment ensures the additional
+        modules are enabled.
+
         Args:
             target_variant: Base name of the target
             config_fragment: A dictionary containg Kconfig symbols and their values.
               Analogous to a defconfig fragment, but as a starlark dictionary.
               See the files under configs/
             base_kernel: A kernel_build() to base the module build.
+            ddk_config_deps: Additional dependencies to pass to ddk_config().
+            implicit_config_fragment: Additional Kconfig symbols to select
+              from the module dictionary. See note above.
+            config_path: Path to the file which declares config_fragment.
+              Optional. If set, an executable {target_variant}_menuconfig is created
+              which can run menuconfig and update the config_path file.
 
         Returns:
             The list of all enabled modules *without* the target_variant/ prefix.
@@ -219,6 +274,9 @@ def create_module_registry():
             target_variant,
             config_fragment,
             base_kernel,
+            ddk_config_deps,
+            implicit_config_fragment,
+            config_path,
         )
 
     return struct(
