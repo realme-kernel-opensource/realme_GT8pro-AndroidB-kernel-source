@@ -27,7 +27,8 @@ static uint16_t slc_client_id[] = {
 	SLC_CLIENT_MAX,
 };
 
-#define SLC_MPAM_VERSION_1	0x00000001   /* SLC Client info Version */
+#define SLC_MPAM_VERSION_1	0x00000002   /* SLC iMPAM More gear support */
+#define SLC_FW_VERSION_GEAR	SLC_MPAM_VERSION_1
 
 static int mpam_msc_slc_set_params(struct device *dev, void *param, int param_len,
 		uint32_t param_id)
@@ -118,27 +119,31 @@ static int slc_set_cache_partition(struct device *dev, void *msc_partid, void *m
 	struct slc_partid_capability *slc_partid_cap;
 	int client_idx, partid_idx, gear_idx;
 
-	memcpy(&slc_part_config.query, msc_partid, sizeof(struct msc_query));
-	memcpy(&slc_part_config.gear_config, msc_partconfig, sizeof(struct qcom_slc_gear_val));
-
 	qcom_msc = slc_capability_check(dev, &slc_part_config.query);
 	if (qcom_msc == NULL)
 		return -EINVAL;
 
-	client_idx = slc_part_config.query.client_id;
-	partid_idx = slc_part_config.query.part_id;
 	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
-	slc_client_cap = &(slc_capability->slc_client_cap[client_idx]);
-	slc_partid_cap = &(slc_client_cap->slc_partid_cap[partid_idx]);
+	memcpy(&slc_part_config.query, msc_partid, sizeof(struct msc_query));
+	slc_part_config.gear_config.gear_val =
+		((struct qcom_slc_gear_val *)msc_partconfig)->gear_val;
 
-	for (gear_idx = 0; gear_idx < slc_partid_cap->num_gears; gear_idx++) {
-		if (slc_partid_cap->part_id_gears[gear_idx] == slc_part_config.gear_config.gear_val)
-			break;
-	}
+	if (slc_capability->firmware_ver.firmware_version == 0) {
+		client_idx = slc_part_config.query.client_id;
+		partid_idx = slc_part_config.query.part_id;
+		slc_client_cap = &(slc_capability->slc_client_cap[client_idx]);
+		slc_partid_cap = &(slc_client_cap->slc_partid_cap[partid_idx]);
 
-	if (gear_idx == slc_partid_cap->num_gears) {
-		dev_err(dev, "GEAR config not valid!\n");
-		return -EINVAL;
+		for (gear_idx = 0; gear_idx < slc_partid_cap->num_gears; gear_idx++) {
+			if (slc_partid_cap->gear_def.gear_cfg.part_id_gears[gear_idx] ==
+					slc_part_config.gear_config.gear_val)
+				break;
+		}
+
+		if (gear_idx == slc_partid_cap->num_gears) {
+			dev_err(dev, "GEAR config not valid!\n");
+			return -EINVAL;
+		}
 	}
 
 	return mpam_msc_slc_set_params(dev, &slc_part_config, sizeof(struct slc_partid_config),
@@ -148,26 +153,34 @@ static int slc_set_cache_partition(struct device *dev, void *msc_partid, void *m
 static int slc_reset_cache_partition(struct device *dev, void *msc_partid, void *msc_partconfig)
 {
 	struct qcom_mpam_msc *qcom_msc;
+	struct qcom_slc_capability *slc_capability;
 	struct slc_partid_config slc_part_config = {0};
-
-	memcpy(&slc_part_config.query, msc_partid, sizeof(struct msc_query));
-	memcpy(&slc_part_config.gear_config, msc_partconfig, sizeof(struct qcom_slc_gear_val));
 
 	qcom_msc = slc_capability_check(dev, &slc_part_config.query);
 	if (qcom_msc == NULL)
 		return -EINVAL;
 
+	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
+	memcpy(&slc_part_config.query, msc_partid, sizeof(struct msc_query));
+
+	if (slc_capability->firmware_ver.firmware_version >= SLC_FW_VERSION_GEAR)
+		slc_part_config.gear_config.gear_val =
+			((struct qcom_slc_gear_val *)msc_partconfig)->gear_val;
+	else
+		memcpy(&slc_part_config.gear_config, msc_partconfig,
+				sizeof(struct qcom_slc_gear_val));
+
 	return mpam_msc_slc_set_params(dev, &slc_part_config, sizeof(struct slc_partid_config),
 			PARAM_RESET_CACHE_PARTITION_MSC);
 }
 
-static int slc_firmware_version_query(struct device *dev, void *msc_partid, void *msc_partconfig)
+static int slc_firmware_version_query(struct device *dev, void *msc_partid, void *version)
 {
 	struct qcom_mpam_msc *qcom_msc;
 	struct msc_query query;
 	struct qcom_slc_firmware_version *firmware_ver;
 
-	firmware_ver = (struct qcom_slc_firmware_version *)msc_partconfig;
+	firmware_ver = (struct qcom_slc_firmware_version *)version;
 	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
 	if (qcom_msc == NULL)
 		return -EINVAL;
@@ -224,6 +237,7 @@ static int slc_get_cache_partition_capability(struct device *dev, void *msc_part
 	struct qcom_slc_capability *slc_capability;
 	struct slc_partid_capability *slc_partid_capability;
 	struct slc_client_capability *slc_client_cap;
+	int ret;
 
 	query = (struct msc_query *)msc_partid;
 	qcom_msc = slc_capability_check(dev, query);
@@ -236,8 +250,14 @@ static int slc_get_cache_partition_capability(struct device *dev, void *msc_part
 	if (slc_client_cap->enabled == false)
 		return -EINVAL;
 
-	return mpam_msc_slc_get_params(dev, query, sizeof(struct msc_query), slc_partid_capability,
-			sizeof(struct slc_partid_capability), PARAM_GET_CACHE_CAPABILITY_MSC);
+	ret = mpam_msc_slc_get_params(dev, query, sizeof(struct msc_query),
+			slc_partid_capability, sizeof(struct slc_partid_capability),
+			PARAM_GET_CACHE_CAPABILITY_MSC);
+	if (ret == 0)
+		slc_partid_capability->gear_def.cap_cfg.slc_bitfield_capacity =
+			slc_capability->slc_bitfield_capacity;
+
+	return ret;
 }
 
 static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
@@ -522,9 +542,11 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 			client_info->slc_mon_info.num_cap_monitor;
 		slc_capability->slc_mon_list.read_miss_config_available =
 			client_info->slc_mon_info.num_miss_monitor;
+		slc_capability->slc_bitfield_capacity = client_info->slc_bitfield_capacity;
 		if ((slc_capability->num_clients == 0) ||
 				(client_info->slc_mon_info.num_cap_monitor == 0) ||
-				(client_info->slc_mon_info.num_miss_monitor == 0)) {
+				(client_info->slc_mon_info.num_miss_monitor == 0) ||
+				(slc_capability->slc_bitfield_capacity == 0)) {
 			pr_err("SLC Client info population Failed!\n");
 			return -EINVAL;
 		}
@@ -537,6 +559,7 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 
 		qcom_msc->mpam_available = MPAM_AVAILABLE;
 		client_details = &(client_info->client);
+		slc_capability->num_partids = 0;
 		for (client_idx = 0; client_idx < slc_capability->num_clients; client_idx++,
 				client_details++) {
 			client_cap = &(slc_capability->slc_client_cap[client_idx]);
@@ -567,6 +590,7 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 			strscpy(client_cap->client_name, client_details->client_name,
 					CLIENT_NAME_LEN);
 			client_cap->enabled = true;
+			slc_capability->num_partids += num_part_ids;
 			for (partid_idx = 0; partid_idx < num_part_ids; partid_idx++) {
 				query.part_id = partid_idx;
 				ret = msc_system_get_device_capability(qcom_msc->msc_id, &query,
@@ -638,6 +662,8 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 						query.part_id);
 			}
 		}
+
+		slc_capability->num_partids = SLC_NUM_PARTIDS;
 	}
 
 	return ret;

@@ -54,10 +54,26 @@ struct slc_client_info {
 } __packed;
 
 /* PARAM_GET_CACHE_CAPABILITY_MSC */
+struct slc_partid_capacity_config {
+	uint32_t gear_flds_bitmap;
+	uint16_t dflt_bitmap;
+	uint32_t slc_bitfield_capacity;
+} __packed;
+
+struct slc_partid_gear_config {
+	uint8_t part_id_gears[MAX_NUM_GEARS];
+} __packed;
+
+union partid_gear_def {
+	struct slc_partid_capacity_config cap_cfg;
+	struct slc_partid_gear_config gear_cfg;
+} __packed;
+
 struct slc_partid_capability {
 	uint8_t part_id;
 	uint8_t num_gears;
-	uint8_t part_id_gears[MAX_NUM_GEARS];
+	union partid_gear_def gear_def;
+	uint32_t part_id_gears[MAX_NUM_GEARS];
 } __packed;
 
 /* PARAM_GET_CACHE_PARTITION_MSC */
@@ -143,6 +159,7 @@ struct slc_mon_details {
 struct slc_sct_client_info {
 	uint32_t num_clients;
 	struct slc_mon_details slc_mon_info;
+	uint32_t slc_bitfield_capacity;
 	struct slc_client_details client;
 } __packed;
 
@@ -195,10 +212,12 @@ struct slc_client_capability {
 
 struct qcom_slc_capability {
 	uint32_t num_clients;
+	uint32_t slc_bitfield_capacity;
 	struct slc_client_capability *slc_client_cap;
 	struct slc_mon_capability slc_mon_list;
 	struct slc_mon_configured slc_mon_configured;
 	struct qcom_slc_firmware_version firmware_ver;
+	uint32_t num_partids;
 } __packed;
 
 /* slc mon API parameters */
