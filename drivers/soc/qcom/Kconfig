@@ -238,6 +238,7 @@ config QCOM_QMI_HELPERS
 	depends on NET
 
 source "$(KCONFIG_EXT_PREFIX)drivers/soc/qcom/memshare/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/qcom/hab/Kconfig"
 
 config QCOM_RPMH
 	tristate "Qualcomm RPM-Hardened (RPMH) Communication"
