@@ -32,6 +32,9 @@ enum {
 	VOTER_IDX_DISP_CRM_HW_3,
 	VOTER_IDX_DISP_CRM_HW_4,
 	VOTER_IDX_DISP_CRM_HW_5,
+	VOTER_IDX_DISP_CRM_HW_6,
+	VOTER_IDX_DISP_CRM_HW_7,
+	VOTER_IDX_DISP_CRM_HW_8,
 };
 
 static const struct regmap_config icc_regmap_config = {
@@ -1586,6 +1589,97 @@ static struct qcom_icc_node qnm_mdp_disp_crm_hw_5 = {
 	.links = { SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_5 },
 };
 
+static struct qcom_icc_node qnm_mnoc_hf_disp_crm_hw_6 = {
+	.name = "qnm_mnoc_hf_disp_crm_hw_6",
+	.id = MASTER_MNOC_HF_MEM_NOC_DISP_CRM_HW_6,
+	.channels = 2,
+	.buswidth = 32,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { SLAVE_LLCC_DISP_CRM_HW_6 },
+};
+
+static struct qcom_icc_node llcc_mc_disp_crm_hw_6 = {
+	.name = "llcc_mc_disp_crm_hw_6",
+	.id = MASTER_LLCC_DISP_CRM_HW_6,
+	.channels = 4,
+	.buswidth = 4,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { SLAVE_EBI1_DISP_CRM_HW_6 },
+};
+
+static struct qcom_icc_node qnm_mdp_disp_crm_hw_6 = {
+	.name = "qnm_mdp_disp_crm_hw_6",
+	.id = MASTER_MDP_DISP_CRM_HW_6,
+	.channels = 2,
+	.buswidth = 32,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_6 },
+};
+
+static struct qcom_icc_node qnm_mnoc_hf_disp_crm_hw_7 = {
+	.name = "qnm_mnoc_hf_disp_crm_hw_7",
+	.id = MASTER_MNOC_HF_MEM_NOC_DISP_CRM_HW_7,
+	.channels = 2,
+	.buswidth = 32,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { SLAVE_LLCC_DISP_CRM_HW_7 },
+};
+
+static struct qcom_icc_node llcc_mc_disp_crm_hw_7 = {
+	.name = "llcc_mc_disp_crm_hw_7",
+	.id = MASTER_LLCC_DISP_CRM_HW_7,
+	.channels = 4,
+	.buswidth = 4,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { SLAVE_EBI1_DISP_CRM_HW_7 },
+};
+
+static struct qcom_icc_node qnm_mdp_disp_crm_hw_7 = {
+	.name = "qnm_mdp_disp_crm_hw_7",
+	.id = MASTER_MDP_DISP_CRM_HW_7,
+	.channels = 2,
+	.buswidth = 32,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_7 },
+};
+
+static struct qcom_icc_node qnm_mnoc_hf_disp_crm_hw_8 = {
+	.name = "qnm_mnoc_hf_disp_crm_hw_8",
+	.id = MASTER_MNOC_HF_MEM_NOC_DISP_CRM_HW_8,
+	.channels = 2,
+	.buswidth = 32,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { SLAVE_LLCC_DISP_CRM_HW_8 },
+};
+
+static struct qcom_icc_node llcc_mc_disp_crm_hw_8 = {
+	.name = "llcc_mc_disp_crm_hw_8",
+	.id = MASTER_LLCC_DISP_CRM_HW_8,
+	.channels = 4,
+	.buswidth = 4,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { SLAVE_EBI1_DISP_CRM_HW_8 },
+};
+
+static struct qcom_icc_node qnm_mdp_disp_crm_hw_8 = {
+	.name = "qnm_mdp_disp_crm_hw_8",
+	.id = MASTER_MDP_DISP_CRM_HW_8,
+	.channels = 2,
+	.buswidth = 32,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_8 },
+};
+
+
 static struct qcom_icc_node qns_a1noc_snoc = {
 	.name = "qns_a1noc_snoc",
 	.id = SLAVE_A1NOC_SNOC,
@@ -2577,6 +2671,94 @@ static struct qcom_icc_node qns_mem_noc_hf_disp_crm_hw_5 = {
 	.links = { MASTER_MNOC_HF_MEM_NOC_DISP_CRM_HW_5 },
 };
 
+static struct qcom_icc_node qns_llcc_disp_crm_hw_6 = {
+	.name = "qns_llcc_disp_crm_hw_6",
+	.id = SLAVE_LLCC_DISP_CRM_HW_6,
+	.channels = 4,
+	.buswidth = 16,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { MASTER_LLCC_DISP_CRM_HW_6 },
+};
+
+static struct qcom_icc_node ebi_disp_crm_hw_6 = {
+	.name = "ebi_disp_crm_hw_6",
+	.id = SLAVE_EBI1_DISP_CRM_HW_6,
+	.channels = 4,
+	.buswidth = 4,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 0,
+};
+
+static struct qcom_icc_node qns_mem_noc_hf_disp_crm_hw_6 = {
+	.name = "qns_mem_noc_hf_disp_crm_hw_6",
+	.id = SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_6,
+	.channels = 2,
+	.buswidth = 32,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { MASTER_MNOC_HF_MEM_NOC_DISP_CRM_HW_6 },
+};
+
+static struct qcom_icc_node qns_llcc_disp_crm_hw_7 = {
+	.name = "qns_llcc_disp_crm_hw_7",
+	.id = SLAVE_LLCC_DISP_CRM_HW_7,
+	.channels = 4,
+	.buswidth = 16,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { MASTER_LLCC_DISP_CRM_HW_7 },
+};
+
+static struct qcom_icc_node ebi_disp_crm_hw_7 = {
+	.name = "ebi_disp_crm_hw_7",
+	.id = SLAVE_EBI1_DISP_CRM_HW_7,
+	.channels = 4,
+	.buswidth = 4,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 0,
+};
+
+static struct qcom_icc_node qns_mem_noc_hf_disp_crm_hw_7 = {
+	.name = "qns_mem_noc_hf_disp_crm_hw_7",
+	.id = SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_7,
+	.channels = 2,
+	.buswidth = 32,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { MASTER_MNOC_HF_MEM_NOC_DISP_CRM_HW_7 },
+};
+
+static struct qcom_icc_node qns_llcc_disp_crm_hw_8 = {
+	.name = "qns_llcc_disp_crm_hw_8",
+	.id = SLAVE_LLCC_DISP_CRM_HW_8,
+	.channels = 4,
+	.buswidth = 16,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { MASTER_LLCC_DISP_CRM_HW_8 },
+};
+
+static struct qcom_icc_node ebi_disp_crm_hw_8 = {
+	.name = "ebi_disp_crm_hw_8",
+	.id = SLAVE_EBI1_DISP_CRM_HW_8,
+	.channels = 4,
+	.buswidth = 4,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 0,
+};
+
+static struct qcom_icc_node qns_mem_noc_hf_disp_crm_hw_8 = {
+	.name = "qns_mem_noc_hf_disp_crm_hw_8",
+	.id = SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_8,
+	.channels = 2,
+	.buswidth = 32,
+	.noc_ops = &qcom_qnoc4_ops,
+	.num_links = 1,
+	.links = { MASTER_MNOC_HF_MEM_NOC_DISP_CRM_HW_8 },
+};
+
+
 static struct qcom_icc_bcm bcm_acv = {
 	.name = "ACV",
 	.type = QCOM_ICC_BCM_TYPE_MASK,
@@ -3258,6 +3440,132 @@ static struct qcom_icc_bcm bcm_sh1_disp_crm_hw_5 = {
 	.nodes = { &qnm_mnoc_hf_disp_crm_hw_5 },
 };
 
+static struct qcom_icc_bcm bcm_acv_disp_crm_hw_6 = {
+	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_6,
+	.crm_node = 4,
+	.num_nodes = 1,
+	.nodes = { &ebi_disp_crm_hw_6 },
+};
+
+static struct qcom_icc_bcm bcm_mc0_disp_crm_hw_6 = {
+	.name = "MC0",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_6,
+	.crm_node = 0,
+	.num_nodes = 1,
+	.nodes = { &ebi_disp_crm_hw_6 },
+};
+
+static struct qcom_icc_bcm bcm_mm0_disp_crm_hw_6 = {
+	.name = "MM0",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_6,
+	.crm_node = 3,
+	.num_nodes = 1,
+	.nodes = { &qns_mem_noc_hf_disp_crm_hw_6 },
+};
+
+static struct qcom_icc_bcm bcm_sh0_disp_crm_hw_6 = {
+	.name = "SH0",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_6,
+	.crm_node = 1,
+	.num_nodes = 1,
+	.nodes = { &qns_llcc_disp_crm_hw_6 },
+};
+
+static struct qcom_icc_bcm bcm_sh1_disp_crm_hw_6 = {
+	.name = "SH1",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_6,
+	.crm_node = 2,
+	.enable_mask = 0x1,
+	.num_nodes = 1,
+	.nodes = { &qnm_mnoc_hf_disp_crm_hw_6 },
+};
+
+static struct qcom_icc_bcm bcm_acv_disp_crm_hw_7 = {
+	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_7,
+	.crm_node = 4,
+	.num_nodes = 1,
+	.nodes = { &ebi_disp_crm_hw_7 },
+};
+
+static struct qcom_icc_bcm bcm_mc0_disp_crm_hw_7 = {
+	.name = "MC0",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_7,
+	.crm_node = 0,
+	.num_nodes = 1,
+	.nodes = { &ebi_disp_crm_hw_7 },
+};
+
+static struct qcom_icc_bcm bcm_mm0_disp_crm_hw_7 = {
+	.name = "MM0",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_7,
+	.crm_node = 3,
+	.num_nodes = 1,
+	.nodes = { &qns_mem_noc_hf_disp_crm_hw_7 },
+};
+
+static struct qcom_icc_bcm bcm_sh0_disp_crm_hw_7 = {
+	.name = "SH0",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_7,
+	.crm_node = 1,
+	.num_nodes = 1,
+	.nodes = { &qns_llcc_disp_crm_hw_7 },
+};
+
+static struct qcom_icc_bcm bcm_sh1_disp_crm_hw_7 = {
+	.name = "SH1",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_7,
+	.crm_node = 2,
+	.enable_mask = 0x1,
+	.num_nodes = 1,
+	.nodes = { &qnm_mnoc_hf_disp_crm_hw_7 },
+};
+
+static struct qcom_icc_bcm bcm_acv_disp_crm_hw_8 = {
+	.name = "ACV",
+	.type = QCOM_ICC_BCM_TYPE_MASK,
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_8,
+	.crm_node = 4,
+	.num_nodes = 1,
+	.nodes = { &ebi_disp_crm_hw_8 },
+};
+
+static struct qcom_icc_bcm bcm_mc0_disp_crm_hw_8 = {
+	.name = "MC0",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_8,
+	.crm_node = 0,
+	.num_nodes = 1,
+	.nodes = { &ebi_disp_crm_hw_8 },
+};
+
+static struct qcom_icc_bcm bcm_mm0_disp_crm_hw_8 = {
+	.name = "MM0",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_8,
+	.crm_node = 3,
+	.num_nodes = 1,
+	.nodes = { &qns_mem_noc_hf_disp_crm_hw_8 },
+};
+
+static struct qcom_icc_bcm bcm_sh0_disp_crm_hw_8 = {
+	.name = "SH0",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_8,
+	.crm_node = 1,
+	.num_nodes = 1,
+	.nodes = { &qns_llcc_disp_crm_hw_8 },
+};
+
+static struct qcom_icc_bcm bcm_sh1_disp_crm_hw_8 = {
+	.name = "SH1",
+	.voter_idx = VOTER_IDX_DISP_CRM_HW_8,
+	.crm_node = 2,
+	.enable_mask = 0x1,
+	.num_nodes = 1,
+	.nodes = { &qnm_mnoc_hf_disp_crm_hw_8 },
+};
+
 static struct qcom_icc_bcm *aggre_noc_bcms[] = {
 	&bcm_ce0,
 };
@@ -3454,6 +3762,12 @@ static struct qcom_icc_bcm *gem_noc_bcms[] = {
 	&bcm_sh1_disp_crm_hw_4,
 	&bcm_sh0_disp_crm_hw_5,
 	&bcm_sh1_disp_crm_hw_5,
+	&bcm_sh0_disp_crm_hw_6,
+	&bcm_sh1_disp_crm_hw_6,
+	&bcm_sh0_disp_crm_hw_7,
+	&bcm_sh1_disp_crm_hw_7,
+	&bcm_sh0_disp_crm_hw_8,
+	&bcm_sh1_disp_crm_hw_8,
 };
 
 static struct qcom_icc_node *gem_noc_nodes[] = {
@@ -3499,6 +3813,12 @@ static struct qcom_icc_node *gem_noc_nodes[] = {
 	[SLAVE_LLCC_DISP_CRM_HW_4] = &qns_llcc_disp_crm_hw_4,
 	[MASTER_MNOC_HF_MEM_NOC_DISP_CRM_HW_5] = &qnm_mnoc_hf_disp_crm_hw_5,
 	[SLAVE_LLCC_DISP_CRM_HW_5] = &qns_llcc_disp_crm_hw_5,
+	[MASTER_MNOC_HF_MEM_NOC_DISP_CRM_HW_6] = &qnm_mnoc_hf_disp_crm_hw_6,
+	[SLAVE_LLCC_DISP_CRM_HW_6] = &qns_llcc_disp_crm_hw_6,
+	[MASTER_MNOC_HF_MEM_NOC_DISP_CRM_HW_7] = &qnm_mnoc_hf_disp_crm_hw_7,
+	[SLAVE_LLCC_DISP_CRM_HW_7] = &qns_llcc_disp_crm_hw_7,
+	[MASTER_MNOC_HF_MEM_NOC_DISP_CRM_HW_8] = &qnm_mnoc_hf_disp_crm_hw_8,
+	[SLAVE_LLCC_DISP_CRM_HW_8] = &qns_llcc_disp_crm_hw_8,
 };
 
 static char *gem_noc_voters[] = {
@@ -3514,6 +3834,9 @@ static char *gem_noc_voters[] = {
 	[VOTER_IDX_DISP_CRM_HW_3] = "disp_crm_hw_3",
 	[VOTER_IDX_DISP_CRM_HW_4] = "disp_crm_hw_4",
 	[VOTER_IDX_DISP_CRM_HW_5] = "disp_crm_hw_5",
+	[VOTER_IDX_DISP_CRM_HW_6] = "disp_crm_hw_6",
+	[VOTER_IDX_DISP_CRM_HW_7] = "disp_crm_hw_7",
+	[VOTER_IDX_DISP_CRM_HW_8] = "disp_crm_hw_8",
 };
 
 static struct qcom_icc_desc canoe_gem_noc = {
@@ -3618,6 +3941,12 @@ static struct qcom_icc_bcm *mc_virt_bcms[] = {
 	&bcm_mc0_disp_crm_hw_4,
 	&bcm_acv_disp_crm_hw_5,
 	&bcm_mc0_disp_crm_hw_5,
+	&bcm_acv_disp_crm_hw_6,
+	&bcm_mc0_disp_crm_hw_6,
+	&bcm_acv_disp_crm_hw_7,
+	&bcm_mc0_disp_crm_hw_7,
+	&bcm_acv_disp_crm_hw_8,
+	&bcm_mc0_disp_crm_hw_8,
 };
 
 static struct qcom_icc_node *mc_virt_nodes[] = {
@@ -3645,6 +3974,12 @@ static struct qcom_icc_node *mc_virt_nodes[] = {
 	[SLAVE_EBI1_DISP_CRM_HW_4] = &ebi_disp_crm_hw_4,
 	[MASTER_LLCC_DISP_CRM_HW_5] = &llcc_mc_disp_crm_hw_5,
 	[SLAVE_EBI1_DISP_CRM_HW_5] = &ebi_disp_crm_hw_5,
+	[MASTER_LLCC_DISP_CRM_HW_6] = &llcc_mc_disp_crm_hw_6,
+	[SLAVE_EBI1_DISP_CRM_HW_6] = &ebi_disp_crm_hw_6,
+	[MASTER_LLCC_DISP_CRM_HW_7] = &llcc_mc_disp_crm_hw_7,
+	[SLAVE_EBI1_DISP_CRM_HW_7] = &ebi_disp_crm_hw_7,
+	[MASTER_LLCC_DISP_CRM_HW_8] = &llcc_mc_disp_crm_hw_8,
+	[SLAVE_EBI1_DISP_CRM_HW_8] = &ebi_disp_crm_hw_8,
 };
 
 static char *mc_virt_voters[] = {
@@ -3660,6 +3995,9 @@ static char *mc_virt_voters[] = {
 	[VOTER_IDX_DISP_CRM_HW_3] = "disp_crm_hw_3",
 	[VOTER_IDX_DISP_CRM_HW_4] = "disp_crm_hw_4",
 	[VOTER_IDX_DISP_CRM_HW_5] = "disp_crm_hw_5",
+	[VOTER_IDX_DISP_CRM_HW_6] = "disp_crm_hw_6",
+	[VOTER_IDX_DISP_CRM_HW_7] = "disp_crm_hw_7",
+	[VOTER_IDX_DISP_CRM_HW_8] = "disp_crm_hw_8",
 };
 
 static struct qcom_icc_desc canoe_mc_virt = {
@@ -3688,6 +4026,9 @@ static struct qcom_icc_bcm *mmss_noc_bcms[] = {
 	&bcm_mm0_disp_crm_hw_3,
 	&bcm_mm0_disp_crm_hw_4,
 	&bcm_mm0_disp_crm_hw_5,
+	&bcm_mm0_disp_crm_hw_6,
+	&bcm_mm0_disp_crm_hw_7,
+	&bcm_mm0_disp_crm_hw_8,
 };
 
 static struct qcom_icc_node *mmss_noc_nodes[] = {
@@ -3738,6 +4079,12 @@ static struct qcom_icc_node *mmss_noc_nodes[] = {
 	[SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_4] = &qns_mem_noc_hf_disp_crm_hw_4,
 	[MASTER_MDP_DISP_CRM_HW_5] = &qnm_mdp_disp_crm_hw_5,
 	[SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_5] = &qns_mem_noc_hf_disp_crm_hw_5,
+	[MASTER_MDP_DISP_CRM_HW_6] = &qnm_mdp_disp_crm_hw_6,
+	[SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_6] = &qns_mem_noc_hf_disp_crm_hw_6,
+	[MASTER_MDP_DISP_CRM_HW_7] = &qnm_mdp_disp_crm_hw_7,
+	[SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_7] = &qns_mem_noc_hf_disp_crm_hw_7,
+	[MASTER_MDP_DISP_CRM_HW_8] = &qnm_mdp_disp_crm_hw_8,
+	[SLAVE_MNOC_HF_MEM_NOC_DISP_CRM_HW_8] = &qns_mem_noc_hf_disp_crm_hw_8,
 };
 
 static char *mmss_noc_voters[] = {
@@ -3752,6 +4099,9 @@ static char *mmss_noc_voters[] = {
 	[VOTER_IDX_DISP_CRM_HW_3] = "disp_crm_hw_3",
 	[VOTER_IDX_DISP_CRM_HW_4] = "disp_crm_hw_4",
 	[VOTER_IDX_DISP_CRM_HW_5] = "disp_crm_hw_5",
+	[VOTER_IDX_DISP_CRM_HW_6] = "disp_crm_hw_6",
+	[VOTER_IDX_DISP_CRM_HW_7] = "disp_crm_hw_7",
+	[VOTER_IDX_DISP_CRM_HW_8] = "disp_crm_hw_8",
 };
 
 static struct qcom_icc_desc canoe_mmss_noc = {
