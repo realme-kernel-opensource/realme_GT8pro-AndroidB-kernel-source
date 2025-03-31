@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef UFS_QCOM_PHY_QMP_V4_CANOE_H_
@@ -32,6 +32,9 @@
 #define UFS_PHY_TX_POST_EMP_LVL_S5		PHY_OFF(0x244)
 #define UFS_PHY_TX_POST_EMP_LVL_S6		PHY_OFF(0x248)
 #define UFS_PHY_TX_POST_EMP_LVL_S7		PHY_OFF(0x24C)
+#define UFS_PHY_TX_POST_EMP_G12_G3		PHY_OFF(0x274)
+#define UFS_PHY_TX_POST_EMP_G4_G5		PHY_OFF(0x278)
+
 #define UFS_PHY_RX_EYEMON_VOLTAGE_MAX_STEPS_CAPABILITY		PHY_OFF(0x150)
 #define UFS_PHY_RX_EYEMON_VOLTAGE_MAX_OFFSET_CAPABILITY	PHY_OFF(0x154)
 
@@ -183,6 +186,46 @@
 #define UFS_PHY_RX_LINECFG_DISABLE_BIT		BIT(1)
 #define QSERDES_RX_INTERFACE_MODE_CLOCK_EDGE_BIT	BIT(6)
 
+enum tx_hs_equalizer_mode {
+	TX_POST_EMP_MODE_0	= 0,
+	TX_POST_EMP_MODE_1	= BIT(3),
+};
+
+/*
+ * Bit[0:2] are used for HSG4 setting. From the MPHY spec, the
+ * de-emphasis levels are defined as follows
+ * b000: No de-emphasis selected,
+ * b001: De-emphasis of 0.8 dB selected,
+ * b010: De-emphasis of 1.6 dB selected,
+ * b011: De-emphasis of 2.5 dB selected,
+ * b100: De-emphasis of 3.5 dB selected,
+ * b101: De-emphasis of 4.7 dB selected,
+ * b110: De-emphasis of 6.0 dB selected,
+ * b111: De-emphasis of 7.6 dB selected
+ */
+enum tx_hs_equalizer_g4_setting {
+	TX_POST_EMP_SETTING_HSG4_0	= 0,
+	TX_POST_EMP_SETTING_HSG4_1	= 0x01,
+	TX_POST_EMP_SETTING_HSG4_2	= 0x02,
+	TX_POST_EMP_SETTING_HSG4_3	= 0x03,
+	TX_POST_EMP_SETTING_HSG4_4	= 0x04,
+	TX_POST_EMP_SETTING_HSG4_5	= 0x05,
+	TX_POST_EMP_SETTING_HSG4_6	= 0x06,
+	TX_POST_EMP_SETTING_HSG4_7	= 0x07,
+};
+
+/* Bit[4:6] are used for HSG5 setting */
+enum tx_hs_equalizer_g5_setting {
+	TX_POST_EMP_SETTING_HSG5_0	= 0x00,
+	TX_POST_EMP_SETTING_HSG5_1	= 0x10,
+	TX_POST_EMP_SETTING_HSG5_2	= 0x20,
+	TX_POST_EMP_SETTING_HSG5_3	= 0x30,
+	TX_POST_EMP_SETTING_HSG5_4	= 0x40,
+	TX_POST_EMP_SETTING_HSG5_5	= 0x50,
+	TX_POST_EMP_SETTING_HSG5_6	= 0x60,
+	TX_POST_EMP_SETTING_HSG5_7	= 0x70,
+};
+
 /*
  * This structure represents the v4 specific phy.
  * common_cfg MUST remain the first field in this structure
@@ -305,6 +348,7 @@ static struct ufs_qcom_phy_calibration phy_cal_table_rate_A_g5[] = {
 	UFS_QCOM_PHY_CAL_ENTRY(UFS_PHY_TX_POST_EMP_LVL_S5, 0x12),
 	UFS_QCOM_PHY_CAL_ENTRY(UFS_PHY_TX_POST_EMP_LVL_S6, 0x15),
 	UFS_QCOM_PHY_CAL_ENTRY(UFS_PHY_TX_POST_EMP_LVL_S7, 0x19),
+	UFS_QCOM_PHY_CAL_ENTRY(UFS_PHY_TX_POST_EMP_G4_G5, 0x08),
 	UFS_QCOM_PHY_CAL_ENTRY(UFS_PHY_RX_EYEMON_VOLTAGE_MAX_STEPS_CAPABILITY, 0x3F),
 	UFS_QCOM_PHY_CAL_ENTRY(UFS_PHY_RX_EYEMON_VOLTAGE_MAX_OFFSET_CAPABILITY, 0x18),
 };

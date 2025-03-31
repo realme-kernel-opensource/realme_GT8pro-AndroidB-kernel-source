@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "phy-qcom-ufs-qmp-v4-canoe.h"
@@ -84,6 +84,8 @@ static int ufs_qcom_phy_qmp_v4_phy_calibrate(struct phy *generic_phy)
 	writel_relaxed(0x00, ufs_qcom_phy->mmio + UFS_PHY_SW_RESET);
 	/* flush buffered writes */
 	wmb();
+
+	ufs_qcom_phy->tx_hs_equalizer_configured = false;
 
 	err = reset_control_deassert(ufs_qcom_phy->ufs_reset);
 	if (err) {
@@ -228,17 +230,22 @@ void ufs_qcom_phy_qmp_v4_power_control(struct ufs_qcom_phy *phy,
 	}
 }
 
-/* Refer to MPHY Spec Table-40 */
-#define  DEEMPHASIS_3_5_dB	0x04
-#define  NO_DEEMPHASIS		0x0
-
 static inline
-u32 ufs_qcom_phy_qmp_v4_get_tx_hs_equalizer(struct ufs_qcom_phy *phy, u32 gear)
+void ufs_qcom_phy_qmp_v4_tx_hs_equalizer_config(struct ufs_qcom_phy *phy)
 {
-	if (gear == 5)
-		return DEEMPHASIS_3_5_dB;
-	/* Gear 1-4 setting */
-	return NO_DEEMPHASIS;
+	/* HSG5 de-emphasis setting 4 = -3.5db. HSG4 uses default setting */
+	u32 value = TX_POST_EMP_MODE_1 | TX_POST_EMP_SETTING_HSG5_4;
+
+	writel_relaxed(value, phy->mmio + UFS_PHY_TX_POST_EMP_G4_G5);
+	/* Similar to wmb(), this read ensures the previous write has completed */
+	readl_relaxed(phy->mmio + UFS_PHY_TX_POST_EMP_G4_G5);
+
+	phy->tx_hs_equalizer_configured = true;
+	/*
+	 * Note:
+	 * In case HS Gears 1-4 support de-emphasis setting, add the settings
+	 * here as well as in the phy calibration setting.
+	 */
 }
 
 static inline
@@ -349,7 +356,7 @@ static struct ufs_qcom_phy_specific_ops phy_v4_ops = {
 	.set_tx_lane_enable	= ufs_qcom_phy_qmp_v4_set_tx_lane_enable,
 	.ctrl_rx_linecfg	= ufs_qcom_phy_qmp_v4_ctrl_rx_linecfg,
 	.power_control		= ufs_qcom_phy_qmp_v4_power_control,
-	.get_tx_hs_equalizer    = ufs_qcom_phy_qmp_v4_get_tx_hs_equalizer,
+	.tx_hs_equalizer_config = ufs_qcom_phy_qmp_v4_tx_hs_equalizer_config,
 	.dbg_register_dump	= ufs_qcom_phy_qmp_v4_dbg_register_dump,
 	.dbg_register_save	= ufs_qcom_phy_qmp_v4_dbg_register_save,
 };
