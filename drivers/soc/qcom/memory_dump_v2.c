@@ -133,7 +133,10 @@ struct memdump_info {
 static LIST_HEAD(dynamic_dump_list);
 DEFINE_MUTEX(dump_mutex);
 static struct msm_memory_dump memdump;
-
+#ifdef CONFIG_DEEPSLEEP
+static size_t total_size;
+static phys_addr_t global_mini_phys_addr;
+#endif
 /**
  * reset_sprs_dump_table - reset the sprs dump table
  *
@@ -1559,6 +1562,10 @@ static int mem_dump_probe(struct platform_device *pdev)
 		}
 	}
 
+#ifdef CONFIG_DEEPSLEEP
+	total_size = used_size;
+	global_mini_phys_addr = phys_addr;
+#endif
 	md_entry.phys_addr = phys_addr;
 	md_entry.virt_addr = (u64)memdump_vaddr;
 	md_entry.size = used_size;
@@ -1569,6 +1576,22 @@ static int mem_dump_probe(struct platform_device *pdev)
 	return ret;
 }
 
+#ifdef CONFIG_DEEPSLEEP
+static int mem_dump_resume(struct platform_device *pdev)
+{
+	int ret;
+
+	ret = qcom_scm_assign_dump_table_region(1, global_mini_phys_addr, total_size);
+	if (ret) {
+		ret = init_memdump_imem_area(total_size);
+		if (ret)
+			dev_err(&pdev->dev, "init memdump imem area failed, ret=%d\n", ret);
+	}
+
+	return 0;
+}
+#endif
+
 static const struct of_device_id mem_dump_match_table[] = {
 	{.compatible = "qcom,mem-dump",},
 	{}
@@ -1576,6 +1599,9 @@ static const struct of_device_id mem_dump_match_table[] = {
 
 static struct platform_driver mem_dump_driver = {
 	.probe = mem_dump_probe,
+#ifdef CONFIG_DEEPSLEEP
+	.resume = mem_dump_resume,
+#endif
 	.driver = {
 		.name = "msm_mem_dump",
 		.of_match_table = mem_dump_match_table,
