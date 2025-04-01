@@ -164,4 +164,6 @@ vienna_perf_config = {
     "CONFIG_USB_F_GSI": "m",
     "CONFIG_USB_F_QDSS": "m",
     "CONFIG_USB_M31_MSM_EUSB2_PHY": "m",
+    "CONFIG_QTI_PMIC_EUSB2_REPEATER": "m",
+    "CONFIG_USB_REPEATER": "m",
 }
