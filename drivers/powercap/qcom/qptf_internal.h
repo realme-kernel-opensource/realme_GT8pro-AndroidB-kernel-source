@@ -47,7 +47,6 @@ struct qptm_node {
 	struct qptm_node *parent;
 	struct qptm *qptm;
 	struct device_node *np;
-	struct device_node *pnp;
 };
 
 static inline struct qptm *to_qptm(struct powercap_zone *zone)
