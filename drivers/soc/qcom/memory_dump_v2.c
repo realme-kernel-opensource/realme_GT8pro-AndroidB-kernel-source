@@ -133,7 +133,7 @@ struct memdump_info {
 static LIST_HEAD(dynamic_dump_list);
 DEFINE_MUTEX(dump_mutex);
 static struct msm_memory_dump memdump;
-#ifdef CONFIG_DEEPSLEEP
+#if defined(CONFIG_DEEPSLEEP) || defined(CONFIG_HIBERNATION)
 static size_t total_size;
 static phys_addr_t global_mini_phys_addr;
 #endif
@@ -1562,7 +1562,7 @@ static int mem_dump_probe(struct platform_device *pdev)
 		}
 	}
 
-#ifdef CONFIG_DEEPSLEEP
+#if defined(CONFIG_DEEPSLEEP) || defined(CONFIG_HIBERNATION)
 	total_size = used_size;
 	global_mini_phys_addr = phys_addr;
 #endif
@@ -1576,7 +1576,7 @@ static int mem_dump_probe(struct platform_device *pdev)
 	return ret;
 }
 
-#ifdef CONFIG_DEEPSLEEP
+#if defined(CONFIG_DEEPSLEEP) || defined(CONFIG_HIBERNATION)
 static int mem_dump_resume(struct platform_device *pdev)
 {
 	int ret;
@@ -1590,6 +1590,11 @@ static int mem_dump_resume(struct platform_device *pdev)
 
 	return 0;
 }
+#else
+static int mem_dump_resume(struct platform_device *pdev)
+{
+	return 0;
+}
 #endif
 
 static const struct of_device_id mem_dump_match_table[] = {
@@ -1599,9 +1604,7 @@ static const struct of_device_id mem_dump_match_table[] = {
 
 static struct platform_driver mem_dump_driver = {
 	.probe = mem_dump_probe,
-#ifdef CONFIG_DEEPSLEEP
 	.resume = mem_dump_resume,
-#endif
 	.driver = {
 		.name = "msm_mem_dump",
 		.of_match_table = mem_dump_match_table,
