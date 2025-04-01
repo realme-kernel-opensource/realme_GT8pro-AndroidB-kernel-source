@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/compat.h>
 #include <linux/types.h>
@@ -25,13 +25,6 @@
 #define PF_QMSGQ		AF_QMSGQ
 #endif
 
-struct qmsgq_cb {
-	u32 src_cid;
-	u32 src_port;
-	u32 dst_cid;
-	u32 dst_port;
-};
-
 static const struct qmsgq_endpoint *registered_ep;
 static DEFINE_MUTEX(qmsgq_register_mutex);
 
@@ -43,8 +36,24 @@ static DEFINE_MUTEX(qmsgq_register_mutex);
 
 /* local port allocation management */
 static DEFINE_XARRAY_ALLOC(qmsgq_ports);
-u32 qmsgq_ports_next = QMSGQ_MIN_EPH_SOCKET;
 static DEFINE_SPINLOCK(qmsgq_port_lock);
+static u32 qmsgq_ports_next = QMSGQ_MIN_EPH_SOCKET;
+
+#define QMSGQ_HASH_SIZE           251
+#define QMSGQ_HASH(addr)          ((addr)->svm_port % QMSGQ_HASH_SIZE)
+#define QMSGQ_BOUND_SOCKETS(addr) (&qmsgq_bind_table[QMSGQ_HASH(addr)])
+
+#define QMSGQ_CONN_HASH(src, dst)				\
+	(((src)->svm_cid ^ (dst)->svm_port) % QMSGQ_HASH_SIZE)
+#define QMSGQ_CONNECTED_SOCKETS(src, dst)		\
+	(&qmsgq_connected_table[QMSGQ_CONN_HASH(src, dst)])
+
+struct list_head qmsgq_bind_table[QMSGQ_HASH_SIZE + 1];
+EXPORT_SYMBOL_GPL(qmsgq_bind_table);
+struct list_head qmsgq_connected_table[QMSGQ_HASH_SIZE];
+EXPORT_SYMBOL_GPL(qmsgq_connected_table);
+DEFINE_SPINLOCK(qmsgq_table_lock);
+EXPORT_SYMBOL_GPL(qmsgq_table_lock);
 
 /* The default peer timeout indicates how long we will wait for a peer response
  * to a control message.
@@ -54,6 +63,36 @@ static DEFINE_SPINLOCK(qmsgq_port_lock);
 #define QMSGQ_DEFAULT_BUFFER_SIZE     (1024 * 256)
 #define QMSGQ_DEFAULT_BUFFER_MAX_SIZE (1024 * 256)
 #define QMSGQ_DEFAULT_BUFFER_MIN_SIZE 128
+
+static void qmsgq_init_tables(void)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(qmsgq_bind_table); i++)
+		INIT_LIST_HEAD(&qmsgq_bind_table[i]);
+
+	for (i = 0; i < ARRAY_SIZE(qmsgq_connected_table); i++)
+		INIT_LIST_HEAD(&qmsgq_connected_table[i]);
+}
+
+static struct sock *qmsgq_dequeue_accept(struct sock *listener)
+{
+	struct qmsgq_sock *qlistener;
+	struct qmsgq_sock *qconnected;
+
+	qlistener = sk_qsk(listener);
+
+	if (list_empty(&qlistener->accept_queue))
+		return NULL;
+
+	qconnected = list_entry(qlistener->accept_queue.next,
+				struct qmsgq_sock, accept_queue);
+
+	list_del_init(&qconnected->accept_queue);
+	sock_put(listener);
+
+	return qsk_sk(qconnected);
+}
 
 static void qmsgq_deassign_ep(struct qmsgq_sock *qsk)
 {
@@ -68,6 +107,7 @@ static void qmsgq_deassign_ep(struct qmsgq_sock *qsk)
 int qmsgq_assign_ep(struct qmsgq_sock *qsk, struct qmsgq_sock *psk)
 {
 	const struct qmsgq_endpoint *new_ep;
+	struct sock *sk = qsk_sk(qsk);
 	int ret;
 
 	new_ep = registered_ep;
@@ -85,6 +125,14 @@ int qmsgq_assign_ep(struct qmsgq_sock *qsk, struct qmsgq_sock *psk)
 	if (!new_ep || !try_module_get(new_ep->module))
 		return -ENODEV;
 
+	if (sk->sk_type == SOCK_SEQPACKET) {
+		if (!new_ep->seqpacket_allow ||
+		    !new_ep->seqpacket_allow(qsk->remote_addr.svm_cid)) {
+			module_put(new_ep->module);
+			return -ESOCKTNOSUPPORT;
+		}
+	}
+
 	ret = new_ep->init(qsk, psk);
 	if (ret) {
 		module_put(new_ep->module);
@@ -95,6 +143,7 @@ int qmsgq_assign_ep(struct qmsgq_sock *qsk, struct qmsgq_sock *psk)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(qmsgq_assign_ep);
 
 static bool qmsgq_find_cid(unsigned int cid)
 {
@@ -109,23 +158,67 @@ static bool sock_type_connectible(u16 type)
 	return (type == SOCK_STREAM) || (type == SOCK_SEQPACKET);
 }
 
-static struct qmsgq_sock *qmsgq_port_lookup(int port)
+static struct sock *__qmsgq_find_bound_socket(const struct sockaddr_vm *addr)
 {
 	struct qmsgq_sock *qsk;
-	unsigned long flags;
 
-	spin_lock_irqsave(&qmsgq_port_lock, flags);
-	qsk = xa_load(&qmsgq_ports, port);
-	if (qsk)
-		sock_hold(qsk_sk(qsk));
-	spin_unlock_irqrestore(&qmsgq_port_lock, flags);
+	list_for_each_entry(qsk, QMSGQ_BOUND_SOCKETS(addr), bound_table) {
+		if (vsock_addr_equals_addr(addr, &qsk->local_addr))
+			return sk_vsock(qsk);
 
-	return qsk;
+		if (addr->svm_port == qsk->local_addr.svm_port &&
+		    (qsk->local_addr.svm_cid == VMADDR_CID_ANY ||
+		     addr->svm_cid == VMADDR_CID_ANY))
+			return sk_vsock(qsk);
+	}
+
+	return NULL;
 }
 
-static void qmsgq_port_put(struct qmsgq_sock *qsk)
+static struct sock *__qmsgq_find_connected_socket(struct sockaddr_vm *src,
+						  struct sockaddr_vm *dst)
 {
-	sock_put(qsk_sk(qsk));
+	struct qmsgq_sock *qsk;
+
+	list_for_each_entry(qsk, QMSGQ_CONNECTED_SOCKETS(src, dst),
+			    connected_table) {
+		if (vsock_addr_equals_addr(src, &qsk->remote_addr) &&
+		    dst->svm_port == qsk->local_addr.svm_port) {
+			return sk_vsock(qsk);
+		}
+	}
+
+	return NULL;
+}
+
+static void __qmsgq_insert_connected(struct list_head *list,
+				     struct qmsgq_sock *qsk)
+{
+	sock_hold(&qsk->sk);
+	list_add(&qsk->connected_table, list);
+}
+
+void qmsgq_insert_connected(struct qmsgq_sock *qsk)
+{
+	struct list_head *list = QMSGQ_CONNECTED_SOCKETS(&qsk->remote_addr,
+							 &qsk->local_addr);
+
+	spin_lock_bh(&qmsgq_table_lock);
+	__qmsgq_insert_connected(list, qsk);
+	spin_unlock_bh(&qmsgq_table_lock);
+}
+EXPORT_SYMBOL_GPL(qmsgq_insert_connected);
+
+static void __qmsgq_remove_bound(struct qmsgq_sock *qsk)
+{
+	list_del_init(&qsk->bound_table);
+	sock_put(&qsk->sk);
+}
+
+static void __qmsgq_remove_connected(struct qmsgq_sock *qsk)
+{
+	list_del_init(&qsk->connected_table);
+	sock_put(&qsk->sk);
 }
 
 static void qmsgq_port_remove(struct qmsgq_sock *qsk)
@@ -139,6 +232,92 @@ static void qmsgq_port_remove(struct qmsgq_sock *qsk)
 	xa_erase(&qmsgq_ports, port);
 	spin_unlock_irqrestore(&qmsgq_port_lock, flags);
 }
+
+void qmsgq_enqueue_accept(struct sock *listener, struct sock *connected)
+{
+	struct qmsgq_sock *vlistener;
+	struct qmsgq_sock *vconnected;
+
+	vlistener = sk_qsk(listener);
+	vconnected = sk_qsk(connected);
+
+	sock_hold(connected);
+	sock_hold(listener);
+	list_add_tail(&vconnected->accept_queue, &vlistener->accept_queue);
+}
+EXPORT_SYMBOL_GPL(qmsgq_enqueue_accept);
+
+void qmsgq_remove_bound(struct qmsgq_sock *qsk)
+{
+	spin_lock_bh(&qmsgq_table_lock);
+	if (!list_empty(&qsk->bound_table))
+		__qmsgq_remove_bound(qsk);
+	spin_unlock_bh(&qmsgq_table_lock);
+}
+EXPORT_SYMBOL_GPL(qmsgq_remove_bound);
+
+void qmsgq_remove_connected(struct qmsgq_sock *qsk)
+{
+	spin_lock_bh(&qmsgq_table_lock);
+	if (!list_empty(&qsk->connected_table))
+		__qmsgq_remove_connected(qsk);
+	spin_unlock_bh(&qmsgq_table_lock);
+}
+EXPORT_SYMBOL_GPL(qmsgq_remove_connected);
+
+void qmsgq_remove_sock(struct qmsgq_sock *qsk)
+{
+	qmsgq_remove_bound(qsk);
+	qmsgq_remove_connected(qsk);
+	qmsgq_port_remove(qsk);
+}
+EXPORT_SYMBOL_GPL(qmsgq_remove_sock);
+
+struct qmsgq_sock *qmsgq_port_lookup(int port)
+{
+	struct qmsgq_sock *qsk;
+	unsigned long flags;
+
+	spin_lock_irqsave(&qmsgq_port_lock, flags);
+	qsk = xa_load(&qmsgq_ports, port);
+	if (qsk)
+		sock_hold(qsk_sk(qsk));
+	spin_unlock_irqrestore(&qmsgq_port_lock, flags);
+
+	return qsk;
+}
+EXPORT_SYMBOL_GPL(qmsgq_port_lookup);
+
+struct sock *qmsgq_find_bound_socket(struct sockaddr_vm *addr)
+{
+	struct sock *sk;
+
+	spin_lock_bh(&qmsgq_table_lock);
+	sk = __qmsgq_find_bound_socket(addr);
+	if (sk)
+		sock_hold(sk);
+
+	spin_unlock_bh(&qmsgq_table_lock);
+
+	return sk;
+}
+EXPORT_SYMBOL_GPL(qmsgq_find_bound_socket);
+
+struct sock *qmsgq_find_connected_socket(struct sockaddr_vm *src,
+					 struct sockaddr_vm *dst)
+{
+	struct sock *sk;
+
+	spin_lock_bh(&qmsgq_table_lock);
+	sk = __qmsgq_find_connected_socket(src, dst);
+	if (sk)
+		sock_hold(sk);
+
+	spin_unlock_bh(&qmsgq_table_lock);
+
+	return sk;
+}
+EXPORT_SYMBOL_GPL(qmsgq_find_connected_socket);
 
 static int qmsgq_port_assign(struct qmsgq_sock *qsk, int *port)
 {
@@ -173,20 +352,76 @@ static int qmsgq_send_shutdown(struct sock *sk, int mode)
 	return qsk->ep->shutdown(qsk, mode);
 }
 
+static int qmsgq_transport_cancel_pkt(struct qmsgq_sock *qsk)
+{
+	const struct qmsgq_endpoint *ep = qsk->ep;
+
+	if (!ep || !ep->cancel_pkt)
+		return -EOPNOTSUPP;
+
+	return ep->cancel_pkt(qsk);
+}
+
 static void qmsgq_connect_timeout(struct work_struct *work)
 {
+	struct sock *sk;
+	struct qmsgq_sock *qsk;
+
+	qsk = container_of(work, struct qmsgq_sock, connect_work.work);
+	sk = qsk_sk(qsk);
+
+	lock_sock(sk);
+	if (sk->sk_state == TCP_SYN_SENT &&
+	    sk->sk_shutdown != SHUTDOWN_MASK) {
+		sk->sk_state = TCP_CLOSE;
+		sk->sk_socket->state = SS_UNCONNECTED;
+		sk->sk_err = ETIMEDOUT;
+		sk_error_report(sk);
+		qmsgq_transport_cancel_pkt(qsk);
+	}
+	release_sock(sk);
+
+	sock_put(sk);
 }
 
 static void qmsgq_pending_work(struct work_struct *work)
 {
 }
 
-/* Bind socket to address.
- *
- * Socket should be locked upon call.
- */
-static int __qmsgq_bind(struct socket *sock,
-			const struct sockaddr_vm *addr, int zapped)
+static void __qmsgq_insert_bound(struct list_head *list,
+				 struct qmsgq_sock *qsk)
+{
+	sock_hold(&qsk->sk);
+	list_add(&qsk->bound_table, list);
+}
+
+static int __qmsgq_connectible_bind(struct socket *sock, const struct sockaddr_vm *addr)
+{
+	struct qmsgq_sock *qsk = sk_qsk(sock->sk);
+	unsigned long flags;
+	int port;
+	int rc;
+
+	/* First ensure this socket isn't already bound. */
+	if (__qmsgq_find_bound_socket(addr))
+		return -EINVAL;
+
+	spin_lock_irqsave(&qmsgq_port_lock, flags);
+	port = addr->svm_port;
+	rc = qmsgq_port_assign(qsk, &port);
+	spin_unlock_irqrestore(&qmsgq_port_lock, flags);
+	if (rc)
+		return rc;
+
+	vsock_addr_init(&qsk->local_addr, VMADDR_CID_HOST, port);
+
+	__qmsgq_insert_bound(QMSGQ_BOUND_SOCKETS(&qsk->local_addr), qsk);
+
+	return 0;
+}
+
+static int __qmsgq_dgram_bind(struct socket *sock,
+			      const struct sockaddr_vm *addr, int zapped)
 {
 	struct qmsgq_sock *qsk = sk_qsk(sock->sk);
 	struct sock *sk = sock->sk;
@@ -197,9 +432,6 @@ static int __qmsgq_bind(struct socket *sock,
 	/* rebinding ok */
 	if (!zapped && addr->svm_port == qsk->local_addr.svm_port)
 		return 0;
-
-	if (addr->svm_cid != VMADDR_CID_ANY && !qmsgq_find_cid(addr->svm_cid))
-		return -EADDRNOTAVAIL;
 
 	spin_lock_irqsave(&qmsgq_port_lock, flags);
 	port = addr->svm_port;
@@ -218,16 +450,50 @@ static int __qmsgq_bind(struct socket *sock,
 	return 0;
 }
 
+/* Bind socket to address.
+ *
+ * Socket should be locked upon call.
+ */
+static int __qmsgq_bind(struct socket *sock,
+			const struct sockaddr_vm *addr)
+{
+	struct sock *sk = sock->sk;
+	int rc;
+
+	if (addr->svm_cid != VMADDR_CID_ANY && !qmsgq_find_cid(addr->svm_cid))
+		return -EADDRNOTAVAIL;
+
+	switch (sock->type) {
+	case SOCK_STREAM:
+	case SOCK_SEQPACKET:
+		spin_lock_bh(&qmsgq_table_lock);
+		rc = __qmsgq_connectible_bind(sock, addr);
+		spin_unlock_bh(&qmsgq_table_lock);
+		break;
+
+	case SOCK_DGRAM:
+		rc = __qmsgq_dgram_bind(sock, addr, sock_flag(sk, SOCK_ZAPPED));
+		break;
+
+	default:
+		rc = -EINVAL;
+		break;
+	}
+
+	return rc;
+}
+
 /* Auto bind to an ephemeral port. */
 static int qmsgq_autobind(struct socket *sock)
 {
-	struct sock *sk = sock->sk;
+	struct qmsgq_sock *qsk = sk_qsk(sock->sk);
 	struct sockaddr_vm addr;
 
-	if (!sock_flag(sk, SOCK_ZAPPED))
+	if (vsock_addr_bound(&qsk->local_addr))
 		return 0;
+
 	vsock_addr_init(&addr, VMADDR_CID_ANY, VMADDR_PORT_ANY);
-	return __qmsgq_bind(sock, &addr, 1);
+	return __qmsgq_bind(sock, &addr);
 }
 
 static int qmsgq_bind(struct socket *sock, struct sockaddr *addr, int len)
@@ -240,10 +506,408 @@ static int qmsgq_bind(struct socket *sock, struct sockaddr *addr, int len)
 		return -EINVAL;
 
 	lock_sock(sk);
-	rc = __qmsgq_bind(sock, vm_addr, sock_flag(sk, SOCK_ZAPPED));
+	rc = __qmsgq_bind(sock, vm_addr);
 	release_sock(sk);
 
 	return rc;
+}
+
+static int qmsgq_listen(struct socket *sock, int backlog)
+{
+	struct qmsgq_sock *qsk = sk_qsk(sock->sk);
+	struct sock *sk = sock->sk;
+	int rc = 0;
+
+	lock_sock(sk);
+
+	if (!sock_type_connectible(sk->sk_type)) {
+		rc = -EOPNOTSUPP;
+		goto out;
+	}
+
+	if (sock->state != SS_UNCONNECTED) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	if (!vsock_addr_bound(&qsk->local_addr)) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	sk->sk_max_ack_backlog = backlog;
+	sk->sk_state = TCP_LISTEN;
+
+out:
+	release_sock(sk);
+	return rc;
+}
+
+static int qmsgq_accept(struct socket *sock, struct socket *newsock,
+			struct proto_accept_arg *arg)
+{
+	struct sock *listener = sock->sk;
+	struct qmsgq_sock *vconnected;
+	struct sock *connected;
+	long timeout;
+	int err = 0;
+	DEFINE_WAIT(wait);
+
+	lock_sock(listener);
+
+	if (!sock_type_connectible(sock->type)) {
+		err = -EOPNOTSUPP;
+		goto out;
+	}
+
+	if (listener->sk_state != TCP_LISTEN) {
+		err = -EINVAL;
+		goto out;
+	}
+
+	timeout = sock_rcvtimeo(listener, arg->flags & O_NONBLOCK);
+	prepare_to_wait(sk_sleep(listener), &wait, TASK_INTERRUPTIBLE);
+
+	while ((connected = qmsgq_dequeue_accept(listener)) == NULL &&
+	       listener->sk_err == 0) {
+		release_sock(listener);
+		timeout = schedule_timeout(timeout);
+		finish_wait(sk_sleep(listener), &wait);
+		lock_sock(listener);
+
+		if (signal_pending(current)) {
+			err = sock_intr_errno(timeout);
+			goto out;
+		} else if (timeout == 0) {
+			err = -EAGAIN;
+			goto out;
+		}
+
+		prepare_to_wait(sk_sleep(listener), &wait, TASK_INTERRUPTIBLE);
+	}
+	finish_wait(sk_sleep(listener), &wait);
+
+	if (listener->sk_err)
+		err = -listener->sk_err;
+
+	if (connected) {
+		sk_acceptq_removed(listener);
+
+		lock_sock_nested(connected, SINGLE_DEPTH_NESTING);
+		vconnected = sk_qsk(connected);
+
+		if (err) {
+			vconnected->rejected = true;
+		} else {
+			newsock->state = SS_CONNECTED;
+			sock_graft(connected, newsock);
+		}
+
+		release_sock(connected);
+		sock_put(connected);
+	}
+
+out:
+	release_sock(listener);
+	return err;
+}
+
+static int qmsgq_connect(struct socket *sock, struct sockaddr *addr, int addr_len, int flags)
+{
+	struct qmsgq_sock *qsk = sk_qsk(sock->sk);
+	const struct qmsgq_endpoint *transport;
+	struct sockaddr_vm *remote_addr;
+	struct sock *sk = sock->sk;
+	long timeout;
+	int err = 0;
+
+	DEFINE_WAIT(wait);
+
+	lock_sock(sk);
+
+	switch (sock->state) {
+	case SS_CONNECTED:
+		err = -EISCONN;
+		goto out;
+	case SS_DISCONNECTING:
+		err = -EINVAL;
+		goto out;
+	case SS_CONNECTING:
+		err = -EALREADY;
+		if (flags & O_NONBLOCK)
+			goto out;
+		break;
+	default:
+		if (sk->sk_state == TCP_LISTEN ||
+		    vsock_addr_cast(addr, addr_len, &remote_addr) != 0) {
+			err = -EINVAL;
+			goto out;
+		}
+
+		memcpy(&qsk->remote_addr, remote_addr, sizeof(qsk->remote_addr));
+
+		err = qmsgq_assign_ep(qsk, NULL);
+		if (err)
+			goto out;
+
+		transport = qsk->ep;
+
+		/* The hypervisor and well-known contexts do not have socket
+		 * endpoints.
+		 */
+		if (!transport ||
+		    !transport->seqpacket_allow(remote_addr->svm_cid)) {
+			err = -ENETUNREACH;
+			goto out;
+		}
+
+		err = qmsgq_autobind(sock);
+		if (err)
+			goto out;
+
+		sk->sk_state = TCP_SYN_SENT;
+
+		err = transport->connect(qsk);
+		if (err < 0)
+			goto out;
+
+		sock->state = SS_CONNECTING;
+		err = -EINPROGRESS;
+	}
+
+	timeout = qsk->connect_timeout;
+	prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
+
+	while (sk->sk_state != TCP_ESTABLISHED && sk->sk_err == 0) {
+		if (flags & O_NONBLOCK) {
+			sock_hold(sk);
+
+			if (mod_delayed_work(system_wq, &qsk->connect_work,
+					     timeout))
+				sock_put(sk);
+
+			goto out_wait;
+		}
+
+		release_sock(sk);
+		timeout = schedule_timeout(timeout);
+		lock_sock(sk);
+
+		if (signal_pending(current)) {
+			err = sock_intr_errno(timeout);
+			sk->sk_state = sk->sk_state == TCP_ESTABLISHED ? TCP_CLOSING : TCP_CLOSE;
+			sock->state = SS_UNCONNECTED;
+			qmsgq_transport_cancel_pkt(qsk);
+			qmsgq_remove_connected(qsk);
+			goto out_wait;
+		} else if ((sk->sk_state != TCP_ESTABLISHED) && (timeout == 0)) {
+			err = -ETIMEDOUT;
+			sk->sk_state = TCP_CLOSE;
+			sock->state = SS_UNCONNECTED;
+			qmsgq_transport_cancel_pkt(qsk);
+			goto out_wait;
+		}
+
+		prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
+	}
+
+	if (sk->sk_err) {
+		err = -sk->sk_err;
+		sk->sk_state = TCP_CLOSE;
+		sock->state = SS_UNCONNECTED;
+	} else {
+		err = 0;
+	}
+
+out_wait:
+	finish_wait(sk_sleep(sk), &wait);
+out:
+	release_sock(sk);
+	return err;
+}
+
+static int qmsgq_seqpacket_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
+{
+	struct qmsgq_sock *qsk = sk_qsk(sock->sk);
+	const struct qmsgq_endpoint *transport;
+	struct sock *sk = sock->sk;
+	ssize_t total_written = 0;
+	int err = 0;
+
+	if (msg->msg_flags & MSG_OOB)
+		return -EOPNOTSUPP;
+
+	lock_sock(sk);
+
+	if (sk->sk_type != SOCK_SEQPACKET) {
+		err = -EOPNOTSUPP;
+		goto out;
+	}
+
+	transport = qsk->ep;
+
+	/* Callers should not provide a destination with connection oriented
+	 * sockets.
+	 */
+	if (msg->msg_namelen) {
+		err = sk->sk_state == TCP_ESTABLISHED ? -EISCONN : -EOPNOTSUPP;
+		goto out;
+	}
+
+	/* Send data only if both sides are not shutdown in the direction. */
+	if (sk->sk_shutdown & SEND_SHUTDOWN ||
+	    qsk->peer_shutdown & RCV_SHUTDOWN) {
+		err = -EPIPE;
+		goto out;
+	}
+
+	if (!transport || sk->sk_state != TCP_ESTABLISHED ||
+	    !vsock_addr_bound(&qsk->local_addr)) {
+		err = -ENOTCONN;
+		goto out;
+	}
+
+	if (!vsock_addr_bound(&qsk->remote_addr)) {
+		err = -EDESTADDRREQ;
+		goto out;
+	}
+
+	while (total_written < len) {
+		ssize_t written;
+
+		/* These checks occur both as part of and after the loop
+		 * conditional since we need to check before and after
+		 * sleeping.
+		 */
+		if (sk->sk_err) {
+			err = -sk->sk_err;
+			goto out_err;
+		} else if ((sk->sk_shutdown & SEND_SHUTDOWN) ||
+			   (qsk->peer_shutdown & RCV_SHUTDOWN)) {
+			err = -EPIPE;
+			goto out_err;
+		}
+
+		written = transport->seqpacket_enqueue(qsk, msg, len - total_written);
+		if (written < 0) {
+			err = written;
+			goto out_err;
+		}
+
+		total_written += written;
+	}
+
+out_err:
+	if (total_written > 0) {
+		/* Return number of written bytes only if:
+		 * 1) SOCK_STREAM socket.
+		 * 2) SOCK_SEQPACKET socket when whole buffer is sent.
+		 */
+		if (sk->sk_type == SOCK_STREAM || total_written == len)
+			err = total_written;
+	}
+out:
+	release_sock(sk);
+	return err;
+}
+
+static int __qmsgq_seqpacket_recvmsg(struct sock *sk, struct msghdr *msg,
+				     size_t len, int flags)
+{
+	DECLARE_SOCKADDR(struct sockaddr_vm *, vm_addr, msg->msg_name);
+	struct sk_buff *skb;
+	struct qmsgq_cb *cb;
+	int copied;
+	int rc = 0;
+
+	/* consider skb_recv_datagram is lock-free */
+	release_sock(sk);
+	skb = skb_recv_datagram(sk, flags, &rc);
+	if (!skb) {
+		pr_err("%s: skb_recv_datagram skb is NULL: %d\n", __func__, rc);
+		lock_sock(sk);
+		return rc;
+	}
+	lock_sock(sk);
+
+	cb = (struct qmsgq_cb *)skb->cb;
+
+	copied = skb->len;
+	if (copied > len) {
+		copied = len;
+		msg->msg_flags |= MSG_TRUNC;
+	}
+
+	/* Place the datagram payload in the user's iovec. */
+	rc = skb_copy_datagram_msg(skb, 0, msg, copied);
+	if (rc < 0) {
+		pr_err("%s: skb_copy_datagram_msg failed: %d\n", __func__, rc);
+		goto out;
+	}
+	rc = copied;
+
+	if (vm_addr) {
+		vsock_addr_init(vm_addr, VMADDR_CID_HOST, cb->src_port);
+		msg->msg_namelen = sizeof(*vm_addr);
+	}
+out:
+	skb_free_datagram(sk, skb);
+	return rc;
+}
+
+static int qmsgq_seqpacket_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
+				   int flags)
+{
+	const struct qmsgq_endpoint *transport;
+	struct sock *sk = sock->sk;
+	struct qmsgq_sock *qsk;
+	int err = 0;
+
+	if ((flags & MSG_OOB) || (flags & MSG_ERRQUEUE))
+		return -EOPNOTSUPP;
+
+	lock_sock(sk);
+
+	if (sk->sk_type != SOCK_SEQPACKET) {
+		err = -EOPNOTSUPP;
+		goto out;
+	}
+
+	qsk = sk_qsk(sk);
+
+	transport = qsk->ep;
+
+	if (!transport || sk->sk_state != TCP_ESTABLISHED) {
+		if (sock_flag(sk, SOCK_DONE))
+			err = 0;
+		else
+			err = -ENOTCONN;
+
+		goto out;
+	}
+
+	/* We don't check peer_shutdown flag here since peer may actually shut
+	 * down, but there can be data in the queue that a local socket can
+	 * receive.
+	 */
+	if (sk->sk_shutdown & RCV_SHUTDOWN) {
+		err = 0;
+		goto out;
+	}
+
+	/* It is valid on Linux to pass in a zero-length receive buffer.  This
+	 * is not an error.  We may as well bail out now.
+	 */
+	if (!len) {
+		err = 0;
+		goto out;
+	}
+
+	err = __qmsgq_seqpacket_recvmsg(sk, msg, len, flags);
+
+out:
+	release_sock(sk);
+	return err;
 }
 
 static int qmsgq_dgram_connect(struct socket *sock, struct sockaddr *addr, int addr_len, int flags)
@@ -471,13 +1135,10 @@ static int qmsgq_dgram_recvmsg(struct socket *sock, struct msghdr *msg, size_t l
 {
 	DECLARE_SOCKADDR(struct sockaddr_vm *, vm_addr, msg->msg_name);
 	struct sock *sk = sock->sk;
-	struct qmsgq_sock *qsk;
 	struct sk_buff *skb;
 	struct qmsgq_cb *cb;
 	int copied;
 	int rc = 0;
-
-	qsk = sk_qsk(sk);
 
 	if (sock_flag(sk, SOCK_ZAPPED)) {
 		pr_err("%s: Invalid socket error\n", __func__);
@@ -520,10 +1181,13 @@ static void __qmsgq_release(struct sock *sk, int level)
 {
 	if (sk) {
 		struct qmsgq_sock *qsk = sk_qsk(sk);
+		struct sock *pending;
 
 		lock_sock_nested(sk, level);
 		if (qsk->ep)
 			qsk->ep->release(qsk);
+		else if (sock_type_connectible(sk->sk_type))
+			qmsgq_remove_sock(qsk);
 
 		if (!sock_flag(sk, SOCK_DEAD))
 			sk->sk_state_change(sk);
@@ -534,6 +1198,13 @@ static void __qmsgq_release(struct sock *sk, int level)
 		sock_orphan(sk);
 		sk->sk_shutdown = SHUTDOWN_MASK;
 		skb_queue_purge(&sk->sk_receive_queue);
+
+		/* Clean up any sockets that never were accepted. */
+		while ((pending = qmsgq_dequeue_accept(sk)) != NULL) {
+			__qmsgq_release(pending, SINGLE_DEPTH_NESTING);
+			sock_put(pending);
+		}
+
 		release_sock(sk);
 		sock_put(sk);
 	}
@@ -547,6 +1218,24 @@ static int qmsgq_release(struct socket *sock)
 
 	return 0;
 }
+
+static const struct proto_ops qmsgq_seqpacket_ops = {
+	.owner		= THIS_MODULE,
+	.family		= AF_QMSGQ,
+	.release	= qmsgq_release,
+	.bind		= qmsgq_bind,
+	.connect	= qmsgq_connect,
+	.socketpair	= sock_no_socketpair,
+	.accept		= qmsgq_accept,
+	.getname	= qmsgq_getname,
+	.poll		= qmsgq_poll,
+	.ioctl		= sock_no_ioctl,
+	.listen		= qmsgq_listen,
+	.shutdown	= qmsgq_shutdown,
+	.sendmsg	= qmsgq_seqpacket_sendmsg,
+	.recvmsg	= qmsgq_seqpacket_recvmsg,
+	.mmap		= sock_no_mmap,
+};
 
 static const struct proto_ops qmsgq_dgram_ops = {
 	.owner		= THIS_MODULE,
@@ -655,6 +1344,13 @@ static struct sock *__qmsgq_create(struct net *net, struct socket *sock, struct 
 	return sk;
 }
 
+struct sock *qmsgq_create_connected(struct sock *parent)
+{
+	return __qmsgq_create(sock_net(parent), NULL, parent, GFP_KERNEL,
+			      parent->sk_type, 0);
+}
+EXPORT_SYMBOL_GPL(qmsgq_create_connected);
+
 static int qmsgq_create(struct net *net, struct socket *sock,
 			int protocol, int kern)
 {
@@ -672,9 +1368,13 @@ static int qmsgq_create(struct net *net, struct socket *sock,
 	case SOCK_DGRAM:
 		sock->ops = &qmsgq_dgram_ops;
 		break;
+	case SOCK_SEQPACKET:
+		sock->ops = &qmsgq_seqpacket_ops;
+		break;
 	default:
 		return -ESOCKTNOSUPPORT;
 	}
+
 	sock->state = SS_UNCONNECTED;
 
 	sk = __qmsgq_create(net, sock, NULL, GFP_KERNEL, 0, kern);
@@ -693,47 +1393,6 @@ static int qmsgq_create(struct net *net, struct socket *sock,
 	return 0;
 }
 
-int qmsgq_post(const struct qmsgq_endpoint *ep, struct sockaddr_vm *src, struct sockaddr_vm *dst,
-	       void *data, int len)
-{
-	struct qmsgq_sock *qsk;
-	struct qmsgq_cb *cb;
-	struct sk_buff *skb;
-	int rc;
-
-	skb = alloc_skb_with_frags(0, len, 0, &rc, GFP_KERNEL);
-	if (!skb) {
-		pr_err("%s: Unable to get skb with len:%d\n", __func__, len);
-		return -ENOMEM;
-	}
-	cb = (struct qmsgq_cb *)skb->cb;
-	cb->src_cid = src->svm_cid;
-	cb->src_port = src->svm_port;
-	cb->dst_cid = dst->svm_cid;
-	cb->dst_port = dst->svm_port;
-
-	skb->data_len = len;
-	skb->len = len;
-	skb_store_bits(skb, 0, data, len);
-
-	qsk = qmsgq_port_lookup(dst->svm_port);
-	if (!qsk || qsk->ep != ep) {
-		pr_err("%s: invalid dst port:%d\n", __func__, dst->svm_port);
-		kfree_skb(skb);
-		return -EINVAL;
-	}
-
-	if (sock_queue_rcv_skb(qsk_sk(qsk), skb)) {
-		pr_err("%s: sock_queue_rcv_skb failed\n", __func__);
-		qmsgq_port_put(qsk);
-		kfree_skb(skb);
-		return -EINVAL;
-	}
-	qmsgq_port_put(qsk);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(qmsgq_post);
-
 int qmsgq_endpoint_register(const struct qmsgq_endpoint *ep)
 {
 	int rc = 0;
@@ -744,11 +1403,11 @@ int qmsgq_endpoint_register(const struct qmsgq_endpoint *ep)
 	mutex_lock(&qmsgq_register_mutex);
 	if (registered_ep) {
 		rc = -EBUSY;
-		goto error;
+		goto out;
 	}
 	registered_ep = ep;
 
-error:
+out:
 	mutex_unlock(&qmsgq_register_mutex);
 	return rc;
 }
@@ -774,6 +1433,8 @@ static int __init qmsgq_proto_init(void)
 	int rc;
 
 	registered_ep = NULL;
+
+	qmsgq_init_tables();
 
 	rc = proto_register(&qmsgq_proto, 1);
 	if (rc)

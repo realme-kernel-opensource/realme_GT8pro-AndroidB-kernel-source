@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023,2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __AF_QMSGQ_H_
 #define __AF_QMSGQ_H_
@@ -72,6 +72,20 @@ struct qmsgq_endpoint {
 			     struct msghdr *msg, size_t len);
 	bool (*dgram_allow)(u32 cid, u32 port);
 
+	/* Cancel all pending packets sent on vsock. */
+	int (*cancel_pkt)(struct qmsgq_sock *qsk);
+
+	/* Connections. */
+	int (*connect)(struct qmsgq_sock *qsk);
+
+	/* SEQ_PACKET. */
+	ssize_t (*seqpacket_dequeue)(struct qmsgq_sock *qsk, struct msghdr *msg,
+				     int flags);
+	int (*seqpacket_enqueue)(struct qmsgq_sock *qsk, struct msghdr *msg,
+				 size_t len);
+	bool (*seqpacket_allow)(u32 remote_cid);
+	u32 (*seqpacket_has_data)(struct qmsgq_sock *qsk);
+
 	/* Shutdown. */
 	int (*shutdown)(struct qmsgq_sock *qsk, int mode);
 
@@ -79,8 +93,24 @@ struct qmsgq_endpoint {
 	u32 (*get_local_cid)(void);
 };
 
-int qmsgq_post(const struct qmsgq_endpoint *ep, struct sockaddr_vm *src, struct sockaddr_vm *dst,
-	       void *data, int len);
+struct qmsgq_cb {
+	u32 src_cid;
+	u32 src_port;
+	u32 dst_cid;
+	u32 dst_port;
+};
+
+struct sock *qmsgq_create_connected(struct sock *parent);
+struct sock *qmsgq_find_bound_socket(struct sockaddr_vm *addr);
+struct sock *qmsgq_find_connected_socket(struct sockaddr_vm *src,
+					 struct sockaddr_vm *dst);
+int qmsgq_assign_ep(struct qmsgq_sock *qsk, struct qmsgq_sock *psk);
+struct qmsgq_sock *qmsgq_port_lookup(int port);
+void qmsgq_insert_connected(struct qmsgq_sock *qsk);
+void qmsgq_enqueue_accept(struct sock *listener, struct sock *connected);
+void qmsgq_remove_bound(struct qmsgq_sock *qsk);
+void qmsgq_remove_connected(struct qmsgq_sock *qsk);
+void qmsgq_remove_sock(struct qmsgq_sock *qsk);
 int qmsgq_endpoint_register(const struct qmsgq_endpoint *ep);
 void qmsgq_endpoint_unregister(const struct qmsgq_endpoint *ep);
 
