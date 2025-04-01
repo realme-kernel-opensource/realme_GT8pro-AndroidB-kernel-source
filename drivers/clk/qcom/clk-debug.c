@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016, 2019-2021, The Linux Foundation. All rights reserved. */
-/* Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include <linux/clk.h>
 #include <linux/export.h>
@@ -979,7 +979,6 @@ static void clk_debug_suspend_trace_probe(void *unused,
 					const char *action, int val, bool start)
 {
 	if (start && val > 0 && !strcmp("machine_suspend", action)) {
-		pr_info("Enabled Clocks:\n");
 		clock_debug_print_enabled_clocks(NULL);
 	}
 }
