@@ -15,13 +15,6 @@
 # Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
 
 ### build/kernel/kleaf/bazel.WORKSPACE contents ###
-load("//build/kernel/kleaf:workspace.bzl", "define_kleaf_workspace")
-
-define_kleaf_workspace()
-
-# Optional epilog for analysis testing.
-load("//build/kernel/kleaf:workspace_epilog.bzl", "define_kleaf_workspace_epilog")
-define_kleaf_workspace_epilog()
 
 ### Qualcomm customizations ###
 new_local_repository(
