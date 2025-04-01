@@ -101,6 +101,7 @@ def define_single_vm_build(
     copy_to_dist_dir(
         name = "{}_dist".format(name),
         data = [
+            ":{}_modules_install".format(name),
             ":{}_signed_modules".format(name),
             ":{}_merge_msm_uapi_headers".format(name),
             ":signing_key",
@@ -110,6 +111,7 @@ def define_single_vm_build(
         ],
         dist_dir = "out/msm-kernel-{}/dist".format(name),
         flat = True,
+        allow_duplicate_filenames = True,
         log = "info",
     )
 
