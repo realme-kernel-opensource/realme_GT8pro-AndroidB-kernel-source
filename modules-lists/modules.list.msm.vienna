@@ -86,3 +86,5 @@ sched-walt.ko
 phy-msm-m31-eusb2.ko
 rdbg.ko
 deferred-free-helper.ko
+repeater.ko
+repeater-qti-pmic-eusb2.ko
