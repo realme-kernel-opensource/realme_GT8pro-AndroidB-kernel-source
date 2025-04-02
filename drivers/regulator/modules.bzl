@@ -148,3 +148,16 @@ def register_modules(registry):
             "drivers/regulator/proxy-consumer",
         ],
     )
+
+    registry.register(
+        name = "drivers/regulator/qpnp-lcdb-regulator",
+        out = "qpnp-lcdb-regulator.ko",
+        config = "CONFIG_REGULATOR_QPNP_LCDB",
+        srcs = [
+            # do not sort
+            "drivers/regulator/qpnp-lcdb-regulator.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )
