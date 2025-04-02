@@ -108,6 +108,7 @@ lahaina_perf_config = {
     "CONFIG_PCI_MSM": "m",
     "CONFIG_PDR_INDICATION_NOTIF_TIMEOUT": "9000",
     "CONFIG_PHY_QCOM_UFS": "m",
+    "CONFIG_PHY_QCOM_UFS_V4_YUPIK": "m",
     "CONFIG_PHY_QCOM_UFS_QRBTC_SDM845": "m",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_YUPIK": "m",
