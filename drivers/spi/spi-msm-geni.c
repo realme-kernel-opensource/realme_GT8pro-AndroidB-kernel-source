@@ -21,6 +21,7 @@
 #include <linux/qcom-geni-se-common.h>
 #include <linux/msm_gpi.h>
 #include <linux/spi/spi.h>
+#include <linux/spinlock.h>
 #include <linux/pinctrl/consumer.h>
 
 #define SPI_NUM_CHIPSELECT	(4)
@@ -203,6 +204,7 @@ struct spi_geni_master {
 	struct pinctrl *geni_pinctrl;
 	struct pinctrl_state *geni_gpio_active;
 	struct pinctrl_state *geni_gpio_sleep;
+	spinlock_t data_dump_lock;
 	resource_size_t phys_addr;
 	resource_size_t size;
 	void __iomem *base;
@@ -427,6 +429,7 @@ static void spi_dump_ipc(struct spi_geni_master *mas, char *prefix, char *str, i
 		return;
 	}
 
+	spin_lock(&mas->data_dump_lock);
 	if (mas->max_data_dump_size > 0 && size > mas->max_data_dump_size)
 		size = mas->max_data_dump_size;
 
@@ -437,6 +440,7 @@ static void spi_dump_ipc(struct spi_geni_master *mas, char *prefix, char *str, i
 		size -= SPI_DATA_DUMP_SIZE;
 	}
 	__spi_dump_ipc(mas, prefix, (char *)str + offset, total_bytes, offset, size);
+	spin_unlock(&mas->data_dump_lock);
 }
 
 /*
@@ -480,13 +484,18 @@ static ssize_t spi_max_dump_size_store(struct device *dev, struct device_attribu
 
 	geni_mas = spi_controller_get_devdata(spi);
 
+	spin_lock(&geni_mas->data_dump_lock);
 	if (kstrtoint(buf, 0, &geni_mas->max_data_dump_size)) {
 		dev_err(dev, "%s Invalid input\n", __func__);
+		spin_unlock(&geni_mas->data_dump_lock);
 		return -EINVAL;
 	}
 
 	if (geni_mas->max_data_dump_size <= 0)
 		geni_mas->max_data_dump_size = SPI_DATA_DUMP_SIZE;
+
+	spin_unlock(&geni_mas->data_dump_lock);
+
 	return size;
 }
 
@@ -2900,6 +2909,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 			goto spi_geni_probe_err;
 	}
 
+	spin_lock_init(&geni_mas->data_dump_lock);
 	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
 	if (ret) {
 		ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
