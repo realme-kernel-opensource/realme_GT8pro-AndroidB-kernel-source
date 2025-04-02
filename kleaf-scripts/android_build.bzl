@@ -160,7 +160,7 @@ def define_single_android_build(
     avb_sign_boot_image(
         name = "{}_avb_sign_boot_image".format(stem),
         artifacts = "{}_gki_artifacts".format(base_kernel),
-        avbtool = "//prebuilts/kernel-build-tools:linux-x86/bin/avbtool",
+        avbtool = "//prebuilts/kernel-build-tools:avbtool",
         key = "//tools/mkbootimg:gki/testdata/testkey_rsa4096.pem",
         props = [
             "com.android.build.boot.os_version:13",

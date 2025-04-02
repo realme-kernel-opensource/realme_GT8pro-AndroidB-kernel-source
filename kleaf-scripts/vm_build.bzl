@@ -16,7 +16,7 @@ def define_make_vm_dtb_img(target, dtb_list, page_size):
     dtb_cmd = "compiled_dtb_list=\"{}\"\n".format(" ".join(["$(location {})".format(d) for d in compiled_dtbs]))
     dtb_cmd += """
       set +x
-      $(location //prebuilts/kernel-build-tools:linux-x86/bin/mkdtboimg) \\
+      $(location //prebuilts/kernel-build-tools:mkdtboimg) \\
         create "$@" --page_size={page_size} $${{compiled_dtb_list}}
       set -x
     """.format(page_size = page_size)
@@ -25,7 +25,7 @@ def define_make_vm_dtb_img(target, dtb_list, page_size):
         name = "{}_vm_dtb_img".format(target),
         srcs = compiled_dtbs,
         outs = ["{}-dtb.img".format(target)],
-        tools = ["//prebuilts/kernel-build-tools:linux-x86/bin/mkdtboimg"],
+        tools = ["//prebuilts/kernel-build-tools:mkdtboimg"],
         cmd = dtb_cmd,
     )
 
