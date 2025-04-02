@@ -203,6 +203,7 @@ static const unsigned int top_tasks_bitmap_size =
 __read_mostly unsigned int walt_scale_demand_divisor;
 
 #define SCHED_PRINT(arg)	printk_deferred("%s=%llu", #arg, (unsigned long long)arg)
+#define SCHED_PRINT_SIGNED(arg)	printk_deferred("%s=%lld", #arg, (unsigned long long)arg)
 #define STRG(arg)		#arg
 
 void walt_task_dump(struct task_struct *p)
@@ -222,15 +223,13 @@ void walt_task_dump(struct task_struct *p)
 	SCHED_PRINT(wts->demand);
 	SCHED_PRINT(wts->coloc_demand);
 	SCHED_PRINT(wts->enqueue_after_migration);
-	SCHED_PRINT(wts->prev_cpu);
-	SCHED_PRINT(wts->new_cpu);
+	SCHED_PRINT_SIGNED(wts->prev_cpu);
+	SCHED_PRINT_SIGNED(wts->new_cpu);
 	SCHED_PRINT(wts->misfit);
 	SCHED_PRINT(wts->prev_on_rq);
-	SCHED_PRINT(wts->prev_on_rq_cpu);
-	SCHED_PRINT(wts->mvp_prio);
+	SCHED_PRINT_SIGNED(wts->prev_on_rq_cpu);
+	SCHED_PRINT_SIGNED(wts->mvp_prio);
 	SCHED_PRINT(wts->iowaited);
-	SCHED_PRINT(sched_ravg_window);
-	SCHED_PRINT(new_sched_ravg_window);
 
 	for (i = 0 ; i < nr_cpu_ids; i++)
 		j += scnprintf(buff + j, buffsz - j, "%u ",
@@ -314,6 +313,8 @@ void walt_dump(void)
 			sched_ravg_window_change_time);
 	printk_deferred("global_ws=%llu\n",
 			 atomic64_read(&walt_irq_work_lastq_ws));
+	SCHED_PRINT(sched_ravg_window);
+	SCHED_PRINT(new_sched_ravg_window);
 	for_each_online_cpu(cpu)
 		walt_rq_dump(cpu);
 	SCHED_PRINT(max_possible_cluster_id);
