@@ -10,6 +10,7 @@ vienna_consolidate_config = {
     "CONFIG_LKDTM": "m",
     "CONFIG_TORTURE_TEST": "m",
     "CONFIG_LOCK_TORTURE_TEST": "m",
+    "CONFIG_MSM_GPI_DMA_DEBUG": "y",
     "CONFIG_PAGE_OWNER": "y",
     "CONFIG_PAGE_POISONING": "y",
     "CONFIG_QCOM_DYNAMIC_MEMORY_DUMP": "y",
