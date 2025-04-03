@@ -271,9 +271,11 @@ err_init:
 static void cpufreq_free_table(unsigned int cpu)
 {
 	struct cpu_freq_time *freq_time = NULL;
+	struct hlist_node *node;
 	int bkt;
 
-	hash_for_each(CPUFREQ_TABLE_PTR(cpu), bkt, freq_time, hash_node) {
+	hash_for_each_safe(CPUFREQ_TABLE_PTR(cpu), bkt, node, freq_time,
+			   hash_node) {
 		hash_del(&freq_time->hash_node);
 		kfree(freq_time);
 	}
