@@ -101,12 +101,16 @@ static int fetch_and_populate_cdevs(char *config_buf, struct thermal_zone_device
 	int buf_size = 0, buf_offset = 0, buf1_offset = 0, buf2_offset = 0;
 	char *buf_cdev = NULL, *buf_cdev_upper = NULL, *buf_cdev_lower = NULL;
 	struct thermal_instance *instance;
+	struct thermal_trip_desc *td;
 
 	mutex_lock(&tz->lock);
-	list_for_each_entry(instance, &tz->thermal_instances, tz_node) {
-		if (instance->cdev)
-			buf_size++;
+	for_each_trip_desc(tz, td) {
+		list_for_each_entry(instance, &td->thermal_instances, trip_node) {
+			if (instance->cdev)
+				buf_size++;
+		}
 	}
+
 	if (!buf_size) {
 		mutex_unlock(&tz->lock);
 		return offset;
@@ -127,38 +131,40 @@ static int fetch_and_populate_cdevs(char *config_buf, struct thermal_zone_device
 		bool first_entry = true;
 		bool no_cdevs = true;
 
-		list_for_each_entry(instance, &tz->thermal_instances, tz_node) {
-			if (!instance->cdev || instance->trip != &tz->trips[i].trip)
-				continue;
+		for_each_trip_desc(tz, td) {
+			list_for_each_entry(instance, &td->thermal_instances, trip_node) {
+				if (!instance->cdev || instance->trip != &tz->trips[i].trip)
+					continue;
 
-			no_cdevs = false;
-			if (first_entry) {
-				first_entry = false;
-				buf_offset += scnprintf(
-						buf_cdev + buf_offset,
-						buf_size - buf_offset,
-						" %s", instance->cdev->type);
-				buf1_offset += scnprintf(
-						buf_cdev_upper + buf1_offset,
-						buf_size - buf1_offset,
-						" %ld", instance->upper);
-				buf2_offset += scnprintf(
-						buf_cdev_lower + buf2_offset,
-						buf_size - buf2_offset,
-						" %ld", instance->lower);
-			} else {
-				buf_offset += scnprintf(
-						buf_cdev + buf_offset,
-						buf_size - buf_offset,
-						"+%s", instance->cdev->type);
-				buf1_offset += scnprintf(
-						buf_cdev_upper + buf1_offset,
-						buf_size - buf1_offset,
-						"+%ld", instance->upper);
-				buf2_offset += scnprintf(
-						buf_cdev_lower + buf2_offset,
-						buf_size - buf2_offset,
-						"+%ld", instance->lower);
+				no_cdevs = false;
+				if (first_entry) {
+					first_entry = false;
+					buf_offset += scnprintf(
+							buf_cdev + buf_offset,
+							buf_size - buf_offset,
+							" %s", instance->cdev->type);
+					buf1_offset += scnprintf(
+							buf_cdev_upper + buf1_offset,
+							buf_size - buf1_offset,
+							" %ld", instance->upper);
+					buf2_offset += scnprintf(
+							buf_cdev_lower + buf2_offset,
+							buf_size - buf2_offset,
+							" %ld", instance->lower);
+				} else {
+					buf_offset += scnprintf(
+							buf_cdev + buf_offset,
+							buf_size - buf_offset,
+							"+%s", instance->cdev->type);
+					buf1_offset += scnprintf(
+							buf_cdev_upper + buf1_offset,
+							buf_size - buf1_offset,
+							"+%ld", instance->upper);
+					buf2_offset += scnprintf(
+							buf_cdev_lower + buf2_offset,
+							buf_size - buf2_offset,
+							"+%ld", instance->lower);
+				}
 			}
 		}
 
