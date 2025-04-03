@@ -1022,7 +1022,7 @@ static void __tmc_remove(struct device *dev)
 		return;
 	}
 	if (drvdata->pm_config.pm_enable)
-		list_del(&drvdata->link);
+		list_del(&drvdata->delayed->link);
 	spin_unlock(&delay_lock);
 
 	if (!drvdata->csdev)
