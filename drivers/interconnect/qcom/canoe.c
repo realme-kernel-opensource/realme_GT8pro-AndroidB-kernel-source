@@ -62,12 +62,24 @@ static struct qcom_icc_node qhm_qspi = {
 	.links = { SLAVE_A1NOC_SNOC },
 };
 
+static struct qcom_icc_qosbox qxm_crypto_qos = {
+	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
+	.num_ports = 1,
+	.offsets = { 0x16000 },
+	.config = &(struct qos_config) {
+		.prio = 2,
+		.urg_fwd = 1,
+		.prio_fwd_disable = 1,
+	},
+};
+
 static struct qcom_icc_node qxm_crypto = {
 	.name = "qxm_crypto",
 	.id = MASTER_CRYPTO,
 	.channels = 1,
 	.buswidth = 16,
 	.noc_ops = &qcom_qnoc4_ops,
+	.qosbox = &qxm_crypto_qos,
 	.num_links = 1,
 	.links = { SLAVE_A1NOC_SNOC },
 };
