@@ -2208,11 +2208,6 @@ static void geni_i2c_err_prep_sg(struct geni_i2c_dev *gi2c)
 static void geni_i2c_gsi_cancel_pending(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
 					u32 num, u32 msg_idx, u32 wr_idx, u8 *rd_dma_buf)
 {
-	if (gi2c->is_shared && gi2c->err) {
-		I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "Unlock bus\n");
-		geni_i2c_unlock_bus(gi2c);
-	}
-
 	if (msg->flags & I2C_M_RD) {
 		geni_se_common_iommu_unmap_buf(gi2c->wrapper_dev, &gi2c->rx_ph,
 					       msg->len, DMA_FROM_DEVICE);
