@@ -4,6 +4,7 @@
  *
  * Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  * Copyright (c) 2023, Linaro Limited
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/of.h>
 #include <linux/module.h>
@@ -612,6 +613,13 @@ static const struct dev_pm_ops pm8xxx_rtc_pm_ops = {
 	.resume = pm8xxx_rtc_resume,
 };
 
+static void pm8xxx_rtc_shutdown(struct platform_device *pdev)
+{
+	struct pm8xxx_rtc *rtc_dd = platform_get_drvdata(pdev);
+
+	devm_free_irq(rtc_dd->dev, rtc_dd->alarm_irq, rtc_dd);
+}
+
 static struct platform_driver pm8xxx_rtc_driver = {
 	.probe		= pm8xxx_rtc_probe,
 	.remove_new	= pm8xxx_remove,
@@ -619,6 +627,7 @@ static struct platform_driver pm8xxx_rtc_driver = {
 		.name		= "rtc-pm8xxx",
 		.of_match_table	= pm8xxx_id_table,
 	},
+	.shutdown	= pm8xxx_rtc_shutdown,
 };
 
 module_platform_driver(pm8xxx_rtc_driver);
