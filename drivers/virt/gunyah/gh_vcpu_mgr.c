@@ -270,6 +270,13 @@ static void android_rvh_gh_after_vcpu_run(void *unused, u16 vmid, u32 vcpu_id, i
 		}
 	}
 	preempt_enable();
+	if (signal_pending(current)) {
+		if (!vcpu->wdog_frozen) {
+			gh_hcall_wdog_manage(vm->wdog_cap_id,
+					WATCHDOG_MANAGE_OP_FREEZE);
+			vcpu->wdog_frozen = true;
+		}
+	}
 }
 
 static int gh_vcpu_mgr_reg_rm_cbs(void)
