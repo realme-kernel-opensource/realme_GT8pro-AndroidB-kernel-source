@@ -1271,17 +1271,33 @@ static const struct auxiliary_device_id gh_rm_drv_id_table[] = {
 	{ }
 };
 
+static struct device_node *gh_rm_find_of_node(void)
+{
+	struct device_node *gunyah_np __free(device_node) = NULL;
+
+	gunyah_np = of_find_node_by_path("/hypervisor");
+	if (!gunyah_np)
+		return NULL;
+
+	return of_get_compatible_child(gunyah_np, "gunyah-resource-manager");
+}
+
 static int gh_rm_drv_probe(struct auxiliary_device *adev,
 				const struct auxiliary_device_id *adev_id)
 {
+	struct device_node *node __free(device_node) = NULL;
 	struct device *dev = &adev->dev;
-	struct device *rm_dev = adev->dev.parent;
-	struct device_node *node = rm_dev->of_node;
 	int ret;
 
-	rm = rm_dev->driver_data;
-	if (!rm)
+	rm = dev->platform_data;
+	if (!rm) {
 		dev_err(dev, "Failed to get the rm pointer\n");
+		return -ENODEV;
+	}
+
+	node = gh_rm_find_of_node();
+	if (!node)
+		return -ENODEV;
 
 	gh_rm_intc = of_irq_find_parent(node);
 	if (!gh_rm_intc) {
@@ -1309,6 +1325,7 @@ static int gh_rm_drv_probe(struct auxiliary_device *adev,
 	if (ret)
 		return ret;
 
+	of_node_put(node);
 	return 0;
 }
 
