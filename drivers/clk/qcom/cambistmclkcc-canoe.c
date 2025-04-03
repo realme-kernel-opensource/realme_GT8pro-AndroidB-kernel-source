@@ -70,7 +70,7 @@ static struct clk_alpha_pll cam_bist_mclk_cc_pll0 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOW] = 1171200000},
+				[VDD_LOW_L1] = 1171200000},
 		},
 	},
 };
@@ -493,12 +493,16 @@ static int cam_bist_mclk_cc_canoe_probe(struct platform_device *pdev)
 
 	ret = qcom_cc_really_probe(&pdev->dev, &cam_bist_mclk_cc_canoe_desc, regmap);
 	if (ret) {
-		dev_err(&pdev->dev, "Failed to register CAM BIST MCLK CC clocks ret=%d\n", ret);
-		return ret;
+		if (ret != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "Failed to register CAM BIST MCLK CC clocks ret=%d\n",
+				ret);
+		goto err;
 	}
 
-	pm_runtime_put_sync(&pdev->dev);
 	dev_info(&pdev->dev, "Registered CAM BIST MCLK CC clocks\n");
+
+err:
+	pm_runtime_put_sync(&pdev->dev);
 
 	return ret;
 }

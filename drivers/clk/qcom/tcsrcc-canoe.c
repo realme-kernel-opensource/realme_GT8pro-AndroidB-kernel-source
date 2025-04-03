@@ -114,7 +114,8 @@ static int tcsr_cc_canoe_probe(struct platform_device *pdev)
 
 	ret = qcom_cc_really_probe(&pdev->dev, &tcsr_cc_canoe_desc, regmap);
 	if (ret) {
-		dev_err(&pdev->dev, "Failed to register TCSR CC clocks ret=%d\n", ret);
+		if (ret != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "Failed to register TCSR CC clocks ret=%d\n", ret);
 		return ret;
 	}
 
