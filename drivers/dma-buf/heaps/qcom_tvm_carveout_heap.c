@@ -48,7 +48,7 @@ static struct dmabuf_membuf_helper *membuf_helper;
 static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_data)
 {
 	struct tvm_pool *pool;
-	struct gh_sgl_desc *altmap_sgl = NULL, *mempool_sgl = NULL;
+	struct gh_sgl_desc *sgl_desc = NULL;
 	struct dev_pagemap *pgmap;
 	phys_addr_t base, memmap_base;
 	size_t size, dmabuf_size;
@@ -83,22 +83,26 @@ static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_da
 	 * for this large dmabuf.
 	 */
 	if (dmabuf_size >= SZ_128M && dmabuf_mem_pool) {
-		ret = membuf_helper->dmabuf_membuf_prepare_altmap(obj, &altmap_sgl, dmabuf_size);
+		ret = membuf_helper->dmabuf_membuf_prepare_altmap(obj, &sgl_desc, dmabuf_size);
 		if (ret)
 			goto err_altmap;
 		memmap_base = PFN_PHYS(obj->pgmap.altmap.base_pfn);
 	}
 
-	if (altmap_sgl)
-		alloc_data->sgl_desc = altmap_sgl;
+	if (sgl_desc)
+		alloc_data->sgl_desc = sgl_desc;
 	pool->membuf = membuf_helper->dmabuf_membuf_alloc(alloc_data);
 	if (IS_ERR(pool->membuf)) {
 		ret = PTR_ERR(pool->membuf);
 		goto err_mem_buf_alloc;
 	}
 
-	mempool_sgl = membuf_helper->dmabuf_membuf_get_sgl(pool->membuf);
-	if (mempool_sgl->n_sgl_entries != 1) {
+	/* free the sgl_desc if created via prepare_altmap */
+	kfree(sgl_desc);
+	sgl_desc = NULL;
+
+	sgl_desc = membuf_helper->dmabuf_membuf_get_sgl(pool->membuf);
+	if (sgl_desc->n_sgl_entries != 1) {
 		pr_err("Memory not contiguous!\n");
 		ret = EINVAL;
 		goto err_memremap;
@@ -110,8 +114,8 @@ static struct tvm_pool *tvm_pool_create(struct mem_buf_allocation_data *alloc_da
 	 * to ZONE_DEVICE.
 	 */
 	pgmap = &pool->pgmap;
-	base = mempool_sgl->sgl_entries[0].ipa_base;
-	size = mempool_sgl->sgl_entries[0].size;
+	base = sgl_desc->sgl_entries[0].ipa_base;
+	size = sgl_desc->sgl_entries[0].size;
 	memset(pgmap, 0, sizeof(*pgmap));
 	if (obj->memmap) {
 		memcpy(pgmap, (const void *)&obj->pgmap, sizeof(*pgmap));
@@ -153,6 +157,7 @@ err_mem_buf_alloc:
 		membuf_helper->dmabuf_membuf_free(obj->memmap);
 	if (obj->memmap_base)
 		gen_pool_free(dmabuf_mem_pool, obj->memmap_base, obj->memmap_size);
+	kfree(sgl_desc);
 err_altmap:
 	kfree(obj);
 err_obj_alloc:
