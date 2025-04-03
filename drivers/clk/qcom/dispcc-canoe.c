@@ -1014,17 +1014,12 @@ static struct clk_rcg2 disp_cc_mdss_vsync_clk_src = {
 	},
 };
 
-static const struct freq_tbl ftbl_disp_cc_osc_clk_src[] = {
-	F(38400000, P_DISP_CC_PLL2_OUT_MAIN, 1, 0, 0),
-	{ }
-};
-
 static struct clk_rcg2 disp_cc_osc_clk_src = {
 	.cmd_rcgr = 0x8104,
 	.mnd_width = 0,
 	.hid_width = 5,
 	.parent_map = disp_cc_parent_map_10,
-	.freq_tbl = ftbl_disp_cc_osc_clk_src,
+	.freq_tbl = ftbl_disp_cc_esync0_clk_src,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "disp_cc_osc_clk_src",
 		.parent_data = disp_cc_parent_data_10,
