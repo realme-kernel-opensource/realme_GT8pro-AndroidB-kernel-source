@@ -467,8 +467,6 @@ static inline int init_event_ring(int er_num, bool reinit_ring)
 	QPACE_WRITE_ER_REG(er_num, QPACE_DMA_ER_MGR_0_RD_PTR_L_OFFSET,
 			   FIELD_GET(GENMASK(31, 0), ring_end_phys) - DESCRIPTOR_SIZE);
 
-	ev_rings[er_num].cycle_bit = 0;
-
 	/*
 	 * Since struct event_ring->cycle_bit is zero initialized, for the initial pass
 	 * by HW, an invalid ED will need to have a cycle bit of 1 / true, which will be
@@ -517,9 +515,7 @@ static int init_event_rings(void)
 static DEFINE_SPINLOCK(qpace_ref_lock);
 static int active_rings;
 
-static bool rings_inited_since_activation[NUM_RINGS];
-
-void get_qpace(int ring_num)
+static void get_qpace(int ring_num)
 {
 	struct transfer_ring *tr = &tr_rings[ring_num];
 
@@ -530,11 +526,8 @@ void get_qpace(int ring_num)
 	}
 
 	if (!tr->item_count) {
-		if (!rings_inited_since_activation[ring_num]) {
-			rings_inited_since_activation[ring_num] = true;
-			init_event_ring(ring_num, true);
-			init_transfer_ring(ring_num, true);
-		}
+		init_event_ring(ring_num, true);
+		init_transfer_ring(ring_num, true);
 
 		active_rings++;
 	}
@@ -542,9 +535,8 @@ void get_qpace(int ring_num)
 
 	spin_unlock(&qpace_ref_lock);
 }
-EXPORT_SYMBOL(get_qpace);
 
-void put_qpace(int ring_num, int  n_consumed_entries)
+static void put_qpace(int ring_num, int  n_consumed_entries)
 {
 	struct transfer_ring *tr = &tr_rings[ring_num];
 
@@ -557,14 +549,10 @@ void put_qpace(int ring_num, int  n_consumed_entries)
 	if (!active_rings) {
 		dev_pm_qos_update_request(&qos_req, PM_QOS_RESUME_LATENCY_DEFAULT_VALUE);
 		pm_relax(qpace_dev);
-
-		for (int i = 0; i < ARRAY_SIZE(rings_inited_since_activation); i++)
-			rings_inited_since_activation[i] = false;
 	}
 
 	spin_unlock(&qpace_ref_lock);
 }
-EXPORT_SYMBOL(put_qpace);
 
 /*
  * =============================================================================

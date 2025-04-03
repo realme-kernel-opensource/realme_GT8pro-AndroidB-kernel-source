@@ -170,10 +170,6 @@ int qpace_consume_er(int er_num,
  */
 bool is_qpace_enabled(void);
 
-void get_qpace(int ring_num);
-
-void put_qpace(int ring_num, int  n_consumed_entries);
-
 #else /* CONFIG_QTI_PAGE_COMPRESSION_ENGINE */
 
 static inline int qpace_urgent_compress(phys_addr_t input_addr,
@@ -221,16 +217,6 @@ static inline int qpace_consume_er(int er_num,
 static inline bool is_qpace_enabled(void)
 {
 	return false;
-}
-
-void get_qpace(int ring_num)
-{
-
-}
-
-void put_qpace(int ring_num, int  n_consumed_entries)
-{
-
 }
 
 #endif
