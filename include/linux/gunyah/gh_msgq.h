@@ -49,9 +49,6 @@ int gh_msgq_send(void *msgq_client_desc,
 int gh_msgq_recv(void *msgq_client_desc,
 			void *buff, size_t buff_size,
 			size_t *recv_size, unsigned long flags);
-int gh_msgq_recv_killable(void *msgq_client_desc,
-			void *buff, size_t buff_size,
-			size_t *recv_size, unsigned long flags);
 
 int gh_msgq_populate_cap_info(int label, u64 cap_id,
 				int direction, int irq);
@@ -75,13 +72,6 @@ static inline int gh_msgq_send(void *msgq_client_desc,
 }
 
 static inline int gh_msgq_recv(void *msgq_client_desc,
-			void *buff, size_t buff_size,
-			size_t *recv_size, unsigned long flags)
-{
-	return -EINVAL;
-}
-
-static inline int gh_msgq_recv_killable(void *msgq_client_desc,
 			void *buff, size_t buff_size,
 			size_t *recv_size, unsigned long flags)
 {
