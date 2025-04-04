@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2019, 2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -419,11 +419,10 @@ void qcom_glink_spss_unregister(struct qcom_glink_spss *spss)
 	qcom_glink_native_remove(spss->glink);
 
 	mbox_free_channel(spss->mbox_chan);
+	device_unregister(&spss->dev);
 
 	glink_spss_reset(spss->tx_pipe);
 	glink_spss_reset(spss->rx_pipe);
-
-	device_unregister(&spss->dev);
 }
 EXPORT_SYMBOL_GPL(qcom_glink_spss_unregister);
 
