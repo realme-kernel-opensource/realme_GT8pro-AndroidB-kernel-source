@@ -42,6 +42,11 @@ socinfo.ko
 qcom_hwspinlock.ko
 qcom-ipcc.ko
 llcc-qcom.ko
+qcom_cpucp.ko
+qcom_scmi_vendor.ko
+qcom_scmi_client.ko
+dcvs_fp.ko
+qcom-dcvs.ko
 qcom_llcc_pmu.ko
 qcom-pmu-lib.ko
 kryo_arm64_edac.ko
@@ -63,6 +68,8 @@ qcom_edac.ko
 kryo_arm64_edac.ko
 llcc-qcom.ko
 mdt_loader.ko
+governor_gpubw_mon.ko
+governor_msm_adreno_tz.ko
 qcom_ipc_logging.ko
 dwc3-msm.ko
 phy-generic.ko
@@ -73,3 +80,9 @@ usb_f_gsi.ko
 usb_f_qdss.ko
 clk-rpmh.ko
 qcom-cpufreq-hw.ko
+dcc_v2.ko
+memory_dump_v2.ko
+sched-walt.ko
+phy-msm-m31-eusb2.ko
+rdbg.ko
+deferred-free-helper.ko

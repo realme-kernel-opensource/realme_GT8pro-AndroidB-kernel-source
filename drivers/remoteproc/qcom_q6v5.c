@@ -5,7 +5,7 @@
  * Copyright (C) 2016-2018 Linaro Ltd.
  * Copyright (C) 2014 Sony Mobile Communications AB
  * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/glob.h>
 #include <linux/kernel.h>
@@ -103,7 +103,13 @@ void qcom_q6v5_register_ssr_subdev(struct qcom_q6v5 *q6v5, struct rproc_subdev *
 {
 	q6v5->ssr_subdev = ssr_subdev;
 }
-EXPORT_SYMBOL(qcom_q6v5_register_ssr_subdev);
+EXPORT_SYMBOL_GPL(qcom_q6v5_register_ssr_subdev);
+
+void qcom_q6v5_register_glink_subdev(struct qcom_q6v5 *q6v5, struct rproc_subdev *glink_subdev)
+{
+	q6v5->glink_subdev = glink_subdev;
+}
+EXPORT_SYMBOL_GPL(qcom_q6v5_register_glink_subdev);
 
 static void qcom_q6v5_crash_handler_work(struct work_struct *work)
 {
@@ -121,7 +127,11 @@ static void qcom_q6v5_crash_handler_work(struct work_struct *work)
 
 	rproc->state = RPROC_CRASHED;
 	list_for_each_entry_reverse(subdev, &rproc->subdevs, node) {
-		if (subdev->stop)
+		/*
+		 * Debug requirement from glink to not clean up their
+		 * data when SSR is not enabled for a remoteproc.
+		 */
+		if (subdev->stop && subdev != q6v5->glink_subdev)
 			subdev->stop(subdev, true);
 	}
 
@@ -556,10 +566,23 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 		return load_state ? -ENOMEM : -EINVAL;
 	}
 
-	q6v5->path = devm_of_icc_get(&pdev->dev, NULL);
-	if (IS_ERR(q6v5->path))
-		return dev_err_probe(&pdev->dev, PTR_ERR(q6v5->path),
-				     "failed to acquire interconnect path\n");
+	q6v5->path = devm_of_icc_get(&pdev->dev, "rproc_ddr");
+	if (IS_ERR(q6v5->path)) {
+		if (PTR_ERR(q6v5->path) != -ENODATA) {
+			return dev_err_probe(&pdev->dev, PTR_ERR(q6v5->path),
+				     "failed to acquire rproc_ddr interconnect path\n");
+		}
+		q6v5->path = NULL;
+	}
+
+	q6v5->crypto_path = devm_of_icc_get(&pdev->dev, "crypto_ddr");
+	if (IS_ERR(q6v5->crypto_path)) {
+		if (PTR_ERR(q6v5->crypto_path) != -ENODATA) {
+			return dev_err_probe(&pdev->dev, PTR_ERR(q6v5->crypto_path),
+				     "failed to acquire crypto_ddr interconnect path\n");
+		}
+		q6v5->crypto_path = NULL;
+	}
 
 	INIT_WORK(&q6v5->crash_handler, qcom_q6v5_crash_handler_work);
 

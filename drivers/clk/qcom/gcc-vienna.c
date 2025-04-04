@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -94,7 +94,7 @@ static struct clk_alpha_pll gcc_gpll0 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -143,7 +143,7 @@ static struct clk_alpha_pll gcc_gpll1 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -184,7 +184,7 @@ static struct clk_alpha_pll gcc_gpll10 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -225,7 +225,7 @@ static struct clk_alpha_pll gcc_gpll11 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -289,7 +289,7 @@ static struct clk_alpha_pll gcc_gpll12 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -316,7 +316,7 @@ static struct clk_alpha_pll gcc_gpll13 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -343,7 +343,7 @@ static struct clk_alpha_pll gcc_gpll2 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -370,7 +370,7 @@ static struct clk_alpha_pll gcc_gpll3 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -397,7 +397,7 @@ static struct clk_alpha_pll gcc_gpll4 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -406,8 +406,22 @@ static struct clk_alpha_pll gcc_gpll4 = {
 	},
 };
 
+/* 808.0 MHz Configuration */
+static const struct alpha_pll_config gcc_gpll7_config = {
+	.l = 0x2a,
+	.cal_l = 0x48,
+	.alpha = 0x1555,
+	.config_ctl_val = 0x25c400e7,
+	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi1_val = 0xf51dea20,
+	.user_ctl_val = 0x00000008,
+	.user_ctl_hi_val = 0x00000002,
+};
+
 static struct clk_alpha_pll gcc_gpll7 = {
 	.offset = 0x7000,
+	.vco_table = taycan_eko_t_vco,
+	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
 	.clkr = {
 		.enable_reg = 0x52020,
@@ -418,13 +432,13 @@ static struct clk_alpha_pll gcc_gpll7 = {
 				.fw_name = "bi_tcxo",
 			},
 			.num_parents = 1,
-			.ops = &clk_alpha_pll_fixed_taycan_eko_t_ops,
+			.ops = &clk_alpha_pll_taycan_eko_t_ops,
 		},
 		.vdd_data = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -501,7 +515,7 @@ static struct clk_alpha_pll gcc_gpll9 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -871,6 +885,7 @@ static struct clk_rcg2 gcc_camss_cci_0_clk_src = {
 
 static const struct freq_tbl ftbl_gcc_camss_csi0phytimer_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(100000000, P_GCC_GPLL0_OUT_EVEN, 3, 0, 0),
 	F(300000000, P_GCC_GPLL0_OUT_EVEN, 1, 0, 0),
 	{ }
 };
@@ -900,6 +915,8 @@ static struct clk_rcg2 gcc_camss_csi0phytimer_clk_src = {
 };
 
 static const struct freq_tbl ftbl_gcc_camss_mclk0_clk_src[] = {
+	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(24000000, P_GCC_GPLL8_OUT_MAIN, 10, 1, 4),
 	F(64000000, P_GCC_GPLL8_OUT_MAIN, 15, 0, 0),
 	{ }
 };
@@ -1022,7 +1039,20 @@ static struct clk_rcg2 gcc_camss_ope_clk_src = {
 
 static const struct freq_tbl ftbl_gcc_camss_tfe_0_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(128000000, P_GCC_GPLL9_OUT_MAIN, 9, 0, 0),
+	F(135529412, P_GCC_GPLL9_OUT_MAIN, 8.5, 0, 0),
+	F(144000000, P_GCC_GPLL9_OUT_MAIN, 8, 0, 0),
+	F(153600000, P_GCC_GPLL9_OUT_MAIN, 7.5, 0, 0),
+	F(164571429, P_GCC_GPLL9_OUT_MAIN, 7, 0, 0),
+	F(177230769, P_GCC_GPLL9_OUT_MAIN, 6.5, 0, 0),
+	F(192000000, P_GCC_GPLL9_OUT_MAIN, 6, 0, 0),
+	F(209454545, P_GCC_GPLL9_OUT_MAIN, 5.5, 0, 0),
+	F(230400000, P_GCC_GPLL9_OUT_MAIN, 5, 0, 0),
+	F(256000000, P_GCC_GPLL9_OUT_MAIN, 4.5, 0, 0),
+	F(288000000, P_GCC_GPLL9_OUT_MAIN, 4, 0, 0),
+	F(329142857, P_GCC_GPLL9_OUT_MAIN, 3.5, 0, 0),
 	F(366000000, P_GCC_GPLL9_OUT_MAIN, 2, 0, 0),
+	F(384000000, P_GCC_GPLL9_OUT_MAIN, 3, 0, 0),
 	F(460000000, P_GCC_GPLL9_OUT_MAIN, 2, 0, 0),
 	F(576000000, P_GCC_GPLL9_OUT_MAIN, 2, 0, 0),
 	{ }
@@ -1057,6 +1087,7 @@ static struct clk_rcg2 gcc_camss_tfe_0_clk_src = {
 
 static const struct freq_tbl ftbl_gcc_camss_tfe_0_csid_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(120000000, P_GCC_GPLL0_OUT_MAIN, 5, 0, 0),
 	F(266571429, P_GCC_GPLL4_OUT_MAIN, 3.5, 0, 0),
 	F(426400000, P_GCC_GPLL1_OUT_MAIN, 2.5, 0, 0),
 	F(466500000, P_GCC_GPLL4_OUT_MAIN, 2, 0, 0),
@@ -1092,7 +1123,20 @@ static struct clk_rcg2 gcc_camss_tfe_0_csid_clk_src = {
 
 static const struct freq_tbl ftbl_gcc_camss_tfe_1_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(128000000, P_GCC_GPLL10_OUT_MAIN, 9, 0, 0),
+	F(135529412, P_GCC_GPLL10_OUT_MAIN, 8.5, 0, 0),
+	F(144000000, P_GCC_GPLL10_OUT_MAIN, 8, 0, 0),
+	F(153600000, P_GCC_GPLL10_OUT_MAIN, 7.5, 0, 0),
+	F(164571429, P_GCC_GPLL10_OUT_MAIN, 7, 0, 0),
+	F(177230769, P_GCC_GPLL10_OUT_MAIN, 6.5, 0, 0),
+	F(192000000, P_GCC_GPLL10_OUT_MAIN, 6, 0, 0),
+	F(209454545, P_GCC_GPLL10_OUT_MAIN, 5.5, 0, 0),
+	F(230400000, P_GCC_GPLL10_OUT_MAIN, 5, 0, 0),
+	F(256000000, P_GCC_GPLL10_OUT_MAIN, 4.5, 0, 0),
+	F(288000000, P_GCC_GPLL10_OUT_MAIN, 4, 0, 0),
+	F(329142857, P_GCC_GPLL10_OUT_MAIN, 3.5, 0, 0),
 	F(366000000, P_GCC_GPLL10_OUT_MAIN, 2, 0, 0),
+	F(384000000, P_GCC_GPLL10_OUT_MAIN, 3, 0, 0),
 	F(460000000, P_GCC_GPLL10_OUT_MAIN, 2, 0, 0),
 	F(576000000, P_GCC_GPLL10_OUT_MAIN, 2, 0, 0),
 	{ }
@@ -1186,6 +1230,7 @@ static struct clk_rcg2 gcc_camss_tfe_cphy_rx_clk_src = {
 
 static const struct freq_tbl ftbl_gcc_camss_top_ahb_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(40000000, P_GCC_GPLL0_OUT_EVEN, 7.5, 0, 0),
 	F(80000000, P_GCC_GPLL0_OUT_MAIN, 7.5, 0, 0),
 	{ }
 };
@@ -1215,6 +1260,7 @@ static struct clk_rcg2 gcc_camss_top_ahb_clk_src = {
 };
 
 static const struct freq_tbl ftbl_gcc_gp1_clk_src[] = {
+	F(25000000, P_GCC_GPLL0_OUT_EVEN, 12, 0, 0),
 	F(50000000, P_GCC_GPLL0_OUT_EVEN, 6, 0, 0),
 	F(100000000, P_GCC_GPLL0_OUT_MAIN, 6, 0, 0),
 	F(200000000, P_GCC_GPLL0_OUT_MAIN, 3, 0, 0),
@@ -1685,6 +1731,7 @@ static const struct freq_tbl ftbl_gcc_qupv3_wrap1_s6_clk_src[] = {
 	F(75000000, P_GCC_GPLL0_OUT_EVEN, 4, 0, 0),
 	F(80000000, P_GCC_GPLL0_OUT_EVEN, 1, 4, 15),
 	F(96000000, P_GCC_GPLL0_OUT_EVEN, 1, 8, 25),
+	F(128000000, P_GCC_GPLL2_OUT_MAIN, 6, 0, 0),
 	F(153600000, P_GCC_GPLL2_OUT_MAIN, 5, 0, 0),
 	{ }
 };
@@ -1839,8 +1886,10 @@ static struct clk_rcg2 gcc_sdcc1_apps_clk_src = {
 };
 
 static const struct freq_tbl ftbl_gcc_sdcc1_ice_core_clk_src[] = {
+	F(75000000, P_GCC_GPLL0_OUT_EVEN, 4, 0, 0),
 	F(100000000, P_GCC_GPLL0_OUT_EVEN, 3, 0, 0),
 	F(150000000, P_GCC_GPLL0_OUT_MAIN, 4, 0, 0),
+	F(200000000, P_GCC_GPLL0_OUT_MAIN, 3, 0, 0),
 	F(300000000, P_GCC_GPLL0_OUT_MAIN, 2, 0, 0),
 	{ }
 };
@@ -1873,9 +1922,12 @@ static struct clk_rcg2 gcc_sdcc1_ice_core_clk_src = {
 
 static const struct freq_tbl ftbl_gcc_sdcc2_apps_clk_src[] = {
 	F(400000, P_BI_TCXO, 12, 1, 4),
+	F(19200000, P_BI_TCXO, 1, 0, 0),
 	F(25000000, P_GCC_GPLL0_OUT_EVEN, 12, 0, 0),
+	F(37500000, P_GCC_GPLL0_OUT_EVEN, 8, 0, 0),
 	F(50000000, P_GCC_GPLL0_OUT_EVEN, 6, 0, 0),
 	F(75000000, P_GCC_GPLL0_OUT_EVEN, 4, 0, 0),
+	F(90000000, P_GCC_GPLL7_OUT_MAIN, 6, 0, 0),
 	F(100000000, P_GCC_GPLL0_OUT_EVEN, 3, 0, 0),
 	F(202000000, P_GCC_GPLL7_OUT_MAIN, 4, 0, 0),
 	{ }
@@ -3700,6 +3752,7 @@ static const struct qcom_reset_map gcc_vienna_resets[] = {
 	[GCC_USB3_PHY_SEC_BCR] = { 0x5000c },
 	[GCC_USB3PHY_PHY_PRIM_BCR] = { 0x50004 },
 	[GCC_USB3PHY_PHY_SEC_BCR] = { 0x50010 },
+	[GCC_USB_PHY_CFG_AHB2PHY_BCR] = { 0x6a000 },
 	[GCC_VCODEC0_BCR] = { 0x2c000 },
 	[GCC_VENUS_BCR] = { 0x2b018 },
 	[GCC_VENUS_CTL_AXI_CLK_ARES] = { 0x2d028, 2 },
@@ -3757,6 +3810,7 @@ static int gcc_vienna_probe(struct platform_device *pdev)
 	clk_taycan_eko_t_pll_configure(&gcc_gpll10, regmap, &gcc_gpll10_config);
 	clk_taycan_eko_t_pll_configure(&gcc_gpll11, regmap, &gcc_gpll11_config);
 	clk_taycan_eko_t_pll_configure(&gcc_gpll12, regmap, &gcc_gpll12_config);
+	clk_taycan_eko_t_pll_configure(&gcc_gpll7, regmap, &gcc_gpll7_config);
 	clk_rivian_eko_t_pll_configure(&gcc_gpll8, regmap, &gcc_gpll8_config);
 	clk_taycan_eko_t_pll_configure(&gcc_gpll9, regmap, &gcc_gpll9_config);
 

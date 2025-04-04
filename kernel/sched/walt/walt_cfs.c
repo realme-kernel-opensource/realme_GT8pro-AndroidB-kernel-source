@@ -57,19 +57,20 @@ void create_util_to_cost(void)
 DECLARE_PER_CPU(unsigned long, gov_last_util);
 
 /* Migration margins */
-unsigned int sched_capacity_margin_up[WALT_NR_CPUS] = {
-			[0 ... WALT_NR_CPUS-1] = 1078 /* ~5% margin */
-};
-unsigned int sched_capacity_margin_down[WALT_NR_CPUS] = {
-			[0 ... WALT_NR_CPUS-1] = 1205 /* ~15% margin */
-};
+unsigned int sched_capacity_margin_up[ANDROID_CGROUPS][MAX_CLUSTERS] = {
+			/* ~5% margin */
+			{[0 ... MAX_CLUSTERS-1] = 1078},
+			{[0 ... MAX_CLUSTERS-1] = 1078},
+			{[0 ... MAX_CLUSTERS-1] = 1078},
+			{[0 ... MAX_CLUSTERS-1] = 1078}
 
-/* Migration margins for topapp */
-unsigned int sched_capacity_margin_early_up[WALT_NR_CPUS] = {
-			[0 ... WALT_NR_CPUS-1] = 1078 /* ~5% margin */
 };
-unsigned int sched_capacity_margin_early_down[WALT_NR_CPUS] = {
-			[0 ... WALT_NR_CPUS-1] = 1205 /* ~15% margin */
+unsigned int sched_capacity_margin_down[ANDROID_CGROUPS][MAX_CLUSTERS] = {
+			/* ~15% margin */
+			{[0 ... MAX_CLUSTERS-1] = 1205},
+			{[0 ... MAX_CLUSTERS-1] = 1205},
+			{[0 ... MAX_CLUSTERS-1] = 1205},
+			{[0 ... MAX_CLUSTERS-1] = 1205}
 };
 
 static inline bool
@@ -125,7 +126,8 @@ struct find_best_target_env {
 static unsigned long cpu_util_without(int cpu, struct task_struct *p)
 {
 	unsigned int util;
-
+	struct walt_rq *wrq;
+	u64 walt_cpu_util;
 	/*
 	 * WALT does not decay idle tasks in the same manner
 	 * as PELT, so it makes little sense to subtract task
@@ -139,7 +141,9 @@ static unsigned long cpu_util_without(int cpu, struct task_struct *p)
 	if (cpu != task_cpu(p) || !READ_ONCE(p->se.avg.last_update_time))
 		return cpu_util(cpu);
 
-	util = max_t(long, cpu_util(cpu) - task_util(p), 0);
+	wrq = &per_cpu(walt_rq, cpu);
+	walt_cpu_util = wrq->walt_stats.cumulative_runnable_avg_scaled;
+	util = max_t(long, walt_cpu_util - task_util(p), 0);
 
 	/*
 	 * Utilization (estimated) can exceed the CPU capacity, thus let's

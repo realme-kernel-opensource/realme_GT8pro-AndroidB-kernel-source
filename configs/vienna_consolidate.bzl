@@ -2,6 +2,7 @@ vienna_consolidate_config = {
     # keep sorted
     "CONFIG_ATOMIC64_SELFTEST": "m",
     "CONFIG_CMA_DEBUGFS": "y",
+    "CONFIG_CORESIGHT_SOURCE_ETM4X": "m",
     "CONFIG_DEBUG_PAGEALLOC": "y",
     "CONFIG_DEBUG_PAGEALLOC_ENABLE_DEFAULT": "y",
     "CONFIG_DEBUG_SPINLOCK": "y",
@@ -11,9 +12,11 @@ vienna_consolidate_config = {
     "CONFIG_LOCK_TORTURE_TEST": "m",
     "CONFIG_PAGE_OWNER": "y",
     "CONFIG_PAGE_POISONING": "y",
+    "CONFIG_QCOM_DYNAMIC_MEMORY_DUMP": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_RUNTIME_TESTING_MENU": "y",
     "CONFIG_NOP_USB_XCEIV": "m",
+    "CONFIG_SCHED_WALT_DEBUG": "m",
     "CONFIG_USB_DWC3_MSM": "m",
     "CONFIG_USB_QCOM_EMU_PHY": "m",
     "CONFIG_USB_CONFIGFS_F_CCID": "m",
@@ -24,4 +27,5 @@ vienna_consolidate_config = {
     "CONFIG_USB_F_CDEV": "m",
     "CONFIG_USB_F_GSI": "m",
     "CONFIG_USB_F_QDSS": "m",
+    "CONFIG_USB_M31_MSM_EUSB2_PHY": "m",
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2014-2017, 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/platform_device.h>
@@ -1443,13 +1443,43 @@ static int dynamic_mem_dump_alloc(struct platform_device *pdev, struct device_no
 	return 0;
 }
 
+static int set_dynamic_memdump(const char *val, const struct kernel_param *kp)
+{
+	int enable = 0;
+	struct memdump_info *dump_info, *tmp;
+	int ret = 0;
+
+	if (sscanf(val, "%du", &enable) != 1)
+		return -EINVAL;
+
+	if (enable) {
+		list_for_each_entry_safe(dump_info, tmp, &dynamic_dump_list, link) {
+			ret = dynamic_mem_dump_enable(dump_info);
+			if (ret)
+				break;
+		}
+	}
+	return 0;
+}
 #else
 static int dynamic_mem_dump_alloc(struct platform_device *pdev, struct device_node *node,
 			struct reserved_mem *rmem, size_t *rmem_offset)
 {
 	return 0;
 }
+
+static int set_dynamic_memdump(const char *val, const struct kernel_param *kp)
+{
+	return 0;
+}
 #endif
+
+static const struct kernel_param_ops dynamic_memdump_param_ops = {
+	.set = set_dynamic_memdump,
+	.get = param_get_int,
+};
+
+module_param_cb(enable_dynamic_memdump, &dynamic_memdump_param_ops, NULL, 0644);
 
 static int mem_dump_probe(struct platform_device *pdev)
 {

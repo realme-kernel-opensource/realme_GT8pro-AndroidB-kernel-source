@@ -93,7 +93,7 @@ def define_single_vm_build(
     copy_to_dist_dir(
         name = "{}_dist".format(name),
         data = [
-            ":{}_modules_install".format(name),
+            ":{}_signed_modules".format(name),
             ":{}_merge_msm_uapi_headers".format(name),
             ":signing_key",
             ":verity_key",

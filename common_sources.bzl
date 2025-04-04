@@ -15,6 +15,8 @@ COPY_FILES = [
     "drivers/char/virtio_console.c",
     "drivers/virtio/virtio_input.c",
     "drivers/block/virtio_blk.c",
+    "net/core/failover.c",
+    "drivers/net/net_failover.c",
 ]
 
 def define_common_upstream_files():

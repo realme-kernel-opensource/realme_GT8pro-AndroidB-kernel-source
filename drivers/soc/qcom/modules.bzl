@@ -164,6 +164,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/cpuss_telemetry",
+        out = "cpuss_telemetry.ko",
+        config = "CONFIG_QCOM_CPUSS_TELEMETRY",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/cpuss_telemetry.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/cpu_phys_log_map",
         out = "cpu_phys_log_map.ko",
         config = "CONFIG_QCOM_CPU_PHYS_LOG_MAP",
@@ -263,6 +277,7 @@ def register_modules(registry):
             "drivers/soc/qcom/mem_buf/mem_buf_dev",
             "drivers/soc/qcom/secure_buffer",
             "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_ctrl",
             "drivers/virt/gunyah/gh_rm_drv",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
@@ -316,6 +331,10 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/gic_intr_routing.c",
             "drivers/soc/qcom/irq_internals.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
         ],
     )
 
@@ -722,6 +741,10 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/soc/qcom/qcom_cpuss_sleep_stats_v4.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/cpuss_telemetry",
         ],
     )
 
@@ -1292,5 +1315,49 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/block/virtio_blk",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/qti-pmic-lpm",
+        out = "qti-pmic-lpm.ko",
+        config = "CONFIG_QTI_PMIC_LPM",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qti-pmic-lpm.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/panel_event_notifier",
+            "drivers/soc/qcom/qti_pmic_glink",
+            "drivers/soc/qcom/pdr_interface",
+            "drivers/soc/qcom/qmi_helpers",
+            "drivers/remoteproc/rproc_qcom_common",
+            "drivers/rpmsg/qcom_smd",
+            "drivers/rpmsg/qcom_glink_smem",
+            "drivers/rpmsg/qcom_glink",
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/soc/qcom/minidump",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/debug_symbol",
+            "drivers/dma-buf/heaps/qcom_dma_heaps",
+            "drivers/iommu/msm_dma_iommu_mapping",
+            "drivers/soc/qcom/mem_buf/mem_buf_dev",
+            "drivers/soc/qcom/secure_buffer",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom-pmic-ecid",
+        out = "qcom-pmic-ecid.ko",
+        config = "CONFIG_QCOM_PMIC_ECID",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom-pmic-ecid.c",
         ],
     )

@@ -170,6 +170,16 @@ config QCOM_LLCC_PERFMON
 	  interface. sysfs interface is used to configure and dump the LLCC
 	  performance events.
 
+config QCOM_LLCC_HEURISTICS
+	tristate "Qualcomm Technologies, Inc. LLCC HEURISTICS Driver"
+	depends on QCOM_LLCC
+	help
+	  This option enables driver for LLCC Heuristics support to pass the
+	  parameter input to heuristics algorithm parameters to control CPU
+	  HEURISTICS SCID. Parameters taken from DTB and can determine feature
+	  enablement from DTB itself. Also Provide the capability to disable,
+	  enable HERISTIC SCID functionality from SYSFS.
+
 config QCOM_MDT_LOADER
 	tristate
 	select QCOM_SCM
@@ -512,6 +522,18 @@ config QCOM_CPU_VENDOR_HOOKS
         help
           CPU vendor hooks driver registers with andriod vendor hooks
           provided by core kernel to extend kernel functionality.
+
+config QTI_PMIC_LPM
+        tristate "QTI PMIC LPM support"
+        depends on MFD_SPMI_PMIC
+        help
+          Say Y here to enable the Qualcomm Technologies, Inc. low power mode
+          driver which reports the entry and exit of PMIC's low power modes
+          DeepSleep/Hibernate/TWM to a companion chip through the SDAM
+          interface.
+
+          To compile this driver as a module, choose M here: the
+          module will be called qti-pmic-lpm.
 
 config MSM_BOOT_STATS
 	tristate "Use MSM boot stats reporting"
@@ -979,4 +1001,22 @@ config QCOM_CACHE_ALLOCATION
 	  cache with different size for cpu/gpu dynamically according to cpu/gpu load
 	  varies in runtime, like freq and bandwidth varies. This driver also provides
 	  sysfs nodes to enable/disable this governor and to set thresholds for control.
+
+config QCOM_CPUSS_TELEMETRY
+	tristate "Qualcomm CPUSS Telemetry driver"
+	depends on QTI_SCMI_VENDOR_PROTOCOL
+	default n
+	help
+	  This is a cpuss telemetry driver. It realizes that to get cpuss telemetry data
+	  exposed in shared memory location from CPUCP. This data is the LPM statistics
+	  of cpu cores, clusters and cpu subsystem. And the data is exposed via debugfs
+	  nodes for utilization.
+
+config QCOM_PMIC_ECID
+	tristate "QCOM PMIC ECID driver"
+	help
+	  This driver provides information on PMIC chipset ECID (Exclusive Chip Identifier).
+	  This driver reads the chipset ECID details from the respective address and
+	  exposes the details via sysfs interface.
+	  This helps in identification of PMIC part information.
 endmenu

@@ -36,6 +36,15 @@ config GH_VIRT_WATCHDOG
 	  actions such as setting the bark/bite time and also petting the
 	  watchdog in the hypervisor.
 
+config GH_VCPU_MGR
+	tristate "Manage Secondary VM's vCPU"
+	depends on GUNYAH
+	help
+	  To support preemption of vCPUs of a secondary VM without causing
+	  Watchdog bite on the secondary VM, use this VCPU mgr. This is
+	  needed only if SoC/Gunyah WDT is enabled on the Secondary VM and if the VCPUs
+	  are run from the upstream GUNYAH_VCPU driver.
+
 config GH_CTRL
 	tristate "Create Gunyah entries under /sys/hypervisor"
 	depends on SYSFS
@@ -112,7 +121,7 @@ config GH_MEM_NOTIFIER
 
 config GH_SECURE_VM_LOADER
 	tristate "Gunyah Secure Virtual Machine Loader Driver"
-	depends on GUNYAH
+	depends on GUNYAH && !QTVM_WITH_AVF
 	select QCOM_MDT_LOADER
 	help
 	  This driver invokes mdt Loader to load images of
@@ -122,12 +131,21 @@ config GH_SECURE_VM_LOADER
 
 config GH_PROXY_SCHED
 	tristate "PROXY Scheduling for Secondary VMs"
-	depends on GUNYAH
+	depends on GUNYAH && !QTVM_WITH_AVF
 	help
 	  Gunyah Proxy Scheduler provides framework to schedule/run VCPUs
 	  of Secondary VMs by exposing required functionality which can be
 	  invoked by the Gunyah driver. Gunyah Proxy Scheduler communicates
 	  with Gunyah hypervisor to run the VCPUs as needed.
+
+config QTVM_WITH_AVF
+	bool "Vendor support for QTVMs being launched with AVF"
+	depends on GUNYAH
+	help
+	  This helps identify platforms that support launching Qualcomm
+	  Trusted VMs using AVF. If This is enabled, /dev/gunyah will be used
+	  to load a QTVM.
+	  If unsure, say n.
 
 config GH_PANIC_NOTIFIER
 	tristate "Nofity other VM to do error handle when Primary VM panic"
@@ -160,5 +178,12 @@ config GH_GUEST_POPS
 	    driver. That is, it listens to the shutdown requests, and when it receives
 	    one, it'll emulate a power key press action by sending an input
 	    notification to user-space.
+
+config GUNYAH_TRACE
+	tristate "Gunyah trace driver"
+	help
+	  Gunyah trace is used to output debug log for gunyah hypervisor.
+	  The driver can help to dump gunyah trace buffer continuously and
+	  provide interface to control gunyah trace.
 
 endif

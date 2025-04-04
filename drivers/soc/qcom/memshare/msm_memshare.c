@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/err.h>
@@ -14,6 +14,7 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/notifier.h>
+#include <linux/sysfs.h>
 #include <linux/soc/qcom/qmi.h>
 #include <linux/remoteproc/qcom_rproc.h>
 #include <linux/rpmsg/qcom_glink.h>
@@ -25,6 +26,8 @@
 #include <trace/events/rproc_qcom.h>
 
 /* Macros */
+#define SYSFS_NAME_LEN	50
+
 static unsigned long(attrs);
 
 static struct qmi_handle *mem_share_svc_handle;
@@ -39,9 +42,14 @@ struct memshare_driver {
 };
 
 struct memshare_child {
-	struct device *dev;
 	int client_id;
+	uint32_t dynamic_size;
+	struct device *dev;
 	struct qcom_glink_mem_entry *mem_entry;
+	struct attribute_group client_attr_grp;
+	struct kobject *client_kobject;
+	struct kobject kobject_member;
+	const char *client_name;
 };
 
 static struct memshare_driver *memsh_drv;
@@ -339,10 +347,19 @@ static void handle_alloc_generic_req(struct qmi_handle *handle,
 		if (alloc_req->num_bytes > memblock[index].init_size)
 			alloc_req->num_bytes = memblock[index].init_size;
 
+		if (client_node->dynamic_size) {
+
+			if (client_node->dynamic_size > memblock[index].dynamic_size_max)
+				client_node->dynamic_size = memblock[index].dynamic_size_max;
+
+			alloc_req->num_bytes = client_node->dynamic_size;
+		}
+
 		if (memblock[index].guard_band)
 			size = alloc_req->num_bytes + MEMSHARE_GUARD_BYTES;
 		else
 			size = alloc_req->num_bytes;
+
 		rc = memshare_alloc(client_node->dev, size,
 					&memblock[index]);
 		if (rc) {
@@ -666,11 +683,60 @@ static void memshare_init_worker(struct work_struct *work)
 	dev_dbg(memsh_drv->dev, "memshare: memshare_init successful\n");
 }
 
+static ssize_t dynamic_size_show(struct kobject *kobj, struct kobj_attribute *attr,
+		char *buf)
+{
+	struct memshare_child *client;
+
+	client = container_of(kobj, struct memshare_child, kobject_member);
+	if (!client) {
+		dev_err(memsh_drv->dev, "memshare: Read request for invalid client\n");
+		return -EINVAL;
+	}
+	return scnprintf(buf, PAGE_SIZE, "%u\n", client->dynamic_size);
+}
+
+static ssize_t dynamic_size_store(struct kobject *kobj, struct kobj_attribute *attr,
+		const char *buf, size_t size_count)
+{
+	struct memshare_child *client;
+	int ret;
+
+	client = container_of(kobj, struct memshare_child, kobject_member);
+	if (!client) {
+		dev_err(memsh_drv->dev,
+			"memshare: Write request for invalid client\n");
+		return -EINVAL;
+	}
+
+	ret = kstrtou32(buf, 0, &client->dynamic_size);
+	if (ret < 0) {
+		dev_err(memsh_drv->dev,
+			"memshare: Failure to store dynamic size (error: %d)\n", ret);
+		return ret;
+	}
+
+	return size_count;
+}
+
+static struct kobj_attribute memshare_client_sysf_attr = __ATTR_RW_MODE(dynamic_size, 0640);
+
+static struct attribute *memshare_attributes[] = {
+	&memshare_client_sysf_attr.attr,
+	NULL,
+};
+
+static const struct attribute_group memshare_attribute_group = {
+	.attrs = memshare_attributes,
+};
+
 static int memshare_child_probe(struct platform_device *pdev)
 {
 	int rc;
 	uint32_t size, client_id;
+	uint32_t dynamic_size_max;
 	const char *name;
+	char kobject_name[SYSFS_NAME_LEN];
 	struct memshare_child *drv;
 	struct device_node *mem_node;
 
@@ -769,10 +835,10 @@ static int memshare_child_probe(struct platform_device *pdev)
 				&memblock[num_clients]);
 		if (rc) {
 			dev_err(memsh_drv->dev,
-				"memshare_child: Unable to allocate memory for guaranteed clients, rc: %d\n",
+				"memshare: Unable to allocate memory for guaranteed clients, rc: %d\n",
 				rc);
 			mem_node = of_parse_phandle(pdev->dev.of_node,
-						    "memory-region", 0);
+						"memory-region", 0);
 			of_node_put(mem_node);
 			if (mem_node)
 				of_reserved_mem_device_release(&pdev->dev);
@@ -781,6 +847,38 @@ static int memshare_child_probe(struct platform_device *pdev)
 		memblock[num_clients].size = size;
 		memblock[num_clients].allotted = 1;
 		shared_hyp_mapping(num_clients);
+	}
+
+	drv->client_attr_grp = memshare_attribute_group;
+
+	rc = of_property_read_string(pdev->dev.of_node, "client_name",
+						&drv->client_name);
+	if (rc) {
+		dev_err(memsh_drv->dev, "memshare: client name attribute not available, continuing....\n");
+	} else {
+		if (of_property_read_bool(pdev->dev.of_node, "qcom,dynamic-size-feature")) {
+			(void)snprintf(kobject_name,
+					SYSFS_NAME_LEN, "%s%s", "memshare_", drv->client_name);
+
+			drv->client_kobject = kobject_create_and_add(kobject_name, kernel_kobj);
+			if (!drv->client_kobject) {
+				dev_err(memsh_drv->dev,
+						"memshare: failed to create kobject\n");
+				return -ENOMEM;
+			}
+
+			rc = sysfs_create_group(drv->client_kobject, &memshare_attribute_group);
+			if (rc) {
+				dev_err(memsh_drv->dev,
+					"memshare: failed to created attribute, rc: %d\n", rc);
+				kobject_put(drv->client_kobject);
+				return -ENOMEM;
+			}
+
+			if (!of_property_read_u32(pdev->dev.of_node,
+					"qcom,dynamic-size-max", &dynamic_size_max))
+				memblock[num_clients].dynamic_size_max = dynamic_size_max;
+		}
 	}
 
 	memsh_child[num_clients] = drv;
@@ -835,8 +933,20 @@ static int memshare_probe(struct platform_device *pdev)
 
 static void memshare_remove(struct platform_device *pdev)
 {
+	int i;
+	struct memshare_child *child_node;
+
 	if (!memsh_drv)
 		return ;
+
+	for (i = 0; i < num_clients; i++) {
+		child_node = memsh_child[i];
+		if (child_node->client_kobject) {
+			sysfs_remove_group(child_node->client_kobject,
+					&child_node->client_attr_grp);
+			kobject_put(child_node->client_kobject);
+		}
+	}
 
 	if (mem_share_svc_handle) {
 		qmi_handle_release(mem_share_svc_handle);

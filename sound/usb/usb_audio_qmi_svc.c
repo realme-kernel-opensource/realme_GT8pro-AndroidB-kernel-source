@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -710,7 +710,7 @@ skip_sync_ep:
 
 	/* event ring */
 	ret = xhci_sideband_create_interrupter(uadev[card_num].sb, 1,
-						uaudio_qdev->intr_num, false);
+						false, 0, uaudio_qdev->intr_num);
 	if (ret == -ENOMEM) {
 		ret = -ENODEV;
 		goto drop_sync_ep;
@@ -889,6 +889,11 @@ static void uaudio_dev_intf_cleanup(struct usb_device *udev,
 	struct intf_info *info)
 {
 
+	if (!info) {
+		uaudio_err("info is NULL\n");
+		return;
+	}
+
 	uaudio_iommu_unmap(MEM_XFER_RING, info->data_xfer_ring_va,
 		info->data_xfer_ring_size, info->data_xfer_ring_size);
 	info->data_xfer_ring_va = 0;
@@ -951,17 +956,18 @@ static void uaudio_dev_cleanup(struct uaudio_dev *dev)
 	dev->udev = NULL;
 }
 
-
 static void uaudio_connect(struct snd_usb_audio *chip)
 {
 	struct xhci_sideband *sb;
+	struct usb_interface *intf;
 
 	if (chip->card->number >= SNDRV_CARDS) {
 		uaudio_err("Invalid card number\n");
 		return;
 	}
 
-	sb = xhci_sideband_register(chip->dev);
+	intf = chip->intf[chip->num_interfaces - 1];
+	sb = xhci_sideband_register(intf, XHCI_SIDEBAND_VENDOR, NULL);
 	if (!sb)
 		return;
 
@@ -988,6 +994,7 @@ static void uaudio_disconnect(struct snd_usb_audio *chip)
 		return;
 	}
 
+	mutex_lock(&chip->mutex);
 	dev = &uadev[card_num];
 
 	/* clean up */
@@ -997,6 +1004,7 @@ static void uaudio_disconnect(struct snd_usb_audio *chip)
 	}
 
 	if (atomic_read(&dev->in_use)) {
+		mutex_unlock(&chip->mutex);
 		uaudio_dbg("sending qmi indication disconnect\n");
 		uaudio_dbg("sq->sq_family:%x sq->sq_node:%x sq->sq_port:%x\n",
 				svc->client_sq.sq_family,
@@ -1024,6 +1032,7 @@ static void uaudio_disconnect(struct snd_usb_audio *chip)
 			atomic_set(&dev->in_use, 0);
 		}
 
+		mutex_lock(&chip->mutex);
 	}
 
 	uaudio_dev_cleanup(dev);
@@ -1031,6 +1040,7 @@ done:
 	if (dev->sb)
 		xhci_sideband_unregister(dev->sb);
 
+	mutex_unlock(&chip->mutex);
 	uadev[card_num].chip = NULL;
 	uadev[card_num].sb = NULL;
 }
@@ -1246,6 +1256,9 @@ static int enable_audio_stream(struct snd_usb_substream *subs,
 	snd_interval_setinteger(i);
 	i->min = i->max = cur_rate;
 
+	if (!chip->intf[0])
+		return -ENODEV;
+
 	pm_runtime_barrier(&chip->intf[0]->dev);
 	snd_usb_autoresume(chip);
 
@@ -1435,6 +1448,7 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 
 response:
 	if (!req_msg->enable && ret != -EINVAL && ret != -ENODEV) {
+		mutex_lock(&chip->mutex);
 		if (info_idx >= 0) {
 			info = &uadev[pcm_card_num].info[info_idx];
 			uaudio_dev_intf_cleanup(
@@ -1446,6 +1460,7 @@ response:
 		if (atomic_read(&uadev[pcm_card_num].in_use))
 			kref_put(&uadev[pcm_card_num].kref,
 					uaudio_dev_release);
+		mutex_unlock(&chip->mutex);
 	}
 
 	resp.usb_token = req_msg->usb_token;

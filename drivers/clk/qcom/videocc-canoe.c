@@ -25,6 +25,8 @@
 #include "reset.h"
 #include "vdd-level.h"
 
+#define ACCU_CFG_MASK (0x1f << 21)
+
 static DEFINE_VDD_REGULATORS(vdd_mm, VDD_HIGH_L1 + 1, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_mxc, VDD_HIGH_L1 + 1, 1, vdd_corner);
 
@@ -478,22 +480,29 @@ static struct clk_branch video_cc_mvs0_clk = {
 	},
 };
 
-static struct clk_branch video_cc_mvs0_freerun_clk = {
-	.halt_reg = 0x80e0,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0x80e0,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "video_cc_mvs0_freerun_clk",
-			.parent_hws = (const struct clk_hw*[]) {
-				&video_cc_mvs0_clk_src.clkr.hw,
+static struct clk_mem_branch video_cc_mvs0_freerun_clk = {
+	.mem_enable_reg = 0x80E4,
+	.mem_ack_reg =  0x80E4,
+	.mem_enable_mask = BIT(3),
+	.mem_enable_ack_mask = 0xc00,
+	.mem_enable_inverted = true,
+	.branch = {
+		.halt_reg = 0x80e0,
+		.halt_check = BRANCH_HALT,
+		.clkr = {
+			.enable_reg = 0x80e0,
+			.enable_mask = BIT(0),
+			.hw.init = &(const struct clk_init_data) {
+				.name = "video_cc_mvs0_freerun_clk",
+				.parent_hws = (const struct clk_hw*[]) {
+					&video_cc_mvs0_clk_src.clkr.hw,
+				},
+				.num_parents = 1,
+				.flags = CLK_SET_RATE_PARENT,
+				.ops = &clk_branch2_mem_ops,
 			},
-			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
 		},
-	},
+	}
 };
 
 static struct clk_branch video_cc_mvs0_shift_clk = {
@@ -796,7 +805,7 @@ static struct clk_regmap *video_cc_canoe_clocks[] = {
 	[VIDEO_CC_AHB_CLK_SRC] = &video_cc_ahb_clk_src.clkr,
 	[VIDEO_CC_MVS0_CLK] = &video_cc_mvs0_clk.clkr,
 	[VIDEO_CC_MVS0_CLK_SRC] = &video_cc_mvs0_clk_src.clkr,
-	[VIDEO_CC_MVS0_FREERUN_CLK] = &video_cc_mvs0_freerun_clk.clkr,
+	[VIDEO_CC_MVS0_FREERUN_CLK] = &video_cc_mvs0_freerun_clk.branch.clkr,
 	[VIDEO_CC_MVS0_SHIFT_CLK] = &video_cc_mvs0_shift_clk.clkr,
 	[VIDEO_CC_MVS0_VPP0_CLK] = &video_cc_mvs0_vpp0_clk.clkr,
 	[VIDEO_CC_MVS0_VPP0_FREERUN_CLK] = &video_cc_mvs0_vpp0_freerun_clk.clkr,
@@ -862,14 +871,54 @@ static struct qcom_cc_desc video_cc_canoe_desc = {
 
 static const struct of_device_id video_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-videocc" },
+	{ .compatible = "qcom,alor-videocc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, video_cc_canoe_match_table);
 
+static void video_cc_canoe_fixup_alor(struct regmap *regmap)
+{
+	video_cc_canoe_clocks[VIDEO_CC_PLL3] = NULL;
+	video_cc_canoe_clocks[VIDEO_CC_MVS0A_CLK] = NULL;
+	video_cc_canoe_clocks[VIDEO_CC_MVS0A_CLK_SRC] = NULL;
+	video_cc_canoe_clocks[VIDEO_CC_MVS0A_FREERUN_CLK] = NULL;
+
+	video_cc_canoe_gdscs[VIDEO_CC_MVS0A_GDSC] = NULL;
+
+	/*
+	 * Update VIDEO_CC_SPARE1 to have same clk_on for video_cc_mvs0_clk, video_cc_mvs0_vpp0_clk,
+	 * video_cc_mvs0_vpp1_clk during core reset by default.
+	 */
+	regmap_update_bits(regmap, 0x9f24, BIT(0), BIT(0));
+}
+
+static int video_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,alor-videocc"))
+		video_cc_canoe_fixup_alor(regmap);
+	else {
+		clk_taycan_eko_t_pll_configure(&video_cc_pll3, regmap, &video_cc_pll3_config);
+
+		/*
+		 * Maximize MVS0A CFG3 ctl data download delay and enable memory redundancy.
+		 */
+		regmap_update_bits(regmap, 0x8088, ACCU_CFG_MASK, ACCU_CFG_MASK);
+	}
+
+	return 0;
+}
+
+
 static int video_cc_canoe_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
-	unsigned int accu_cfg_mask = 0x1f << 21;
 	int ret;
 
 	regmap = qcom_cc_map(pdev, &video_cc_canoe_desc);
@@ -887,21 +936,22 @@ static int video_cc_canoe_probe(struct platform_device *pdev)
 	clk_taycan_eko_t_pll_configure(&video_cc_pll0, regmap, &video_cc_pll0_config);
 	clk_taycan_eko_t_pll_configure(&video_cc_pll1, regmap, &video_cc_pll1_config);
 	clk_taycan_eko_t_pll_configure(&video_cc_pll2, regmap, &video_cc_pll2_config);
-	clk_taycan_eko_t_pll_configure(&video_cc_pll3, regmap, &video_cc_pll3_config);
+
+	ret = video_cc_canoe_fixup(pdev, regmap);
+	if (ret)
+		return ret;
 
 	/*
 	 *	Maximize ctl data download delay and enable memory redundancy:
-	 *	MVS0A CFG3
 	 *	MVS0 CFG3
 	 *	MVS0 VPP1 CFG3
 	 *	MVS0 VPP0 CFG3
 	 *	MVS0C CFG3
 	 */
-	regmap_update_bits(regmap, 0x8088, accu_cfg_mask, accu_cfg_mask);
-	regmap_update_bits(regmap, 0x80b4, accu_cfg_mask, accu_cfg_mask);
-	regmap_update_bits(regmap, 0x8100, accu_cfg_mask, accu_cfg_mask);
-	regmap_update_bits(regmap, 0x812c, accu_cfg_mask, accu_cfg_mask);
-	regmap_update_bits(regmap, 0x8158, accu_cfg_mask, accu_cfg_mask);
+	regmap_update_bits(regmap, 0x80b4, ACCU_CFG_MASK, ACCU_CFG_MASK);
+	regmap_update_bits(regmap, 0x8100, ACCU_CFG_MASK, ACCU_CFG_MASK);
+	regmap_update_bits(regmap, 0x812c, ACCU_CFG_MASK, ACCU_CFG_MASK);
+	regmap_update_bits(regmap, 0x8158, ACCU_CFG_MASK, ACCU_CFG_MASK);
 
 	/*
 	 * Keep clocks always enabled:

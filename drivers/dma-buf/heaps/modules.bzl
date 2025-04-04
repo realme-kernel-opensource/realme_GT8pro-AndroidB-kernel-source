@@ -17,6 +17,7 @@ def register_modules(registry):
             "drivers/dma-buf/heaps/qcom_sg_ops.h",
             "drivers/dma-buf/heaps/qcom_system_heap.h",
             "drivers/dma-buf/heaps/qcom_system_movable_heap.h",
+            "drivers/dma-buf/heaps/deferred-free-helper.h",
         ],
         conditional_srcs = {
             "CONFIG_QCOM_DMABUF_HEAPS_SYSTEM": {
@@ -79,5 +80,16 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+            "drivers/dma-buf/heaps/deferred-free-helper",
+        ],
+    )
+    registry.register(
+        name = "drivers/dma-buf/heaps/deferred-free-helper",
+        out = "deferred-free-helper.ko",
+        config = "CONFIG_QCOM_DMABUF_HEAPS_DEFERRED_FREE",
+        srcs = [
+            # do not sort
+            "drivers/dma-buf/heaps/deferred-free-helper.c",
+            "drivers/dma-buf/heaps/deferred-free-helper.h",
         ],
     )

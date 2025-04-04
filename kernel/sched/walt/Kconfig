@@ -30,6 +30,15 @@ config SCHED_WALT_DEBUG
 	  in scenarios like RT throttling and sleeping while in atomic
 	  context etc.
 
+config SCHED_WALT_STATS
+	tristate "WALT stats"
+	depends on SCHED_WALT
+	help
+	  This feature will statistic the number of idle/active load
+	  balances, the reasons for CPU frequency selection, the time
+	  the CPU spends at minimum/maximum frequency (excluding idle
+	  time), and the time the CPU spends at each frequency point.
+
 config SCHED_CONSERVATIVE_BOOST_LPM_BIAS
 	bool "Enable LPM bias if conservative boost is enabled"
 	default n

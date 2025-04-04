@@ -695,7 +695,7 @@ static const struct llcc_slice_config canoe_data[] = {
 	{LLCC_COMPUTE1,       22, 4096, 1, 1, 0xFFFFFFFF, 0, 0, 0, 0,
 							  0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
 							  0, 0},
-	{LLCC_CPUSS_OPP,      32, 5120, 0, 1, 0xFFFFFFFF, 0, 0, 0, 0,
+	{LLCC_CPUSS_OPP,      32,    0, 0, 1,          0, 0, 0, 0, 0,
 							  0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1,
 							  0, 0},
 	{LLCC_CPUSS_MPAM1,    17, 2048, 1, 1, 0xFFFFFFFF, 0, 0, 0, 0,

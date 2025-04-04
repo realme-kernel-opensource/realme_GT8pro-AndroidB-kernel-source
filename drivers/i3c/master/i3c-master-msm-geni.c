@@ -326,6 +326,7 @@ struct geni_i3c_dev {
 	u32 clk_src_freq;
 	u32 dfs_idx;
 	u32 prev_dfs_idx;
+	u32 rd_actual_len;
 	u8 *cur_buf;
 	enum i3c_trans_dir cur_rnw;
 	int cur_len;
@@ -369,7 +370,7 @@ struct geni_i3c_err_log {
 };
 
 static struct geni_i3c_err_log gi3c_log[] = {
-	[RD_TERM] = { -EINVAL, "I3C slave early read termination" },
+	[RD_TERM] = { -ENODATA, "I3C slave early read termination" },
 	[NACK] = { -ENOTCONN, "NACK: slave unresponsive, check power/reset" },
 	[CRC_ERR] = { -EINVAL, "CRC or parity error" },
 	[BUS_PROTO] = { -EPROTO, "Bus proto err, noisy/unexpected start/stop" },
@@ -792,8 +793,10 @@ static void gi3c_gsi_cb_err(struct msm_gpi_dma_async_tx_cb_param *cb, char *xfer
 	if (cb->status & DM_I3C_CB_ERR) {
 		I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
 			    "%s TCE Unexpected Err, stat:0x%x\n", xfer, cb->status);
-		if (cb->status & (BIT(GP_IRQ0) << 5))
+		if (cb->status & (BIT(GP_IRQ0) << 5)) {
 			geni_i3c_err(gi3c, RD_TERM);
+			gi3c->rd_actual_len = cb->length;
+		}
 		if (cb->status & (BIT(GP_IRQ1) << 5))
 			geni_i3c_err(gi3c, NACK);
 		if (cb->status & (BIT(GP_IRQ2) << 5))
@@ -1528,11 +1531,18 @@ geni_i3c_err_prep:
 					       gi3c->cur_len, DMA_FROM_DEVICE);
 	if (gi3c->err) {
 		gi3c->cur_len = 0;
+		if (gi3c->err == -ENODATA)
+			gi3c->err = 0;
+		else
+			gi3c->rd_actual_len = gi3c->cur_len;
 		ret = (gi3c->err == -EBUSY) ? I3C_ERROR_M2 : gi3c->err;
 		I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
 			    "%s:I3C transaction error:%d\n", __func__, gi3c->err);
+	} else {
+		gi3c->rd_actual_len = gi3c->cur_len;
 	}
-
+	I3C_LOG_DBG(gi3c->ipcl, true, gi3c->se.dev, "%s:xfer_len :%d\n",
+		    __func__, gi3c->rd_actual_len);
 geni_i3c_gsi_read_xfer_out:
 	if (!ret && gi3c->err)
 		ret = gi3c->err;
@@ -2203,6 +2213,7 @@ geni_i3c_master_gsi_priv_xfers(struct geni_i3c_dev *gi3c, struct i3c_priv_xfer *
 		xfer.m_param |= ((dyn_addr & I3C_ADDR_MASK) << SLV_ADDR_SHFT);
 		xfer.m_param |= (use_7e) ? USE_7E : 0;
 		xfer.tx_idx = i;
+		gi3c->rd_actual_len = 0;
 
 		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
 			    "%s: stall:%d,use_7e:%d, num_xfers:%d,i:%d,m_param:0x%x,rnw:%d\n",
@@ -2215,6 +2226,7 @@ geni_i3c_master_gsi_priv_xfers(struct geni_i3c_dev *gi3c, struct i3c_priv_xfer *
 			xfer.m_cmd = I3C_PRIVATE_READ;
 			ret = i3c_geni_execute_read_command(gi3c, &xfer, (u8 *)xfers[i].data.in,
 							    xfers[i].len);
+			xfers[i].actual_len = gi3c->rd_actual_len;
 		} else {
 			xfer.m_cmd = I3C_PRIVATE_WRITE;
 			if (tx_tre_q->is_multi_descriptor)
@@ -4120,7 +4132,7 @@ static int geni_i3c_probe(struct platform_device *pdev)
 	}
 
 	INIT_WORK(&gi3c->hj_wd, geni_i3c_hotjoin);
-	gi3c->hj_wq = alloc_workqueue("%s", 0, 0, dev_name(gi3c->se.dev));
+	gi3c->hj_wq = alloc_workqueue("%s", WQ_UNBOUND | WQ_HIGHPRI, 1, dev_name(gi3c->se.dev));
 	geni_i3c_enable_hotjoin_irq(gi3c, true);
 	device_create_file(gi3c->se.dev, &dev_attr_capture_kpi);
 

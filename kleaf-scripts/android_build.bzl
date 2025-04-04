@@ -8,7 +8,6 @@ load(
     "kernel_build",
     "kernel_build_config",
     "kernel_images",
-    "kernel_unstripped_modules_archive",
     "merged_kernel_uapi_headers",
     "super_image",
     "unsparsed_image",
@@ -135,6 +134,7 @@ def define_single_android_build(
         build_initramfs = True,
         build_dtbo = True,
         build_vendor_dlkm = True,
+        dedup_dlkm_modules = True,  # removes system_dlkm modules from vendor_dlkm
         modules_list = "modules-lists/modules.list.msm.{}".format(name),
         vendor_dlkm_modules_list = ":{}_vendor_dlkm_modules_list_generated".format(stem),
         system_dlkm_modules_blocklist = "modules-lists/modules.systemdlkm_blocklist.msm.{}".format(name),
@@ -227,25 +227,6 @@ def define_single_android_build(
         """,
     )
 
-    kernel_unstripped_modules_archive(
-        name = "{}_unstripped_modules_tar".format(stem),
-        kernel_build = base_kernel,
-        kernel_modules = [":{}/{}".format(stem, module) for module in modules],
-    )
-
-    end_module_list = [stem + "_um/" + module.split("/")[-1] + ".ko" for module in modules]
-
-    hermetic_genrule(
-        name = "{}_unstripped_modules".format(stem),
-        srcs = [":{}_unstripped_modules_tar".format(stem)],
-        outs = end_module_list,
-        cmd = """
-            out_dir="{}_um"
-            mkdir -p "$(@D)/$$out_dir"
-            tar --strip-components=1 -C "$(@D)/$$out_dir" -xzf $<
-        """.format(stem),
-    )
-
     dist_data = [
         "{}_gki_artifacts".format(base_kernel),
         ":{}_modules_install".format(stem),
@@ -262,7 +243,7 @@ def define_single_android_build(
     ] + [
         ":{}/{}".format(stem, module)
         for module in modules
-    ] + ["{}_unstripped_modules".format(stem)]  # put this last to overwrite stripped modules with unstripped in out dir
+    ]
 
     vendor_dlkm_module_unprotected_list = get_unprotected_vendor_modules_list(stem)
     vendor_unprotected_dlkm = " ".join(vendor_dlkm_module_unprotected_list)

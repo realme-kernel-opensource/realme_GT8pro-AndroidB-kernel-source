@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cpu.h>
@@ -82,7 +82,7 @@ static ssize_t disable_memcpy_optimization_store(struct device *dev,
 
 		per_cpu(need_ack, cpu) = true;
 		wake_up(&fds->waitq[cpu]);
-		wait_event(fds->waitq[cpu], !per_cpu(need_ack, cpu));
+		wait_event_killable(fds->waitq[cpu], !per_cpu(need_ack, cpu));
 		if (fds->ret < 0)
 			goto cleanup;
 		fds->curr_val[cpu] = fds->req_val;
@@ -100,7 +100,7 @@ cleanup:
 		fds->ret = 0;
 		per_cpu(need_ack, i) = true;
 		wake_up(&fds->waitq[i]);
-		wait_event(fds->waitq[i], !per_cpu(need_ack, i));
+		wait_event_killable(fds->waitq[i], !per_cpu(need_ack, i));
 		if (fds->ret < 0) {
 			dev_err(fds->dev, "dmof broken now:cpu:%d\n", i);
 			WARN_ON(1);
@@ -134,7 +134,7 @@ static ssize_t disable_memcpy_optimization_show(struct device *dev,
 
 		per_cpu(need_ack, cpu) = true;
 		wake_up(&fds->waitq[cpu]);
-		wait_event(fds->waitq[cpu], !per_cpu(need_ack, cpu));
+		wait_event_killable(fds->waitq[cpu], !per_cpu(need_ack, cpu));
 		if (fds->ret < 0)
 			goto cleanup;
 	}
@@ -179,7 +179,7 @@ static int qcom_dmof_kthread_fn(void *data)
 		}
 
 repeat:
-		wait_event(fds->waitq[cpu], per_cpu(need_ack, cpu));
+		wait_event_killable(fds->waitq[cpu], per_cpu(need_ack, cpu));
 		if (fds->ret < 0)
 			break;
 
@@ -279,7 +279,7 @@ static int cpu_up_notifier(unsigned int cpu)
 	per_cpu(need_ack, cpu) = true;
 	wake_up(&fds->waitq[cpu]);
 
-	wait_event(fds->waitq[cpu], !per_cpu(need_ack, cpu));
+	wait_event_killable(fds->waitq[cpu], !per_cpu(need_ack, cpu));
 	if (fds->ret >= 0)
 		fds->curr_val[cpu] = fds->val;
 
@@ -327,6 +327,7 @@ static int qcom_dmof_probe(struct platform_device *pdev)
 	qcom_dmof_dd->thread_comm = "cpudmof/%u";
 	qcom_dmof_dd->cmd = COMMAND_INIT;
 	qcom_dmof_dd->ret = 0;
+	qcom_dmof_dd->val = 1;
 
 	qcom_dmof_dd->waitq = devm_kcalloc(&pdev->dev, num_possible_cpus(),
 					   sizeof(wait_queue_head_t), GFP_KERNEL);

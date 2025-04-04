@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
 #include <linux/firmware/qcom/qcom_scm.h>
 
 #include "si_core.h"
+
+#include "trace_si_core.h"
 
 /* 6 Sec. retry seems reasonable!? */
 #define SCM_EBUSY_WAIT_MS 30
@@ -48,5 +50,6 @@ int si_object_invoke_ctx_invoke(struct si_object_invoke_ctx *oic,
 	if (ret)
 		pr_err("QTEE returned with %d!\n", ret);
 
+	trace_si_objcet_do_ctx_invoke_ret(oic->context_id, oic->flags, i, *response_type, ret);
 	return ret;
 }

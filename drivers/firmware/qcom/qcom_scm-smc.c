@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/firmware/qcom/qcom_scm_hab.h>
 #include <linux/firmware/qcom/qcom_tzmem.h>
 #include <linux/arm-smccc.h>
 #include <linux/dma-mapping.h>
@@ -18,13 +19,7 @@
 
 #include "qcom_scm.h"
 
-/**
- * struct arm_smccc_args
- * @args:	The array of values used in registers in smc instruction
- */
-struct arm_smccc_args {
-	unsigned long args[8];
-};
+static bool hab_calling_convention;
 
 static DEFINE_MUTEX(qcom_scm_lock);
 
@@ -42,18 +37,24 @@ static void __scm_smc_do_quirk(const struct arm_smccc_args *smc,
 {
 	unsigned long a0 = smc->args[0];
 	struct arm_smccc_quirk quirk = { .id = ARM_SMCCC_QUIRK_QCOM_A6 };
+	bool atomic = ARM_SMCCC_IS_FAST_CALL(smc->args[0]) ? true : false;
 
 	quirk.state.a6 = 0;
 
-	do {
-		arm_smccc_smc_quirk(a0, smc->args[1], smc->args[2],
-				    smc->args[3], smc->args[4], smc->args[5],
-				    quirk.state.a6, smc->args[7], res, &quirk);
 
-		if (res->a0 == QCOM_SCM_INTERRUPTED)
-			a0 = res->a0;
+	if (hab_calling_convention) {
+		scm_call_qcpe(smc, res, atomic);
+	} else {
+		do {
+			arm_smccc_smc_quirk(a0, smc->args[1], smc->args[2],
+					smc->args[3], smc->args[4], smc->args[5],
+					quirk.state.a6, smc->args[7], res, &quirk);
 
-	} while (res->a0 == QCOM_SCM_INTERRUPTED);
+			if (res->a0 == QCOM_SCM_INTERRUPTED)
+				a0 = res->a0;
+
+		} while (res->a0 == QCOM_SCM_INTERRUPTED);
+	}
 }
 
 #define IS_WAITQ_SLEEP_OR_WAKE(res) \
@@ -302,4 +303,21 @@ int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 
 	return ret;
 
+}
+
+void __qcom_scm_init(void)
+{
+	/**
+	 * The HAB connection should be opened before first SMC call.
+	 * If not, there could be errors that might cause the
+	 * system to crash.
+	 */
+	scm_qcpe_hab_open();
+	hab_calling_convention = true;
+
+}
+
+void __qcom_scm_qcpe_exit(void)
+{
+	scm_qcpe_hab_close();
 }

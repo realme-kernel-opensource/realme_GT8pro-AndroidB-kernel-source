@@ -26,10 +26,10 @@ gh_rm_drv.ko
 gh_virt_wdt.ko
 hvc_gunyah.ko
 qcom_dma_heaps.ko
-boot_stats.ko
 virtio_clk_monaco.ko
 virtio_clk_lemans.ko
 virtio_clk.ko
+debug-regulator.ko
 virtio_regulator.ko
 iommu-logger.ko
 qcom_iommu_util.ko
@@ -44,3 +44,4 @@ pinctrl-spmi-gpio.ko
 pinctrl-spmi-mpp.ko
 qcom_wdt_core.ko
 smem.ko
+deferred-free-helper.ko

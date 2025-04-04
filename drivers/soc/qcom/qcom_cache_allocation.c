@@ -83,7 +83,6 @@ static void cpu_gpu_freq_update(struct cache_allocation *pdev)
 	trace_cache_alloc_gpu_update(pdev->gpu_freq_prev, pdev->gpu_freq_curr);
 }
 
-#if IS_ENABLED(CONFIG_QTI_MPAM_MSC)
 static int cache_allocation_configure(struct cache_allocation *pdev)
 {
 	int ret = 0, cpu_gear_val;
@@ -110,14 +109,6 @@ static int cache_allocation_configure(struct cache_allocation *pdev)
 	trace_cache_alloc_config_update(pdev->cpu_input, pdev->gpu_input);
 	return ret;
 }
-#else
-static int cache_allocation_configure(struct cache_allocation *pdev)
-{
-	/* do nothing */
-	trace_cache_alloc_config_update(pdev->cpu_input, pdev->gpu_input);
-	return 0;
-}
-#endif
 
 static void cache_prefer_cpu_algo(struct cache_allocation *pdev)
 {

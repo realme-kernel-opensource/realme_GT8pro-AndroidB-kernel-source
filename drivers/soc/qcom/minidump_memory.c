@@ -6,6 +6,7 @@
 
 #include <linux/align.h>
 #include <linux/mm.h>
+#include <linux/mmzone.h>
 #include <linux/swap.h>
 #include <linux/mman.h>
 #include <linux/seq_buf.h>
@@ -14,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/page_ext.h>
 #include <linux/page_owner.h>
+#include <linux/page-flags.h>
 #include <linux/debugfs.h>
 #include <linux/ctype.h>
 #include <soc/qcom/minidump.h>
@@ -45,6 +47,9 @@ static char *md_dma_buf_info_addr;
 
 static size_t md_dma_buf_procs_size = SZ_256K;
 static char *md_dma_buf_procs_addr;
+
+static size_t md_task_memstat_size = SZ_256K;
+static char *md_task_memstat_addr;
 
 static unsigned long *md_debug_totalcma_pages;
 static struct list_head *md_debug_slab_caches;
@@ -307,6 +312,8 @@ bool md_register_memory_dump(int size, char *name)
 		WRITE_ONCE(md_dma_buf_info_addr, buffer_start);
 	if (!strcmp(name, "DMA_PROC"))
 		WRITE_ONCE(md_dma_buf_procs_addr, buffer_start);
+	if (!strcmp(name, "TASK_MEMSTAT"))
+		WRITE_ONCE(md_task_memstat_addr, buffer_start);
 	return true;
 }
 
@@ -423,7 +430,10 @@ static bool check_unaccounted(char *buf, ssize_t count,
 	struct accounted_call_site *call_site;
 
 	if ((page->flags &
-		((1UL << PG_lru) | (1UL << PG_slab) | (1UL << PG_swapbacked))))
+		((1UL << PG_lru) | (1UL << PG_swapbacked))))
+		return false;
+
+	if (PageSlab(page))
 		return false;
 
 	nr_entries = stack_depot_fetch(handle, &entries);
@@ -466,7 +476,7 @@ static ssize_t dump_page_owner_md(char *buf, size_t count,
 					goto dump;
 				break;
 			case 0x2:
-				if (page->flags & (1UL << PG_slab))
+				if (PageSlab(page))
 					goto dump;
 				break;
 			case 0x4:
@@ -551,7 +561,7 @@ static void md_dump_pageowner(char *addr, size_t dump_size)
 		if (PageBuddy(page)) {
 			unsigned long freepage_order = buddy_order_unsafe(page);
 
-			if (freepage_order < MAX_ORDER)
+			if (freepage_order < MAX_PAGE_ORDER)
 				pfn += (1UL << freepage_order) - 1;
 			continue;
 		}
@@ -813,9 +823,7 @@ static bool is_slub_debug_enabled(void)
 	return false;
 }
 
-static int dump_tracking(const struct kmem_cache *s,
-		const void *object,
-		const struct track *t, void *private)
+static int dump_tracking(struct kmem_cache *s, void *object, void *private)
 {
 	int ret = 0;
 	u32 nr_entries;
@@ -823,9 +831,20 @@ static int dump_tracking(const struct kmem_cache *s,
 	char *buf;
 	size_t size;
 	unsigned long *entries;
+	struct track *t;
+	depot_stack_handle_t handle;
 
-	if (!t->addr || !t->handle)
-		return 0;
+	t = get_track(s, object, TRACK_ALLOC);
+#ifdef CONFIG_STACKDEPOT
+	handle = READ_ONCE(t->handle);
+#else
+	handle = 0;
+#endif
+
+	if (!t->addr || !handle) {
+		pr_err("Did not get valid tracking data for slabowner\n");
+		return -EINVAL;
+	}
 
 	priv_buf = (struct priv_buf *)private;
 	buf = priv_buf->buf + priv_buf->offset;
@@ -834,18 +853,18 @@ static int dump_tracking(const struct kmem_cache *s,
 	{
 		int i;
 
-		nr_entries = stack_depot_fetch(t->handle, &entries);
+		nr_entries = stack_depot_fetch(handle, &entries);
 
 		if ((buf > (md_slabowner_dump_addr +
 			md_slabowner_dump_size - slab_owner_handles_size))
-			|| !found_stack(t->handle,
+			|| !found_stack(handle,
 				md_slabowner_dump_addr,
 				md_slabowner_dump_size,
 				slab_owner_handles_size,
 				&nr_slab_owner_handles)) {
 
 			ret = scnprintf(buf, size, "%p %u %u\n",
-				object, t->handle, nr_entries);
+				object, handle, nr_entries);
 			if (ret == size - 1)
 				goto err;
 
@@ -857,25 +876,27 @@ static int dump_tracking(const struct kmem_cache *s,
 			}
 		} else {
 			ret = scnprintf(buf, size, "%p %u %u\n",
-					object, t->handle, 0);
+					object, handle, 0);
 		}
 	}
 #else
 	ret = scnprintf(buf, size, "%p %p\n", object, (void *)t->addr);
 
 #endif
+	priv_buf->offset += ret;
+	return 0;
 err:
 	priv_buf->offset += ret;
-	return ret;
+	if (priv_buf->offset >= priv_buf->size - 1)
+		pr_err("slabowner minidump region exhausted\n");
+
+	return -EINVAL;
 }
 
 static void md_dump_slabowner(char *m, size_t dump_size)
 {
 	struct kmem_cache *s;
-	int node;
 	struct priv_buf buf;
-	struct kmem_cache_node *n;
-	ssize_t ret;
 	int i;
 
 	buf.buf = m;
@@ -892,34 +913,10 @@ static void md_dump_slabowner(char *m, size_t dump_size)
 					"%s\n", s->name);
 		if (buf.offset == buf.size - 1)
 			return;
-		for_each_kmem_cache_node(s, node, n) {
-			unsigned long flags;
-			struct slab *slab;
 
-			if (!atomic_long_read(&n->nr_slabs))
-				continue;
+		if (IS_ENABLED(CONFIG_SLUB_DEBUG_ON) || (s->flags & SLAB_STORE_USER))
+			get_each_kmemcache_object(s, dump_tracking, &buf);
 
-			spin_lock_irqsave(&n->list_lock, flags);
-			list_for_each_entry(slab, &n->partial, slab_list) {
-				ret  = get_each_object_track(s, slab, TRACK_ALLOC,
-						dump_tracking, &buf);
-				if (buf.offset == buf.size - 1) {
-					spin_unlock_irqrestore(&n->list_lock, flags);
-					pr_err("slabowner minidump region exhausted\n");
-					return;
-				}
-			}
-			list_for_each_entry(slab, &n->full, slab_list) {
-				ret  = get_each_object_track(s, slab, TRACK_ALLOC,
-						dump_tracking, &buf);
-				if (buf.offset == buf.size - 1) {
-					spin_unlock_irqrestore(&n->list_lock, flags);
-					pr_err("slabowner minidump region exhausted\n");
-					return;
-				}
-			}
-			spin_unlock_irqrestore(&n->list_lock, flags);
-		}
 		buf.offset += scnprintf(buf.buf + buf.offset, buf.size - buf.offset, "\n");
 		if (buf.offset == buf.size - 1)
 			return;
@@ -1061,7 +1058,7 @@ static inline void md_dump_slabowner(char *m, size_t dump_size) {}
 static inline void md_debugfs_slabowner(struct dentry *minidump_dir) {}
 #endif	/* CONFIG_SLUB_DEBUG */
 
-static int dump_bufinfo(const struct dma_buf *buf_obj, void *private)
+static int dump_bufinfo(const struct dma_buf *buf_obj, struct dma_buf_priv *buf)
 {
 	int ret;
 	struct dma_buf_attachment *attach_obj;
@@ -1069,7 +1066,6 @@ static int dump_bufinfo(const struct dma_buf *buf_obj, void *private)
 	struct dma_resv_iter cursor;
 	struct dma_fence *fence;
 	int attach_count;
-	struct dma_buf_priv *buf = (struct dma_buf_priv *)private;
 	struct priv_buf *priv_buf = buf->priv_buf;
 
 
@@ -1146,6 +1142,7 @@ err:
 static void md_dma_buf_info(char *m, size_t dump_size)
 {
 	int ret;
+	struct dma_buf *dmabuf;
 	struct dma_buf_priv dma_buf_priv;
 	struct priv_buf buf;
 
@@ -1166,7 +1163,17 @@ static void md_dma_buf_info(char *m, size_t dump_size)
 			"size", "flags", "mode", "count", "ino");
 	buf.offset = ret;
 
-	dma_buf_get_each(dump_bufinfo, &dma_buf_priv);
+	ret = mutex_lock_interruptible(&debugfs_list_mutex);
+	if (ret)
+		return;
+
+	list_for_each_entry(dmabuf, &debugfs_list, list_node) {
+		ret = dump_bufinfo(dmabuf, &dma_buf_priv);
+		if (ret)
+			break;
+	}
+
+	mutex_unlock(&debugfs_list_mutex);
 
 	scnprintf(buf.buf + buf.offset, buf.size - buf.offset,
 			"\nTotal %d objects, %zu bytes\n",
@@ -1347,6 +1354,89 @@ static void md_debugfs_dmabufprocs(struct dentry *minidump_dir)
 			&proc_dma_buf_procs_size_ops);
 }
 
+static void md_task_memstat(char *m, size_t dump_size)
+{
+	struct task_struct *task;
+	struct priv_buf buf;
+
+	buf.buf = m;
+	buf.size = dump_size;
+	buf.offset = 0;
+
+	buf.offset += scnprintf(buf.buf + buf.offset,
+				buf.size - buf.offset,
+				"%-8s %-8s %-10s %-8s %-16s %-16s %-16s %s\n",
+				"PID",
+				"RSS(KB)",
+				"SWAP(KB)",
+				"ADJ",
+				"anon_rss(KB)",
+				"file_rss(KB)",
+				"shmem_rss(KB)",
+				"TaskName");
+
+	rcu_read_lock();
+	for_each_process(task) {
+		if (task->mm) {
+			buf.offset += scnprintf(buf.buf + buf.offset,
+					buf.size - buf.offset,
+					"%-8d %-8lu %-10lu %-8d %-16lu %-16lu %-16lu %s\n",
+					task->pid,
+					K(get_mm_rss(task->mm)),
+					K(get_mm_counter(task->mm, MM_SWAPENTS)),
+					task->signal->oom_score_adj,
+					K(get_mm_counter(task->mm, MM_ANONPAGES)),
+					K(get_mm_counter(task->mm, MM_FILEPAGES)),
+					K(get_mm_counter(task->mm, MM_SHMEMPAGES)),
+					task->comm);
+			if (buf.offset == buf.size - 1)
+				goto err;
+		}
+	}
+	rcu_read_unlock();
+
+	return;
+err:
+	rcu_read_unlock();
+	pr_err("TASK_MEMSTAT Minidump region exhausted\n");
+}
+
+static ssize_t task_memstat_size_write(struct file *file,
+					  const char __user *ubuf,
+					  size_t count, loff_t *offset)
+{
+	unsigned long long size;
+
+	if (kstrtoull_from_user(ubuf, count, 0, &size)) {
+		pr_err_ratelimited("Invalid format for size\n");
+		return -EINVAL;
+	}
+	update_dump_size("TASK_MEMSTAT", size,
+			&md_task_memstat_addr, &md_task_memstat_size);
+	return count;
+}
+
+static ssize_t task_memstat_size_read(struct file *file, char __user *ubuf,
+				       size_t count, loff_t *offset)
+{
+	char buf[100];
+
+	snprintf(buf, sizeof(buf), "%zu MB\n", md_task_memstat_size/SZ_1M);
+	return simple_read_from_buffer(ubuf, count, offset, buf, strlen(buf));
+}
+
+static const struct file_operations proc_task_memstat_size_ops = {
+	.open   = simple_open,
+	.write  = task_memstat_size_write,
+	.read   = task_memstat_size_read,
+};
+
+static void md_debugfs_task_memstat(struct dentry *minidump_dir)
+{
+	debugfs_create_file("task_memstat_size_mb", 0400, minidump_dir, NULL,
+			&proc_task_memstat_size_ops);
+}
+
 void md_dump_memory(void)
 {
 	if (md_meminfo_seq_buf)
@@ -1368,6 +1458,8 @@ void md_dump_memory(void)
 	if (md_dma_buf_procs_addr)
 		md_dma_buf_procs(md_dma_buf_procs_addr, md_dma_buf_procs_size);
 
+	if (md_task_memstat_addr)
+		md_task_memstat(md_task_memstat_addr, md_task_memstat_size);
 }
 
 #define MD_DEBUG_LOOKUP(_var, type) \
@@ -1420,5 +1512,10 @@ int md_minidump_memory_init(void)
 	md_register_memory_dump(md_dma_buf_procs_size, "DMA_PROC");
 	md_debugfs_dmabufprocs(minidump_dir);
 
+	md_register_memory_dump(md_task_memstat_size, "TASK_MEMSTAT");
+	md_debugfs_task_memstat(minidump_dir);
+
 	return error;
 }
+
+MODULE_IMPORT_NS(DMA_BUF);

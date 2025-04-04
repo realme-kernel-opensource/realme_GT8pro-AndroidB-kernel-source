@@ -59,6 +59,15 @@ config REGULATOR_QCOM_AMOLED
 	  positive, negative and bias for the AMOLED display panel. It also
 	  allows configurability for the various bias-voltage parameters.
 
+config REGULATOR_REFGEN
+	tristate "Qualcomm Technologies, Inc. REFGEN regulator driver"
+	depends on OF
+	help
+	  This driver supports control of the REFGEN reference bias generator
+	  block found on some Qualcomm Technologies Inc. SoCs.  A REFGEN
+	  is used by various PHY blocks found inside of the SoC.  It supports
+	  enable/disable control.
+
 config REGULATOR_RPMH
 	tristate "Qualcomm Technologies, Inc. Legacy RPMh regulator driver"
 	depends on QCOM_RPMH

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -16,6 +16,12 @@
 #include <linux/firmware/qcom/qcom_scm.h>
 
 #include "gh_common.h"
+
+/*
+ * IDs for QTVMs vs non-QTVMs
+ */
+#define QCOM_SCM_RM_MANAGED_VMID 0x3A
+#define QCOM_SCM_MAX_MANAGED_VMID 0x3F
 
 /* Notification type Message IDs */
 /* Memory APIs */

@@ -116,3 +116,11 @@ config QCOM_DMABUF_HEAPS_SYSTEM_MOVABLE
 	  lend memory from the movable zone.
 	  If in doubt, say N here.
 
+config QCOM_DMABUF_HEAPS_DEFERRED_FREE
+	tristate "DMA-BUF heaps deferred-free library"
+	depends on QCOM_DMABUF_HEAPS
+	help
+	  Choose this option to enable the DMA-BUF heaps deferred-free
+	  library. It allows the page-zeroing to be done out of the
+	  normal allocation/free path.
+	  If in doubt, say N here.

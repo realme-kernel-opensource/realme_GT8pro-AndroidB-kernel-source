@@ -128,4 +128,23 @@ def register_modules(registry):
             # do not sort
             "drivers/regulator/virtio_regulator.c",
         ],
+        deps = [
+            # do not sort
+            "drivers/regulator/debug-regulator",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/regulator/refgen",
+        out = "refgen.ko",
+        config = "CONFIG_REGULATOR_REFGEN",
+        srcs = [
+            # do not sort
+            "drivers/regulator/refgen.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/regulator/debug-regulator",
+            "drivers/regulator/proxy-consumer",
+        ],
     )

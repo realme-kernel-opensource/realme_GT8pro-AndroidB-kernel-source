@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -13,9 +13,15 @@
 
 #include "gh_common.h"
 
+#ifdef CONFIG_QTVM_WITH_AVF
+#define GUNYAH_QCOM_MIN_MSGQ		0x101
+#else
+#define GUNYAH_QCOM_MIN_MSGQ		0x1
+#endif
+
 enum gh_msgq_label {
 	GH_MSGQ_LABEL_RM,
-	GH_MSGQ_LABEL_MEMBUF,
+	GH_MSGQ_LABEL_MEMBUF = GUNYAH_QCOM_MIN_MSGQ,
 	GH_MSGQ_LABEL_DISPLAY,
 	GH_MSGQ_LABEL_VSOCK,
 	GH_MSGQ_LABEL_TEST_TUIVM,
@@ -49,6 +55,9 @@ int gh_msgq_send(void *msgq_client_desc,
 int gh_msgq_recv(void *msgq_client_desc,
 			void *buff, size_t buff_size,
 			size_t *recv_size, unsigned long flags);
+int gh_msgq_recv_killable(void *msgq_client_desc,
+			void *buff, size_t buff_size,
+			size_t *recv_size, unsigned long flags);
 
 int gh_msgq_populate_cap_info(int label, u64 cap_id,
 				int direction, int irq);
@@ -72,6 +81,13 @@ static inline int gh_msgq_send(void *msgq_client_desc,
 }
 
 static inline int gh_msgq_recv(void *msgq_client_desc,
+			void *buff, size_t buff_size,
+			size_t *recv_size, unsigned long flags)
+{
+	return -EINVAL;
+}
+
+static inline int gh_msgq_recv_killable(void *msgq_client_desc,
 			void *buff, size_t buff_size,
 			size_t *recv_size, unsigned long flags)
 {

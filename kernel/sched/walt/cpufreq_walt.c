@@ -15,87 +15,11 @@
 
 #include "walt.h"
 #include "trace.h"
-
-#define MAX_ZONES 10
-#define ZONE_TUPLE_SIZE 2
-#define MAX_UTIL 1024
-
-struct waltgov_zones {
-	int util_thresh;
-	int inflate_factor;
-};
-
-struct waltgov_tunables {
-	struct gov_attr_set	attr_set;
-	unsigned int		up_rate_limit_us;
-	unsigned int		down_rate_limit_us;
-	unsigned int		hispeed_load;
-	unsigned int		hispeed_freq;
-	unsigned int		hispeed_cond_freq;
-	unsigned int		rtg_boost_freq;
-	unsigned int		adaptive_level_1;
-	unsigned int		adaptive_low_freq;
-	unsigned int		adaptive_high_freq;
-	unsigned int		adaptive_level_1_kernel;
-	unsigned int		adaptive_low_freq_kernel;
-	unsigned int		adaptive_high_freq_kernel;
-	bool			pl;
-	int			boost;
-	int			zone_util_pct[MAX_ZONES][ZONE_TUPLE_SIZE];
-};
-
-struct waltgov_policy {
-	struct cpufreq_policy	*policy;
-	u64			last_ws;
-	u64			curr_cycles;
-	u64			last_cyc_update_time;
-	unsigned long		avg_cap;
-	struct waltgov_tunables	*tunables;
-	struct list_head	tunables_hook;
-	unsigned long		hispeed_cond_util;
-	struct waltgov_zones	zone_util[MAX_ZONES];
-
-	raw_spinlock_t		update_lock;
-	u64			last_freq_update_time;
-	s64			min_rate_limit_ns;
-	s64			up_rate_delay_ns;
-	s64			down_rate_delay_ns;
-	unsigned int		next_freq;
-	unsigned int		cached_raw_freq;
-	unsigned int		driving_cpu;
-	unsigned int		ipc_smart_freq;
-
-	/* The next fields are only needed if fast switch cannot be used: */
-	struct	irq_work	irq_work;
-	struct	kthread_work	work;
-	struct	mutex		work_lock;
-	struct	kthread_worker	worker;
-	struct task_struct	*thread;
-
-	bool			limits_changed;
-	bool			need_freq_update;
-	bool			thermal_isolated;
-	bool			rtg_boost_flag;
-	bool			hispeed_flag;
-	bool			conservative_pl_flag;
-};
-
-struct waltgov_cpu {
-	struct waltgov_callback	cb;
-	struct waltgov_policy	*wg_policy;
-	unsigned int		cpu;
-	struct walt_cpu_load	walt_load;
-	unsigned long		util;
-	unsigned int		flags;
-	unsigned int		reasons;
-	bool			rtg_boost_flag;
-	bool			hispeed_flag;
-	bool			conservative_pl_flag;
-};
+#include "sysctl_walt_stats.h"
 
 DEFINE_PER_CPU(struct waltgov_callback *, waltgov_cb_data);
-static DEFINE_PER_CPU(struct waltgov_cpu, waltgov_cpu);
-static DEFINE_PER_CPU(struct waltgov_tunables *, cached_tunables);
+DEFINE_PER_CPU(struct waltgov_cpu, waltgov_cpu);
+DEFINE_PER_CPU(struct waltgov_tunables *, cached_tunables);
 
 /************************ Governor internals ***********************/
 
@@ -144,6 +68,7 @@ static void __waltgov_update_next_freq(struct waltgov_policy *wg_policy,
 	wg_policy->cached_raw_freq = raw_freq;
 	wg_policy->next_freq = next_freq;
 	wg_policy->last_freq_update_time = time;
+	rollover_freq_ns_stats(0);
 }
 
 static bool waltgov_update_next_freq(struct waltgov_policy *wg_policy, u64 time,
@@ -298,6 +223,10 @@ static unsigned int get_smart_freq_limit(unsigned int freq, struct waltgov_polic
 	unsigned int smart_freq = FREQ_QOS_MAX_DEFAULT_VALUE;
 	unsigned int smart_reason = 0;
 	struct walt_sched_cluster *cluster = cpu_cluster(wg_policy->policy->cpu);
+
+	if (cluster_in_smart_lrpb(cluster))
+		goto out;
+
 	/*
 	 * if ipc is enabled, then we update freq with respect to ipc and legacy both;
 	 * if ipc is disabled and legacy is enabled then we update freq with respect to legacy only;
@@ -325,6 +254,7 @@ static unsigned int get_smart_freq_limit(unsigned int freq, struct waltgov_polic
 		wg_driv_cpu->reasons |= smart_reason;
 	}
 
+out:
 	return freq;
 }
 
@@ -503,6 +433,8 @@ out:
 
 	post_update_cleanups(wg_policy);
 
+	assign_reasons_counter(wg_policy);
+
 	return final_freq;
 }
 
@@ -562,11 +494,12 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 				unsigned long *max)
 {
 	struct waltgov_policy *wg_policy = wg_cpu->wg_policy;
-	bool is_migration = wg_cpu->flags & WALT_CPUFREQ_IC_MIGRATION_BIT;
+	bool is_rollover = wg_cpu->flags & WALT_CPUFREQ_ROLLOVER_BIT;
 	bool is_rtg_boost = wg_cpu->walt_load.rtgb_active;
 	bool is_hiload;
 	bool employ_ed_boost = wg_cpu->walt_load.ed_active && sysctl_ed_boost_pct;
 	unsigned long pl = wg_cpu->walt_load.pl;
+	unsigned long nbl = scale_time_to_util(wg_cpu->walt_load.non_boosted_load);
 	unsigned long min_util = *util;
 
 	if (is_rtg_boost && (!cpumask_test_cpu(wg_cpu->cpu, cpu_partial_halt_mask) ||
@@ -575,9 +508,9 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 		wg_cpu->rtg_boost_flag = true;
 	}
 
-	is_hiload = (cpu_util >= mult_frac(wg_policy->avg_cap,
-					   wg_policy->tunables->hispeed_load,
-					   100));
+	is_hiload = is_rollover && (nbl >= mult_frac(wg_policy->avg_cap,
+				   wg_policy->tunables->hispeed_load,
+				   100));
 
 	if (cpumask_test_cpu(wg_cpu->cpu, cpu_partial_halt_mask) &&
 			is_state1())
@@ -586,13 +519,12 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	if (wg_policy->avg_cap < wg_policy->hispeed_cond_util)
 		is_hiload = false;
 
-	if (is_hiload && !is_migration) {
+	if (is_hiload) {
 		wg_policy->hispeed_flag = true;
 		wg_cpu->hispeed_flag = true;
+		if (nl >= mult_frac(cpu_util, NL_RATIO, 100))
+			max_and_reason(util, *max, wg_cpu, CPUFREQ_REASON_NWD_BIT);
 	}
-
-	if (is_hiload && nl >= mult_frac(cpu_util, NL_RATIO, 100))
-		max_and_reason(util, *max, wg_cpu, CPUFREQ_REASON_NWD_BIT);
 
 	/*
 	 * For conservative PL, 2 cases may arise, if we have set
@@ -709,6 +641,8 @@ static void waltgov_update_freq(struct waltgov_callback *cb, u64 time,
 
 		if (!next_f)
 			goto out;
+
+		update_min_max_freq_ns(wg_policy, time);
 
 		if (wg_policy->policy->fast_switch_enabled)
 			waltgov_fast_switch(wg_policy, time, next_f);

@@ -19,6 +19,7 @@ struct group_cpu_time;
 struct walt_task_struct;
 struct walt_rq;
 struct walt_related_thread_group;
+struct votable;
 
 extern const char *task_event_names[];
 
@@ -444,12 +445,12 @@ TRACE_EVENT(sched_set_boost,
 TRACE_EVENT(sched_load_to_gov,
 
 	TP_PROTO(struct rq *rq, u64 aggr_grp_load, u32 tt_load,
-		int freq_aggr, u64 load, int policy,
+		int freq_aggr, u64 nbl, u64 load, int policy,
 		int big_task_rotation,
 		unsigned int user_hint,
 		struct walt_rq *wrq,
 		unsigned int reasons),
-	TP_ARGS(rq, aggr_grp_load, tt_load, freq_aggr, load, policy,
+	TP_ARGS(rq, aggr_grp_load, tt_load, freq_aggr, nbl, load, policy,
 		big_task_rotation, user_hint, wrq, reasons),
 
 	TP_STRUCT__entry(
@@ -464,6 +465,7 @@ TRACE_EVENT(sched_load_to_gov,
 		__field(u64,	nt_ps)
 		__field(u64,	grp_nt_ps)
 		__field(u64,	pl)
+		__field(u64,	nbl)
 		__field(u64,	load)
 		__field(int,	big_task_rotation)
 		__field(unsigned int, user_hint)
@@ -484,6 +486,7 @@ TRACE_EVENT(sched_load_to_gov,
 		__entry->nt_ps		= wrq->nt_prev_runnable_sum;
 		__entry->grp_nt_ps	= wrq->grp_time.nt_prev_runnable_sum;
 		__entry->pl		= wrq->walt_stats.pred_demands_sum_scaled;
+		__entry->nbl		= nbl;
 		__entry->load		= load;
 		__entry->big_task_rotation	= big_task_rotation;
 		__entry->user_hint	= user_hint;
@@ -491,13 +494,13 @@ TRACE_EVENT(sched_load_to_gov,
 		__entry->util		= scale_time_to_util(load);
 	),
 
-	TP_printk("cpu=%d policy=%d ed_task_pid=%d aggr_grp_load=%llu freq_aggr=%d tt_load=%llu rq_ps=%llu grp_rq_ps=%llu nt_ps=%llu grp_nt_ps=%llu pl=%llu load=%llu big_task_rotation=%d user_hint=%u reasons=0x%x util=%llu",
+	TP_printk("cpu=%d policy=%d ed_task_pid=%d aggr_grp_load=%llu freq_aggr=%d tt_load=%llu rq_ps=%llu grp_rq_ps=%llu nt_ps=%llu grp_nt_ps=%llu pl=%llu nbl=%llu load=%llu big_task_rotation=%d user_hint=%u reasons=0x%x util=%llu",
 		__entry->cpu, __entry->policy, __entry->ed_task_pid,
 		__entry->aggr_grp_load, __entry->freq_aggr,
 		__entry->tt_load, __entry->rq_ps, __entry->grp_rq_ps,
 		__entry->nt_ps, __entry->grp_nt_ps, __entry->pl, __entry->load,
-		__entry->big_task_rotation, __entry->user_hint, __entry->reasons,
-		__entry->util)
+		__entry->nbl, __entry->big_task_rotation, __entry->user_hint,
+		__entry->reasons, __entry->util)
 );
 
 TRACE_EVENT(core_ctl_eval_need,
@@ -1736,58 +1739,27 @@ TRACE_EVENT(ipc_update,
 
 TRACE_EVENT(sched_update_updown_migrate_values,
 
-	TP_PROTO(bool up, int cluster),
+	TP_PROTO(unsigned int cluster, unsigned int cgroup_id),
 
-	TP_ARGS(up, cluster),
-
+	TP_ARGS(cluster, cgroup_id),
 
 	TP_STRUCT__entry(
-		__field(bool, up)
-		__field(int, cluster)
+		__field(unsigned int, cluster)
+		__array(char, cgroup_name, TASK_COMM_LEN)
 		__field(unsigned int, cluster_up)
 		__field(unsigned int, cluster_down)
 	),
 
 	TP_fast_assign(
-		__entry->up		= up;
 		__entry->cluster	= cluster;
-		__entry->cluster_up	= sched_capacity_margin_up[cluster_first_cpu(
-						sched_cluster[cluster])];
-		__entry->cluster_down	= sched_capacity_margin_down[cluster_first_cpu(
-						sched_cluster[cluster])];
+		memcpy(__entry->cgroup_name, cgroup_names[cgroup_id], TASK_COMM_LEN);
+		__entry->cluster_up	= sched_capacity_margin_up[cgroup_id][cluster];
+		__entry->cluster_down	= sched_capacity_margin_down[cgroup_id][cluster];
 	),
 
-	TP_printk("up=%d cluster=%d cluster_up=%u cluster_down=%u",
-			__entry->up, __entry->cluster,
-			__entry->cluster_up, __entry->cluster_down)
-);
-
-TRACE_EVENT(sched_update_updown_early_migrate_values,
-
-	TP_PROTO(bool up, int cluster),
-
-	TP_ARGS(up, cluster),
-
-
-	TP_STRUCT__entry(
-		__field(bool, up)
-		__field(int, cluster)
-		__field(unsigned int, cluster_up)
-		__field(unsigned int, cluster_down)
-	),
-
-	TP_fast_assign(
-		__entry->up		= up;
-		__entry->cluster	= cluster;
-		__entry->cluster_up	= sched_capacity_margin_early_up[cluster_first_cpu(
-						sched_cluster[cluster])];
-		__entry->cluster_down	= sched_capacity_margin_early_down[cluster_first_cpu(
-						sched_cluster[cluster])];
-	),
-
-	TP_printk("up=%d cluster=%d cluster_up=%u cluster_down=%u",
-			__entry->up, __entry->cluster,
-			__entry->cluster_up, __entry->cluster_down)
+	TP_printk("cluster=%d cluster_up=%u cluster_down=%u cgroup=%s",
+			__entry->cluster, __entry->cluster_up, __entry->cluster_down,
+			__entry->cgroup_name)
 );
 
 TRACE_EVENT(sched_pipeline_tasks,
@@ -2058,6 +2030,54 @@ TRACE_EVENT(walt_oscillate,
 		__entry->pid, __entry->src_cpu, __entry->dst_cpu,
 		__entry->oscillate_cpu, __entry->reason)
 );
+
+TRACE_EVENT(sched_client_vote,
+
+	TP_PROTO(const char *votable_name, int client_id, bool enabled, int val),
+
+	TP_ARGS(votable_name, client_id, enabled, val),
+
+	TP_STRUCT__entry(
+		__array(char,		votable_name, TASK_COMM_LEN)
+		__field(int,		client_id)
+		__field(bool,		enabled)
+		__field(int,		val)
+		),
+
+	TP_fast_assign(
+		memcpy(__entry->votable_name, votable_name, TASK_COMM_LEN);
+		__entry->client_id	= client_id;
+		__entry->enabled	= enabled;
+		__entry->val		= val;
+		),
+
+	TP_printk("votable_name=%s client=%d enable=%d val=%d",
+			__entry->votable_name, __entry->client_id, __entry->enabled, __entry->val)
+);
+
+TRACE_EVENT(sched_votable_result,
+
+	TP_PROTO(const char *votable_name, int effective_client_id, int effective_result),
+
+	TP_ARGS(votable_name, effective_client_id, effective_result),
+
+	TP_STRUCT__entry(
+		__array(char,		votable_name, TASK_COMM_LEN)
+		__field(int,		effective_client_id)
+		__field(int,		effective_result)
+		),
+
+	TP_fast_assign(
+		memcpy(__entry->votable_name, votable_name, TASK_COMM_LEN);
+		__entry->effective_client_id	= effective_client_id;
+		__entry->effective_result	= effective_result;
+		),
+
+	TP_printk("votable_name=%s eff_client=%d eff_result=%d",
+			__entry->votable_name, __entry->effective_client_id,
+			__entry->effective_result)
+);
+
 #endif /* _TRACE_WALT_H */
 
 #undef TRACE_INCLUDE_PATH

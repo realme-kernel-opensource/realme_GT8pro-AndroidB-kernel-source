@@ -440,7 +440,15 @@ config SDW_DEBUGCC_VIENNA
 	  VIENNA devices.
 	  Say Y if you want to support the debug clocks such as clock
 	  measurement functionality.
-endif
+
+config SM_GCC_ALOR
+        tristate "ALOR Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+        help
+	  Support for the global clock controller on Qualcomm Technologies, Inc
+	  Alor devices.
+	  Say Y if you want to use peripheral devices such as UART,
+	  SPI, I2C, USB, SD/UFS, PCIe etc.
 
 config VIRTIO_CLK
         tristate "Virtio clock driver"
@@ -450,3 +458,51 @@ config VIRTIO_CLK
           Qualcomm Technologies, Inc automotive virtual machine.
           Say Y if you want to use pass through peripheral devices such as UART,
           SPI, I2C, USB etc.
+
+config SC_GCC_7280
+	tristate "SC7280 Global Clock Controller"
+	select QCOM_GDSC
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc.
+	  SC7280 devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI,
+	  I2C, USB, UFS, SDCC, PCIe etc.
+
+config SC_DISPCC_7280
+	tristate "SC7280 Display Clock Controller"
+	select SC_GCC_7280
+	help
+	  Support for the display clock controller on Qualcomm Technologies, Inc.
+	  SC7280 devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
+config SC_CAMCC_7280
+	tristate "SC7280 Camera Clock Controller"
+	select SC_GCC_7280
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc.
+	  SC7280 devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
+config SC_GPUCC_7280
+	tristate "SC7280 Graphics Clock Controller"
+	select SC_GCC_7280
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc
+	  SC7280 devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
+config SC_VIDEOCC_7280
+	tristate "SC7280 Video Clock Controller"
+	select SC_GCC_7280
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc.
+	  SC7280 devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
+
+endif

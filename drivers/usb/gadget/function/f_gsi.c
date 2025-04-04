@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -637,6 +637,14 @@ static int ipa_connect_channels(struct gsi_data_port *d_port)
 				sizeof(ipa_in_channel_out_params));
 	memset(&ipa_out_channel_out_params, 0x0,
 				sizeof(ipa_out_channel_out_params));
+
+	ret = wait_for_completion_timeout(&wait_for_ipa_ready,
+				msecs_to_jiffies(GSI_IPA_READY_TIMEOUT));
+	if (!ret) {
+		log_event_err("%s: ipa ready timeout", __func__);
+		ret = -ETIMEDOUT;
+		goto end_xfer_ep_out;
+	}
 
 	log_event_dbg("%s: Calling xdci_connect", __func__);
 	ret = d_port->ipa_ops->xdci_connect(out_params, in_params,
@@ -2665,13 +2673,10 @@ static int gsi_func_suspend(struct usb_function *f, u8 options)
 	return 0;
 }
 
-static int gsi_update_function_bind_params(struct f_gsi *gsi,
-	struct usb_composite_dev *cdev,
-	struct gsi_function_bind_info *info)
+static int gsi_assign_string_ids(struct f_gsi *gsi,
+				 struct usb_composite_dev *cdev,
+				 struct gsi_function_bind_info *info)
 {
-	struct usb_ep *ep;
-	struct usb_cdc_notification *event;
-	struct usb_function *f = &gsi->function;
 	int status;
 
 	if (info->ctrl_str_idx >= 0 && info->ctrl_desc) {
@@ -2727,6 +2732,22 @@ static int gsi_update_function_bind_params(struct f_gsi *gsi,
 	if (info->data_nop_desc)
 		info->data_nop_desc->bInterfaceNumber = gsi->data_id;
 
+	return 0;
+}
+
+static int gsi_update_function_bind_params(struct f_gsi *gsi,
+	struct usb_composite_dev *cdev,
+	struct gsi_function_bind_info *info)
+{
+	struct usb_ep *ep;
+	struct usb_cdc_notification *event;
+	struct usb_function *f = &gsi->function;
+	int status;
+
+	status = gsi_assign_string_ids(gsi, cdev, info);
+	if (status < 0)
+		return status;
+
 	/* allocate instance-specific endpoints */
 	if (info->fs_in_desc) {
 		ep = usb_ep_autoconfig(cdev->gadget, info->fs_in_desc);
@@ -2761,7 +2782,7 @@ static int gsi_update_function_bind_params(struct f_gsi *gsi,
 		gsi->c_port.notify_req->buf =
 			kmalloc(info->notify_buf_len, GFP_KERNEL);
 		if (!gsi->c_port.notify_req->buf)
-			goto fail;
+			goto free_req;
 
 		gsi->c_port.notify_req->length = info->notify_buf_len;
 		gsi->c_port.notify_req->context = gsi;
@@ -2814,15 +2835,17 @@ static int gsi_update_function_bind_params(struct f_gsi *gsi,
 	status = usb_assign_descriptors(f, info->fs_desc_hdr, info->hs_desc_hdr,
 					info->ss_desc_hdr, info->ss_desc_hdr);
 	if (status)
-		goto fail;
+		goto free_req_buf;
 
 	return 0;
 
-fail:
-	if (gsi->c_port.notify_req) {
+free_req_buf:
+	if (gsi->c_port.notify_req && gsi->c_port.notify_req->buf)
 		kfree(gsi->c_port.notify_req->buf);
+free_req:
+	if (gsi->c_port.notify_req)
 		usb_ep_free_request(gsi->c_port.notify, gsi->c_port.notify_req);
-	}
+fail:
 	/* we might as well release our claims on endpoints */
 	if (gsi->c_port.notify)
 		gsi->c_port.notify->driver_data = NULL;
@@ -2844,6 +2867,14 @@ void ipa_ready_callback(void *ops)
 	complete_all(&wait_for_ipa_ready);
 }
 EXPORT_SYMBOL(ipa_ready_callback);
+
+void ipa_exit_callback(void)
+{
+	memset(&ipa_ops, 0x0, sizeof(struct ipa_usb_ops));
+	reinit_completion(&wait_for_ipa_ready);
+
+}
+EXPORT_SYMBOL_GPL(ipa_exit_callback);
 
 static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 {

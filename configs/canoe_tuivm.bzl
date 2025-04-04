@@ -13,7 +13,7 @@ canoe_tuivm_config = {
     "CONFIG_GH_PANIC_NOTIFIER": "m",
     "CONFIG_GH_RM_DRV": "m",
     "CONFIG_GH_TLMM_VM_MEM_ACCESS": "m",
-    "CONFIG_GH_VIRT_WATCHDOG": "m",
+    "CONFIG_GH_VIRT_WATCHDOG": "n",
     "CONFIG_GUNYAH": "m",
     "CONFIG_GUNYAH_DRIVERS": "y",
     "CONFIG_GUNYAH_PLATFORM_HOOKS": "m",
@@ -64,7 +64,5 @@ canoe_tuivm_config = {
     "CONFIG_VIRTIO_MMIO_SWIOTLB": "y",
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_INTERCONNECT_CLK": "m",
-    "CONFIG_GH_SECURE_VM_LOADER": "m",
-    "CONFIG_QCOM_MDT_LOADER": "m",
     "CONFIG_PSI": "y",
 }

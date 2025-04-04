@@ -6,6 +6,8 @@
  * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#define pr_fmt(fmt) "shmbridge: [%d]: " fmt, __LINE__
+
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/slab.h>
@@ -125,7 +127,7 @@ static int32_t qtee_shmbridge_enable(bool enable)
 		return ret;
 	}
 	qtee_shmbridge_enabled = true;
-	pr_warn("shmbridge is enabled\n");
+	pr_info("shmbridge is enabled\n");
 	return ret;
 }
 
@@ -331,7 +333,7 @@ int32_t qtee_shmbridge_register(
 	ipfn_and_s_perm_flags = UPDATE_IPFN_AND_S_PERM_FLAGS(paddr, tz_perm);
 	size_and_flags = UPDATE_SIZE_AND_FLAGS(size, ns_vmid_num);
 
-	if (support_hyp) {
+	if (support_hyp && (ns_vmid_num == 0)) {
 		size_and_flags |= SELF_OWNER_BIT << 1;
 		size_and_flags |= (VM_PERM_R | VM_PERM_W) << 2;
 	}
@@ -407,6 +409,12 @@ int32_t qtee_shmbridge_allocate_shm(size_t size, struct qtee_shm *shm)
 		goto exit;
 	}
 
+	if (!default_bridge.genpool) {
+		pr_err("Shmbridge pool not available!\n");
+		ret = -ENOMEM;
+		goto exit;
+	}
+
 	size = roundup(size, 1 << default_bridge.min_alloc_order);
 
 	va = gen_pool_alloc(default_bridge.genpool, size);
@@ -421,8 +429,7 @@ int32_t qtee_shmbridge_allocate_shm(size_t size, struct qtee_shm *shm)
 	shm->paddr = gen_pool_virt_to_phys(default_bridge.genpool, va);
 	shm->size = size;
 
-	pr_debug("%s: shm->paddr %llx, size %zu\n",
-			__func__, (uint64_t)shm->paddr, shm->size);
+	pr_debug("shm->paddr: 0x%llx, size: %zu\n", (uint64_t)shm->paddr, shm->size);
 
 exit:
 	return ret;
@@ -491,9 +498,6 @@ static int qtee_shmbridge_init(struct platform_device *pdev)
 	else
 		default_bridge.size = custom_bridge_size * MIN_BRIDGE_SIZE;
 
-	pr_err("qtee shmbridge registered default bridge with size %zu bytes\n",
-		default_bridge.size);
-
 	default_bridge.vaddr = (void *)__get_free_pages(GFP_KERNEL|__GFP_COMP,
 				get_order(default_bridge.size));
 	if (!default_bridge.vaddr)
@@ -531,7 +535,7 @@ static int qtee_shmbridge_init(struct platform_device *pdev)
 	mutex_init(&bridge_list_head.lock);
 	INIT_LIST_HEAD(&bridge_list_head.head);
 
-	/* temporarily disable shm bridge mechanism */
+	/* Enable shm bridge mechanism */
 	ret = qtee_shmbridge_enable(true);
 	if (ret) {
 		/* keep the mem pool and return if failed to enable bridge */
@@ -557,11 +561,11 @@ static int qtee_shmbridge_init(struct platform_device *pdev)
 		goto exit_deregister_default_bridge;
 	}
 
-	pr_debug("qtee shmbridge registered default bridge with size %zu bytes\n",
-			default_bridge.size);
+	pr_info("qtee shmbridge registered default bridge with size: %zu bytes, paddr: 0x%llx\n",
+		default_bridge.size, (uint64_t)default_bridge.paddr);
 
 	mem_protection_enabled = scm_mem_protection_init_do();
-	pr_err("MEM protection %s, %d\n",
+	pr_info("MEM protection %s, %d\n",
 			(!mem_protection_enabled ? "Enabled" : "Not enabled"),
 			mem_protection_enabled);
 	return 0;

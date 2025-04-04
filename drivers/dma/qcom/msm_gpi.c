@@ -3204,13 +3204,15 @@ int gpi_terminate_all(struct dma_chan *chan)
 	struct gpii *gpii = gpii_chan->gpii;
 	int schid, echid, i;
 	int ret = 0;
+	bool stop_cmd_failed = false;
+	u32 ch_state;
 
 	GPII_INFO(gpii, gpii_chan->chid, "Enter\n");
 	mutex_lock(&gpii->ctrl_lock);
 
 	/*
-	 * treat both channels as a group if its protocol is not UART
-	 * STOP, RESET, or START needs to be in lockstep
+	 * Determine start and end channel IDs based on protocol
+	 * STOP, RESET if STOP fails, and RE-START needs to be in lockstep
 	 */
 	schid = (gpii->protocol == SE_PROTOCOL_UART) ? gpii_chan->chid : 0;
 	echid = (gpii->protocol == SE_PROTOCOL_UART) ? schid + 1 :
@@ -3227,43 +3229,52 @@ int gpi_terminate_all(struct dma_chan *chan)
 
 		/* send command to Stop the channel */
 		ret = gpi_send_cmd(gpii, gpii_chan, GPI_CH_CMD_STOP);
-		if (ret)
+		if (ret) {
 			GPII_ERR(gpii, gpii_chan->chid,
 				 "Error Stopping Chan:%d resetting\n", ret);
+			stop_cmd_failed = true;
+		} else {
+			gpi_noop_tre(gpii_chan);
+		}
 	}
 
-	/* reset the channels (clears any pending tre) */
-	for (i = schid; i < echid; i++) {
-		gpii_chan = &gpii->gpii_chan[i];
-
-		ret = gpi_reset_chan(gpii_chan, GPI_CH_CMD_RESET);
-		if (ret) {
-			GPII_ERR(gpii, gpii_chan->chid,
-				 "Error resetting channel ret:%d\n", ret);
-			if (!gpii->reg_table_dump) {
+	/* Reset channels if stop command fails */
+	if (stop_cmd_failed) {
+		if (!gpii->reg_table_dump) {
+			gpi_dump_debug_reg(gpii);
+			gpii->reg_table_dump = true;
+		}
+		ch_state = gpi_read_ch_state(gpii_chan);
+		GPII_ERR(gpii, gpii_chan->chid, "CH state state:%s\n",
+			 TO_GPI_CH_STATE_STR(ch_state));
+		for (i = schid; i < echid; i++) {
+			gpii_chan = &gpii->gpii_chan[i];
+			ret = gpi_reset_chan(gpii_chan, GPI_CH_CMD_RESET);
+			if (ret) {
+				GPII_ERR(gpii, gpii_chan->chid,
+					 "Error resetting channel: %d\n", ret);
 				gpi_dump_debug_reg(gpii);
-				gpii->reg_table_dump = true;
+				goto terminate_exit;
 			}
-			goto terminate_exit;
-		}
 
-		/* reprogram channel CNTXT */
-		ret = gpi_alloc_chan(gpii_chan, false);
-		if (ret) {
-			GPII_ERR(gpii, gpii_chan->chid,
-				 "Error alloc_channel ret:%d\n", ret);
-			goto terminate_exit;
+			/* reprogram channel CNTXT */
+			ret = gpi_alloc_chan(gpii_chan, false);
+			if (ret) {
+				GPII_ERR(gpii, gpii_chan->chid,
+					 "Error allocating channel: %d\n", ret);
+				goto terminate_exit;
+			}
 		}
 	}
 
-	/* restart the channels */
-	for (i = schid; i < echid; i++) {
+	/* Restart the channels */
+	for (i = echid - 1; i >= schid; i--) {
 		gpii_chan = &gpii->gpii_chan[i];
 
 		ret = gpi_start_chan(gpii_chan);
 		if (ret) {
 			GPII_ERR(gpii, gpii_chan->chid,
-				 "Error Starting Channel ret:%d\n", ret);
+				 "Error starting channel: %d\n", ret);
 			goto terminate_exit;
 		}
 	}
@@ -3406,7 +3417,7 @@ static int gpi_pause(struct dma_chan *chan)
 {
 	struct gpii_chan *gpii_chan = to_gpii_chan(chan);
 	struct gpii *gpii = gpii_chan->gpii;
-	int i, ret, idx = 0;
+	int idx = 0;
 	u32 offset1, offset2, type1, type2;
 	struct gpi_ring *ev_ring = gpii->ev_ring;
 	phys_addr_t cntxt_rp, local_rp;
@@ -3469,40 +3480,6 @@ static int gpi_pause(struct dma_chan *chan)
 			rp1 = ev_ring->base;
 	}
 
-	/* send stop command to stop the channels */
-	for (i = 0; i < MAX_CHANNELS_PER_GPII; i++) {
-		gpii_chan = &gpii->gpii_chan[i];
-		/* disable ch state so no more TRE processing */
-		write_lock_irq(&gpii->pm_lock);
-		gpii_chan->pm_state = PREPARE_TERMINATE;
-		write_unlock_irq(&gpii->pm_lock);
-			/* send command to Stop the channel */
-		ret = gpi_send_cmd(gpii, gpii_chan, GPI_CH_CMD_STOP);
-		if (ret) {
-			GPII_ERR(gpii, gpii->gpii_chan[i].chid,
-				 "Error stopping chan, ret:%d\n", ret);
-			mutex_unlock(&gpii->ctrl_lock);
-			return -ECONNRESET;
-		}
-	}
-
-	for (i = 0; i < MAX_CHANNELS_PER_GPII; i++) {
-		gpii_chan = &gpii->gpii_chan[i];
-		gpi_noop_tre(gpii_chan);
-	}
-
-	for (i = 0; i < MAX_CHANNELS_PER_GPII; i++) {
-		gpii_chan = &gpii->gpii_chan[i];
-
-		ret = gpi_start_chan(gpii_chan);
-		if (ret) {
-			GPII_ERR(gpii, gpii_chan->chid,
-				 "Error Starting Channel ret:%d\n", ret);
-			mutex_unlock(&gpii->ctrl_lock);
-			return -ECONNRESET;
-		}
-	}
-
 	if (gpii->dual_ee_sync_flag) {
 		while (iter < total_iter) {
 			iter++;
@@ -3524,8 +3501,6 @@ static int gpi_resume(struct dma_chan *chan)
 {
 	struct gpii_chan *gpii_chan = to_gpii_chan(chan);
 	struct gpii *gpii = gpii_chan->gpii;
-	int i;
-	int ret;
 
 	GPII_INFO(gpii, gpii_chan->chid, "enter\n");
 
@@ -3550,17 +3525,6 @@ static int gpi_resume(struct dma_chan *chan)
 			  "channel is already active\n");
 		mutex_unlock(&gpii->ctrl_lock);
 		return 0;
-	}
-
-	/* send start command to start the channels */
-	for (i = 0; i < MAX_CHANNELS_PER_GPII; i++) {
-		ret = gpi_send_cmd(gpii, &gpii->gpii_chan[i], GPI_CH_CMD_START);
-		if (ret) {
-			GPII_ERR(gpii, gpii->gpii_chan[i].chid,
-				 "Erro starting chan, ret:%d\n", ret);
-			mutex_unlock(&gpii->ctrl_lock);
-			return ret;
-		}
 	}
 
 	write_lock_irq(&gpii->pm_lock);
@@ -3609,7 +3573,7 @@ struct dma_async_tx_descriptor *gpi_prep_slave_sg(struct dma_chan *chan,
 	}
 
 	ch_state = gpi_read_ch_state(gpii_chan);
-	GPII_VERB(gpii, gpii_chan->chid, "enter_c wp:0x%0llx rp:0x%0llx state:%s\n",
+	GPII_VERB(gpii, gpii_chan->chid, "enter wp:0x%0llx rp:0x%0llx state:%s\n",
 		  to_physical(ch_ring, ch_ring->wp), to_physical(ch_ring, ch_ring->rp),
 		  TO_GPI_CH_STATE_STR(ch_state));
 

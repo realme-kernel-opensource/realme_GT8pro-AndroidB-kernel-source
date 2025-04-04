@@ -10,6 +10,7 @@ def register_modules(registry):
             "kernel/sched/walt/preemptirq_long.h",
             "kernel/sched/walt/walt.h",
             "kernel/sched/walt/walt_debug.h",
+            "kernel/sched/walt/voter.h",
         ],
     )
 
@@ -34,6 +35,7 @@ def register_modules(registry):
             "kernel/sched/walt/walt_cfs.c",
             "kernel/sched/walt/walt_tp.c",
             "kernel/sched/walt/walt_config.c",
+            "kernel/sched/walt/voter.c",
             "kernel/sched/walt/walt_cpufreq_cycle_cntr_driver.c",
             "kernel/sched/walt/walt_gclk_cycle_counter_driver.c",
             "kernel/sched/walt/walt_cycles.c",
@@ -45,7 +47,16 @@ def register_modules(registry):
             "kernel/sched/walt/perf_trace_counters.h",
             "kernel/sched/walt/trace.h",
             "kernel/sched/walt/walt.h",
+            "kernel/sched/walt/voter.h",
+            "kernel/sched/walt/sysctl_walt_stats.h",
         ],
+        conditional_srcs = {
+            "CONFIG_SCHED_WALT_STATS": {
+                True: [
+                    "kernel/sched/walt/sysctl_walt_stats.c",
+                ],
+            },
+        },
         deps = [
             # do not sort
             "drivers/soc/qcom/socinfo",

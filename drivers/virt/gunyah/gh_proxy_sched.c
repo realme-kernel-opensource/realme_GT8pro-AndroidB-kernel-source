@@ -56,6 +56,8 @@
 #define GH_VCPU_STATE_POWERED_OFF	2
 /* VCPU is blocked in EL2 for an unspecified reason */
 #define GH_VCPU_STATE_BLOCKED		3
+/* VCPU has made a call to PSCI_SYSTEM_RESET or PSCI_SYSTEM_RESET2 */
+#define GH_VCPU_STATE_PSCI_SYSTEM_RESET		256
 
 #define GH_VCPU_SUSPEND_STATE_STANDBY	0
 #define GH_VCPU_SUSPEND_STATE_POWERDOWN	1
@@ -696,6 +698,8 @@ void gh_vcpu_work_function(struct work_struct *work)
 				return;
 			break;
 		case GH_VCPU_STATE_POWERED_OFF:
+			fallthrough;
+		case GH_VCPU_STATE_PSCI_SYSTEM_RESET:
 			__pm_relax(vcpu->ws);
 			/* once cpu is powered off, the work is done */
 			if (!vcpu->abort_sleep)
@@ -832,6 +836,9 @@ int gh_vcpu_run(gh_vmid_t vmid, unsigned int vcpu_id, uint64_t resume_data_0,
 			 * or has been terminated due to a reset request from another VM.
 			 */
 			case GH_VCPU_STATE_POWERED_OFF:
+				fallthrough;
+			/* The VCPU has made a call to PSCI_SYSTEM_RESET or PSCI_SYSTEM_RESET2 */
+			case GH_VCPU_STATE_PSCI_SYSTEM_RESET:
 				__pm_relax(vcpu->ws);
 				gh_vcpu_sleep(vcpu);
 				break;

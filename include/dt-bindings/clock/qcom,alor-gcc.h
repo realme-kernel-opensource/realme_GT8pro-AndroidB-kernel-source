@@ -233,5 +233,6 @@
 #define GCC_VIDEO_AXI1_CLK_ARES					31
 #define GCC_VIDEO_BCR						32
 #define GCC_VIDEO_XO_CLK_ARES					33
+#define GCC_QUSB2PHY_SEC_BCR					34
 
 #endif

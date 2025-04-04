@@ -23,6 +23,7 @@
 #include <trace/events/power.h>
 #include "walt.h"
 #include "trace.h"
+#include "sysctl_walt_stats.h"
 
 const char *task_event_names[] = {
 	"PUT_PREV_TASK",
@@ -297,8 +298,10 @@ void walt_rq_dump(int cpu)
 				wrq->load_subs[i].new_subs);
 	}
 	walt_task_dump(tsk);
-	SCHED_PRINT(sched_capacity_margin_up[cpu]);
-	SCHED_PRINT(sched_capacity_margin_down[cpu]);
+	for (i = 0; i < ANDROID_CGROUPS; i++) {
+		SCHED_PRINT(sched_capacity_margin_up[i][cpu_cluster(cpu)->id]);
+		SCHED_PRINT(sched_capacity_margin_down[i][cpu_cluster(cpu)->id]);
+	}
 }
 
 void walt_dump(void)
@@ -618,7 +621,9 @@ should_apply_suh_freq_boost(struct walt_sched_cluster *cluster)
 	return is_cluster_hosting_top_app(cluster);
 }
 
-static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason, bool trace)
+#define HISPEED_BASED_ON_TOPAPP_ONLY 0
+static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
+		bool trace, u64 *non_boosted_load)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_sched_cluster *cluster = wrq->cluster;
@@ -657,6 +662,10 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason, bool tra
 		*reason = CPUFREQ_REASON_SUH_BIT;
 	}
 
+	*non_boosted_load = load;
+	if (HISPEED_BASED_ON_TOPAPP_ONLY)
+		*non_boosted_load = wrq->grp_time.prev_runnable_sum;
+
 	if (wrq->ed_task) {
 		load = mult_frac(load, 100 + sysctl_ed_boost_pct, 100);
 		*reason = CPUFREQ_REASON_EARLY_DET_BIT;
@@ -679,7 +688,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason, bool tra
 
 	if (trace)
 		trace_sched_load_to_gov(rq, aggr_grp_load, tt_load, sched_freq_aggr_en,
-				load, 0, walt_rotation_enabled,
+				*non_boosted_load, load, 0, walt_rotation_enabled,
 				sysctl_sched_user_hint, wrq, *reason);
 	return load;
 }
@@ -689,13 +698,14 @@ static bool rtgb_active;
 static inline unsigned long
 __cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *reason, bool trace)
 {
-	u64 util;
+	u64 util, non_boosted_load;
 	struct rq *rq = cpu_rq(cpu);
-	unsigned long capacity = capacity_orig_of(cpu);
+	struct walt_sched_cluster *cluster = cpu_cluster(cpu);
+	unsigned long capacity = cluster_in_smart_lrpb(cluster) ?
+					cluster->pre_smart_freq_capacity : capacity_orig_of(cpu);
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
-	util = scale_time_to_util(freq_policy_load(rq, reason, trace));
-
+	util = scale_time_to_util(freq_policy_load(rq, reason, trace, &non_boosted_load));
 	/*
 	 * util is on a scale of 0 to 1024.  this is the utilization
 	 * of the cpu in the last window
@@ -720,6 +730,7 @@ __cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *rea
 		else
 			walt_load->ed_active = false;
 		walt_load->trailblazer_state = trailblazer_state;
+		walt_load->non_boosted_load = non_boosted_load;
 	}
 
 	return (util >= capacity) ? capacity : util;
@@ -782,10 +793,12 @@ cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *reaso
 	struct walt_cpu_load wl_other = {0};
 	struct walt_cpu_load wl_prime = {0};
 	unsigned long util = 0, util_other = 0, util_prime = 0;
-	unsigned long capacity = capacity_orig_of(cpu);
 	int i, mpct_other, mpct_prime;
 	unsigned long max_nl_other = 0, max_pl_other = 0;
 	unsigned long max_nl_prime = 0, max_pl_prime = 0;
+	struct walt_sched_cluster *cluster = cpu_cluster(cpu);
+	unsigned long capacity = cluster_in_smart_lrpb(cluster) ?
+					cluster->pre_smart_freq_capacity : capacity_orig_of(cpu);
 
 	util =  __cpu_util_freq_walt(cpu, walt_load, reason, true);
 
@@ -2550,17 +2563,18 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	struct walt_rq *wrq = &per_cpu(walt_rq, task_cpu(p));
-	u64 next_ms_boundary, delta;
+	u64 next_ms_boundary, delta, lrb_threshold_ns;
 	int periods;
 	bool running;
 	int no_boost_reason = 0;
 
 	/*
-	 * If it has been active for more than 4mS turn it off, the task that caused this activation
-	 * should have slept and if its still running it must have updated its load via
+	 * If it has been active for more than threshold mS turn it off, the task that caused this
+	 * activation should have slept and if its still running it must have updated its load via
 	 * prs. No need to continue boosting.
 	 */
-	if (wallclock > wrq->lrb_pipeline_start_time + 4000000)
+	lrb_threshold_ns = (sched_ravg_window <= SCHED_RAVG_8MS_WINDOW) ? 4000000 : 8000000;
+	if (wallclock > wrq->lrb_pipeline_start_time + lrb_threshold_ns)
 		wrq->lrb_pipeline_start_time = 0;
 
 	if (!pipeline_in_progress())
@@ -2818,6 +2832,10 @@ static void init_new_task_load(struct task_struct *p)
 	wts->mark_start_birth_ts = 0;
 	wts->high_util_history = 0;
 	__sched_fork_init(p);
+
+	/* New task inherits the MPAM part_id */
+	wts->mpam_part_id = cur_wts->mpam_part_id;
+
 	walt_flag_set(p, WALT_INIT_BIT, 1);
 	walt_flag_set(p, WALT_TRAILBLAZER_BIT, 0);
 }
@@ -3663,6 +3681,8 @@ static void walt_update_tg_pointer(struct cgroup_subsys_state *css)
 		walt_init_topapp_tg(css_tg(css));
 	else if (!strcmp(css->cgroup->kn->name, "foreground"))
 		walt_init_foreground_tg(css_tg(css));
+	else if (!strcmp(css->cgroup->kn->name, "background"))
+		walt_init_background_tg(css_tg(css));
 	else
 		walt_init_tg(css_tg(css));
 }
@@ -4199,6 +4219,7 @@ void update_cpu_capacity_helper(int cpu)
 
 	old = capacity_orig_of(cpu);
 	wrq->cpu_capacity_orig = min(fmax_capacity, thermal_cap);
+	cluster->pre_smart_freq_capacity = thermal_cap;
 
 	if (old != wrq->cpu_capacity_orig)
 		trace_update_cpu_capacity(cpu, fmax_capacity, wrq->cpu_capacity_orig);
@@ -5558,6 +5579,8 @@ static void walt_init(struct work_struct *work)
 	}
 
 	topology_clear_scale_freq_source(SCALE_FREQ_SOURCE_ARCH, cpu_online_mask);
+
+	walt_stats_sysctl_init();
 }
 
 static DECLARE_WORK(walt_init_work, walt_init);

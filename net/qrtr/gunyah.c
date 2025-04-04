@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/io.h>
@@ -772,7 +772,7 @@ static int qrtr_gunyah_probe(struct platform_device *pdev)
 			qdev->peer_name = GH_SELF_VM;
 
 		qdev->vm_nb.notifier_call = qrtr_gunyah_vm_cb;
-		qdev->vm_nb.priority = INT_MAX;
+		qdev->vm_nb.priority = INT_MAX - 1;
 		gh_register_vm_notifier(&qdev->vm_nb);
 	}
 
@@ -781,7 +781,7 @@ static int qrtr_gunyah_probe(struct platform_device *pdev)
 	if (IS_ERR_OR_NULL(qdev->tx_dbl)) {
 		ret = PTR_ERR(qdev->tx_dbl);
 		dev_err(qdev->dev, "failed to get gunyah tx dbl %d\n", ret);
-		return ret;
+		goto notifier_fail;
 	}
 	INIT_WORK(&qdev->work, qrtr_gunyah_retry_work);
 
@@ -810,6 +810,9 @@ fail_rx_dbl:
 register_fail:
 	cancel_work_sync(&qdev->work);
 	gh_dbl_tx_unregister(qdev->tx_dbl);
+notifier_fail:
+	if (qdev->master)
+		gh_unregister_vm_notifier(&qdev->vm_nb);
 
 	return ret;
 }

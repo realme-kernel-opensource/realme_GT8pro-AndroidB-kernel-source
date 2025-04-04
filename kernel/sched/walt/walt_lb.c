@@ -8,6 +8,7 @@
 
 #include "walt.h"
 #include "trace.h"
+#include "sysctl_walt_stats.h"
 
 inline unsigned long walt_lb_cpu_util(int cpu)
 {
@@ -82,6 +83,7 @@ out_unlock: /* called with busiest_rq lock */
 		raw_spin_lock(&target_rq->__lock);
 		walt_attach_task(push_task, target_rq);
 		raw_spin_unlock(&target_rq->__lock);
+		walt_inc_active_balance_migration_counter(target_cpu);
 	}
 
 	if (push_task)
@@ -432,6 +434,7 @@ unlock:
 	raw_spin_lock_irqsave(&dst_rq->__lock, flags);
 	walt_attach_task(pull_me, dst_rq);
 	raw_spin_unlock_irqrestore(&dst_rq->__lock, flags);
+	walt_inc_idle_balance_migration_counter(dst_cpu);
 
 	*pulled_task_struct = pull_me;
 	return 1; /* we pulled 1 task */
@@ -1215,6 +1218,8 @@ void sched_walt_oscillate(unsigned int busy_cpu)
 			wake_up_if_idle(dst_cpu);
 		}
 		goto out;
+	} else {
+		no_oscillate_reason = 103;
 	}
 unlock:
 	raw_spin_unlock_irqrestore(&src_rq->__lock, flags);

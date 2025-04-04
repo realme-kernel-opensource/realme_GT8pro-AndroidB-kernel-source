@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "gunyah: " fmt
@@ -12,9 +12,11 @@
 #include <linux/kobject.h>
 #include <linux/of.h>
 #include <linux/printk.h>
+#include <linux/sched_clock.h>
 #include <linux/slab.h>
 #include <linux/gunyah.h>
 #include <linux/gunyah/gh_errno.h>
+#include <linux/gunyah/gh_ctrl.h>
 #include "hcall_ctrl.h"
 
 #define QC_HYP_SMCCC_CALL_UID                                                  \
@@ -90,11 +92,42 @@ static const struct attribute_group version_group = {
 	.attrs = version_attrs,
 };
 
+void gh_get_virt_time_offset(struct gh_virt_time_offset *virt_time_offset)
+{
+	struct clock_read_data *rd;
+	unsigned int seq = 0;
+	u64 ns;
+
+	do {
+		rd = sched_clock_read_begin(&seq);
+		ns = mul_u64_u32_shr(rd->epoch_cyc, rd->mult, rd->shift);
+		virt_time_offset->offset = ns - rd->epoch_ns;
+		virt_time_offset->ns = rd->epoch_ns;
+	} while (sched_clock_read_retry(seq));
+}
+EXPORT_SYMBOL_GPL(gh_get_virt_time_offset);
+
+static ssize_t virt_time_offset_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buffer)
+{
+	struct gh_virt_time_offset virt_time_offset;
+
+	gh_get_virt_time_offset(&virt_time_offset);
+
+	return scnprintf(buffer, PAGE_SIZE, "%llu\n", virt_time_offset.offset);
+}
+static struct kobj_attribute virt_time_offset_attr =
+	__ATTR_RO(virt_time_offset);
+
 static int __init gh_sysfs_register(void)
 {
 	int ret;
 
 	ret = sysfs_create_file(hypervisor_kobj, &type_attr.attr);
+	if (ret)
+		return ret;
+
+	ret = sysfs_create_file(hypervisor_kobj, &virt_time_offset_attr.attr);
 	if (ret)
 		return ret;
 

@@ -119,8 +119,9 @@ extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 struct walt_cpu_load {
 	unsigned long	nl;
 	unsigned long	pl;
-	bool		rtgb_active;
+	unsigned long	non_boosted_load;
 	u64		ws;
+	bool		rtgb_active;
 	bool		ed_active;
 	bool		trailblazer_state;
 };
@@ -164,6 +165,7 @@ enum smart_freq_legacy_reason {
 	PIPELINE_90FPS_SMART_FREQ,
 	PIPELINE_120FPS_OR_GREATER_SMART_FREQ,
 	THERMAL_ROTATION_SMART_FREQ,
+	LRPB_SMART_FREQ,
 	LEGACY_SMART_FREQ,
 };
 
@@ -228,6 +230,7 @@ struct walt_sched_cluster {
 	unsigned int		max_possible_freq;
 	unsigned int		max_freq;
 	unsigned int		walt_internal_freq_limit;
+	unsigned long		pre_smart_freq_capacity;
 	u64			aggr_grp_load;
 	unsigned long		util_to_cost[1024];
 	u64			found_ts;
@@ -284,6 +287,70 @@ struct walt_rq {
 	u64			lrb_pipeline_start_time; /* lrb = long_running_boost */
 };
 
+#define MAX_ZONES 10
+#define ZONE_TUPLE_SIZE 2
+#define MAX_UTIL 1024
+
+struct waltgov_zones {
+	int util_thresh;
+	int inflate_factor;
+};
+
+struct waltgov_tunables {
+	struct gov_attr_set	attr_set;
+	unsigned int		up_rate_limit_us;
+	unsigned int		down_rate_limit_us;
+	unsigned int		hispeed_load;
+	unsigned int		hispeed_freq;
+	unsigned int		hispeed_cond_freq;
+	unsigned int		rtg_boost_freq;
+	unsigned int		adaptive_level_1;
+	unsigned int		adaptive_low_freq;
+	unsigned int		adaptive_high_freq;
+	unsigned int		adaptive_level_1_kernel;
+	unsigned int		adaptive_low_freq_kernel;
+	unsigned int		adaptive_high_freq_kernel;
+	bool			pl;
+	int			boost;
+	int			zone_util_pct[MAX_ZONES][ZONE_TUPLE_SIZE];
+};
+
+struct waltgov_policy {
+	struct cpufreq_policy	*policy;
+	u64			last_ws;
+	u64			curr_cycles;
+	u64			last_cyc_update_time;
+	unsigned long		avg_cap;
+	struct waltgov_tunables	*tunables;
+	struct list_head	tunables_hook;
+	unsigned long		hispeed_cond_util;
+	struct waltgov_zones	zone_util[MAX_ZONES];
+
+	raw_spinlock_t		update_lock;
+	u64			last_freq_update_time;
+	s64			min_rate_limit_ns;
+	s64			up_rate_delay_ns;
+	s64			down_rate_delay_ns;
+	unsigned int		next_freq;
+	unsigned int		cached_raw_freq;
+	unsigned int		driving_cpu;
+	unsigned int		ipc_smart_freq;
+
+	/* The next fields are only needed if fast switch cannot be used: */
+	struct	irq_work	irq_work;
+	struct	kthread_work	work;
+	struct	mutex		work_lock;
+	struct	kthread_worker	worker;
+	struct task_struct	*thread;
+
+	bool			limits_changed;
+	bool			need_freq_update;
+	bool			thermal_isolated;
+	bool			rtg_boost_flag;
+	bool			hispeed_flag;
+	bool			conservative_pl_flag;
+};
+
 DECLARE_PER_CPU(struct walt_rq, walt_rq);
 
 extern struct completion walt_get_cycle_counts_cb_completion;
@@ -299,8 +366,19 @@ extern int walt_cpufreq_cycle_cntr_driver_register(void);
 extern int walt_gclk_cycle_counter_driver_register(void);
 
 extern int num_sched_clusters;
-extern unsigned int sched_capacity_margin_up[WALT_NR_CPUS];
-extern unsigned int sched_capacity_margin_down[WALT_NR_CPUS];
+#define NUM_UPDOWN_SETTINGS 2
+enum sched_cgroup_type {
+	ANDROID_CGROUP_OTHER,
+	ANDROID_CGROUP_TOPAPP,
+	ANDROID_CGROUP_FOREGROUND,
+	ANDROID_CGROUP_BACKGROUND,
+	ANDROID_CGROUPS,
+};
+
+extern char *cgroup_names[ANDROID_CGROUPS];
+extern unsigned int sched_capacity_margin_up[ANDROID_CGROUPS][MAX_CLUSTERS];
+extern unsigned int sched_capacity_margin_down[ANDROID_CGROUPS][MAX_CLUSTERS];
+extern unsigned int use_cgroup_margin;
 extern cpumask_t asym_cap_sibling_cpus;
 extern cpumask_t pipeline_sync_cpus;
 extern cpumask_t storage_boost_cpus;
@@ -331,6 +409,7 @@ extern int sched_busy_hyst_handler(const struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos);
 extern u64 walt_sched_clock(void);
 extern void walt_init_tg(struct task_group *tg);
+extern void walt_init_background_tg(struct task_group *tg);
 extern void walt_init_topapp_tg(struct task_group *tg);
 extern void walt_init_foreground_tg(struct task_group *tg);
 extern int register_walt_callback(void);
@@ -552,6 +631,7 @@ struct walt_task_group {
 	 * particular boost type
 	 */
 	bool sched_boost_enable[MAX_NUM_BOOST_TYPE];
+	enum sched_cgroup_type group_type;
 };
 
 struct sched_avg_stats {
@@ -565,7 +645,22 @@ struct waltgov_callback {
 	void (*func)(struct waltgov_callback *cb, u64 time, unsigned int flags);
 };
 
+struct waltgov_cpu {
+	struct waltgov_callback	cb;
+	struct waltgov_policy	*wg_policy;
+	unsigned int		cpu;
+	struct walt_cpu_load	walt_load;
+	unsigned long		util;
+	unsigned int		flags;
+	unsigned int		reasons;
+	bool			rtg_boost_flag;
+	bool			hispeed_flag;
+	bool			conservative_pl_flag;
+};
+
 DECLARE_PER_CPU(struct waltgov_callback *, waltgov_cb_data);
+DECLARE_PER_CPU(struct waltgov_cpu, waltgov_cpu);
+DECLARE_PER_CPU(struct waltgov_tunables *, cached_tunables);
 
 static inline void waltgov_add_callback(int cpu, struct waltgov_callback *cb,
 			void (*func)(struct waltgov_callback *cb, u64 time,
@@ -807,7 +902,7 @@ static inline unsigned long capacity_of(int cpu)
 static inline bool __cpu_overutilized(int cpu, int delta)
 {
 	return (capacity_orig_of(cpu) * 1024) <
-		((cpu_util(cpu) + delta) * sched_capacity_margin_up[cpu]);
+		((cpu_util(cpu) + delta) * sched_capacity_margin_up[0][cpu_cluster(cpu)->id]);
 }
 
 static inline bool cpu_overutilized(int cpu)
@@ -1007,26 +1102,44 @@ static bool check_for_higher_capacity(int cpu1, int cpu2)
 	return capacity_orig_of(cpu1) > capacity_orig_of(cpu2);
 }
 
-/* Migration margins for topapp */
-extern unsigned int sched_capacity_margin_early_up[WALT_NR_CPUS];
-extern unsigned int sched_capacity_margin_early_down[WALT_NR_CPUS];
 static inline bool task_fits_capacity(struct task_struct *p,
 					int dst_cpu)
 {
+	struct cgroup_subsys_state *css;
+	struct task_group *tg;
+	struct walt_task_group *wtg;
 	unsigned int margin;
 	unsigned long capacity = capacity_orig_of(dst_cpu);
+	bool down = check_for_higher_capacity(task_cpu(p), dst_cpu);
+	int id, cgroup_type = 0;
 
+	rcu_read_lock();
+	css = task_css(p, cpu_cgrp_id);
+	if (!css || !strlen(css->cgroup->kn->name))
+		goto finish;
+	tg = container_of(css, struct task_group, css);
+	wtg = (struct walt_task_group *) tg->android_vendor_data1;
+	cgroup_type = wtg->group_type;
+
+finish:
+	rcu_read_unlock();
+
+	if (!use_cgroup_margin)
+		cgroup_type = ANDROID_CGROUP_OTHER;
 	/*
 	 * Derive upmigration/downmigrate margin wrt the src/dest CPU.
 	 */
-	if (check_for_higher_capacity(task_cpu(p), dst_cpu)) {
-		margin = sched_capacity_margin_down[dst_cpu];
+	if (down) {
+		id = cpu_cluster(dst_cpu)->id;
+		margin = sched_capacity_margin_down[cgroup_type][id];
 		if (task_in_related_thread_group(p))
-			margin = max(margin, sched_capacity_margin_early_down[dst_cpu]);
+			margin = max(margin, sched_capacity_margin_down[ANDROID_CGROUP_TOPAPP][id]);
+
 	} else {
-		margin = sched_capacity_margin_up[task_cpu(p)];
+		id = cpu_cluster(task_cpu(p))->id;
+		margin = sched_capacity_margin_up[cgroup_type][id];
 		if (task_in_related_thread_group(p))
-			margin = max(margin, sched_capacity_margin_early_up[task_cpu(p)]);
+			margin = max(margin, sched_capacity_margin_up[ANDROID_CGROUP_TOPAPP][id]);
 	}
 
 	return capacity * 1024 > uclamp_task_util(p) * margin;
@@ -1531,6 +1644,7 @@ extern bool move_storage_load(struct rq *rq);
 extern u8 contiguous_yielding_windows;
 #define NUM_PIPELINE_BUSY_THRES 3
 extern unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
+extern inline bool cluster_in_smart_lrpb(struct walt_sched_cluster *cluster);
 #define NUM_LOAD_SYNC_SETTINGS 3
 extern unsigned int sysctl_cluster01_load_sync[NUM_LOAD_SYNC_SETTINGS];
 extern unsigned int sysctl_cluster01_load_sync_60fps[NUM_LOAD_SYNC_SETTINGS];

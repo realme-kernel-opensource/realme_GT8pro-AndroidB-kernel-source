@@ -1,0 +1,24 @@
+def register_modules(registry):
+    registry.register(
+        name = "net/core/failover",
+        out = "failover.ko",
+        config = "CONFIG_FAILOVER",
+        srcs = [
+            # do not sort
+            "net/core/failover.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/net/net_failover",
+        out = "net_failover.ko",
+        config = "CONFIG_NET_FAILOVER",
+        srcs = [
+            # do not sort
+            "drivers/net/net_failover.c",
+        ],
+        deps = [
+            # do not sort
+            "net/core/failover",
+        ],
+    )
