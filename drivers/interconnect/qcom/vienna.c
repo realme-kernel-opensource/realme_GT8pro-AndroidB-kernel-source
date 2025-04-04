@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -50,7 +50,7 @@ static struct qcom_icc_node qhm_qdss_bam = {
 	.links = { SLAVE_A1NOC_SNOC },
 };
 
-static struct qcom_icc_qosbox qhm_qup0_qos = {
+static struct qcom_icc_qosbox qhm_qup1_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 1,
 	.offsets = { 0x17000 },
@@ -61,13 +61,13 @@ static struct qcom_icc_qosbox qhm_qup0_qos = {
 	},
 };
 
-static struct qcom_icc_node qhm_qup0 = {
-	.name = "qhm_qup0",
-	.id = MASTER_QUP_0,
+static struct qcom_icc_node qhm_qup1 = {
+	.name = "qhm_qup1",
+	.id = MASTER_QUP_1,
 	.channels = 1,
 	.buswidth = 4,
 	.noc_ops = &qcom_qnoc4_ops,
-	.qosbox = &qhm_qup0_qos,
+	.qosbox = &qhm_qup1_qos,
 	.num_links = 1,
 	.links = { SLAVE_A1NOC_SNOC },
 };
@@ -226,14 +226,14 @@ static struct qcom_icc_node xm_usb2_0 = {
 	.links = { SLAVE_A1NOC_SNOC },
 };
 
-static struct qcom_icc_node qup0_core_master = {
-	.name = "qup0_core_master",
-	.id = MASTER_QUP_CORE_0,
+static struct qcom_icc_node qup1_core_master = {
+	.name = "qup1_core_master",
+	.id = MASTER_QUP_CORE_1,
 	.channels = 1,
 	.buswidth = 4,
 	.noc_ops = &qcom_qnoc4_ops,
 	.num_links = 1,
-	.links = { SLAVE_QUP_CORE_0 },
+	.links = { SLAVE_QUP_CORE_1 },
 };
 
 static struct qcom_icc_node qsm_cfg = {
@@ -249,7 +249,7 @@ static struct qcom_icc_node qsm_cfg = {
 		   SLAVE_IMEM_CFG, SLAVE_IPC_ROUTER_CMP_L0,
 		   SLAVE_IPC_ROUTER_CMP_L1, SLAVE_IPC_ROUTER_PERIPH,
 		   SLAVE_CNOC_MSS, SLAVE_QDSS_CFG,
-		   SLAVE_QUP_0, SLAVE_SDCC_1,
+		   SLAVE_QUP_1, SLAVE_SDCC_1,
 		   SLAVE_SDCC_2, SLAVE_TCSR,
 		   SLAVE_TLMM, SLAVE_USB2_0,
 		   SLAVE_VENUS_CFG, SLAVE_VSENSE_CTRL_CFG,
@@ -820,9 +820,9 @@ static struct qcom_icc_node qns_a1noc_snoc = {
 	.links = { MASTER_A1NOC_SNOC },
 };
 
-static struct qcom_icc_node qup0_core_slave = {
-	.name = "qup0_core_slave",
-	.id = SLAVE_QUP_CORE_0,
+static struct qcom_icc_node qup1_core_slave = {
+	.name = "qup1_core_slave",
+	.id = SLAVE_QUP_CORE_1,
 	.channels = 1,
 	.buswidth = 4,
 	.init_peak = INT_MAX,
@@ -939,9 +939,9 @@ static struct qcom_icc_node qhs_qdss_cfg = {
 	.num_links = 0,
 };
 
-static struct qcom_icc_node qhs_qup0 = {
-	.name = "qhs_qup0",
-	.id = SLAVE_QUP_0,
+static struct qcom_icc_node qhs_qup1 = {
+	.name = "qhs_qup1",
+	.id = SLAVE_QUP_1,
 	.channels = 1,
 	.buswidth = 4,
 	.noc_ops = &qcom_qnoc4_ops,
@@ -1404,7 +1404,7 @@ static struct qcom_icc_bcm bcm_cn1 = {
 	.name = "CN1",
 	.voter_idx = VOTER_IDX_HLOS,
 	.num_nodes = 2,
-	.nodes = { &qhs_qup0, &qhs_display_cfg },
+	.nodes = { &qhs_qup1, &qhs_display_cfg },
 };
 
 static struct qcom_icc_bcm bcm_co0 = {
@@ -1447,12 +1447,12 @@ static struct qcom_icc_bcm bcm_mm1 = {
 		   &qxm_video_v_cpu, &qns_mem_noc_sf },
 };
 
-static struct qcom_icc_bcm bcm_qup0 = {
-	.name = "QUP0",
+static struct qcom_icc_bcm bcm_qup1 = {
+	.name = "QUP1",
 	.voter_idx = VOTER_IDX_HLOS,
 	.vote_scale = 1,
 	.num_nodes = 1,
-	.nodes = { &qup0_core_slave },
+	.nodes = { &qup1_core_slave },
 };
 
 static struct qcom_icc_bcm bcm_sh0 = {
@@ -1552,7 +1552,7 @@ static struct qcom_icc_bcm *aggre_noc_bcms[] = {
 
 static struct qcom_icc_node *aggre_noc_nodes[] = {
 	[MASTER_QDSS_BAM] = &qhm_qdss_bam,
-	[MASTER_QUP_0] = &qhm_qup0,
+	[MASTER_QUP_1] = &qhm_qup1,
 	[MASTER_CRYPTO] = &qxm_crypto,
 	[MASTER_IPA] = &qxm_ipa,
 	[MASTER_QDSS_ETR] = &xm_qdss_etr_0,
@@ -1578,12 +1578,12 @@ static struct qcom_icc_desc vienna_aggre_noc = {
 };
 
 static struct qcom_icc_bcm *clk_virt_bcms[] = {
-	&bcm_qup0,
+	&bcm_qup1,
 };
 
 static struct qcom_icc_node *clk_virt_nodes[] = {
-	[MASTER_QUP_CORE_0] = &qup0_core_master,
-	[SLAVE_QUP_CORE_0] = &qup0_core_slave,
+	[MASTER_QUP_CORE_1] = &qup1_core_master,
+	[SLAVE_QUP_CORE_1] = &qup1_core_slave,
 };
 
 static char *clk_virt_voters[] = {
@@ -1619,7 +1619,7 @@ static struct qcom_icc_node *cnoc_cfg_nodes[] = {
 	[SLAVE_IPC_ROUTER_PERIPH] = &qhs_ipc_router_periph,
 	[SLAVE_CNOC_MSS] = &qhs_mss_cfg,
 	[SLAVE_QDSS_CFG] = &qhs_qdss_cfg,
-	[SLAVE_QUP_0] = &qhs_qup0,
+	[SLAVE_QUP_1] = &qhs_qup1,
 	[SLAVE_SDCC_1] = &qhs_sdc1,
 	[SLAVE_SDCC_2] = &qhs_sdc2,
 	[SLAVE_TCSR] = &qhs_tcsr,
