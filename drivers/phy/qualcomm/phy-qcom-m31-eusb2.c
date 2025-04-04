@@ -125,6 +125,9 @@ struct m31eusb2_phy {
 	struct clk			 *ref_clk;
 
 	struct phy			 *repeater;
+	bool				 clocks_enabled;
+	bool				 power_enabled;
+	bool				 repeater_enabled;
 };
 
 static int m31eusb2_phy_write_readback(void __iomem *base, u32 offset,
@@ -182,7 +185,10 @@ static int m31eusb2_phy_set_mode(struct phy *uphy, enum phy_mode mode, int submo
 
 static int m31eusb2_phy_clocks(struct m31eusb2_phy *phy, bool on)
 {
-	int ret = 0;
+	int ret;
+
+	if (phy->clocks_enabled == on)
+		return 0;
 
 	if (on) {
 		ret = clk_prepare_enable(phy->ref_clk_src);
@@ -197,8 +203,47 @@ static int m31eusb2_phy_clocks(struct m31eusb2_phy *phy, bool on)
 
 		clk_disable_unprepare(phy->ref_clk_src);
 	}
+	phy->clocks_enabled = on;
 
-	return ret;
+	return 0;
+}
+
+static int m31eusb2_phy_power(struct m31eusb2_phy *phy, bool on)
+{
+	int ret;
+
+	if (phy->power_enabled == on)
+		return 0;
+
+	if (on) {
+		ret = regulator_bulk_enable(M31_EUSB_NUM_VREGS, phy->vregs);
+		if (ret)
+			return ret;
+	} else {
+		regulator_bulk_disable(M31_EUSB_NUM_VREGS, phy->vregs);
+	}
+	phy->power_enabled = on;
+
+	return 0;
+}
+
+static int m31eusb2_phy_repeater_init(struct m31eusb2_phy *phy, bool init)
+{
+	int ret;
+
+	if (phy->repeater_enabled == init)
+		return 0;
+
+	if (init) {
+		ret = phy_init(phy->repeater);
+		if (ret)
+			return ret;
+	} else {
+		phy_exit(phy->repeater);
+	}
+	phy->repeater_enabled = init;
+
+	return 0;
 }
 
 static int m31eusb2_phy_init(struct phy *uphy)
@@ -207,13 +252,13 @@ static int m31eusb2_phy_init(struct phy *uphy)
 	const struct m31_eusb2_priv_data *data = phy->data;
 	int ret;
 
-	ret = regulator_bulk_enable(M31_EUSB_NUM_VREGS, phy->vregs);
+	ret = m31eusb2_phy_power(phy, true);
 	if (ret) {
 		dev_err(&uphy->dev, "failed to enable regulator, %d\n", ret);
 		return ret;
 	}
 
-	ret = phy_init(phy->repeater);
+	ret = m31eusb2_phy_repeater_init(phy, true);
 	if (ret) {
 		dev_err(&uphy->dev, "repeater init failed. %d\n", ret);
 		goto disable_vreg;
@@ -240,9 +285,9 @@ static int m31eusb2_phy_init(struct phy *uphy)
 	return 0;
 
 disable_repeater:
-	phy_exit(phy->repeater);
+	m31eusb2_phy_repeater_init(phy, false);
 disable_vreg:
-	regulator_bulk_disable(M31_EUSB_NUM_VREGS, phy->vregs);
+	m31eusb2_phy_power(phy, false);
 
 	return 0;
 }
@@ -252,8 +297,8 @@ static int m31eusb2_phy_exit(struct phy *uphy)
 	struct m31eusb2_phy *phy = phy_get_drvdata(uphy);
 
 	m31eusb2_phy_clocks(phy, false);
-	regulator_bulk_disable(M31_EUSB_NUM_VREGS, phy->vregs);
-	phy_exit(phy->repeater);
+	m31eusb2_phy_repeater_init(phy, false);
+	m31eusb2_phy_power(phy, false);
 
 	return 0;
 }
