@@ -1020,4 +1020,16 @@ config QCOM_PMIC_ECID
 	  This driver reads the chipset ECID details from the respective address and
 	  exposes the details via sysfs interface.
 	  This helps in identification of PMIC part information.
+
+config QCOM_MSM_IPCC
+	tristate "Qualcomm Technologies, Inc. IPCC driver"
+	depends on MAILBOX
+	help
+	  Qualcomm Technologies, Inc. IPCC driver for MSM devices. The drivers
+	  acts as an interrupt controller for the clients interested in
+	  talking to the IPCC (inbound-communication). On the other hand, the
+	  driver also provides a mailbox channel for outbound-communications.
+	  Say Y here to compile the driver as a part of kernel or M to compile
+	  as a module.
+
 endmenu

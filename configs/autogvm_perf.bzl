@@ -116,4 +116,5 @@ autogvm_perf_config = {
     "CONFIG_USB_DWC3_MSM": "m",
     "CONFIG_QCOM_MINIDUMP": "m",
     "CONFIG_QCOM_VA_MINIDUMP": "m",
+    "CONFIG_QCOM_MSM_IPCC": "m",
 }
