@@ -150,7 +150,7 @@ static const char * const drv_names_vienna[][MAX_DRV_NAMES] = {
 			"AUDIO CESTA", "AOP", "DEBUG", "GPU", "DISPLAY", "COMPUTE_DSP",
 			"TME_HW", "TME_SW", "MDM SW", "MDM HW", "MDM Q6 CESTA", "WLAN RF",
 			"WLAN BB", "CAM_IFE0 CESTA", "CAM_IFE1", "CAM_IFE2", "PCI0 CESTA",
-			"DDR AUX", "ARC CPRF"},
+			"DDR AUX", "ARC CPRF", ""},
 	[AOSS_DRV_NAME] = {"APPS", "SP", "AUDIO", "AOP", "DEBUG", "GPU", "DISPLAY", "COMPUTE",
 			"TME", "MODEM", "WLAN_RF", "WLAN BB", "CAM", "PCIE", ""},
 };
