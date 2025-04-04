@@ -17,6 +17,7 @@ COPY_FILES = [
     "drivers/block/virtio_blk.c",
     "net/core/failover.c",
     "drivers/net/net_failover.c",
+    "drivers/net/virtio_net.c",
 ]
 
 def define_common_upstream_files():
