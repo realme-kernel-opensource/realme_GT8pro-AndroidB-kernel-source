@@ -23,3 +23,17 @@ def register_modules(registry):
             "drivers/soc/qcom/panel_event_notifier",
         ],
     )
+
+    registry.register(
+        name = "drivers/hwmon/qti_btl",
+        out = "qti_btl.ko",
+        config = "CONFIG_SENSORS_QTI_BTL",
+        srcs = [
+            # do not sort
+            "drivers/hwmon/qti_btl.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/hwmon/hwmon",
+        ],
+    )
