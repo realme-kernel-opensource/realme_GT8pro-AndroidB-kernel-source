@@ -87,3 +87,4 @@ qcom_tzmem.ko
 icc-clk.ko
 cqhci.ko
 sdhci-msm.ko
+deferred-free-helper.ko
