@@ -48,7 +48,7 @@ static const struct alpha_pll_config eva_cc_pll0_config = {
 	.cal_l = 0x48,
 	.alpha = 0xb000,
 	.config_ctl_val = 0x25c400e7,
-	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi_val = 0x0a8062e0,
 	.config_ctl_hi1_val = 0xf51dea20,
 	.user_ctl_val = 0x00000008,
 	.user_ctl_hi_val = 0x00000002,
@@ -72,7 +72,7 @@ static struct clk_alpha_pll eva_cc_pll0 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -441,12 +441,15 @@ static int eva_cc_canoe_probe(struct platform_device *pdev)
 
 	ret = qcom_cc_really_probe(&pdev->dev, &eva_cc_canoe_desc, regmap);
 	if (ret) {
-		dev_err(&pdev->dev, "Failed to register EVA CC clocks ret=%d\n", ret);
-		return ret;
+		if (ret != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "Failed to register EVA CC clocks ret=%d\n", ret);
+		goto err;
 	}
 
-	pm_runtime_put_sync(&pdev->dev);
 	dev_info(&pdev->dev, "Registered EVA CC clocks\n");
+
+err:
+	pm_runtime_put_sync(&pdev->dev);
 
 	return ret;
 }
