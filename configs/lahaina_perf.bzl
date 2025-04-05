@@ -25,7 +25,6 @@ lahaina_perf_config = {
     "CONFIG_SC_DISPCC_7280": "m",
     "CONFIG_SC_GPUCC_7280": "m",
     "CONFIG_SC_VIDEOCC_7280": "m",
-    "CONFIG_SC_DEBUGCC_7280": "m",
     "CONFIG_CORESIGHT_CSR": "m",
     "CONFIG_CORESIGHT_CTI": "m",
     "CONFIG_CORESIGHT_DUMMY": "m",
