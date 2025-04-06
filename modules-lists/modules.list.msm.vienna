@@ -36,6 +36,7 @@ stub-regulator.ko
 clk-dummy.ko
 icc-clk.ko
 clk-qcom.ko
+gic_intr_routing.ko
 gdsc-regulator.ko
 smem.ko
 socinfo.ko
