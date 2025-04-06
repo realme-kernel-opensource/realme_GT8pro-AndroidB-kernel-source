@@ -536,9 +536,10 @@ resp_fill:
 static void handle_query_size_req(struct qmi_handle *handle,
 	struct sockaddr_qrtr *sq, struct qmi_txn *txn, const void *decoded_msg)
 {
-	int rc, index = DHMS_MEM_CLIENT_INVALID;
+	int rc, i, index = DHMS_MEM_CLIENT_INVALID;
 	struct mem_query_size_req_msg_v01 *query_req;
 	struct mem_query_size_rsp_msg_v01 *query_resp;
+	struct memshare_child *client_node = NULL;
 
 	mutex_lock(&memsh_drv->mem_share);
 	query_req = (struct mem_query_size_req_msg_v01 *)decoded_msg;
@@ -565,9 +566,35 @@ static void handle_query_size_req(struct qmi_handle *handle,
 		goto resp_fill;
 	}
 
+	for (i = 0; i < num_clients; i++) {
+		if (memsh_child[i]->client_id == query_req->client_id) {
+			client_node = memsh_child[i];
+			dev_dbg(memsh_drv->dev,
+				"memshare_query: found client with client_id: %d, index: %d\n",
+				query_req->client_id, index);
+			break;
+		}
+	}
+
+	if (!client_node) {
+		dev_err(memsh_drv->dev,
+			"memshare_query: No valid client node found\n");
+		mutex_unlock(&memsh_drv->mem_share);
+		goto resp_fill;
+	}
+
 	if (memblock[index].init_size) {
 		query_resp->size_valid = 1;
-		query_resp->size = memblock[index].init_size;
+
+		if (client_node->dynamic_size) {
+
+			if (client_node->dynamic_size > memblock[index].dynamic_size_max)
+				client_node->dynamic_size = memblock[index].dynamic_size_max;
+
+			query_resp->size = client_node->dynamic_size;
+		} else {
+			query_resp->size = memblock[index].init_size;
+		}
 	} else {
 		query_resp->size_valid = 1;
 		query_resp->size = 0;
