@@ -65,6 +65,7 @@ gunyah_rsc_mgr.ko
 qcom_edac.ko
 qcom_aoss.ko
 msm_qmp.ko
+qcom-reboot-reason.ko
 qrtr.ko
 gcc-vienna.ko
 gpucc-vienna.ko
