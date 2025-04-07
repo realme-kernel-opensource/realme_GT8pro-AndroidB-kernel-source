@@ -86,6 +86,9 @@ unsigned int __read_mostly sched_init_task_load_windows;
  */
 unsigned int __read_mostly sched_load_granule;
 
+static u64 last_migration_irqwork_ts;
+static u64 last_rollover_irqwork_ts;
+
 bool walt_is_idle_task(struct task_struct *p)
 {
 	return walt_flag_test(p, WALT_IDLE_TASK_BIT);
@@ -313,6 +316,9 @@ void walt_dump(void)
 			sched_ravg_window_change_time);
 	printk_deferred("global_ws=%llu\n",
 			 atomic64_read(&walt_irq_work_lastq_ws));
+
+	printk_deferred("last_migration_irqwork_ts=%llu last_rollover_irqwork_ts=%llu\n",
+			last_migration_irqwork_ts, last_rollover_irqwork_ts);
 	SCHED_PRINT(sched_ravg_window);
 	SCHED_PRINT(new_sched_ravg_window);
 	for_each_online_cpu(cpu)
@@ -4156,6 +4162,11 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 		}
 		spin_unlock_irqrestore(&sched_ravg_window_lock, flags);
 	}
+
+	if (!is_migration)
+		last_migration_irqwork_ts = wc;
+	else
+		last_rollover_irqwork_ts = wc;
 }
 
 /**
