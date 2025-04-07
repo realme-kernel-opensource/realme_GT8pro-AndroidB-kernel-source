@@ -82,6 +82,8 @@ struct qcom_spss {
 
 	struct reg_info cx;
 
+	struct reg_info sensors;
+
 	int pas_id;
 
 	struct completion start_done;
@@ -450,6 +452,80 @@ static int spss_load(struct rproc *rproc, const struct firmware *fw)
 	return res;
 }
 
+static int spss_disable_regulator(struct qcom_spss *spss, struct reg_info *regulator)
+{
+	int ret;
+
+	if (!regulator->reg)
+		return 0;
+
+	ret = regulator_disable(regulator->reg);
+	if (ret != 0) {
+		dev_err(spss->dev, "Disable regulator failed [%d]\n", ret);
+		goto finish;
+	}
+
+	ret = regulator_set_voltage(regulator->reg, 0, INT_MAX);
+	if (ret != 0) {
+		dev_err(spss->dev, "Set voltage %d failed [%d]\n", 0, ret);
+		goto set_voltage_fail;
+	}
+
+	ret = regulator_set_load(regulator->reg, 0);
+	if (ret != 0) {
+		dev_err(spss->dev, "Set load %d failed [%d]\n", 0, ret);
+		goto set_load_fail;
+	}
+
+	goto finish;
+
+set_load_fail:
+	regulator_set_voltage(regulator->reg, regulator->uV, INT_MAX);
+
+set_voltage_fail:
+	(void)regulator_enable(regulator->reg);
+
+finish:
+	return ret;
+}
+
+static int spss_enable_regulator(struct qcom_spss *spss, struct reg_info *regulator)
+{
+	int ret;
+
+	if (!regulator->reg)
+		return 0;
+
+	ret = regulator_set_voltage(regulator->reg, regulator->uV, INT_MAX);
+	if (ret != 0) {
+		dev_err(spss->dev, "Set voltage %d failed [%d]\n", regulator->uV, ret);
+		goto finish;
+	}
+
+	ret = regulator_set_load(regulator->reg, regulator->uA);
+	if (ret != 0) {
+		dev_err(spss->dev, "Set load %d failed [%d]\n", regulator->uA, ret);
+		goto set_load_fail;
+	}
+
+	ret = regulator_enable(regulator->reg);
+	if (ret != 0) {
+		dev_err(spss->dev, "Enable regulator failed [%d]\n", ret);
+		goto enable_fail;
+	}
+
+	goto finish;
+
+enable_fail:
+	(void)regulator_set_load(regulator->reg, 0);
+
+set_load_fail:
+	regulator_set_voltage(regulator->reg, 0, INT_MAX);
+
+finish:
+	return ret;
+}
+
 static int spss_stop(struct rproc *rproc)
 {
 	struct qcom_spss *spss = (struct qcom_spss *)rproc->priv;
@@ -473,7 +549,7 @@ static int spss_stop(struct rproc *rproc)
 static int spss_attach(struct rproc *rproc)
 {
 	struct qcom_spss *spss = (struct qcom_spss *)rproc->priv;
-	int ret = 0;
+	int ret = 0, regulator_ret = 0;
 
 	/* If rproc already crashed stop it and propagate error */
 	if (check_status(spss, &ret)) {
@@ -498,6 +574,23 @@ static int spss_attach(struct rproc *rproc)
 
 	ret = wait_for_completion_timeout(&spss->start_done, msecs_to_jiffies(SPSS_TIMEOUT));
 	read_sp2cl_debug_registers(spss);
+
+	/*
+	 * Disable sensors regulator regardless of SPSS is up or not.
+	 * Prior to Disablement, perform enable the regulator,
+	 * to keep votes' ref count non-negative.
+	 * Do not check return value on enablement and disablement.
+	 * If voting fails, a message will be printed and most likely
+	 * that we'll crash anyway as SPU did not go up well.
+	 */
+	regulator_ret = spss_enable_regulator(spss, &spss->sensors);
+	if (regulator_ret)
+		dev_err(spss->dev, "Failed to enable sensors regulator [%d]\n", regulator_ret);
+
+	regulator_ret = spss_disable_regulator(spss, &spss->sensors);
+	if (regulator_ret)
+		dev_err(spss->dev, "Failed to disable sensors regulator [%d]\n", regulator_ret);
+
 	if (rproc->recovery_disabled && !ret) {
 		dev_err(spss->dev, "%d ms timeout poked\n", SPSS_TIMEOUT);
 		dev_err(spss->dev, "%s attach timed out\n", rproc->name);
@@ -518,20 +611,6 @@ static int spss_attach(struct rproc *rproc)
 	return ret;
 }
 
-static inline void disable_regulator(struct reg_info *regulator)
-{
-	regulator_set_voltage(regulator->reg, 0, INT_MAX);
-	regulator_set_load(regulator->reg, 0);
-	regulator_disable(regulator->reg);
-}
-
-static inline int enable_regulator(struct reg_info *regulator)
-{
-	regulator_set_voltage(regulator->reg, regulator->uV, INT_MAX);
-	regulator_set_load(regulator->reg, regulator->uA);
-	return regulator_enable(regulator->reg);
-}
-
 static int spss_start(struct rproc *rproc)
 {
 	struct qcom_spss *spss = (struct qcom_spss *)rproc->priv;
@@ -542,9 +621,13 @@ static int spss_start(struct rproc *rproc)
 	if (ret)
 		return ret;
 
-	ret = enable_regulator(&spss->cx);
+	ret = spss_enable_regulator(spss, &spss->cx);
 	if (ret)
 		goto disable_xo_clk;
+
+	ret = spss_enable_regulator(spss, &spss->sensors);
+	if (ret)
+		goto disable_cx_reg;
 
 	/* Signal AOP about spss status. */
 	if (spss->qmp) {
@@ -552,7 +635,7 @@ static int spss_start(struct rproc *rproc)
 		if (status) {
 			dev_err(spss->dev,
 			"Failed to signal AOP about spss status [%d]\n", status);
-			goto disable_xo_clk;
+			goto disable_sensors_reg;
 		}
 	}
 
@@ -578,7 +661,22 @@ static int spss_start(struct rproc *rproc)
 			"Failed to signal AOP about spss status [%d]\n", status);
 	}
 
-	disable_regulator(&spss->cx);
+disable_sensors_reg:
+	/*
+	 * Do not check return value as we may already be
+	 * in an error flow.
+	 * In case of failure, an error message will be printed.
+	 */
+	spss_disable_regulator(spss, &spss->sensors);
+
+disable_cx_reg:
+	/*
+	 * Do not check return value as we may already be
+	 * in an error flow.
+	 * In case of failure, an error message will be printed.
+	 */
+	spss_disable_regulator(spss, &spss->cx);
+
 disable_xo_clk:
 	clk_disable_unprepare(spss->xo);
 	return ret;
@@ -797,6 +895,12 @@ static int qcom_spss_probe(struct platform_device *pdev)
 	ret = init_regulator(spss->dev, &spss->cx, "cx");
 	if (ret)
 		goto deinit_wakeup_source;
+
+	if (of_find_property(pdev->dev.of_node, "sensors-supply", NULL)) {
+		ret = init_regulator(spss->dev, &spss->sensors, "sensors");
+		if (ret)
+			goto deinit_wakeup_source;
+	}
 
 	spss->qmp = qmp_get(spss->dev);
 	if (IS_ERR(spss->qmp)) {
