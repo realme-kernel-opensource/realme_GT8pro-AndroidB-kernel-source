@@ -1,6 +1,8 @@
 lahaina_perf_config = {
     # keep sorted
     "CONFIG_ARCH_YUPIK": "y",
+    "CONFIG_ARM_QCOM_CPUFREQ_HW": "m",
+    "CONFIG_ARM_QCOM_CPUFREQ_HW_DEBUG": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_NVMEM": "n",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
@@ -37,7 +39,6 @@ lahaina_perf_config = {
     "CONFIG_CORESIGHT_TPDA": "m",
     "CONFIG_CORESIGHT_TPDM": "m",
     "CONFIG_CORESIGHT_TRACE_NOC": "m",
-    "CONFIG_CORESIGHT_UETM": "m",
     "CONFIG_CPU_IDLE_GOV_QCOM_LPM": "m",
     "CONFIG_DEVFREQ_GOV_QCOM_ADRENO_TZ": "m",
     "CONFIG_DEVFREQ_GOV_QCOM_GPUBW_MON": "m",
@@ -45,6 +46,7 @@ lahaina_perf_config = {
     "CONFIG_DRM_DISPLAY_HELPER": "m",
     "CONFIG_DRM_MSM_HELPER": "m",
     "CONFIG_EDAC_QCOM": "m",
+    "CONFIG_EDAC_KRYO_ARM64": "m",
     "CONFIG_FTRACE_STARTUP_TEST": "n",
     "CONFIG_GH_ARM64_DRV": "m",
     "CONFIG_GH_CTRL": "m",
@@ -239,8 +241,6 @@ lahaina_perf_config = {
     "CONFIG_QTI_PMIC_GLINK": "m",
     "CONFIG_QTI_PMIC_GLINK_DEBUG": "m",
     "CONFIG_QTI_PMIC_PON_LOG": "m",
-    "CONFIG_QTI_QCOM_SCMI_CLIENT": "m",
-    "CONFIG_QTI_SCMI_VENDOR_PROTOCOL": "m",
     "CONFIG_QTI_SYS_PM_VX": "n",
     "CONFIG_QTI_THERMALZONE_CONFIG_DEBUG": "m",
     "CONFIG_R8712U": "n",
