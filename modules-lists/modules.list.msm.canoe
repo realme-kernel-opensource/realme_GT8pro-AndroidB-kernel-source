@@ -88,7 +88,6 @@ phy-qcom-ufs-qmp-v4-canoe.ko
 sg.ko
 gh_arm_drv.ko
 gh_dbl.ko
-gh_mem_notifier.ko
 gh_msgq.ko
 gh_vcpu_mgr.ko
 gh_rm_drv.ko
