@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/err.h>
@@ -626,7 +626,7 @@ static int msm_m31_eusb2_phy_set_suspend(struct usb_phy *uphy, int suspend)
 		}
 
 		/* With EUD spoof disconnect, keep clk and ldos on */
-		if (phy->phy.flags & EUD_SPOOF_DISCONNECT)
+		if (phy->phy.flags & EUD_SPOOF_DISCONNECT || is_eud_debug_mode_active(phy))
 			goto suspend_exit;
 
 		if (phy->ref_clk && phy->ref_clk_enable) {
