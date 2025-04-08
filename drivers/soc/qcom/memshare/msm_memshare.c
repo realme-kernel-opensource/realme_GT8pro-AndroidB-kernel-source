@@ -328,7 +328,7 @@ static void handle_alloc_generic_req(struct qmi_handle *handle,
 	for (i = 0; i < num_clients; i++) {
 		if (memsh_child[i]->client_id == alloc_req->client_id) {
 			client_node = memsh_child[i];
-			dev_info(memsh_drv->dev,
+			dev_dbg(memsh_drv->dev,
 				"memshare_alloc: found client with client_id: %d, index: %d\n",
 				alloc_req->client_id, index);
 			break;
@@ -713,26 +713,42 @@ static void memshare_init_worker(struct work_struct *work)
 static ssize_t dynamic_size_show(struct kobject *kobj, struct kobj_attribute *attr,
 		char *buf)
 {
-	struct memshare_child *client;
+	struct memshare_child *client = NULL;
 
-	client = container_of(kobj, struct memshare_child, kobject_member);
+	for (int i = 0; i < MAX_CLIENTS; i++) {
+		if (memsh_child[i]->client_kobject == kobj) {
+			client = memsh_child[i];
+			dev_dbg(memsh_drv->dev, "memshare: client match with id: %d\n",
+				client->client_id);
+			break;
+		}
+	}
+
 	if (!client) {
 		dev_err(memsh_drv->dev, "memshare: Read request for invalid client\n");
 		return -EINVAL;
 	}
+
 	return scnprintf(buf, PAGE_SIZE, "%u\n", client->dynamic_size);
 }
 
 static ssize_t dynamic_size_store(struct kobject *kobj, struct kobj_attribute *attr,
 		const char *buf, size_t size_count)
 {
-	struct memshare_child *client;
+	struct memshare_child *client = NULL;
 	int ret;
 
-	client = container_of(kobj, struct memshare_child, kobject_member);
+	for (int i = 0; i < MAX_CLIENTS; i++) {
+		if (memsh_child[i]->client_kobject == kobj) {
+			client = memsh_child[i];
+			dev_dbg(memsh_drv->dev, "memshare: client match with id: %d\n",
+				client->client_id);
+			break;
+		}
+	}
+
 	if (!client) {
-		dev_err(memsh_drv->dev,
-			"memshare: Write request for invalid client\n");
+		dev_err(memsh_drv->dev, "memshare: Write request for invalid client\n");
 		return -EINVAL;
 	}
 
