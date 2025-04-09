@@ -2099,6 +2099,24 @@ static void ufs_qcom_set_tx_hs_equalizer(struct ufs_hba *hba,
 	u32 equalizer_val = 0;
 	int ret, i;
 
+	/*
+	 * There are two methods to enable the TX de-emphasis.
+	 * The first method involves setting the UFS PHY register
+	 * UFS_PHY_TX_POST_EMP_xx_xx during the PHY calibration and
+	 * one time setting after phy init.
+	 * The second method involves sending a DME command to select
+	 * the TX_HS_EQUALIZER setting prior to each PMC command.
+	 * Only one method should be implemented. Not both.
+	 */
+	ret = ufs_qcom_phy_tx_hs_equalizer_config(phy);
+	if (!ret)
+		return;
+
+	/*
+	 * Try the second method. With this method, the UFS_PHY_TX_POST_EMP_xx_xx
+	 * regiter should not have been set (use its default setting) during the
+	 * phy calibration.
+	 */
 	ret = ufs_qcom_phy_get_tx_hs_equalizer(phy, gear, &equalizer_val);
 	if (ret)
 		return;
