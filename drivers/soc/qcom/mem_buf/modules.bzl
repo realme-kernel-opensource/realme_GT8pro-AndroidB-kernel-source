@@ -31,6 +31,7 @@ def register_modules(registry):
             "drivers/firmware/qcom/qcom-scm",
             "drivers/virt/gunyah/gh_rm_drv",
             "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_mem_notifier",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
         ],

@@ -1158,6 +1158,16 @@ struct gh_sgl_desc *mem_buf_get_sgl(void *__membuf)
 }
 EXPORT_SYMBOL_GPL(mem_buf_get_sgl);
 
+static void mem_buf_retrieve_obj_release(struct qcom_sg_buffer *buffer)
+{
+	struct mem_buf_dmabuf_obj *obj;
+
+	obj = container_of(buffer, struct mem_buf_dmabuf_obj, buffer);
+
+	sg_free_table(&buffer->sg_table);
+	kfree(obj);
+}
+
 static void mem_buf_retrieve_dma_buf_release(struct dma_buf *dmabuf)
 {
 	struct qcom_sg_buffer *buffer = dmabuf->priv;
@@ -1165,14 +1175,17 @@ static void mem_buf_retrieve_dma_buf_release(struct dma_buf *dmabuf)
 
 	obj = container_of(buffer, struct mem_buf_dmabuf_obj, buffer);
 
+	/*
+	 * Memunmap must be called before mem_buf_unmap_s2 to avoid another
+	 * thread's call to mem_buf_map_mem_s2 from returning an ipa address
+	 * which collides with the not-yet-freed memmap.
+	 */
 	memunmap_pages(&obj->pgmap);
-	qcom_sg_release(dmabuf);
-	sg_free_table(&buffer->sg_table);
 	if (obj->memmap)
 		mem_buf_free(obj->memmap);
 	if (obj->memmap_base)
 		gen_pool_free(dmabuf_mem_pool, obj->memmap_base, obj->memmap_size);
-	kfree(obj);
+	qcom_sg_dmabuf_release(dmabuf);
 }
 
 static struct mem_buf_dma_buf_ops mem_buf_retrieve_dma_buf_ops = {
@@ -1421,16 +1434,17 @@ struct dma_buf *mem_buf_retrieve(struct mem_buf_retrieve_kernel_arg *arg)
 	buffer->sg_table = *sgt;
 	kfree(sgt);
 
-	INIT_LIST_HEAD(&buffer->attachments);
-	mutex_init(&buffer->lock);
+	qcom_sg_buffer_init(buffer);
 	buffer->heap = NULL;
 	buffer->len = mem_buf_get_sgl_buf_size(sgl_desc);
 	buffer->uncached = false;
-	buffer->free = NULL;
+	buffer->free = mem_buf_retrieve_obj_release;
 	buffer->vmperm = mem_buf_vmperm_alloc_accept(&buffer->sg_table,
 						     arg->memparcel_hdl,
 						     arg->vmids, arg->perms,
-						     arg->nr_acl_entries);
+						     arg->nr_acl_entries,
+						     qcom_sg_release,
+						     &buffer->kref);
 
 	exp_info.size = buffer->len;
 	exp_info.flags = arg->fd_flags;
