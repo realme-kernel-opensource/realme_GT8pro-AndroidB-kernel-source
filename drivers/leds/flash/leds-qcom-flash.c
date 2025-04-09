@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitfield.h>
@@ -192,6 +192,7 @@ struct qcom_flash_led {
 	u8				*chan_id;
 	u8				chan_count;
 	bool				enabled;
+	bool				torch_enabled;
 };
 
 static int set_flash_module_en(struct qcom_flash_led *led, bool en)
@@ -627,13 +628,16 @@ static int qcom_flash_led_brightness_set(struct led_classdev *led_cdev,
 	bool enable = !!brightness;
 	int rc;
 
-	rc = set_flash_strobe(led, SW_STROBE, false);
-	if (rc)
-		return rc;
+	/* Ignore disabling torch LED when it's reenabled to avoid a flicker */
+	if (!led->torch_enabled) {
+		rc = set_flash_strobe(led, SW_STROBE, false);
+		if (rc)
+			return rc;
 
-	rc = set_flash_module_en(led, false);
-	if (rc)
-		return rc;
+		rc = set_flash_module_en(led, false);
+		if (rc)
+			return rc;
+	}
 
 	rc = update_allowed_flash_current(led, &current_ma, enable);
 	if (rc < 0)
@@ -652,7 +656,11 @@ static int qcom_flash_led_brightness_set(struct led_classdev *led_cdev,
 	if (rc)
 		return rc;
 
-	return set_flash_strobe(led, SW_STROBE, enable);
+	rc = set_flash_strobe(led, SW_STROBE, enable);
+	if (!rc)
+		led->torch_enabled = enable;
+
+	return rc;
 }
 
 #define MAX_FLASH_CURRENT_MA		2000
