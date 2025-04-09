@@ -450,6 +450,15 @@ config SM_GCC_ALOR
 	  Say Y if you want to use peripheral devices such as UART,
 	  SPI, I2C, USB, SD/UFS, PCIe etc.
 
+config SM_CAMCC_ALOR
+	tristate "ALOR Camera Clock Controller"
+	depends on SM_GCC_ALOR
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc
+	  Alor devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
 config VIRTIO_CLK
         tristate "Virtio clock driver"
         depends on VIRTIO
