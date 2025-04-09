@@ -481,6 +481,7 @@ static int virtclk_init_vqs(struct virtio_clk *vclk)
 }
 
 static const struct virtio_cc_map clk_virtio_map_table[] = {
+	{ .cc_name = "direwolf-gcc", .desc = &clk_virtio_direwolf_gcc, },
 	{ .cc_name = "lemans-gcc", .desc = &clk_virtio_lemans_gcc, },
 	{ .cc_name = "monaco-gcc", .desc = &clk_virtio_monaco_gcc, },
 	{ }
