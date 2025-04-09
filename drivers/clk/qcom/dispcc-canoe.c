@@ -2193,9 +2193,51 @@ static struct qcom_cc_desc disp_cc_canoe_desc = {
 
 static const struct of_device_id disp_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-dispcc" },
+	{ .compatible = "qcom,alor-dispcc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, disp_cc_canoe_match_table);
+
+static struct clk_init_data disp_cc_mdss_mdp_clk_src_init = {
+	.name = "disp_cc_mdss_mdp_clk_src",
+	.parent_data = disp_cc_parent_data_9,
+	.num_parents = ARRAY_SIZE(disp_cc_parent_data_9),
+	.flags = CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT,
+	.ops = &clk_rcg2_ops,
+};
+
+static struct clk_init_data disp_cc_pll0_init = {
+	.name = "disp_cc_pll0",
+	.parent_data = &(const struct clk_parent_data) {
+		.fw_name = "bi_tcxo",
+		.name = "bi_tcxo",
+	},
+	.num_parents = 1,
+	.flags = CLK_GET_RATE_NOCACHE,
+	.ops = &clk_alpha_pll_taycan_eko_t_ops,
+};
+
+static void disp_cc_alor_fixup(struct regmap *regmap)
+{
+	/* Remove cesta ops until crm enablement for alor*/
+	disp_cc_pll0.clkr.hw.init = &disp_cc_pll0_init;
+	disp_cc_mdss_mdp_clk_src.clkr.hw.init = &disp_cc_mdss_mdp_clk_src_init;
+}
+
+static int disp_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,alor-dispcc"))
+		disp_cc_alor_fixup(regmap);
+
+	return 0;
+}
 
 static int disp_cc_canoe_probe(struct platform_device *pdev)
 {
@@ -2217,6 +2259,10 @@ static int disp_cc_canoe_probe(struct platform_device *pdev)
 	clk_taycan_eko_t_pll_configure(&disp_cc_pll0, regmap, &disp_cc_pll0_config);
 	clk_taycan_eko_t_pll_configure(&disp_cc_pll1, regmap, &disp_cc_pll1_config);
 	clk_pongo_eko_t_pll_configure(&disp_cc_pll2, regmap, &disp_cc_pll2_config);
+
+	ret = disp_cc_canoe_fixup(pdev, regmap);
+	if (ret)
+		return ret;
 
 	/* Enable clock gating for MDP clocks */
 	regmap_update_bits(regmap, DISP_CC_MISC_CMD, 0x10, 0x10);
