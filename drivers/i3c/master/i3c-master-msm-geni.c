@@ -348,6 +348,7 @@ struct geni_i3c_dev {
 	bool is_aon_client_probe_done; /* aon i3c probe done flag */
 	bool hj_in_progress; /* hotjoin in progress flag */
 	bool is_i2c_xfer; /* i2c transfer flag */
+	bool start_xfer_with_7e; /* flag used to skip broadcast address */
 };
 
 struct geni_i3c_i2c_dev_data {
@@ -392,6 +393,10 @@ struct geni_i3c_clk_fld {
 	u8  i3c_t_high_cnt;
 	u8  i3c_t_cycle_cnt;
 	u32 i2c_t_cycle_cnt;
+};
+
+struct  qcom_geni_i3c_features {
+	bool start_xfer_with_7e;
 };
 
 static int geni_i3c_gsi_stop_on_bus(struct geni_i3c_dev *gi3c);
@@ -2181,7 +2186,7 @@ geni_i3c_master_gsi_priv_xfers(struct geni_i3c_dev *gi3c, struct i3c_priv_xfer *
 {
 	struct gsi_tre_queue *tx_tre_q = &gi3c->gsi.tx.tre_queue;
 	struct geni_i3c_xfer_params xfer;
-	bool use_7e = true, stall = false;
+	bool hold_bus = false;
 	int i, ret = 0;
 	unsigned long long start_time = sched_clock();
 
@@ -2207,20 +2212,20 @@ geni_i3c_master_gsi_priv_xfers(struct geni_i3c_dev *gi3c, struct i3c_priv_xfer *
 	tx_tre_q->freed_msg_cnt = 0;
 
 	for (i = 0; i < num_xfers; i++) {
-		stall = (i < (num_xfers - 1));
+		hold_bus = (i < (num_xfers - 1));
 
-		xfer.m_param  = (stall ? STOP_STRETCH : 0);
+		xfer.m_param  = (hold_bus ? STOP_STRETCH : 0);
 		xfer.m_param |= ((dyn_addr & I3C_ADDR_MASK) << SLV_ADDR_SHFT);
-		xfer.m_param |= (use_7e) ? USE_7E : 0;
 		xfer.tx_idx = i;
 		gi3c->rd_actual_len = 0;
+		/* For successive transfer, don't use 7e. Very First transfer is only selective */
+		if (i == 0)
+			xfer.m_param |= gi3c->start_xfer_with_7e ? USE_7E : 0;
 
 		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
-			    "%s: stall:%d,use_7e:%d, num_xfers:%d,i:%d,m_param:0x%x,rnw:%d\n",
-			    __func__, stall, use_7e, num_xfers, i, xfer.m_param, xfers[i].rnw);
-
-		/* Update use_7e status for next loop iteration */
-		use_7e = !stall;
+			    "%s: hold_bus:%d, use_7e:%d, num_msgs:%d, i:%d, m_param:0x%x, rnw:%d\n",
+			    __func__, hold_bus, gi3c->start_xfer_with_7e, num_xfers, i,
+			    xfer.m_param, xfers[i].rnw);
 
 		if (xfers[i].rnw) {
 			xfer.m_cmd = I3C_PRIVATE_READ;
@@ -2272,23 +2277,23 @@ geni_i3c_master_fifo_dma_priv_xfers(struct geni_i3c_dev *gi3c, struct i3c_priv_x
 				    u8 dyn_addr, int num_xfers)
 {
 	struct geni_i3c_xfer_params xfer;
-	bool use_7e = true, stall = false;
+	bool hold_bus = false;
 	int i, ret = 0;
 
 	for (i = 0; i < num_xfers; i++) {
-		stall = (i < (num_xfers - 1));
+		hold_bus = (i < (num_xfers - 1));
 
 		xfer.mode = xfers[i].len > 64 ? GENI_SE_DMA : GENI_SE_FIFO;
-		xfer.m_param  = (stall ? STOP_STRETCH : 0);
+		xfer.m_param  = (hold_bus ? STOP_STRETCH : 0);
 		xfer.m_param |= ((dyn_addr & I3C_ADDR_MASK) << SLV_ADDR_SHFT);
-		xfer.m_param |= (use_7e) ? USE_7E : 0;
+		/* For successive transfer, don't use 7e. Very First transfer is only selective */
+		if (i == 0)
+			xfer.m_param |= gi3c->start_xfer_with_7e ? USE_7E : 0;
 
 		I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
-			    "%s: stall:%d,use_7e:%d, num_xfers:%d,i:%d,m_param:0x%x,rnw:%d\n",
-			    __func__, stall, use_7e, num_xfers, i, xfer.m_param, xfers[i].rnw);
-
-		/* Update use_7e status for next loop iteration */
-		use_7e = !stall;
+			    "%s: hold_bus:%d,use_7e:%d, num_xfers:%d,i:%d,m_param:0x%x,rnw:%d\n",
+			    __func__, hold_bus, gi3c->start_xfer_with_7e, num_xfers, i,
+			    xfer.m_param, xfers[i].rnw);
 
 		if (xfers[i].rnw) {
 			xfer.m_cmd = I3C_PRIVATE_READ;
@@ -2708,11 +2713,11 @@ static int geni_i3c_master_send_ccc_cmd(struct i3c_master_controller *m, struct 
 	gi3c->num_xfers = cmd->ndests;
 
 	for (i = 0; i < cmd->ndests; i++) {
-		int stall = (i < (cmd->ndests - 1)) ||
+		int hold_bus = (i < (cmd->ndests - 1)) ||
 			(cmd->id == I3C_CCC_ENTDAA);
 		struct geni_i3c_xfer_params xfer = { GENI_SE_FIFO };
 
-		xfer.m_param  = (stall ? STOP_STRETCH : 0);
+		xfer.m_param  = (hold_bus ? STOP_STRETCH : 0);
 		xfer.m_param |= (cmd->id << CCC_HDR_CMD_SHFT);
 		xfer.m_param |= IBI_NACK_TBL_CTRL;
 		xfer.tx_idx = i;
@@ -3941,6 +3946,7 @@ static int geni_i3c_probe(struct platform_device *pdev)
 	u32 proto, tx_depth;
 	int ret;
 	u32 se_mode, geni_ios;
+	const struct qcom_geni_i3c_features *data = of_device_get_match_data(&pdev->dev);
 
 	gi3c = devm_kzalloc(&pdev->dev, sizeof(*gi3c), GFP_KERNEL);
 	if (!gi3c)
@@ -4045,6 +4051,12 @@ static int geni_i3c_probe(struct platform_device *pdev)
 	I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
 		    "Client controls the I3C PM, pm_ctrl_client:%d\n",
 		    gi3c->pm_ctrl_client);
+
+	/* Default, I3C to work without sending 7E per transfer. */
+	if (data)
+		gi3c->start_xfer_with_7e = data->start_xfer_with_7e;
+	else
+		gi3c->start_xfer_with_7e = false;
 
 	se_mode = geni_read_reg(gi3c->se.base, GENI_IF_DISABLE_RO);
 	if (se_mode) {
@@ -4451,8 +4463,13 @@ static const struct dev_pm_ops geni_i3c_pm_ops = {
 	.runtime_resume  = geni_i3c_runtime_resume,
 };
 
+static const struct qcom_geni_i3c_features qcom_geni_i3c_with_7e = {
+	.start_xfer_with_7e = true,
+};
+
 static const struct of_device_id geni_i3c_dt_match[] = {
 	{ .compatible = "qcom,geni-i3c" },
+	{ .compatible = "qcom,geni-i3c-with-7e", .data = &qcom_geni_i3c_with_7e },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, geni_i3c_dt_match);
