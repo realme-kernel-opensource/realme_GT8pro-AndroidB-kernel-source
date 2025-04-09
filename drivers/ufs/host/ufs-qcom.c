@@ -4065,7 +4065,7 @@ static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, unsigned long freq)
 	return ret;
 }
 
-static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba)
+static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba, unsigned long freq)
 {
 	int err;
 
@@ -4075,9 +4075,7 @@ static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba)
 		return err;
 	}
 
-	err = ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(hba);
-
-	return err;
+	return ufs_qcom_core_clk_ctrl(hba, freq);
 }
 
 static int ufs_qcom_clk_scale_up_post_change(struct ufs_hba *hba)
@@ -4095,13 +4093,10 @@ static int ufs_qcom_clk_scale_down_pre_change(struct ufs_hba *hba)
 	return 0;
 }
 
-static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
+static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba, unsigned long freq)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufs_pa_layer_attr *attr = &host->dev_req_params;
-	struct ufs_clk_info *clki;
-	struct list_head *head = &hba->clk_list_head;
-	unsigned long curr_freq = 0;
 	unsigned long flags;
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
@@ -4111,15 +4106,7 @@ static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
 	if (attr)
 		ufs_qcom_cfg_timers(hba, false);
 
-	list_for_each_entry(clki, head, list) {
-		if (!IS_ERR_OR_NULL(clki->clk) &&
-		    (!strcmp(clki->name, "core_clk_unipro"))) {
-			curr_freq = clk_get_rate(clki->clk);
-			break;
-		}
-	}
-
-	return ufs_qcom_core_clk_ctrl(hba, curr_freq);
+	return ufs_qcom_core_clk_ctrl(hba, freq);
 }
 
 static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba, bool scale_up,
@@ -4140,7 +4127,7 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba, bool scale_up,
 		if (err)
 			return err;
 		if (scale_up) {
-			err = ufs_qcom_clk_scale_up_pre_change(hba);
+			err = ufs_qcom_clk_scale_up_pre_change(hba, target_freq);
 		} else {
 			err = ufs_qcom_clk_scale_down_pre_change(hba);
 			cancel_dwork_unvote_cpufreq(hba);
@@ -4152,7 +4139,7 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba, bool scale_up,
 		if (scale_up)
 			err = ufs_qcom_clk_scale_up_post_change(hba);
 		else
-			err = ufs_qcom_clk_scale_down_post_change(hba);
+			err = ufs_qcom_clk_scale_down_post_change(hba, target_freq);
 
 
 		if (err || !dev_req_params) {
