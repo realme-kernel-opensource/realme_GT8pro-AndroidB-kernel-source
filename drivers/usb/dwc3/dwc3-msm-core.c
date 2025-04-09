@@ -4396,6 +4396,11 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 		dwc3_msm_set_ss_pwr_events(mdwc, true);
 		enable_irq(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 	}
+	/* Balance the PHY RT get operations done in dwc3_msm_resume() */
+	if (mdwc->usb3_phy)
+		pm_runtime_put_sync(mdwc->usb3_phy->dev.parent);
+	if (mdwc->usb2_phy)
+		pm_runtime_put_sync(mdwc->usb2_phy->dev.parent);
 
 	/* make sure above writes are completed before turning off clocks */
 	wmb();
@@ -4553,6 +4558,28 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 		dwc3_msm_set_ss_pwr_events(mdwc, false);
 	}
 
+	/*
+	 * RT resume PHY subsystem unconditionally. This would ensure that
+	 * the PHY is operational before XHCI resume is triggered. If USB is
+	 * operating in HS mode and if SS PHY is powered down via phy_exit()
+	 * then USB3 PHY RT resume would be a no-op.
+	 */
+	if (mdwc->usb3_phy) {
+		ret = pm_runtime_resume_and_get(mdwc->usb3_phy->dev.parent);
+		if (ret < 0) {
+			dev_err(mdwc->dev, "%s:failed to resume usb3_phy\n",
+					__func__);
+			goto error;
+		}
+	}
+	if (mdwc->usb2_phy) {
+		ret = pm_runtime_resume_and_get(mdwc->usb2_phy->dev.parent);
+		if (ret < 0) {
+			dev_err(mdwc->dev, "%s:failed to resume usb2_phy\n",
+					__func__);
+			goto error;
+		}
+	}
 	/* Resume SS PHY */
 	if (dwc3_msm_get_max_speed(mdwc) >= USB_SPEED_SUPER &&
 			mdwc->lpm_flags & MDWC3_SS_PHY_SUSPEND) {
