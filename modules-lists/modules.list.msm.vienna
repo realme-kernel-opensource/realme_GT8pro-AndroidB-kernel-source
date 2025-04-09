@@ -96,3 +96,4 @@ repeater.ko
 repeater-qti-pmic-eusb2.ko
 f_fs_ipc_log.ko
 msm_sharedmem.ko
+minidump.ko
