@@ -70,6 +70,7 @@ vienna_perf_config = {
     "CONFIG_QCOM_COMMAND_DB": "m",
     "CONFIG_QCOM_CPUCP": "m",
     "CONFIG_QCOM_CPUSS_SLEEP_STATS": "m",
+    "CONFIG_QCOM_CPU_VENDOR_HOOKS": "m",
     "CONFIG_QCOM_DCC_V2": "m",
     "CONFIG_QCOM_DCVS": "m",
     "CONFIG_QCOM_DCVS_FP": "m",
