@@ -539,6 +539,7 @@ block/blk-stat.h
 block/blk-sysfs.c
 block/blk-throttle.h
 block/blk-timeout.c
+block/blk-wbt.c
 block/blk-wbt.h
 block/blk-zoned.c
 block/blk.h
@@ -878,6 +879,7 @@ drivers/dma-buf/dma-fence.c
 drivers/dma-buf/dma-heap.c
 drivers/dma-buf/dma-resv.c
 drivers/dma-buf/sync_file.c
+drivers/dma-buf/udmabuf.c
 drivers/dma/dmaengine.c
 drivers/dma/dmaengine.h
 drivers/dma/of-dma.c
@@ -4541,12 +4543,14 @@ include/trace/events/vmalloc.h
 include/trace/events/vmscan.h
 include/trace/events/vsock_virtio_transport_common.h
 include/trace/events/watchdog.h
+include/trace/events/wbt.h
 include/trace/events/workqueue.h
 include/trace/events/writeback.h
 include/trace/events/xdp.h
 include/trace/hooks/avc.h
 include/trace/hooks/binder.h
 include/trace/hooks/bl_hib.h
+include/trace/hooks/blk.h
 include/trace/hooks/bug.h
 include/trace/hooks/cgroup.h
 include/trace/hooks/compaction.h
@@ -5030,6 +5034,7 @@ include/uapi/linux/tty.h
 include/uapi/linux/tty_flags.h
 include/uapi/linux/types.h
 include/uapi/linux/ublk_cmd.h
+include/uapi/linux/udmabuf.h
 include/uapi/linux/udp.h
 include/uapi/linux/uhid.h
 include/uapi/linux/uinput.h
@@ -6147,6 +6152,7 @@ net/core/net-sysfs.c
 net/core/net-sysfs.h
 net/core/net-traces.c
 net/core/net_namespace.c
+net/core/netclassid_cgroup.c
 net/core/netdev-genl-gen.c
 net/core/netdev-genl-gen.h
 net/core/netdev-genl.c
