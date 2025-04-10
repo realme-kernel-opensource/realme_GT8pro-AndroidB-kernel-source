@@ -19,7 +19,7 @@ GKI_SKIP_CP_KERNEL_HDR=1
 
 # "Hacks" to enable symbol trimming on the common kernel from here (soc-repo). To be removed once
 # we get a common kernel with symbol trimming.
-GKI_KMI_SYMBOL_LIST=../soc-repo/android/abi_gki_aarch64_qcom
+GKI_KMI_SYMBOL_LIST=../common/gki/aarch64/symbols/qcom
 KMI_SYMBOL_LIST=android/abi_gki_aarch64_qcom
 if [ "${VARIANT}" = perf ]; then
 	GKI_TRIM_NONLISTED_KMI=${TRIM_NONLISTED_KMI:-1}
