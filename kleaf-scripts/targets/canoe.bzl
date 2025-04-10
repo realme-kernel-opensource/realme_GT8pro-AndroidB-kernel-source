@@ -1,4 +1,4 @@
-load("//build/kernel/kleaf:kernel.bzl", "kernel_module_group")
+load("//build/kernel/kleaf:kernel.bzl", "kernel_abi", "kernel_module_group")
 load(":configs/canoe_consolidate.bzl", "canoe_consolidate_config")
 load(":configs/canoe_perf.bzl", "canoe_perf_config")
 load(":configs/canoe_tuivm.bzl", "canoe_tuivm_config")
@@ -63,6 +63,14 @@ def define_canoe():
         perf_kwargs = {
             "config_path": "configs/canoe_perf.bzl",
         },
+    )
+
+    kernel_abi(
+        name = "canoe_perf_abi",
+        kernel_build = "//common:kernel_aarch64",
+        kernel_modules = [
+            ":canoe_perf_all_modules",
+        ],
     )
 
 def define_canoe_tuivm():
