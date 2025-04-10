@@ -7057,6 +7057,7 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 		if (ret < 0) {
 			dev_err(mdwc->dev, "%s: pm_runtime_resume_and_get failed\n", __func__);
 			pm_runtime_set_suspended(mdwc->dev);
+			pm_runtime_disable(mdwc->dev);
 			break;
 		}
 		ret = dwc3_msm_core_init(mdwc);
