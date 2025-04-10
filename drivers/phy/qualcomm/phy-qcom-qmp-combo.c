@@ -2756,7 +2756,14 @@ static int qmp_combo_com_exit(struct qmp_combo *qmp, bool force)
 	if (!force && --qmp->init_count)
 		return 0;
 
-	reset_control_bulk_assert(cfg->num_resets, qmp->resets);
+	/*
+	 * TO-DO
+	 * Below assert is needed if the DP driver de-asserts this
+	 * reset during DP Phy init. But since there is no DP Phy
+	 * control implemented yet, commenting out the below assert
+	 * operation
+	 */
+	/* reset_control_bulk_assert(cfg->num_resets, qmp->resets); */
 
 	clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
 
