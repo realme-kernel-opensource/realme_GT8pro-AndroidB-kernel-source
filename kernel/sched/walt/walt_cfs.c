@@ -683,6 +683,23 @@ static inline unsigned long get_util_to_cost(int cpu, unsigned long util)
  * Return: the sum of the energy consumed by the CPUs of the domain assuming
  * a capacity state satisfying the max utilization of the domain.
  */
+unsigned long walt_cpu_energy(int cpu,
+			      unsigned long max_util, unsigned long sum_util)
+{
+	unsigned long cost;
+
+	if (!sum_util)
+		return 0;
+
+	max_util = max_util + (max_util >> 2); /* account  for TARGET_LOAD usually 80 */
+	if (max_util >= 1024)
+		max_util = 1023;
+
+	cost = get_util_to_cost(cpu, max_util);
+
+	return cost * sum_util;
+}
+
 static inline unsigned long walt_em_cpu_energy(struct em_perf_domain *pd,
 				unsigned long max_util, unsigned long sum_util,
 				struct compute_energy_output *output, unsigned int x)
