@@ -13,7 +13,22 @@ int pipeline_nr;
 static DEFINE_RAW_SPINLOCK(heavy_lock);
 static struct walt_task_struct *heavy_wts[MAX_NR_PIPELINE];
 unsigned int pipeline_swap_util_th;
+cpumask_t available_gold_cpus = CPU_MASK_NONE;
+cpumask_t available_prime_cpus = CPU_MASK_NONE;
+int have_heavy_list;
+u32 total_util;
+u32 least_pipeline_demand;
+
 #define SCALING_FACTOR 70
+#define IPC_DEGRADATION_FACTOR 115
+#define PIPELINE_2L_FACTOR 95
+#define REARRANGE_HYST_MS	100ULL
+#define PIPELINE_ENERGY_BAND 6
+#define FIND_HEAVY_FAIL -1
+#define FIND_HEAVY_WAIT 0
+#define FIND_HEAVY_SUCCESS 1
+#define CONFIG1 1
+#define CONFIG2 2
 
 void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_demand,
 		     u64 *scaled_prime_demand)
@@ -243,12 +258,7 @@ static inline bool should_pipeline_pin_special(void)
 	return special_pipeline_thres_valid();
 }
 
-cpumask_t last_available_big_cpus = CPU_MASK_NONE;
-int have_heavy_list;
-u32 total_util;
-u32 least_pipeline_demand;
-#define REARRANGE_HYST_MS	100ULL
-bool find_heaviest_topapp(u64 window_start)
+int find_heaviest_topapp(u64 window_start)
 {
 	struct walt_related_thread_group *grp;
 	struct walt_task_struct *wts;
@@ -260,7 +270,7 @@ bool find_heaviest_topapp(u64 window_start)
 	u64 gold_demand_heavy = 0, prime_demand_heavy = 0;
 
 	if (num_sched_clusters < 2)
-		return false;
+		return FIND_HEAVY_FAIL;
 
 	/* lazy enabling disabling until 100mS for colocation or heavy_nr change */
 	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
@@ -282,7 +292,7 @@ bool find_heaviest_topapp(u64 window_start)
 		}
 		last_rearrange_ns = window_start;
 		least_pipeline_demand = 0;
-		return false;
+		return FIND_HEAVY_FAIL;
 	}
 
 	if (likely(heavy_wts[0])) {
@@ -296,7 +306,7 @@ bool find_heaviest_topapp(u64 window_start)
 	}
 
 	if (last_rearrange_ns && (window_start < rearrange_target_ns))
-		return false;
+		return FIND_HEAVY_WAIT;
 
 	last_rearrange_ns = window_start;
 	raw_spin_lock_irqsave(&grp->lock, flags);
@@ -504,7 +514,7 @@ bool find_heaviest_topapp(u64 window_start)
 
 	raw_spin_unlock(&heavy_lock);
 	raw_spin_unlock_irqrestore(&grp->lock, flags);
-	return true;
+	return FIND_HEAVY_SUCCESS;
 }
 
 static inline void swap_pipeline_with_prime_locked(struct walt_task_struct *prime_wts,
@@ -525,8 +535,19 @@ static inline void swap_pipeline_with_prime_locked(struct walt_task_struct *prim
 		}
 	} else if (!prime_wts && other_wts) {
 		/* if prime preferred died promote gold to prime, assumes 1 prime */
-		other_wts->pipeline_cpu =
-			cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
+		if (have_heavy_list) {
+			int cpu = cpumask_first(&available_prime_cpus);
+
+			if (cpu < nr_cpu_ids) {
+				cpumask_clear_cpu(other_wts->pipeline_cpu,
+						  &available_gold_cpus);
+				other_wts->pipeline_cpu = cpu;
+				cpumask_clear_cpu(cpu, &available_prime_cpus);
+			}
+		} else {
+			other_wts->pipeline_cpu =
+				cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
+		}
 		trace_sched_pipeline_swapped(other_wts, prime_wts);
 	}
 }
@@ -598,8 +619,8 @@ void rearrange_heavy(u64 window_start, bool force)
 {
 	struct walt_task_struct *prime_wts = NULL;
 	struct walt_task_struct *other_wts = NULL;
-	unsigned long flags;
 	bool prime_wts_fits_lower = true;
+	bool rearranged = false;
 	u64 primewts_prime_demand = 0, otherwts_prime_demand = 0, gold_demand = 0;
 
 	if (!pipeline_in_progress())
@@ -611,11 +632,9 @@ void rearrange_heavy(u64 window_start, bool force)
 	if (num_sched_clusters < 2)
 		return;
 
-	raw_spin_lock_irqsave(&heavy_lock, flags);
-
 	/* Ensure that special pipeline task remains pinned if it is the only pipeline thread */
 	if (should_pipeline_pin_special() && soc_feat(SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING))
-		goto out;
+		return;
 	/*
 	 * TODO: As primes are isolated under have_heavy_list < 3, and pipeline misfits are also
 	 * disabled, setting the prime worthy task's pipeline_cpu as CPU7 could lead to the
@@ -624,46 +643,54 @@ void rearrange_heavy(u64 window_start, bool force)
 	 * task to start bouncing around on the golds, and ultimately lead to suboptimal behavior.
 	 */
 	if (have_heavy_list <= 2) {
-		find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
-
-		/* special handling for case where prime is part of cpus_for_pipeline */
-		if (is_max_possible_cluster_cpu(cpumask_last(&cpus_for_pipeline))) {
-			if (!is_prime_worthy(prime_wts) && is_prime_worthy(other_wts))
-				swap_pipeline_with_prime_locked(prime_wts, other_wts);
-
-			goto out;
-		}
-
-		if (prime_wts && !is_prime_worthy(prime_wts)) {
+		for (int i = 0; i < MAX_NR_PIPELINE; i++) {
+			int pipeline_cpu;
 			int assign_cpu;
 
-			/* demote prime_wts, it is not worthy */
-			assign_cpu = cpumask_first(&last_available_big_cpus);
-			if (assign_cpu < nr_cpu_ids) {
-				prime_wts->pipeline_cpu = assign_cpu;
-				cpumask_clear_cpu(assign_cpu, &last_available_big_cpus);
-				prime_wts = NULL;
+			if (!heavy_wts[i])
+				continue;
+
+			pipeline_cpu = heavy_wts[i]->pipeline_cpu;
+			if (pipeline_cpu < 0) {
+				assign_cpu = cpumask_first(&available_gold_cpus);
+				if (assign_cpu < nr_cpu_ids) {
+					heavy_wts[i]->pipeline_cpu = assign_cpu;
+					cpumask_clear_cpu(assign_cpu, &available_gold_cpus);
+				}
+			} else if (cpumask_test_cpu(pipeline_cpu,
+					&sched_cluster[prime_cluster_id]->cpus) &&
+					!is_prime_worthy(heavy_wts[i])) {
+				assign_cpu = cpumask_first(&available_gold_cpus);
+				if (assign_cpu < nr_cpu_ids) {
+					cpumask_set_cpu(pipeline_cpu, &available_prime_cpus);
+					heavy_wts[i]->pipeline_cpu = assign_cpu;
+					cpumask_clear_cpu(assign_cpu, &available_gold_cpus);
+				}
+			} else if (cpumask_test_cpu(pipeline_cpu,
+					&sched_cluster[gold_cluster_id]->cpus) &&
+					!rearranged &&
+					is_prime_worthy(heavy_wts[i])) {
+				assign_cpu = cpumask_first(&available_prime_cpus);
+				if (assign_cpu < nr_cpu_ids) {
+					cpumask_set_cpu(pipeline_cpu, &available_gold_cpus);
+					heavy_wts[i]->pipeline_cpu = assign_cpu;
+					cpumask_clear_cpu(assign_cpu, &available_prime_cpus);
+					rearranged = true;
+				}
 			}
-			/* if no pipeline cpu available to assign, leave task on prime */
 		}
-
-		if (!prime_wts && is_prime_worthy(other_wts)) {
-			/* promote other_wts to prime, it is worthy */
-			swap_pipeline_with_prime_locked(NULL, other_wts);
-		}
-
-		goto out;
+		return;
 	}
 
 	/* Under pipeline pinning, do not swap for nr = 3*/
 	if (should_pipeline_pin_special())
-		goto out;
+		return;
 
 	if (delay_rearrange(window_start, AUTO_PIPELINE, force))
-		goto out;
+		return;
 
 	if (!soc_feat(SOC_ENABLE_PIPELINE_SWAPPING_BIT) && !force)
-		goto out;
+		return;
 
 	/* swap prime for have_heavy_list >= 3 */
 	find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
@@ -688,8 +715,250 @@ void rearrange_heavy(u64 window_start, bool force)
 					((primewts_prime_demand + pipeline_swap_util_th) <
 					 otherwts_prime_demand)))
 		swap_pipeline_with_prime_locked(prime_wts, other_wts);
+}
+
+void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
+{
+	int i, gold_cpu, prime_cpu, cpu;
+	u64 gold_energy, prime_energy;
+	u64 config1, config2;
+	u64 cur_cpu_util;
+	u64 t0_util, t1_util, t2_util;
+	u64 t0_gold, t1_gold, t2_gold, t0_prime, t1_prime, t2_prime;
+	u64 non_pipeline_cluster_util[MAX_CLUSTERS];
+	u64 non_pipeline_cluster_max_util[MAX_CLUSTERS];
+	struct walt_sched_cluster *cluster;
+	bool t0_is_prime = false, t1_is_prime = false, t2_is_prime = false;
+	static int prev_config;
+	u64 prev_energy = 0;
+
+	if (found_topapp == FIND_HEAVY_FAIL)
+		return;
+
+	raw_spin_lock(&heavy_lock);
+
+	if (found_topapp == FIND_HEAVY_SUCCESS && !sysctl_single_thread_pipeline) {
+		cpumask_and(&available_gold_cpus, cpu_online_mask,
+			    &sched_cluster[gold_cluster_id]->cpus);
+		cpumask_and(&available_prime_cpus, cpu_online_mask,
+			    &sched_cluster[prime_cluster_id]->cpus);
+		cpumask_and(&available_gold_cpus, &available_gold_cpus, &cpus_for_pipeline);
+		cpumask_and(&available_prime_cpus, &available_prime_cpus, &cpus_for_pipeline);
+		cpumask_andnot(&available_gold_cpus, &available_gold_cpus, cpu_halt_mask);
+		cpumask_andnot(&available_prime_cpus, &available_prime_cpus, cpu_halt_mask);
+
+		have_heavy_list = 0;
+		for (i = 0; i < MAX_NR_PIPELINE; i++) {
+			if (heavy_wts[i]) {
+				have_heavy_list++;
+				if (heavy_wts[i]->pipeline_cpu != -1) {
+					if (cpumask_test_cpu(heavy_wts[i]->pipeline_cpu,
+							     &available_gold_cpus))
+						cpumask_clear_cpu(heavy_wts[i]->pipeline_cpu,
+								  &available_gold_cpus);
+					else
+						cpumask_clear_cpu(heavy_wts[i]->pipeline_cpu,
+								  &available_prime_cpus);
+				}
+			}
+		}
+	}
+
+	if (!heavy_wts[MAX_NR_PIPELINE - 1] ||
+		cpumask_weight(&sched_cluster[prime_cluster_id]->cpus) == 1) {
+		rearrange_heavy(wrq->window_start, false);
+		goto out;
+	}
+
+	if (found_topapp == FIND_HEAVY_WAIT)
+		goto unlock;
+
+	for_each_sched_cluster(cluster) {
+		if (cluster->id != gold_cluster_id || cluster->id != prime_cluster_id)
+			continue;
+
+		non_pipeline_cluster_util[cluster->id] = 0;
+		non_pipeline_cluster_max_util[cluster->id] = 0;
+
+		for_each_cpu(cpu, &cluster->cpus) {
+			if (cpumask_test_cpu(cpu, &cpus_for_pipeline))
+				continue;
+			wrq = &per_cpu(walt_rq, cpu);
+			cur_cpu_util =  wrq->prev_runnable_sum +
+				wrq->grp_time.prev_runnable_sum;
+			cur_cpu_util = scale_time_to_util(cur_cpu_util);
+			non_pipeline_cluster_util[cluster->id] += cur_cpu_util;
+			non_pipeline_cluster_max_util[cluster->id] =
+				max(non_pipeline_cluster_max_util[cluster->id], cur_cpu_util);
+		}
+	}
+
+	gold_cpu = cpumask_first(&sched_cluster[gold_cluster_id]->cpus);
+	prime_cpu = cpumask_first(&sched_cluster[prime_cluster_id]->cpus);
+
+	/* Config #1 */
+	pipeline_demand(heavy_wts[0], &t0_gold, &t0_prime);
+	pipeline_demand(heavy_wts[1], &t1_gold, &t1_prime);
+	pipeline_demand(heavy_wts[2], &t2_gold, &t2_prime);
+
+	t0_util = t0_prime;
+	t1_util = t1_gold;
+	t2_util = t2_gold;
+
+	gold_energy = walt_cpu_energy(gold_cpu,
+				      max(max(t1_util, t2_util), non_pipeline_cluster_max_util[0]),
+				      non_pipeline_cluster_util[0] + t1_util + t2_util);
+	prime_energy = walt_cpu_energy(prime_cpu,
+				       max(t0_util, non_pipeline_cluster_max_util[1]),
+				       non_pipeline_cluster_util[1] + t0_util);
+	config1 = gold_energy + prime_energy;
+
+	/* Config #2 */
+	if (heavy_wts[0]->pipeline_cpu >= 0 &&
+	    cpumask_test_cpu(heavy_wts[0]->pipeline_cpu,
+			     &sched_cluster[prime_cluster_id]->cpus))
+		t0_is_prime = true;
+	if (heavy_wts[1]->pipeline_cpu >= 0 &&
+	    cpumask_test_cpu(heavy_wts[1]->pipeline_cpu,
+			     &sched_cluster[prime_cluster_id]->cpus))
+		t1_is_prime = true;
+	if (heavy_wts[2]->pipeline_cpu >= 0 &&
+	    cpumask_test_cpu(heavy_wts[2]->pipeline_cpu,
+			     &sched_cluster[prime_cluster_id]->cpus))
+		t2_is_prime = true;
+
+
+	pipeline_demand(heavy_wts[0], &t0_gold, &t0_prime);
+	pipeline_demand(heavy_wts[1], &t1_gold, &t1_prime);
+	pipeline_demand(heavy_wts[2], &t2_gold, &t2_prime);
+
+	t0_util = t0_prime;
+	t1_util = t1_prime;
+	t2_util = t2_gold;
+
+	if (t0_prime && !t1_prime)
+		t0_util = mult_frac(t0_util, IPC_DEGRADATION_FACTOR, 100);
+	if (!t0_prime && t1_prime)
+		t1_util = mult_frac(t1_util, IPC_DEGRADATION_FACTOR, 100);
+	if (!t0_prime && !t1_prime)
+		t0_util = mult_frac(t0_util, IPC_DEGRADATION_FACTOR, 100);
+
+
+	gold_energy = walt_cpu_energy(gold_cpu,
+				      max(t2_util, non_pipeline_cluster_max_util[0]),
+				      non_pipeline_cluster_util[0] + t2_util);
+	prime_energy = walt_cpu_energy(prime_cpu,
+				       max(max(t0_util, t1_util), non_pipeline_cluster_max_util[1]),
+				       non_pipeline_cluster_util[1] + t0_util + t1_util);
+
+	prime_energy = mult_frac(prime_energy, PIPELINE_2L_FACTOR, 100);
+
+	config2 = gold_energy + prime_energy;
+
+	if (prev_config == CONFIG1)
+		prev_energy = config1;
+	else
+		prev_energy = config2;
+	prev_energy = mult_frac(prev_energy, 100 - PIPELINE_ENERGY_BAND, 100);
+	if (!prev_energy)
+		prev_energy = ULONG_MAX;
+
+	if ((((prev_config == CONFIG1 && prev_energy < config2) ||
+	      (prev_config == CONFIG2 && config1 < prev_energy) ||
+	      (!prev_config && config1 < config2) ||
+	      should_pipeline_pin_special()) && !sysctl_pipeline_force_config) ||
+	     (sysctl_pipeline_force_config == CONFIG1)) {
+		if (heavy_wts[2]->pipeline_cpu != -1 &&
+		    cpumask_test_cpu(heavy_wts[2]->pipeline_cpu,
+				     &sched_cluster[prime_cluster_id]->cpus)) {
+			cpumask_set_cpu(heavy_wts[2]->pipeline_cpu, &available_prime_cpus);
+			heavy_wts[2]->pipeline_cpu = -1;
+		}
+
+		if (heavy_wts[1]->pipeline_cpu != -1 &&
+		    cpumask_test_cpu(heavy_wts[1]->pipeline_cpu,
+				     &sched_cluster[prime_cluster_id]->cpus)) {
+			cpumask_set_cpu(heavy_wts[1]->pipeline_cpu, &available_prime_cpus);
+			heavy_wts[1]->pipeline_cpu = -1;
+		}
+
+		if (heavy_wts[0]->pipeline_cpu != -1 &&
+		    cpumask_test_cpu(heavy_wts[0]->pipeline_cpu,
+				     &sched_cluster[gold_cluster_id]->cpus)) {
+			cpumask_set_cpu(heavy_wts[0]->pipeline_cpu, &available_gold_cpus);
+			heavy_wts[0]->pipeline_cpu = -1;
+		}
+
+		if (heavy_wts[2]->pipeline_cpu == -1) {
+			heavy_wts[2]->pipeline_cpu = cpumask_first(&available_gold_cpus);
+			cpumask_clear_cpu(heavy_wts[2]->pipeline_cpu, &available_gold_cpus);
+		}
+
+		if (heavy_wts[1]->pipeline_cpu == -1) {
+			heavy_wts[1]->pipeline_cpu = cpumask_first(&available_gold_cpus);
+			cpumask_clear_cpu(heavy_wts[1]->pipeline_cpu, &available_gold_cpus);
+		}
+
+		if (heavy_wts[0]->pipeline_cpu == -1) {
+			heavy_wts[0]->pipeline_cpu = cpumask_first(&available_prime_cpus);
+			cpumask_clear_cpu(heavy_wts[0]->pipeline_cpu, &available_prime_cpus);
+		}
+
+		prev_config = CONFIG1;
+	} else {
+		if (heavy_wts[2]->pipeline_cpu != -1 &&
+		    cpumask_test_cpu(heavy_wts[2]->pipeline_cpu,
+				     &sched_cluster[prime_cluster_id]->cpus)) {
+			cpumask_set_cpu(heavy_wts[2]->pipeline_cpu, &available_prime_cpus);
+			heavy_wts[2]->pipeline_cpu = -1;
+		}
+
+		if (heavy_wts[0]->pipeline_cpu != -1 &&
+		    cpumask_test_cpu(heavy_wts[0]->pipeline_cpu,
+				     &sched_cluster[gold_cluster_id]->cpus)) {
+			cpumask_set_cpu(heavy_wts[0]->pipeline_cpu, &available_gold_cpus);
+			heavy_wts[0]->pipeline_cpu = -1;
+		}
+
+		if (heavy_wts[1]->pipeline_cpu != -1 &&
+		    cpumask_test_cpu(heavy_wts[1]->pipeline_cpu,
+				     &sched_cluster[gold_cluster_id]->cpus)) {
+			cpumask_set_cpu(heavy_wts[1]->pipeline_cpu, &available_gold_cpus);
+			heavy_wts[1]->pipeline_cpu = -1;
+		}
+
+		if (heavy_wts[2]->pipeline_cpu == -1) {
+			heavy_wts[2]->pipeline_cpu = cpumask_first(&available_gold_cpus);
+			cpumask_clear_cpu(heavy_wts[2]->pipeline_cpu, &available_gold_cpus);
+		}
+
+		if (heavy_wts[0]->pipeline_cpu == -1) {
+			heavy_wts[0]->pipeline_cpu = cpumask_first(&available_prime_cpus);
+			cpumask_clear_cpu(heavy_wts[0]->pipeline_cpu, &available_prime_cpus);
+		}
+
+		if (heavy_wts[1]->pipeline_cpu == -1) {
+			heavy_wts[1]->pipeline_cpu = cpumask_first(&available_prime_cpus);
+			cpumask_clear_cpu(heavy_wts[1]->pipeline_cpu, &available_prime_cpus);
+		}
+
+		prev_config = CONFIG2;
+	}
+
 out:
-	raw_spin_unlock_irqrestore(&heavy_lock, flags);
+	if (trace_sched_pipeline_tasks_enabled()) {
+		for (i = 0; i < MAX_NR_PIPELINE; i++) {
+			if (heavy_wts[i])
+				trace_sched_pipeline_tasks(AUTO_PIPELINE, i, heavy_wts[i],
+							   have_heavy_list, total_util,
+							  should_pipeline_pin_special(),
+							  (have_heavy_list == MAX_NR_PIPELINE) ?
+							  prev_config : 0);
+		}
+	}
+
+unlock:
+	raw_spin_unlock(&heavy_lock);
 }
 
 void rearrange_pipeline_preferred_cpus(u64 window_start)
@@ -799,7 +1068,7 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 		for (i = 0; i < WALT_NR_CPUS; i++) {
 			if (pipeline_wts[i] != NULL)
 				trace_sched_pipeline_tasks(MANUAL_PIPELINE, i, pipeline_wts[i],
-						pipeline_nr, 0, 0);
+						pipeline_nr, 0, 0, 0);
 		}
 	}
 
@@ -813,20 +1082,15 @@ out:
 	}
 }
 
-bool pipeline_check(struct walt_rq *wrq)
+int pipeline_check(struct walt_rq *wrq)
 {
 	/* found_topapp should force rearrangement */
-	bool found_topapp = find_heaviest_topapp(wrq->window_start);
+	int found_topapp = find_heaviest_topapp(wrq->window_start);
 
 	rearrange_pipeline_preferred_cpus(wrq->window_start);
 	pipeline_reset_unisolation_state();
 
 	return found_topapp;
-}
-
-void pipeline_rearrange(struct walt_rq *wrq, bool found_topapp)
-{
-	rearrange_heavy(wrq->window_start, found_topapp);
 }
 
 bool enable_load_sync(int cpu)
