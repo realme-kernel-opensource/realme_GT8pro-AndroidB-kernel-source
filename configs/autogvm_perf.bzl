@@ -119,4 +119,5 @@ autogvm_perf_config = {
     "CONFIG_FAILOVER": "m",
     "CONFIG_NET_FAILOVER": "m",
     "CONFIG_VIRTIO_NET": "m",
+    "CONFIG_QCOM_RPROC_COMMON": "m",
 }
