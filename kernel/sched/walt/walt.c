@@ -3421,8 +3421,8 @@ static void set_preferred_cluster(struct walt_related_thread_group *grp)
 	raw_spin_unlock(&grp->lock);
 }
 
-static int update_preferred_cluster(struct walt_related_thread_group *grp,
-		struct task_struct *p, u32 old_load, bool from_tick)
+static int should_update_preferred_cluster(struct walt_related_thread_group *grp,
+		struct task_struct *p, u32 old_load, bool from_tick, u64 now)
 {
 	u32 new_load = task_load(p);
 
@@ -3440,7 +3440,7 @@ static int update_preferred_cluster(struct walt_related_thread_group *grp,
 	if (abs(new_load - old_load) > sched_ravg_window / 4)
 		return 1;
 
-	if (walt_sched_clock() - grp->last_update > sched_ravg_window)
+	if (now - grp->last_update > sched_ravg_window)
 		return 1;
 
 	return 0;
@@ -4989,7 +4989,7 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 
 	rcu_read_lock();
 	grp = task_related_thread_group(p);
-	if (update_preferred_cluster(grp, p, old_load, false))
+	if (should_update_preferred_cluster(grp, p, old_load, false, wallclock))
 		set_preferred_cluster(grp);
 	rcu_read_unlock();
 }
@@ -5132,7 +5132,7 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 	old_load = task_load(rq->curr);
 	rcu_read_lock();
 	grp = task_related_thread_group(rq->curr);
-	if (update_preferred_cluster(grp, rq->curr, old_load, true))
+	if (should_update_preferred_cluster(grp, rq->curr, old_load, true, rq->clock))
 		set_preferred_cluster(grp);
 	rcu_read_unlock();
 
