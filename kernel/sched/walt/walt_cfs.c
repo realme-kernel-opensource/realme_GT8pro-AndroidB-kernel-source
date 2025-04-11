@@ -662,7 +662,8 @@ static inline unsigned long get_util_to_cost(int cpu, unsigned long util)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
 
-	if (cpu == 0 && util > sysctl_em_inflate_thres)
+	if (cpumask_test_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) &&
+	    util > sysctl_em_inflate_thres)
 		return mult_frac(wrq->cluster->util_to_cost[util], sysctl_em_inflate_pct, 100);
 	else
 		return wrq->cluster->util_to_cost[util];
