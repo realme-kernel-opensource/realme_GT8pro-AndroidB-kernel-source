@@ -323,6 +323,7 @@ canoe_perf_config = {
     "CONFIG_SLIMBUS": "m",
     "CONFIG_SLIM_QCOM_NGD_CTRL": "m",
     "CONFIG_SM_CAMBISTMCLKCC_CANOE": "m",
+    "CONFIG_SM_CAMCC_ALOR": "m",
     "CONFIG_SM_CAMCC_CANOE": "m",
     "CONFIG_SM_DEBUGCC_CANOE": "m",
     "CONFIG_SM_DISPCC_CANOE": "m",
