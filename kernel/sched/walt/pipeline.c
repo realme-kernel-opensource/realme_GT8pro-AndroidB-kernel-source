@@ -916,34 +916,36 @@ bool enable_load_sync(int cpu)
  *      - ret  0: Task should be treated as a misfit (does not fit on smaller CPUs).
  *      - ret  1: Task cannot be treated as a misfit (fits on smaller CPUs).
  *
- * If the task is assigned a pipeline CPU which is a prime CPU, ret should be 0, indicating
- * the task is a misfit.
  * If the number of pipeline tasks is 2 or fewer, continue evaluation of task_fits_max().
- * If the number of pipeline tasks is 3 or more, ret should be 1, indicating the task fits on the
- * smaller CPUs and is not a misfit.
+ * If the number of pipeline tasks is 3 or more:
+ *	a) If the task is assigned a pipeline CPU which is a prime CPU, ret should be 0,
+ *	indicating the task is a misfit.
+ *	b) else, ret should be 1, indicating the task fits on the smaller CPUs and is not a
+ *	misfit.
  */
 int pipeline_fits_smaller_cpus(struct task_struct *p)
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	int pipeline_cpu = wts->pipeline_cpu;
 
+	if (!pipeline_in_progress())
+		return -1;
+
 	if (pipeline_cpu == -1)
 		return -1;
 
-	if (cpumask_test_cpu(pipeline_cpu, &cpu_array[0][num_sched_clusters-1]))
-		return 0;
-
 	if (have_heavy_list) {
-		if (have_heavy_list == MAX_NR_PIPELINE)
-			return 1;
-		else
+		if (have_heavy_list < MAX_NR_PIPELINE)
+			return -1;
+	} else {
+		if (pipeline_nr < MAX_NR_PIPELINE)
 			return -1;
 	}
 
-	if (pipeline_nr >= MAX_NR_PIPELINE)
-		return 1;
-	else
-		return -1;
+	if (cpumask_test_cpu(pipeline_cpu, &cpu_array[0][num_sched_clusters - 1]))
+		return 0;
+
+	return 1;
 }
 
 /*
