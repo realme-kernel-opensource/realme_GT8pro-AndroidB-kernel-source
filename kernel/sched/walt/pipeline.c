@@ -384,6 +384,10 @@ bool find_heaviest_topapp(u64 window_start)
 								(200ULL * MSEC_TO_NSEC)))
 			continue;
 
+		/* ensure the task can be placed on any of the potential pipeline cpus */
+		if (!cpumask_subset(&cpus_for_pipeline, &(wts_to_ts(wts)->cpus_mask)))
+			continue;
+
 		/* skip tasks which are not active since last 2 windows */
 		if (to_be_placed_wts->mark_start < window_start - (sched_ravg_window * 2))
 			continue;
