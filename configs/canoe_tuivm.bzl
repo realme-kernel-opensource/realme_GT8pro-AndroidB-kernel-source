@@ -33,8 +33,6 @@ canoe_tuivm_config = {
     "CONFIG_QCOM_IOMMU_UTIL": "m",
     "CONFIG_QCOM_IPCC": "m",
     "CONFIG_QCOM_LAZY_MAPPING": "m",
-    "CONFIG_QCOM_LOGBUF_BOOTLOG": "m",
-    "CONFIG_QCOM_LOGBUF_VENDOR_HOOKS": "m",
     "CONFIG_QCOM_MEM_BUF": "m",
     "CONFIG_QCOM_MEM_BUF_DEV": "m",
     "CONFIG_QCOM_MEM_BUF_DEV_GH": "y",
