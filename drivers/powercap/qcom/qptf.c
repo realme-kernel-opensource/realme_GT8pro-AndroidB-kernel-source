@@ -13,6 +13,7 @@
 #include <linux/soc/qcom/qptf.h>
 #include "qptf_internal.h"
 
+#define ROOT_NODE "root"
 static LIST_HEAD(powerzone_list);
 static LIST_HEAD(qptm_list);
 static DEFINE_MUTEX(powerzone_list_lock);
@@ -180,15 +181,10 @@ static void qptm_unregister(struct qptm *qptm)
 static int qptm_register(const char *name, struct qptm *qptm, struct qptm *parent)
 {
 	struct powercap_zone *pcz;
+	struct qptm *prnt = NULL;
 
 	if (!qh->pct)
 		return -EAGAIN;
-
-	if (qh->root && !parent)
-		return -EBUSY;
-
-	if (!qh->root && parent)
-		return -EINVAL;
 
 	if (parent && parent->ops)
 		return -EINVAL;
@@ -201,8 +197,13 @@ static int qptm_register(const char *name, struct qptm *qptm, struct qptm *paren
 			   qptm->ops->release))
 		return -EINVAL;
 
+	if (!parent || parent == qh->root)
+		prnt = NULL;
+	else
+		prnt = parent;
+
 	pcz = powercap_register_zone(&qptm->zone, qh->pct, name,
-				     parent ? &parent->zone : NULL,
+				     prnt ? &prnt->zone : NULL,
 				     &zone_ops, MAX_QPTM_CONSTRAINTS,
 				     &constraint_ops);
 	if (IS_ERR(pcz))
@@ -212,7 +213,8 @@ static int qptm_register(const char *name, struct qptm *qptm, struct qptm *paren
 		list_add_tail(&qptm->sibling, &parent->children);
 		qptm->parent = parent;
 	} else {
-		qh->root = qptm;
+		list_add_tail(&qptm->sibling, &qh->root->children);
+		qptm->parent = qh->root;
 	}
 
 	pr_debug("Registered qptm node '%s'\n", qptm->zone.name);
@@ -472,7 +474,9 @@ static struct qptm *create_qptm(struct device *dev, struct device_node *np)
 		qh->hierarchy[idx].qptm = qptm;
 		qptm_ops_init(qptm, &qptm_ops);
 		ret = qptm_register(np->name, qptm,
-			 qh->hierarchy[idx].parent->qptm);
+			qh->hierarchy[idx].parent ?
+			qh->hierarchy[idx].parent->qptm :
+			qh->root);
 		if (ret) {
 			pr_err("Failed to register '%s': %d\n", qptm->name, ret);
 			goto error_exit;
@@ -668,6 +672,29 @@ static struct powercap_control_type_ops pc_ops = {
 	.get_enable = qptm_pct_get_enable,
 };
 
+static int qptm_create_root_node(void)
+{
+	 /*
+	  * Create a root qptm node and this node won't be adding
+	  * into powercap sysfs. It helps to add different dptm
+	  * nodes as independent node under root node.
+	  **/
+	qh->root = kzalloc(sizeof(*qh->root), GFP_KERNEL);
+	if (!qh->root)
+		return -ENOMEM;
+
+	strscpy(qh->root->name, ROOT_NODE, QPTM_NAME_MAX);
+	qh->root->np = NULL;
+	mutex_init(&qh->root->lock);
+	INIT_LIST_HEAD(&qh->root->pz_list);
+	mutex_lock(&qptm_list_lock);
+	list_add(&qh->root->node, &qptm_list);
+	mutex_unlock(&qptm_list_lock);
+	qptm_ops_init(qh->root, NULL);
+
+	return 0;
+}
+
 static int qptm_create_hierarchy(struct qptm_node *hierarchy)
 {
 	int ret;
@@ -687,7 +714,7 @@ static int qptm_create_hierarchy(struct qptm_node *hierarchy)
 		goto out_err;
 	}
 
-	ret = for_qptm_each_child(hierarchy, NULL, NULL);
+	ret = for_qptm_each_child(hierarchy, NULL, qh->root);
 	if (ret)
 		goto out_err;
 
@@ -712,7 +739,14 @@ static void __qptm_destroy_hierarchy(struct qptm *qptm)
 	 * At this point, we know all children were removed from the
 	 * recursive call before
 	 */
-	qptm_unregister(qptm);
+	if (qptm != qh->root) {
+		qptm_unregister(qptm);
+	} else {
+		mutex_lock(&qptm_list_lock);
+		list_del(&qptm->node);
+		mutex_unlock(&qptm_list_lock);
+		kfree(qptm);
+	}
 }
 
 static void qptm_destroy_hierarchy(void)
@@ -741,7 +775,6 @@ static int of_each_qptm_child(struct device_node *root,
 			return -EINVAL;
 		}
 		qh->hierarchy[qh->cur_index].np = child;
-		qh->hierarchy[qh->cur_index].pnp = root;
 		strscpy(qh->hierarchy[qh->cur_index].name, child->name, QPTM_NAME_MAX);
 		if (of_property_read_bool(child, "power-channels"))
 			qh->hierarchy[qh->cur_index].type = QPTM_NODE_DT;
@@ -801,18 +834,27 @@ static int qptf_init(void)
 		goto release_qh;
 	}
 
+	ret = qptm_create_root_node();
+	if (ret < 0)
+		goto release_hierarchy;
+
 	ret = of_each_qptm_child(np, NULL, NULL);
 	if (ret) {
 		pr_err("Failed to read powerzones hierarchy: %d\n", ret);
-		goto release_hierarchy;
+		goto release_root;
 	}
 
 	ret = qptm_create_hierarchy(qh->hierarchy);
 	if (ret < 0)
-		goto release_hierarchy;
+		goto release_root;
 
 	return 0;
 
+release_root:
+	mutex_lock(&qptm_list_lock);
+	list_del(&qh->root->node);
+	mutex_unlock(&qptm_list_lock);
+	kfree(qh->root);
 release_hierarchy:
 	kfree(qh->hierarchy);
 release_qh:
