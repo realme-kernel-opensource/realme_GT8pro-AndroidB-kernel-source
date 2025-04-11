@@ -820,6 +820,7 @@ struct haptics_chip {
 	struct hrtimer			hbst_off_timer;
 	struct notifier_block		hboost_nb;
 	struct notifier_block		lpass_ssr_nb;
+	struct mutex			status_lock;
 	struct mutex			vmax_lock;
 	struct work_struct		set_gain_work;
 	struct list_head		mmap_effect_list;
@@ -1197,22 +1198,23 @@ static int haptics_get_status_data(struct haptics_chip *chip,
 	};
 	const char *name;
 
+	mutex_lock(&chip->status_lock);
 	mod_sel_val[0] = sel & 0xff;
 	mod_sel_val[1] = (sel >> 8) & 0xff;
 	rc = haptics_write(chip, chip->cfg_addr_base,
 			HAP_CFG_MOD_STATUS_XT_REG, &mod_sel_val[1], 1);
 	if (rc < 0)
-		return rc;
+		goto unlock;
 
 	rc = haptics_write(chip, chip->cfg_addr_base,
 			HAP_CFG_MOD_STATUS_SEL_REG, mod_sel_val, 1);
 	if (rc < 0)
-		return rc;
+		goto unlock;
 
 	rc = haptics_read(chip, chip->cfg_addr_base,
 			HAP_CFG_STATUS_DATA_MSB_REG, data, 2);
 	if (rc < 0)
-		return rc;
+		goto unlock;
 
 	if (sel <= BRAKE_CAL_SCALAR)
 		name = hap_status_name[sel];
@@ -1225,7 +1227,11 @@ static int haptics_get_status_data(struct haptics_chip *chip,
 
 	dev_dbg(chip->dev, "Get status data[%s] = (%#x, %#x)\n", name, data[0], data[1]);
 	trace_qcom_haptics_status(name, data[0], data[1]);
-	return 0;
+
+unlock:
+	mutex_unlock(&chip->status_lock);
+
+	return rc;
 }
 
 #define AUTO_CAL_CLK_SCALE_DEN		1000
@@ -6617,6 +6623,7 @@ static int haptics_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+	mutex_init(&chip->status_lock);
 	mutex_init(&chip->vmax_lock);
 
 	rc = haptics_hw_init(chip);
