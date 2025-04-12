@@ -5,3 +5,5 @@ common --//build/kernel/kleaf:allow_ddk_unsafe_headers
 build --flag_alias=socrepo=//build/kernel/kleaf:socrepo
 build --//build/kernel/kleaf:socrepo=true
 common --//build/kernel/kleaf:user_ddk_unsafe_headers=//soc-repo:unsafe_headers_qcom_group
+# Allocate default 80% heap for bazel
+startup --host_jvm_args=-XX:MaxRAMPercentage=80.0
