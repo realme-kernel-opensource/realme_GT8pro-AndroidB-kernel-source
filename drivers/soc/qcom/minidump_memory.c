@@ -1058,7 +1058,7 @@ static inline void md_dump_slabowner(char *m, size_t dump_size) {}
 static inline void md_debugfs_slabowner(struct dentry *minidump_dir) {}
 #endif	/* CONFIG_SLUB_DEBUG */
 
-static int dump_bufinfo(const struct dma_buf *buf_obj, struct dma_buf_priv *buf)
+static int dump_bufinfo(const struct dma_buf *buf_obj, void *private)
 {
 	int ret;
 	struct dma_buf_attachment *attach_obj;
@@ -1066,8 +1066,11 @@ static int dump_bufinfo(const struct dma_buf *buf_obj, struct dma_buf_priv *buf)
 	struct dma_resv_iter cursor;
 	struct dma_fence *fence;
 	int attach_count;
-	struct priv_buf *priv_buf = buf->priv_buf;
+	struct dma_buf_priv *buf;
+	struct priv_buf *priv_buf;
 
+	buf = (struct dma_buf_priv *)private;
+	priv_buf = buf->priv_buf;
 
 	ret = dma_resv_lock(buf_obj->resv, NULL);
 	if (ret)
@@ -1142,7 +1145,6 @@ err:
 static void md_dma_buf_info(char *m, size_t dump_size)
 {
 	int ret;
-	struct dma_buf *dmabuf;
 	struct dma_buf_priv dma_buf_priv;
 	struct priv_buf buf;
 
@@ -1163,17 +1165,9 @@ static void md_dma_buf_info(char *m, size_t dump_size)
 			"size", "flags", "mode", "count", "ino");
 	buf.offset = ret;
 
-	ret = mutex_lock_interruptible(&debugfs_list_mutex);
+	ret = get_dmabuf_debugfs_data(dump_bufinfo, (void *)&dma_buf_priv);
 	if (ret)
-		return;
-
-	list_for_each_entry(dmabuf, &debugfs_list, list_node) {
-		ret = dump_bufinfo(dmabuf, &dma_buf_priv);
-		if (ret)
-			break;
-	}
-
-	mutex_unlock(&debugfs_list_mutex);
+		pr_err("Error occurred during dmabuf debugfs data collection!\n");
 
 	scnprintf(buf.buf + buf.offset, buf.size - buf.offset,
 			"\nTotal %d objects, %zu bytes\n",
