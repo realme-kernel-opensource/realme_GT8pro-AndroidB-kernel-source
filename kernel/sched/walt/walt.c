@@ -86,6 +86,9 @@ unsigned int __read_mostly sched_init_task_load_windows;
  */
 unsigned int __read_mostly sched_load_granule;
 
+static u64 last_migration_irqwork_ts;
+static u64 last_rollover_irqwork_ts;
+
 bool walt_is_idle_task(struct task_struct *p)
 {
 	return walt_flag_test(p, WALT_IDLE_TASK_BIT);
@@ -313,6 +316,9 @@ void walt_dump(void)
 			sched_ravg_window_change_time);
 	printk_deferred("global_ws=%llu\n",
 			 atomic64_read(&walt_irq_work_lastq_ws));
+
+	printk_deferred("last_migration_irqwork_ts=%llu last_rollover_irqwork_ts=%llu\n",
+			last_migration_irqwork_ts, last_rollover_irqwork_ts);
 	SCHED_PRINT(sched_ravg_window);
 	SCHED_PRINT(new_sched_ravg_window);
 	for_each_online_cpu(cpu)
@@ -3415,8 +3421,8 @@ static void set_preferred_cluster(struct walt_related_thread_group *grp)
 	raw_spin_unlock(&grp->lock);
 }
 
-static int update_preferred_cluster(struct walt_related_thread_group *grp,
-		struct task_struct *p, u32 old_load, bool from_tick)
+static int should_update_preferred_cluster(struct walt_related_thread_group *grp,
+		struct task_struct *p, u32 old_load, bool from_tick, u64 now)
 {
 	u32 new_load = task_load(p);
 
@@ -3434,7 +3440,7 @@ static int update_preferred_cluster(struct walt_related_thread_group *grp,
 	if (abs(new_load - old_load) > sched_ravg_window / 4)
 		return 1;
 
-	if (walt_sched_clock() - grp->last_update > sched_ravg_window)
+	if (now - grp->last_update > sched_ravg_window)
 		return 1;
 
 	return 0;
@@ -4156,6 +4162,11 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 		}
 		spin_unlock_irqrestore(&sched_ravg_window_lock, flags);
 	}
+
+	if (!is_migration)
+		last_migration_irqwork_ts = wc;
+	else
+		last_rollover_irqwork_ts = wc;
 }
 
 /**
@@ -4978,7 +4989,7 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 
 	rcu_read_lock();
 	grp = task_related_thread_group(p);
-	if (update_preferred_cluster(grp, p, old_load, false))
+	if (should_update_preferred_cluster(grp, p, old_load, false, wallclock))
 		set_preferred_cluster(grp);
 	rcu_read_unlock();
 }
@@ -5121,7 +5132,7 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 	old_load = task_load(rq->curr);
 	rcu_read_lock();
 	grp = task_related_thread_group(rq->curr);
-	if (update_preferred_cluster(grp, rq->curr, old_load, true))
+	if (should_update_preferred_cluster(grp, rq->curr, old_load, true, rq->clock))
 		set_preferred_cluster(grp);
 	rcu_read_unlock();
 
