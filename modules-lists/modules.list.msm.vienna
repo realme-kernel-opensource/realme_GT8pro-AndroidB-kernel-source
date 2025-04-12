@@ -42,6 +42,8 @@ smem.ko
 socinfo.ko
 qcom_hwspinlock.ko
 qcom-ipcc.ko
+cqhci.ko
+sdhci-msm.ko
 llcc-qcom.ko
 qcom_cpucp.ko
 qcom_scmi_vendor.ko

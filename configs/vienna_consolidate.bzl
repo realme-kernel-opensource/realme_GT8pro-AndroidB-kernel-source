@@ -16,6 +16,7 @@ vienna_consolidate_config = {
     "CONFIG_QCOM_DYNAMIC_MEMORY_DUMP": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_RUNTIME_TESTING_MENU": "y",
+    "CONFIG_SDHCI_MSM_DBG": "y",
     "CONFIG_NOP_USB_XCEIV": "m",
     "CONFIG_SCHED_WALT_DEBUG": "m",
     "CONFIG_USB_DWC3_MSM": "m",
