@@ -4,6 +4,7 @@ arm_smmu.ko
 gic_intr_routing.ko
 llcc-qcom.ko
 cambistmclkcc-canoe.ko
+camcc-alor.ko
 camcc-canoe.ko
 clk-dummy.ko
 clk-qcom.ko
