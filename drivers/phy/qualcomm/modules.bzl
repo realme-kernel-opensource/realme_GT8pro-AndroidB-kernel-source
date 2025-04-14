@@ -107,6 +107,7 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-usb-v4.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-usb-v5.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-usb-v6.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-pcs-aon-v6.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-dp-com-v3.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-dp-phy.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-dp-phy-v3.h",
