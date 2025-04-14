@@ -208,3 +208,30 @@ def register_modules(registry):
             "drivers/thermal/qcom/qti_thermal_vendor_hooks.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/thermal/qcom/qti_dynamic_hw_trip",
+        out = "qti_dynamic_hw_trip.ko",
+        config = "CONFIG_QTI_DYNAMIC_HW_THERMAL_TRIP",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/qti_dynamic_hw_trip.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/soc/qcom/minidump",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/debug_symbol",
+            "drivers/dma-buf/heaps/qcom_dma_heaps",
+            "drivers/iommu/msm_dma_iommu_mapping",
+            "drivers/soc/qcom/mem_buf/mem_buf_dev",
+            "drivers/soc/qcom/secure_buffer",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
