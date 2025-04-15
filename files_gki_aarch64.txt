@@ -1596,6 +1596,7 @@ drivers/pinctrl/pinctrl-utils.h
 drivers/pinctrl/pinmux.c
 drivers/pinctrl/pinmux.h
 drivers/pmdomain/arm/scmi_perf_domain.c
+drivers/pmdomain/arm/scmi_pm_domain.c
 drivers/pmdomain/core.c
 drivers/pmdomain/governor.c
 drivers/power/reset/hisi-reboot.c
