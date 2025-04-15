@@ -51,6 +51,7 @@
 /* Generic definitions */
 #define MAX_STR_LEN			128
 #define BC_WAIT_TIME_MS			1000
+#define BC_FW_VER_WAIT_TIME_MS		1500
 #define WLS_FW_PREPARE_TIME_MS		1000
 #define WLS_FW_WAIT_TIME_MS		500
 #define WLS_FW_UPDATE_TIME_MS		1000
@@ -389,7 +390,7 @@ static int battery_chg_fw_write(struct battery_chg_dev *bcdev, void *data,
 }
 
 static int battery_chg_write(struct battery_chg_dev *bcdev, void *data,
-				int len)
+				int len, u32 wait_time)
 {
 	int rc;
 
@@ -416,7 +417,7 @@ static int battery_chg_write(struct battery_chg_dev *bcdev, void *data,
 	rc = pmic_glink_write(bcdev->client, data, len);
 	if (!rc) {
 		rc = wait_for_completion_timeout(&bcdev->ack,
-					msecs_to_jiffies(BC_WAIT_TIME_MS));
+					msecs_to_jiffies(wait_time));
 		if (!rc) {
 			pr_err("Error, timed out sending message\n");
 			mutex_unlock(&bcdev->rw_lock);
@@ -458,7 +459,7 @@ static int write_property_id(struct battery_chg_dev *bcdev,
 		pr_debug("psy: %s prop_id: %u val: %u\n", pst->psy->desc->name,
 			req_msg.property_id, val);
 
-	return battery_chg_write(bcdev, &req_msg, sizeof(req_msg));
+	return battery_chg_write(bcdev, &req_msg, sizeof(req_msg), BC_WAIT_TIME_MS);
 }
 
 static int read_property_id(struct battery_chg_dev *bcdev,
@@ -477,7 +478,7 @@ static int read_property_id(struct battery_chg_dev *bcdev,
 		pr_debug("psy: %s prop_id: %u\n", pst->psy->desc->name,
 			req_msg.property_id);
 
-	return battery_chg_write(bcdev, &req_msg, sizeof(req_msg));
+	return battery_chg_write(bcdev, &req_msg, sizeof(req_msg), BC_WAIT_TIME_MS);
 }
 
 static int get_property_id(struct psy_state *pst,
@@ -507,7 +508,7 @@ static void battery_chg_notify_disable(struct battery_chg_dev *bcdev)
 		req_msg.hdr.type = MSG_TYPE_NOTIFY;
 		req_msg.hdr.opcode = BC_DISABLE_NOTIFY_REQ;
 
-		rc = battery_chg_write(bcdev, &req_msg, sizeof(req_msg));
+		rc = battery_chg_write(bcdev, &req_msg, sizeof(req_msg), BC_WAIT_TIME_MS);
 		if (rc < 0)
 			pr_err("Failed to disable notification rc=%d\n", rc);
 		else
@@ -526,7 +527,7 @@ static void battery_chg_notify_enable(struct battery_chg_dev *bcdev)
 		req_msg.hdr.type = MSG_TYPE_NOTIFY;
 		req_msg.hdr.opcode = BC_SET_NOTIFY_REQ;
 
-		rc = battery_chg_write(bcdev, &req_msg, sizeof(req_msg));
+		rc = battery_chg_write(bcdev, &req_msg, sizeof(req_msg), BC_WAIT_TIME_MS);
 		if (rc < 0)
 			pr_err("Failed to enable notification rc=%d\n", rc);
 		else
@@ -1184,7 +1185,7 @@ static int battery_psy_set_charge_threshold(struct battery_chg_dev *bcdev,
 	msg.target_soc = target_soc;
 	msg.delta_soc = delta_soc;
 
-	rc = battery_chg_write(bcdev, &msg, sizeof(msg));
+	rc = battery_chg_write(bcdev, &msg, sizeof(msg), BC_WAIT_TIME_MS);
 	if (rc < 0)
 		pr_err("Failed to set charge_control thresholds, rc=%d\n", rc);
 	else
@@ -1575,7 +1576,7 @@ static int wireless_fw_check_for_update(struct battery_chg_dev *bcdev,
 	req_msg.fw_size = size;
 	req_msg.fw_crc = bcdev->wls_fw_crc;
 
-	return battery_chg_write(bcdev, &req_msg, sizeof(req_msg));
+	return battery_chg_write(bcdev, &req_msg, sizeof(req_msg), BC_FW_VER_WAIT_TIME_MS);
 }
 
 #define IDT9415_FW_MAJOR_VER_OFFSET		0x84
@@ -1763,7 +1764,7 @@ static ssize_t wireless_fw_version_show(const struct class *c,
 	req_msg.hdr.type = MSG_TYPE_REQ_RESP;
 	req_msg.hdr.opcode = BC_WLS_FW_GET_VERSION;
 
-	rc = battery_chg_write(bcdev, &req_msg, sizeof(req_msg));
+	rc = battery_chg_write(bcdev, &req_msg, sizeof(req_msg), BC_FW_VER_WAIT_TIME_MS);
 	if (rc < 0) {
 		pr_err("Failed to get FW version rc=%d\n", rc);
 		return rc;
@@ -2142,7 +2143,7 @@ static int battery_chg_ship_mode(struct battery_chg_dev *bcdev)
 	msg.hdr.opcode = BC_SHIP_MODE_REQ_SET;
 	msg.ship_mode_type = SHIP_MODE_PMIC;
 
-	rc = battery_chg_write(bcdev, &msg, sizeof(msg));
+	rc = battery_chg_write(bcdev, &msg, sizeof(msg), BC_WAIT_TIME_MS);
 	if (rc < 0)
 		pr_emerg("Failed to write ship mode: %d\n", rc);
 
@@ -2350,7 +2351,7 @@ static int battery_chg_reboot_notify(struct notifier_block *nb, unsigned long co
 	msg_notify.hdr.type = MSG_TYPE_NOTIFY;
 	msg_notify.hdr.opcode = BC_SHUTDOWN_NOTIFY;
 
-	rc = battery_chg_write(bcdev, &msg_notify, sizeof(msg_notify));
+	rc = battery_chg_write(bcdev, &msg_notify, sizeof(msg_notify), BC_WAIT_TIME_MS);
 	if (rc < 0)
 		pr_err("Failed to send shutdown notification rc=%d\n", rc);
 
