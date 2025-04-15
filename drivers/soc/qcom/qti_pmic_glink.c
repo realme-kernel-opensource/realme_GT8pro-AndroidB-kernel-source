@@ -63,8 +63,6 @@
  * @pdr_service_name:	protection domain service name
  * @pdr_path_name:	protection domain path name
  * @pdr_state:		protection domain service state
- * @wake_count_lock:	lock to update wake_count
- * @wake_count:		wake counter
  */
 struct pmic_glink_dev {
 	struct rpmsg_device	*rpdev;
@@ -95,8 +93,6 @@ struct pmic_glink_dev {
 	const char		*pdr_service_name;
 	const char		*pdr_path_name;
 	atomic_t		pdr_state;
-	spinlock_t		wake_count_lock;
-	int			wake_count;
 };
 
 /**
@@ -133,47 +129,19 @@ struct pmic_glink_buf {
 static LIST_HEAD(pmic_glink_dev_list);
 static DEFINE_MUTEX(pmic_glink_dev_lock);
 
-static void pmic_glink_wake_acquire(struct pmic_glink_dev *pdev)
-{
-	spin_lock(&pdev->wake_count_lock);
-
-	if (!pdev->wake_count) {
-		pm_stay_awake(pdev->dev);
-		dev_dbg(pdev->dev, "wakeup acquired\n");
-	}
-	pdev->wake_count++;
-
-	spin_unlock(&pdev->wake_count_lock);
-}
-
-static void pmic_glink_wake_relax(struct pmic_glink_dev *pdev)
-{
-	spin_lock(&pdev->wake_count_lock);
-
-	if (pdev->wake_count) {
-		pdev->wake_count--;
-		if (!pdev->wake_count) {
-			pm_relax(pdev->dev);
-			dev_dbg(pdev->dev, "wakeup released\n");
-		}
-	}
-
-	spin_unlock(&pdev->wake_count_lock);
-}
-
 static void pmic_glink_notify_clients(struct pmic_glink_dev *pgdev,
 					enum pmic_glink_state state)
 {
 	struct pmic_glink_client *pos;
 
-	pmic_glink_wake_acquire(pgdev);
+	pm_stay_awake(pgdev->dev);
 
 	mutex_lock(&pgdev->client_lock);
 	list_for_each_entry(pos, &pgdev->client_dev_list, node)
 		pos->state_cb(pos->priv, state);
 	mutex_unlock(&pgdev->client_lock);
 
-	pmic_glink_wake_relax(pgdev);
+	pm_relax(pgdev->dev);
 
 	pmic_glink_dbg(pgdev, "state_cb done %d\n", state);
 }
@@ -469,7 +437,6 @@ static void pmic_glink_rx_work(struct work_struct *work)
 		list_for_each_entry_safe(pbuf, tmp, &pdev->rx_list, node) {
 			spin_unlock_irqrestore(&pdev->rx_lock, flags);
 			pmic_glink_rx_callback(pdev, pbuf);
-			pmic_glink_wake_relax(pdev);
 			spin_lock_irqsave(&pdev->rx_lock, flags);
 			list_del(&pbuf->node);
 			kfree(pbuf);
@@ -497,8 +464,6 @@ static int pmic_glink_rpmsg_callback(struct rpmsg_device *rpdev, void *data,
 
 	pbuf->len = len;
 	memcpy(pbuf->buf, data, len);
-
-	pmic_glink_wake_acquire(pdev);
 
 	spin_lock_irqsave(&pdev->rx_lock, flags);
 	list_add_tail(&pbuf->node, &pdev->rx_list);
@@ -697,7 +662,6 @@ static int pmic_glink_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&pgdev->rx_list);
 	INIT_LIST_HEAD(&pgdev->dev_list);
 	spin_lock_init(&pgdev->rx_lock);
-	spin_lock_init(&pgdev->wake_count_lock);
 	mutex_init(&pgdev->client_lock);
 	idr_init(&pgdev->client_idr);
 	atomic_set(&pgdev->prev_state, QCOM_SSR_BEFORE_POWERUP);
