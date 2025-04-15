@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2014, 2019-2021, The Linux Foundation. All rights reserved. */
-/* Copyright (c) 2022-2023, 2025, Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #ifndef __QCOM_CLK_REGMAP_H__
 #define __QCOM_CLK_REGMAP_H__
@@ -75,6 +75,7 @@ struct clk_regmap {
 	u8 crm_num_node;
 #define QCOM_CLK_IS_CRITICAL BIT(0)
 #define QCOM_CLK_BOOT_CRITICAL BIT(1)
+#define QCOM_CLK_MINIDUMP_ENABLE BIT(2)
 	unsigned long flags;
 };
 
