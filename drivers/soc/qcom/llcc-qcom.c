@@ -671,7 +671,7 @@ static const struct llcc_slice_config canoe_data[] = {
 	{LLCC_VIDVSP,          4,  256, 4, 1, 0xFFFFFFFF, 0, 0, 0, 0,
 							  0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
 							  0, 0},
-	{LLCC_VIDDEC,          5, 6144, 4, 1, 0xFFFFFFFF, 0, 2, 0, 0,
+	{LLCC_VIDDEC,          5,  512, 4, 1, 0xFFFFFFFF, 0, 2, 0, 0,
 							  0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1,
 							  1, 33},
 	{LLCC_CAMOFE,         33, 6144, 4, 1, 0xFFFFFFFF, 0, 0, 0, 0,
