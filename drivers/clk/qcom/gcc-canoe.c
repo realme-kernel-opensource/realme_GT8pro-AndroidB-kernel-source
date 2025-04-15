@@ -2137,6 +2137,7 @@ static struct clk_branch gcc_gpu_gemnoc_gfx_clk = {
 	.clkr = {
 		.enable_reg = 0x71010,
 		.enable_mask = BIT(0),
+		.flags = QCOM_CLK_MINIDUMP_ENABLE,
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gcc_gpu_gemnoc_gfx_clk",
 			.ops = &clk_branch2_ops,
