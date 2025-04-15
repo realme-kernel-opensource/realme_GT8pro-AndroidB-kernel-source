@@ -263,16 +263,7 @@ static inline int gh_dbgfs_unregister(void) { return 0; }
 static int __init gh_ctrl_init(void)
 {
 	int ret;
-	struct device_node *hyp;
 	struct arm_smccc_res res;
-
-	hyp = of_find_node_by_path("/hypervisor");
-
-	if (!hyp || (!of_device_is_compatible(hyp, "qcom,gunyah-hypervisor") &&
-		     !of_device_is_compatible(hyp, "qcom,haven-hypervisor"))) {
-		pr_err("gunyah-hypervisor or haven-hypervisor node not present\n");
-		return 0;
-	}
 
 	(void)gh_hcall_hyp_identify(&gunyah_api);
 
