@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __DT_BINDINGS_INTERCONNECT_QCOM_VIENNA_H
@@ -11,7 +11,7 @@
 #define MASTER_APPSS_PROC			2
 #define MASTER_LLCC				3
 #define MASTER_QDSS_BAM				4
-#define MASTER_QUP_0				5
+#define MASTER_QUP_1				5
 #define MASTER_A1NOC_SNOC			6
 #define MASTER_CAMNOC_HF			7
 #define MASTER_CAMNOC_SF			8
@@ -34,7 +34,7 @@
 #define MASTER_CNOC_CFG				25
 #define MASTER_CNOC_MNOC_CFG			26
 #define MASTER_PCIE_ANOC_CFG			27
-#define MASTER_QUP_CORE_0			28
+#define MASTER_QUP_CORE_1			28
 #define MASTER_CRYPTO				29
 #define MASTER_IPA				30
 #define MASTER_VIDEO				31
@@ -66,7 +66,7 @@
 #define SLAVE_PCIE_CFG				529
 #define SLAVE_QDSS_CFG				530
 #define SLAVE_QRNG				531
-#define SLAVE_QUP_0				532
+#define SLAVE_QUP_1				532
 #define SLAVE_SDCC_1				533
 #define SLAVE_SDCC_2				534
 #define SLAVE_TCSR				535
@@ -91,7 +91,7 @@
 #define SLAVE_DDRSS_CFG				554
 #define SLAVE_CNOC_MNOC_CFG			555
 #define SLAVE_PCIE_ANOC_CFG			556
-#define SLAVE_QUP_CORE_0			557
+#define SLAVE_QUP_CORE_1			557
 #define SLAVE_BOOT_IMEM				558
 #define SLAVE_IMEM				559
 #define SLAVE_SERVICE_CNOC			560
