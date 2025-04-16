@@ -310,6 +310,7 @@ class BazelBuilder:
             self.user_opts.extend(["--//soc-repo:skip_{}=true".format(s) for s in self.skip_list if s != 'abi'])
 
         self.user_opts.append("--incompatible_sandbox_hermetic_tmp=false")
+        self.user_opts.append("--noenable_workspace")
 
         if self.dry_run:
             self.user_opts.append("--nobuild")
