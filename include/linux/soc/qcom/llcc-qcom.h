@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/platform_device.h>
@@ -98,6 +98,7 @@
 #define LLCC_CAM_IPE_STROV    92
 #define LLCC_CAM_OFE_STROV    93
 #define LLCC_CPUSS_HEU        94
+#define LLCC_MDM_PNG_FIXED   100
 
 #define LLCC_VERSION_2_0_0_0          0x02000000
 #define LLCC_VERSION_2_1_0_0          0x02010000
