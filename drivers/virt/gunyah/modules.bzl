@@ -82,6 +82,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/virt/gunyah/gunyah_loader",
+            "drivers/virt/gunyah/gh_vcpu_mgr",
             "drivers/soc/qcom/mdt_loader",
             "drivers/soc/qcom/secure_buffer",
             "drivers/firmware/qcom/qcom-scm",
@@ -236,6 +237,7 @@ def register_modules(registry):
             # do not sort
             "drivers/virt/gunyah/gh_vcpu_mgr.c",
             "drivers/virt/gunyah/gh_vcpu_mgr.h",
+            "drivers/virt/gunyah/gh_vcpu_mgr_trace.h",
         ],
         deps = [
             # do not sort
