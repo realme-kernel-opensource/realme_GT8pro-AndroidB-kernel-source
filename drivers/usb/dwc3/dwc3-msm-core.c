@@ -561,6 +561,7 @@ struct dwc3_msm {
 	bool			use_pwr_event_for_wakeup;
 	bool			host_poweroff_in_pm_suspend;
 	bool			disable_host_ssphy_powerdown;
+	bool			is_ssphy_powerdown;
 	bool			enable_host_slow_suspend;
 	unsigned long		lpm_flags;
 	unsigned int		vbus_draw;
@@ -6598,7 +6599,7 @@ static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
 {
 	u32 reg;
 
-	if (mdwc->disable_host_ssphy_powerdown ||
+	if (mdwc->is_ssphy_powerdown || mdwc->disable_host_ssphy_powerdown ||
 		dwc3_msm_get_max_speed(mdwc) < USB_SPEED_SUPER)
 		return 0;
 
@@ -6610,6 +6611,9 @@ static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
 	usb_phy_notify_disconnect(mdwc->ss_phy,
 					USB_SPEED_SUPER);
 	usb_phy_set_suspend(mdwc->ss_phy, 1);
+	phy_power_off(mdwc->usb3_phy);
+	phy_exit(mdwc->usb3_phy);
+	mdwc->is_ssphy_powerdown = true;
 
 	return 0;
 }
@@ -6619,7 +6623,7 @@ static int dwc3_msm_host_ss_powerup(struct dwc3_msm *mdwc)
 	u32 reg;
 
 	dbg_log_string("start: speed:%d\n", dwc3_msm_get_max_speed(mdwc));
-	if (!mdwc->in_host_mode ||
+	if (!mdwc->is_ssphy_powerdown || !mdwc->in_host_mode ||
 		mdwc->disable_host_ssphy_powerdown ||
 		dwc3_msm_get_max_speed(mdwc) < USB_SPEED_SUPER)
 		return 0;
@@ -6627,11 +6631,14 @@ static int dwc3_msm_host_ss_powerup(struct dwc3_msm *mdwc)
 	usb_phy_set_suspend(mdwc->ss_phy, 0);
 	usb_phy_notify_connect(mdwc->ss_phy,
 					USB_SPEED_SUPER);
+	phy_init(mdwc->usb3_phy);
+	phy_power_on(mdwc->usb3_phy);
 
 	dwc3_msm_switch_utmi(mdwc, 0);
 	reg = dwc3_msm_read_reg(mdwc->base, EXTRA_INP_REG);
 	reg &= ~EXTRA_INP_SS_DISABLE;
 	dwc3_msm_write_reg(mdwc->base, EXTRA_INP_REG, reg);
+	mdwc->is_ssphy_powerdown = false;
 
 	return 0;
 }
