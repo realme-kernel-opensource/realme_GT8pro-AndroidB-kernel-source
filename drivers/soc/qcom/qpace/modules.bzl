@@ -10,4 +10,7 @@ def register_modules(registry):
             "drivers/soc/qcom/qpace/qpace-constants.h",
             "drivers/soc/qcom/qpace/qpace-reg-accessors.h",
         ],
+        deps = [
+            "drivers/firmware/qcom/si_core/si_core_module",
+        ],
     )

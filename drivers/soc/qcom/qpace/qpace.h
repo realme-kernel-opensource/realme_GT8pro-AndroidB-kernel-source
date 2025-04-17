@@ -166,6 +166,11 @@ int qpace_consume_er(int er_num,
 		     process_ed_fn fail_handler);
 
 /*
+ * is_qpace_enabled() - return true if qpace is enabled
+ */
+bool is_qpace_enabled(void);
+
+/*
  * get_qpace() - prepare a given ring for usage and ref count its usage
  * @ring_num: the ring we want to use
  *
@@ -230,6 +235,11 @@ static inline int qpace_consume_er(int er_num,
 				   process_ed_fn fail_handler)
 {
 	return 0;
+}
+
+static inline bool is_qpace_enabled(void)
+{
+	return false;
 }
 
 void get_qpace(int ring_num)
