@@ -1029,4 +1029,15 @@ config QCOM_PMIC_ECID
 	  This driver reads the chipset ECID details from the respective address and
 	  exposes the details via sysfs interface.
 	  This helps in identification of PMIC part information.
+
+config QCOM_VADJ
+	tristate "Qualcomm voltage adjustment driver"
+	default n
+	help
+	  This is a qcom voltage adjustment driver. This driver realizes two APIs and two
+	  debugfs nodes for set/get global/CPUSS rails overrides settings. For example,
+	  Users could call the set API to select global rails overrides set number, then
+	  after system reboots, the selected set would take effect. For CPUSS rails, Users
+	  could also select a set number, after system reboots, it will take effect.
+
 endmenu

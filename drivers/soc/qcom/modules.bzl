@@ -1013,6 +1013,16 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qcom_voltage_adj",
+        out = "qcom_voltage_adj.ko",
+        config = "CONFIG_QCOM_VADJ",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_voltage_adj.c",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom_wdt_core",
         out = "qcom_wdt_core.ko",
         config = "CONFIG_QCOM_WDT_CORE",
