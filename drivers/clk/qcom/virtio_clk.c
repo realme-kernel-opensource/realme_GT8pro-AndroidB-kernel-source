@@ -366,6 +366,16 @@ static u8 virtio_clk_get_parent(struct clk_hw *hw)
 	return U8_MAX;
 }
 
+static int virtio_clk_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
+{
+	unsigned long parent_rate = virtio_clk_get_parent(hw);
+
+	if (!req)
+		return 0;
+
+	return virtio_clk_round_rate(hw, req->rate, &parent_rate);
+}
+
 static const struct clk_ops clk_virtio_ops = {
 	.prepare	= virtio_clk_prepare,
 	.unprepare	= virtio_clk_unprepare,
@@ -374,7 +384,7 @@ static const struct clk_ops clk_virtio_ops = {
 	.recalc_rate	= virtio_clk_get_rate,
 	.set_parent	= virtio_clk_set_parent,
 	.get_parent	= virtio_clk_get_parent,
-	.determine_rate = __clk_mux_determine_rate,
+	.determine_rate = virtio_clk_determine_rate,
 };
 
 static int
