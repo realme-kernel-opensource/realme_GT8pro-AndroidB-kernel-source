@@ -514,7 +514,7 @@ static int init_event_rings(void)
 	return 0;
 }
 
-static DEFINE_MUTEX(qpace_ref_lock);
+static DEFINE_SPINLOCK(qpace_ref_lock);
 static int active_rings;
 
 static bool rings_inited_since_activation[NUM_RINGS];
@@ -532,7 +532,7 @@ void get_qpace(int ring_num)
 {
 	struct transfer_ring *tr = &tr_rings[ring_num];
 
-	mutex_lock(&qpace_ref_lock);
+	spin_lock(&qpace_ref_lock);
 	if (!active_rings) {
 		pm_stay_awake(qpace_dev);
 		dev_pm_qos_update_request(&qos_req, 300);
@@ -549,7 +549,7 @@ void get_qpace(int ring_num)
 	}
 	tr->item_count++;
 
-	mutex_unlock(&qpace_ref_lock);
+	spin_unlock(&qpace_ref_lock);
 }
 EXPORT_SYMBOL_GPL(get_qpace);
 
@@ -567,7 +567,7 @@ void put_qpace(int ring_num, int  n_consumed_entries)
 {
 	struct transfer_ring *tr = &tr_rings[ring_num];
 
-	mutex_lock(&qpace_ref_lock);
+	spin_lock(&qpace_ref_lock);
 	tr->item_count -= n_consumed_entries;
 
 	if (!tr->item_count)
@@ -581,7 +581,7 @@ void put_qpace(int ring_num, int  n_consumed_entries)
 			rings_inited_since_activation[i] = false;
 	}
 
-	mutex_unlock(&qpace_ref_lock);
+	spin_unlock(&qpace_ref_lock);
 }
 EXPORT_SYMBOL_GPL(put_qpace);
 
