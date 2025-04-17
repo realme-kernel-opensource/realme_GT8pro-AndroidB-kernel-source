@@ -1,4 +1,5 @@
 canoe_tuivm_config = {
+    "CONFIG_ARCH_ALOR": "y",
     "CONFIG_ARCH_CANOE": "y",
     "CONFIG_ARCH_QTI_VM": "y",
     "CONFIG_ARM_SMMU": "m",
@@ -24,6 +25,7 @@ canoe_tuivm_config = {
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
     "CONFIG_MSM_GPI_DMA": "y",
     "CONFIG_PINCTRL_MSM": "m",
+    "CONFIG_PINCTRL_ALOR": "m",
     "CONFIG_PINCTRL_CANOE": "m",
     "CONFIG_PM_AUTOSLEEP": "y",
     "CONFIG_QCOM_DEBUG_SYMBOL": "m",
