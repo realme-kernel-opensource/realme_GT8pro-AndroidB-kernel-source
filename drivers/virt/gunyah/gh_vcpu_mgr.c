@@ -20,6 +20,8 @@ struct gh_proxy_vcpu {
 	gh_capid_t cap_id;
 	gh_label_t idx;
 	bool wdog_frozen;
+	char ws_name[32];
+	struct wakeup_source *ws;
 };
 
 struct gh_proxy_vm {
@@ -81,6 +83,14 @@ static void gh_init_vms(void)
 		gh_reset_vm(vm);
 		xa_init(&vm->vcpus);
 	}
+}
+
+static inline void gh_get_vcpu_prop_name(int vmid, int vcpu_num, char *name)
+{
+	char extrastr[12];
+
+	scnprintf(extrastr, 12, "_%d_%d", vmid, vcpu_num);
+	strlcat(name, extrastr, 32);
 }
 
 static int gh_wdog_manage(gh_vmid_t vmid, gh_capid_t cap_id, bool populate)
@@ -145,12 +155,25 @@ static int gh_populate_vm_vcpu_info(gh_vmid_t vmid, gh_label_t cpu_idx,
 			ret = -ENOMEM;
 			goto unlock;
 		}
+
+		strscpy(vcpu->ws_name, "gh_vcpu_ws", sizeof(vcpu->ws_name));
+		gh_get_vcpu_prop_name(vmid, vm->vcpu_count,
+				vcpu->ws_name);
+		vcpu->ws = wakeup_source_register(NULL,
+					vcpu->ws_name);
+		if (!vcpu->ws) {
+			pr_err("%s: Wakeup source creation failed\n", __func__);
+			kfree(vcpu);
+			goto unlock;
+		}
+
 		vcpu->cap_id = cap_id;
 		vcpu->idx = cpu_idx;
 		vm->id = vmid;
 		vcpu->vm = vm;
 		ret = xa_err(xa_store(&vm->vcpus, cpu_idx, vcpu, GFP_KERNEL));
 		if (ret) {
+			wakeup_source_unregister(vcpu->ws);
 			kfree(vcpu);
 			goto unlock;
 		}
@@ -182,6 +205,7 @@ static int gh_unpopulate_vm_vcpu_info(gh_vmid_t vmid, gh_label_t cpu_idx,
 	vm = gh_get_vm(vmid);
 	if (vm && vm->is_vcpu_info_populated) {
 		vcpu = xa_load(&vm->vcpus, cpu_idx);
+		wakeup_source_unregister(vcpu->ws);
 		kfree(vcpu);
 		xa_erase(&vm->vcpus, cpu_idx);
 		vm->vcpu_count--;
@@ -238,6 +262,7 @@ static void android_rvh_gh_before_vcpu_run(void *unused, u16 vmid, u32 vcpu_id)
 		return;
 
 	/* Call into Gunyah to run vcpu. */
+	__pm_stay_awake(vcpu->ws);
 	preempt_disable();
 	if (vcpu->wdog_frozen) {
 		gh_hcall_wdog_manage(vm->wdog_cap_id, WATCHDOG_MANAGE_OP_UNFREEZE);
@@ -270,6 +295,21 @@ static void android_rvh_gh_after_vcpu_run(void *unused, u16 vmid, u32 vcpu_id, i
 		}
 	}
 	preempt_enable();
+
+	if (hcall_ret == GH_ERROR_OK) {
+		switch (resp->state) {
+		case GUNYAH_VCPU_STATE_EXPECTS_WAKEUP:
+			if (resp->state_data[1] == GH_VCPU_SYSTEM_SUSPEND)
+				__pm_relax(vcpu->ws);
+			break;
+		case GUNYAH_VCPU_STATE_POWERED_OFF:
+			__pm_relax(vcpu->ws);
+			break;
+		default:
+			break;
+		}
+	}
+
 	if (signal_pending(current)) {
 		if (!vcpu->wdog_frozen) {
 			gh_hcall_wdog_manage(vm->wdog_cap_id,
