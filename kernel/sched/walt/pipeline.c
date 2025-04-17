@@ -10,14 +10,29 @@
 static DEFINE_RAW_SPINLOCK(pipeline_lock);
 static struct walt_task_struct *pipeline_wts[WALT_NR_CPUS];
 int pipeline_nr;
-
 static DEFINE_RAW_SPINLOCK(heavy_lock);
 static struct walt_task_struct *heavy_wts[MAX_NR_PIPELINE];
 unsigned int pipeline_swap_util_th;
+#define SCALING_FACTOR 70
 
-static inline int pipeline_demand(struct walt_task_struct *wts)
+void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_demand,
+		     u64 *scaled_prime_demand)
 {
-	return scale_time_to_util(wts->coloc_demand);
+	u64 util =  scale_time_to_util(wts->coloc_demand);
+	int cpu = task_cpu(wts_to_ts(wts));
+
+	/*
+	 * TODO:
+	 * Assume that a task not on prime is on golds.
+	 * This will need to be revisited for a non 2-cluster system.
+	 */
+	if (cpumask_test_cpu(cpu,  &sched_cluster[num_sched_clusters - 1]->cpus)) {
+		*scaled_prime_demand = util;
+		*scaled_gold_demand = mult_frac(util, 100, SCALING_FACTOR);
+	} else {
+		*scaled_gold_demand = util;
+		*scaled_prime_demand = mult_frac(util, SCALING_FACTOR, 100);
+	}
 }
 
 int add_pipeline(struct walt_task_struct *wts)
@@ -207,8 +222,10 @@ static inline bool special_pipeline_thres_valid(void)
 {
 	struct walt_task_struct *special_wts = (struct walt_task_struct *)
 			android_task_vendor_data(pipeline_special_task);
+	u64 gold_demand, prime_demand;
 
-	if (pipeline_demand(special_wts) < sysctl_pipeline_special_task_util_thres)
+	pipeline_demand(special_wts, &gold_demand, &prime_demand);
+	if (gold_demand < sysctl_pipeline_special_task_util_thres)
 		return true;
 
 	return false;
@@ -240,6 +257,7 @@ bool find_heaviest_topapp(u64 window_start)
 	u64 rearrange_target_ns = 0;
 	int i, j, start, delta = 0;
 	struct walt_task_struct *heavy_wts_to_drop[MAX_NR_PIPELINE];
+	u64 gold_demand_heavy = 0, prime_demand_heavy = 0;
 
 	if (num_sched_clusters < 2)
 		return false;
@@ -307,7 +325,9 @@ bool find_heaviest_topapp(u64 window_start)
 		struct walt_task_struct *to_be_placed_wts = wts;
 		unsigned int win_cnt;
 		int penalty = 0;
+		u64 gold_demand_to_be, prime_demand_to_be;
 
+		pipeline_demand(wts, &gold_demand_to_be, &prime_demand_to_be);
 		win_cnt = atomic_read(&to_be_placed_wts->event_windows);
 		atomic_set(&to_be_placed_wts->event_windows, 0);
 
@@ -318,7 +338,7 @@ bool find_heaviest_topapp(u64 window_start)
 		 * Penalty is applied on the tasks which have less demand(less than 50) and
 		 * were active for less than 4 windows.
 		 */
-		if ((pipeline_demand(to_be_placed_wts) < 50) && (win_cnt < 4)) {
+		if ((gold_demand_to_be < 50) && (win_cnt < 4)) {
 			to_be_placed_wts->pipeline_activity_cnt =
 					max((int)to_be_placed_wts->pipeline_activity_cnt - 10, 0);
 
@@ -339,7 +359,7 @@ bool find_heaviest_topapp(u64 window_start)
 		 *
 		 * If task is marked as LST add 10 more to penalty.
 		 */
-		delta = pipeline_demand(to_be_placed_wts) - least_pipeline_demand;
+		delta = gold_demand_to_be - least_pipeline_demand;
 		if (delta >= 0)
 			to_be_placed_wts->pipeline_activity_cnt += win_cnt;
 		else
@@ -389,11 +409,12 @@ bool find_heaviest_topapp(u64 window_start)
 			} else if (to_be_placed_wts->pipeline_activity_cnt >=
 					heavy_wts[i]->pipeline_activity_cnt) {
 				struct walt_task_struct *tmp;
+				pipeline_demand(heavy_wts[i], &gold_demand_heavy,
+						&prime_demand_heavy);
 
 				if (to_be_placed_wts->pipeline_activity_cnt ==
 							heavy_wts[i]->pipeline_activity_cnt) {
-					if (pipeline_demand(to_be_placed_wts) <=
-								pipeline_demand(heavy_wts[i]))
+					if (prime_demand_to_be <= prime_demand_heavy)
 						continue;
 				}
 				tmp = heavy_wts[i];
@@ -413,8 +434,11 @@ bool find_heaviest_topapp(u64 window_start)
 			heavy_wts[i] = NULL;
 	} else {
 		for (i = 0; i < MAX_NR_PIPELINE; i++) {
-			if (heavy_wts[i])
-				total_util += pipeline_demand(heavy_wts[i]);
+			if (heavy_wts[i]) {
+				pipeline_demand(heavy_wts[i], &gold_demand_heavy,
+						&prime_demand_heavy);
+				total_util += gold_demand_heavy;
+			}
 		}
 
 		if (total_util < sysctl_sched_pipeline_util_thres)
@@ -465,8 +489,10 @@ bool find_heaviest_topapp(u64 window_start)
 			 * least_pipeline_demand: tracks smallest pipeline task, this is used
 			 * for calculation of penalty during pipeline task selection.
 			 */
-			if (pipeline_demand(heavy_wts[i]) <= least_pipeline_demand)
-				least_pipeline_demand = pipeline_demand(heavy_wts[i]);
+			pipeline_demand(heavy_wts[i], &gold_demand_heavy, &prime_demand_heavy);
+			if (gold_demand_heavy <= least_pipeline_demand)
+				least_pipeline_demand = gold_demand_heavy;
+
 		}
 	}
 
@@ -484,8 +510,12 @@ bool find_heaviest_topapp(u64 window_start)
 static inline void swap_pipeline_with_prime_locked(struct walt_task_struct *prime_wts,
 						   struct walt_task_struct *other_wts)
 {
+	u64 gold_demand_1 = 0, prime_demand_1 = 0, gold_demand_2 = 0, prime_demand_2 = 0;
+
 	if (prime_wts && other_wts) {
-		if (pipeline_demand(prime_wts) < pipeline_demand(other_wts)) {
+		pipeline_demand(prime_wts, &gold_demand_1, &prime_demand_1);
+		pipeline_demand(other_wts, &gold_demand_2, &prime_demand_2);
+		if (prime_demand_1 < prime_demand_2) {
 			int cpu;
 
 			cpu = other_wts->pipeline_cpu;
@@ -520,6 +550,7 @@ static inline void find_prime_and_max_tasks(struct walt_task_struct **wts_list,
 {
 	int i;
 	int max_demand = 0;
+	u64 gold_demand = 0, prime_demand = 0;
 
 	for (i = 0; i < MAX_NR_PIPELINE; i++) {
 		struct walt_task_struct *wts = wts_list[i];
@@ -533,9 +564,12 @@ static inline void find_prime_and_max_tasks(struct walt_task_struct **wts_list,
 		if (is_max_possible_cluster_cpu(wts->pipeline_cpu)) {
 			if (prime_wts)
 				*prime_wts = wts;
-		} else if (other_wts && pipeline_demand(wts) > max_demand) {
-			max_demand = pipeline_demand(wts);
-			*other_wts = wts;
+		} else {
+			pipeline_demand(wts, &gold_demand, &prime_demand);
+			if (other_wts && prime_demand > max_demand) {
+				max_demand = prime_demand;
+				*other_wts = wts;
+			}
 		}
 	}
 }
@@ -564,8 +598,9 @@ void rearrange_heavy(u64 window_start, bool force)
 {
 	struct walt_task_struct *prime_wts = NULL;
 	struct walt_task_struct *other_wts = NULL;
-	unsigned long flags, prime_util, other_util;
+	unsigned long flags;
 	bool prime_wts_fits_lower = true;
+	u64 primewts_prime_demand = 0, otherwts_prime_demand = 0, gold_demand = 0;
 
 	if (!pipeline_in_progress())
 		return;
@@ -632,15 +667,14 @@ void rearrange_heavy(u64 window_start, bool force)
 
 	/* swap prime for have_heavy_list >= 3 */
 	find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
-	prime_util = other_util = 0;
 
 	if (prime_wts) {
-		prime_util = pipeline_demand(prime_wts);
+		pipeline_demand(prime_wts, &gold_demand, &primewts_prime_demand);
 		prime_wts_fits_lower = task_fits_capacity(wts_to_ts(prime_wts),
 					cpumask_last(&cpu_array[0][num_sched_clusters - 2]));
 	}
 	if (other_wts)
-		other_util = pipeline_demand(other_wts);
+		pipeline_demand(other_wts, &gold_demand, &otherwts_prime_demand);
 
 	/*
 	 * default behavior if pipeline_swap_util_th == 0 is to swap gold and prime pipeline
@@ -651,9 +685,9 @@ void rearrange_heavy(u64 window_start, bool force)
 	 *		util for task on Gold > util of task on prime + pipeline_swap_util_th
 	 */
 	if (!pipeline_swap_util_th || (prime_wts_fits_lower &&
-					((prime_util + pipeline_swap_util_th) < other_util)))
+					((primewts_prime_demand + pipeline_swap_util_th) <
+					 otherwts_prime_demand)))
 		swap_pipeline_with_prime_locked(prime_wts, other_wts);
-
 out:
 	raw_spin_unlock_irqrestore(&heavy_lock, flags);
 }
@@ -669,6 +703,7 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 	static int assign_cpu = -1;
 	static bool last_set_unisolation;
 	int i;
+	u64 gold_demand = 0, prime_demand = 0;
 
 	if (sysctl_sched_heavy_nr || sysctl_sched_pipeline_util_thres)
 		return;
@@ -718,9 +753,12 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 			if (is_max_possible_cluster_cpu(wts->pipeline_cpu)) {
 				/* assumes just one prime */
 				prime_wts = wts;
-			} else if (pipeline_demand(wts) > max_demand) {
-				max_demand = pipeline_demand(wts);
-				other_wts = wts;
+			} else {
+				pipeline_demand(wts, &gold_demand, &prime_demand);
+				if (prime_demand > max_demand) {
+					max_demand = prime_demand;
+					other_wts = wts;
+				}
 			}
 		}
 	}
