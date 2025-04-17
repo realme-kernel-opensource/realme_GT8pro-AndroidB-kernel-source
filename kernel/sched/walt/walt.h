@@ -1684,4 +1684,6 @@ DECLARE_PER_CPU(unsigned int, walt_yield_to_sleep);
 extern unsigned int walt_sched_yield_counter;
 extern unsigned int sysctl_force_frequent_yielder;
 void account_yields(u64 window_start);
+extern void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_demand,
+		     u64 *scaled_prime_demand);
 #endif /* _WALT_H */
