@@ -112,6 +112,7 @@ autogvm_perf_config = {
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_SPI_SPIDEV": "m",
     "CONFIG_MSM_HSUSB_PHY": "m",
+    "CONFIG_USB_MSM_EUSB2_PHY": "m",
     "CONFIG_USB_DWC3_MSM": "m",
     "CONFIG_QCOM_MINIDUMP": "m",
     "CONFIG_QCOM_VA_MINIDUMP": "m",
