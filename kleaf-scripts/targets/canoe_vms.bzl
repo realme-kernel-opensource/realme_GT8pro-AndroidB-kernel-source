@@ -23,7 +23,6 @@ def define_canoe_vms(vm_image_opts = vm_image_opts()):
         dist_targets = (
             ["canoe-{}_{}_vm_dist".format(vt, variant) for vt in vm_types] +
             ["canoe-{}_{}_dist".format(vt, variant) for vt in vm_types] +
-            [":canoe-{}_{}_modules_install".format(vt, variant) for vt in vm_types] +
             [":canoe-{}_{}_signed_modules".format(vt, variant) for vt in vm_types] +
             ["canoe-{}_{}_merge_msm_uapi_headers".format(vt, variant) for vt in vm_types] +
             [base_kernel] +
