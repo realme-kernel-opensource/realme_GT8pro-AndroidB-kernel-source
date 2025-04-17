@@ -1877,8 +1877,6 @@ static void zram_qpace_work_fn(struct work_struct *work)
 	bool triggered_compress, triggered_copy;
 	int n_entries_consumed;
 
-	get_qpace(COMPRESS_RING);
-
 	pr_debug("kthread: about to kick off compression\n");
 
 	/*
@@ -1959,8 +1957,6 @@ static void zram_qpace_work_fn(struct work_struct *work)
 	} else {
 		pr_debug("Nothing to copy.\n");
 	}
-
-	put_qpace(COMPRESS_RING, 1);
 }
 
 static int qpace_zram_write_page(struct zram *zram, struct bio *bio)
