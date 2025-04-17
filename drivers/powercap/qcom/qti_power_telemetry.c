@@ -28,14 +28,12 @@
 
 #define QPT_CONFIG_SDAM_BASE_OFF	0x45
 #define QPT_DATA_SDAM_BASE_OFF		0x45
-#define QPT_CH_ENABLE_MASK_0		BIT(7)
-#define QPT_CH_ENABLE_MASK_1		BIT(3)
+#define QPT_CH_ENABLE_MASK		BIT(7)
 #define QPT_SID_MASK			GENMASK(4, 0)
 #define QPT_DATA_BYTE_SIZE		5
-#define QPT_ADC_SF_MULTIPLIER		GENMASK(2, 0)
-#define QPT_DATA_SF_BASE		400L
+#define QPT_DATA_TO_POWER_UW		3200L  /* 1 LSB = 3.2 mW */
 
-#define QPT_GET_CMLTV_POWER_UW_FROM_ADC(qpt, adc)	(adc * qpt->adc_scaling_factor)
+#define QPT_GET_CMLTV_POWER_UW_FROM_ADC(adc)	((adc) * QPT_DATA_TO_POWER_UW)
 #define QPT_HW "qpt-hw"
 
 static int qpt_sdam_nvmem_write(struct qpt_priv *qpt, struct qpt_sdam *sdam,
@@ -101,13 +99,6 @@ static u32 get_data_update_rate_from_config(uint8_t timer_lb, uint8_t timer_ub,
 	return (timer * max_count  * 1000 / hz);
 }
 
-static u32 get_scaling_factor_from_config(uint8_t config)
-{
-	u32 mltplr = config & QPT_ADC_SF_MULTIPLIER;
-
-	return (QPT_DATA_SF_BASE * (1 << mltplr));
-}
-
 static u32 get_tperiod_from_config(uint8_t timer_lb, uint8_t timer_ub,
 		uint8_t config0, uint8_t config1)
 {
@@ -118,7 +109,7 @@ static u32 get_tperiod_from_config(uint8_t timer_lb, uint8_t timer_ub,
 	return (timer * shift * 1000 / hz);
 }
 
-static int qti_qpt_sync_common_telemetry_config(struct qpt_priv *qpt)
+static int qti_qpt_sync_telemetry_config(struct qpt_priv *qpt)
 {
 	uint8_t *config_sdam = NULL;
 	int rc = 0;
@@ -130,13 +121,10 @@ static int qti_qpt_sync_common_telemetry_config(struct qpt_priv *qpt)
 
 	config_sdam = qpt->config_sdam_data;
 	if (!config_sdam) {
-		config_sdam = devm_kcalloc(qpt->dev, MAX_CONFIG_SDAM_DATA,
-				sizeof(*config_sdam), GFP_KERNEL);
-		if (!config_sdam)
-			return -ENOMEM;
-	} else {
-		memset(config_sdam, 0, MAX_CONFIG_SDAM_DATA);
+		dev_err(qpt->dev, "Unexpected NULL\n");
+		return -EINVAL;
 	}
+	memset(config_sdam, MAX_CONFIG_SDAM_DATA, 0);
 
 	mutex_lock(&qpt->hw_read_lock);
 	rc = qpt_sdam_nvmem_read(qpt, &qpt->sdam[CONFIG_SDAM],
@@ -159,14 +147,11 @@ static int qti_qpt_sync_common_telemetry_config(struct qpt_priv *qpt)
 				config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG0],
 				config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG1]);
 	qpt->bob_tperiod = qpt->data_update_sampling / qpt->bob_max_count;
-	qpt->adc_scaling_factor = get_scaling_factor_from_config(
-					config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG0]);
 	qpt->config_sdam_data = config_sdam;
-	QPT_DBG_EVENT(qpt, "ready_cnt:%d bob count:%d b_tperiod:%d tperiod:%d",
-			qpt->ready_max_count, qpt->bob_max_count, qpt->bob_tperiod,
-			qpt->tperiod);
-	QPT_DBG_EVENT(qpt, "scaling_factor:%d reporting sampling:%d",
-			qpt->adc_scaling_factor, qpt->data_update_sampling);
+	QPT_DBG_EVENT(qpt,
+	"ready_cnt:%d bob count:%d b_tperiod:%d tperiod:%d update sampling:%d",
+		qpt->ready_max_count, qpt->bob_max_count, qpt->bob_tperiod,
+		qpt->tperiod, qpt->data_update_sampling);
 
 unlock_exit:
 	mutex_unlock(&qpt->hw_read_lock);
@@ -276,7 +261,7 @@ static void qpt_channel_avg_data_update(struct qpt_device *qpt_dev,
 	mutex_lock(&qpt_dev->lock);
 
 	cur_last_data = get_unaligned_le40(base);
-	cur_last_data_uw = QPT_GET_CMLTV_POWER_UW_FROM_ADC(qpt, cur_last_data);
+	cur_last_data_uw = QPT_GET_CMLTV_POWER_UW_FROM_ADC(cur_last_data);
 
 	/*
 	 * Calculate cumulative energy
@@ -409,7 +394,7 @@ static int qti_qpt_set_enable(struct powerzone *pz, bool enable)
 		return 0;
 
 	if (enable) {
-		ret = qti_qpt_sync_common_telemetry_config(qpt);
+		ret = qti_qpt_sync_telemetry_config(qpt);
 		if (ret)
 			return ret;
 	}
@@ -510,19 +495,49 @@ static int qti_qpt_config_sdam_initialize(struct qpt_priv *qpt)
 	int rc = 0;
 	uint8_t conf_idx, data_idx;
 
-	rc = qti_qpt_sync_common_telemetry_config(qpt);
+	if (!qpt->sdam[DATA_AVG_SDAM].nvmem || !qpt->sdam[CONFIG_SDAM].nvmem) {
+		dev_err(qpt->dev, "Invalid sdam nvmem\n");
+		return -EINVAL;
+	}
+
+	config_sdam = devm_kcalloc(qpt->dev, MAX_CONFIG_SDAM_DATA,
+				sizeof(*config_sdam), GFP_KERNEL);
+	if (!config_sdam)
+		return -ENOMEM;
+
+	rc = qpt_sdam_nvmem_read(qpt, &qpt->sdam[CONFIG_SDAM],
+			QPT_CONFIG_SDAM_BASE_OFF,
+			MAX_CONFIG_SDAM_DATA, config_sdam);
 	if (rc < 0)
 		return rc;
 
+	qpt->ready_max_count = config_sdam[CONFIG_SDAM_DATA_READY_MAX_COUNT];
+	qpt->bob_max_count = config_sdam[CONFIG_SDAM_BOB_MAX_COUNT];
+	qpt->hsr_ver = config_sdam[CONFIG_SDAM_HSR_VER];
+	qpt->data_update_sampling = get_data_update_rate_from_config(
+				config_sdam[CONFIG_SDAM_TELEMETRY_TIMER_LB],
+				config_sdam[CONFIG_SDAM_TELEMETRY_TIMER_UB],
+				config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG0],
+					qpt->ready_max_count);
+	qpt->tperiod =  get_tperiod_from_config(
+				config_sdam[CONFIG_SDAM_TELEMETRY_TIMER_LB],
+				config_sdam[CONFIG_SDAM_TELEMETRY_TIMER_UB],
+				config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG0],
+				config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG1]);
+	qpt->bob_tperiod = qpt->data_update_sampling / qpt->bob_max_count;
+	qpt->config_sdam_data = config_sdam;
 	qpt->first_bob_offset = 0xff;
-	config_sdam = qpt->config_sdam_data;
+	QPT_DBG_EVENT(qpt,
+	"ready_cnt :%d bob count:%d b_period:%d tperiod:%d update sampling:%d",
+		qpt->ready_max_count, qpt->bob_max_count, qpt->bob_tperiod,
+		qpt->tperiod, qpt->data_update_sampling);
+
 	/* logic to read number of channels and die_temps */
 	for (conf_idx = CONFIG_SDAM_CH1_CONFIG0, data_idx = 0;
 	 conf_idx <= CONFIG_SDAM_CH23_CONFIG0;
 	 conf_idx += 3, data_idx += QPT_DATA_BYTE_SIZE) {
 
-		if ((!(config_sdam[conf_idx] & QPT_CH_ENABLE_MASK_0)) ||
-			(!(config_sdam[conf_idx + 2] & QPT_CH_ENABLE_MASK_1)))
+		if (!(config_sdam[conf_idx] & QPT_CH_ENABLE_MASK))
 			continue;
 
 		qpt->num_reg++;
