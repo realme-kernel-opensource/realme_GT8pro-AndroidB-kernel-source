@@ -57,3 +57,28 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/spi/spi-geni-qcom-msm",
+        out = "spi-geni-qcom-msm.ko",
+        config = "CONFIG_SPI_QCOM_GENI_MSM",
+        srcs = [
+            # do not sort
+            "drivers/spi/spi-geni-qcom-msm.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/minidump",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/debug_symbol",
+            "drivers/dma-buf/heaps/qcom_dma_heaps",
+            "drivers/iommu/msm_dma_iommu_mapping",
+            "drivers/soc/qcom/mem_buf/mem_buf_dev",
+            "drivers/soc/qcom/secure_buffer",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
