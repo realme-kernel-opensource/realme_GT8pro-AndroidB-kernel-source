@@ -306,6 +306,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qcom_fdcvs",
+        out = "qcom_fdcvs.ko",
+        config = "CONFIG_QCOM_FDCVS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_fdcvs.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_aoss",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/gh_tlmm_vm_mem_access",
         out = "gh_tlmm_vm_mem_access.ko",
         config = "CONFIG_GH_TLMM_VM_MEM_ACCESS",

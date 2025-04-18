@@ -1040,4 +1040,14 @@ config QCOM_VADJ
 	  after system reboots, the selected set would take effect. For CPUSS rails, Users
 	  could also select a set number, after system reboots, it will take effect.
 
+config QCOM_FDCVS
+	tristate "Qualcomm Technologies Inc. FDCVS"
+	default n
+	help
+	  This is a FDCVS driver. It realizes various sysfs nodes which could be used
+	  to config fdcvs. These config parameters would be sent to AOP in the format
+	  of QMP message for further processing.
+
+	  Users could dynamically select different fdcvs configs according to different
+	  use cases.
 endmenu
