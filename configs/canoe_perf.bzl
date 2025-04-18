@@ -244,6 +244,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_TSENS": "m",
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_QCOM_VADC_COMMON": "m",
+    "CONFIG_QCOM_VADJ": "m",
     "CONFIG_QCOM_VM_ALIVE_LOG_DUMPER": "y",
     "CONFIG_QCOM_VM_DMESG_DUMPER": "m",
     "CONFIG_QCOM_VA_MINIDUMP": "m",
