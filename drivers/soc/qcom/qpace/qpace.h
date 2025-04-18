@@ -166,6 +166,11 @@ int qpace_consume_er(int er_num,
 		     process_ed_fn fail_handler);
 
 /*
+ *  is_qpace_enabled() - return true if qpace is enabled
+ */
+bool is_qpace_dev_available(void);
+
+/*
  * get_qpace() - prepare a given ring for usage and ref count its usage
  * @ring_num: the ring we want to use
  *
@@ -189,6 +194,12 @@ void get_qpace(int ring_num);
 void put_qpace(int ring_num, int n_consumed_entries);
 
 #else /* CONFIG_QTI_PAGE_COMPRESSION_ENGINE */
+
+
+static inline bool is_qpace_dev_available(void)
+{
+	return false;
+}
 
 static inline int qpace_urgent_compress(phys_addr_t input_addr,
 					phys_addr_t output_addr)
