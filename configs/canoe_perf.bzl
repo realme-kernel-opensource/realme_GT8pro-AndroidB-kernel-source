@@ -166,6 +166,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_DMABUF_HEAPS_UBWCP": "n",
     "CONFIG_QCOM_DYNAMIC_RAMOOPS": "m",
     "CONFIG_QCOM_EUD": "m",
+    "CONFIG_QCOM_FDCVS": "m",
     "CONFIG_QCOM_FORCE_WDOG_BITE_ON_PANIC": "y",
     "CONFIG_QCOM_GDSC_REGULATOR": "m",
     "CONFIG_QCOM_GLINK": "m",
