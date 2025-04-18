@@ -66,7 +66,7 @@ static struct clk_alpha_pll gcc_gpll0 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -115,7 +115,7 @@ static struct clk_alpha_pll gcc_gpll1 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -142,7 +142,7 @@ static struct clk_alpha_pll gcc_gpll4 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -169,7 +169,7 @@ static struct clk_alpha_pll gcc_gpll7 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -196,7 +196,7 @@ static struct clk_alpha_pll gcc_gpll9 = {
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -2330,156 +2330,6 @@ static struct clk_branch gcc_pdm_xo4_clk = {
 	},
 };
 
-static struct clk_branch gcc_qmip_camera_cmd_ahb_clk = {
-	.halt_reg = 0x26010,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x26010,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x26010,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qmip_camera_cmd_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_qmip_camera_nrt_ahb_clk = {
-	.halt_reg = 0x26008,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x26008,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x26008,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qmip_camera_nrt_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_qmip_camera_rt_ahb_clk = {
-	.halt_reg = 0x2600c,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x2600c,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x2600c,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qmip_camera_rt_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_qmip_disp_dcp_sf_ahb_clk = {
-	.halt_reg = 0x27030,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x27030,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x27030,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qmip_disp_dcp_sf_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_qmip_gpu_ahb_clk = {
-	.halt_reg = 0x71008,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x71008,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x71008,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qmip_gpu_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_qmip_pcie_ahb_clk = {
-	.halt_reg = 0x6b018,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x6b018,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x52010,
-		.enable_mask = BIT(19),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qmip_pcie_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_qmip_video_cv_cpu_ahb_clk = {
-	.halt_reg = 0x32014,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x32014,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x32014,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qmip_video_cv_cpu_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_qmip_video_cvp_ahb_clk = {
-	.halt_reg = 0x32008,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x32008,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x32008,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qmip_video_cvp_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_qmip_video_v_cpu_ahb_clk = {
-	.halt_reg = 0x32010,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x32010,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x32010,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qmip_video_v_cpu_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_qmip_video_vcodec_ahb_clk = {
-	.halt_reg = 0x3200c,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x3200c,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x3200c,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qmip_video_vcodec_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch gcc_qupv3_i2c_core_clk = {
 	.halt_reg = 0x23004,
 	.halt_check = BRANCH_HALT_VOTED,
@@ -3697,16 +3547,6 @@ static struct clk_regmap *gcc_alor_clocks[] = {
 	[GCC_PDM2_CLK_SRC] = &gcc_pdm2_clk_src.clkr,
 	[GCC_PDM_AHB_CLK] = &gcc_pdm_ahb_clk.clkr,
 	[GCC_PDM_XO4_CLK] = &gcc_pdm_xo4_clk.clkr,
-	[GCC_QMIP_CAMERA_CMD_AHB_CLK] = &gcc_qmip_camera_cmd_ahb_clk.clkr,
-	[GCC_QMIP_CAMERA_NRT_AHB_CLK] = &gcc_qmip_camera_nrt_ahb_clk.clkr,
-	[GCC_QMIP_CAMERA_RT_AHB_CLK] = &gcc_qmip_camera_rt_ahb_clk.clkr,
-	[GCC_QMIP_DISP_DCP_SF_AHB_CLK] = &gcc_qmip_disp_dcp_sf_ahb_clk.clkr,
-	[GCC_QMIP_GPU_AHB_CLK] = &gcc_qmip_gpu_ahb_clk.clkr,
-	[GCC_QMIP_PCIE_AHB_CLK] = &gcc_qmip_pcie_ahb_clk.clkr,
-	[GCC_QMIP_VIDEO_CV_CPU_AHB_CLK] = &gcc_qmip_video_cv_cpu_ahb_clk.clkr,
-	[GCC_QMIP_VIDEO_CVP_AHB_CLK] = &gcc_qmip_video_cvp_ahb_clk.clkr,
-	[GCC_QMIP_VIDEO_V_CPU_AHB_CLK] = &gcc_qmip_video_v_cpu_ahb_clk.clkr,
-	[GCC_QMIP_VIDEO_VCODEC_AHB_CLK] = &gcc_qmip_video_vcodec_ahb_clk.clkr,
 	[GCC_QUPV3_I2C_CORE_CLK] = &gcc_qupv3_i2c_core_clk.clkr,
 	[GCC_QUPV3_I2C_S0_CLK] = &gcc_qupv3_i2c_s0_clk.clkr,
 	[GCC_QUPV3_I2C_S0_CLK_SRC] = &gcc_qupv3_i2c_s0_clk_src.clkr,
