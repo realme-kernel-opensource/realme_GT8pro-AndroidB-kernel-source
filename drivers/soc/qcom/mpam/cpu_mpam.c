@@ -498,6 +498,7 @@ static void cpu_mpam_drop_item(struct config_group *group,
 	cpu_mpam_partition_transfer(part_id, PARTID_DEFAULT);
 	bitmap_clear(part_id_free_bitmap, part_id, 1);
 	if (monitor_id != INT_MAX) {
+		monitor_enabled[monitor_id] = INT_MAX;
 		bitmap_clear(monitor_free_bitmap, monitor_id, 1);
 		cpu_mpam_disable_monitor(monitor_id, MPAM_TYPE_CSU_MONITOR);
 		cpu_mpam_disable_monitor(monitor_id, MPAM_TYPE_MBW_MONITOR);
