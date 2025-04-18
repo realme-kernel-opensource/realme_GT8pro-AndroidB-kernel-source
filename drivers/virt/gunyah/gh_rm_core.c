@@ -1287,6 +1287,7 @@ static int gh_rm_drv_probe(struct auxiliary_device *adev,
 {
 	struct device_node *node __free(device_node) = NULL;
 	struct device *dev = &adev->dev;
+	struct device_node *hyp_node;
 	int ret;
 
 	rm = dev->platform_data;
@@ -1296,8 +1297,14 @@ static int gh_rm_drv_probe(struct auxiliary_device *adev,
 	}
 
 	node = gh_rm_find_of_node();
-	if (!node)
-		return -ENODEV;
+	if (!node) {
+		/* We must be the SVM under AVF, use of_node instead */
+		of_node_get(of_root);
+		node = of_root;
+		hyp_node = node;
+	} else {
+		hyp_node = node->parent;
+	}
 
 	gh_rm_intc = of_irq_find_parent(node);
 	if (!gh_rm_intc) {
@@ -1317,7 +1324,7 @@ static int gh_rm_drv_probe(struct auxiliary_device *adev,
 	}
 
 	/* Probe the vmid */
-	ret = gh_vm_probe(dev, node->parent);
+	ret = gh_vm_probe(dev, hyp_node);
 	if (ret < 0 && ret != -ENODEV)
 		return ret;
 
