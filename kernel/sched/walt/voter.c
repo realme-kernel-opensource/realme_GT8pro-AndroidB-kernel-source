@@ -14,32 +14,8 @@
 #include "voter.h"
 #include "trace.h"
 
-#define NUM_MAX_CLIENTS		32
-
 static DEFINE_SPINLOCK(votable_list_slock);
 static LIST_HEAD(votable_list);
-
-struct client_vote {
-	bool	enabled;
-	int	value;
-};
-
-struct votable {
-	const char		*name;
-	struct list_head	list;
-	struct client_vote	votes[NUM_MAX_CLIENTS];
-	int			num_clients;
-	int			type;
-	int			effective_client_id;
-	int			effective_result;
-	raw_spinlock_t		vote_lock;
-	void			*data;
-	int			(*callback)(struct votable *votable,
-						void *data,
-						int effective_result,
-						int effective_client);
-	bool			voted_on;
-};
 
 /**
  * vote_set_any()
@@ -335,8 +311,7 @@ int vote(struct votable *votable, int client_id, bool enabled, int val)
 		votable->effective_client_id = effective_id;
 		votable->effective_result = effective_result;
 
-		trace_sched_votable_result(votable->name, votable->effective_client_id,
-					   votable->effective_result);
+		trace_sched_votable_result(votable);
 
 		if (votable->callback)
 			rc = votable->callback(votable, votable->data,

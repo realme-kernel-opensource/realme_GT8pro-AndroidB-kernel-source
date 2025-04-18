@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 struct qpace_transfer_descriptor {
@@ -166,9 +166,27 @@ int qpace_consume_er(int er_num,
 		     process_ed_fn fail_handler);
 
 /*
- * is_qpace_enabled() - return true if qpace is enabled
+ * get_qpace() - prepare a given ring for usage and ref count its usage
+ * @ring_num: the ring we want to use
+ *
+ * Call the necessary PM callbacks on the first get_qpace() call. Initialize
+ * @ring_num if it has not been initialized already for the current usage
+ * period. This function implicitly increments a reference counter that
+ * tracks the number of items in the ring.
  */
-bool is_qpace_enabled(void);
+void get_qpace(int ring_num);
+
+/*
+ * put_qpace() - Reduce the number of items tracked by a ring
+ * @ring_num: The ring we're modifying usage stats for
+ * @n_consumed_entries: The number of items we want to mark as unused
+ *
+ * Reduces the number of items tracked by a ring. If a ring has no more
+ * queued items, it becomes inactive. If all rings become inactive, then
+ * we call the necessary PM callbacks to allow QPaCE's resources to be
+ * collapsed.
+ */
+void put_qpace(int ring_num, int n_consumed_entries);
 
 #else /* CONFIG_QTI_PAGE_COMPRESSION_ENGINE */
 
@@ -214,9 +232,14 @@ static inline int qpace_consume_er(int er_num,
 	return 0;
 }
 
-static inline bool is_qpace_enabled(void)
+void get_qpace(int ring_num)
 {
-	return false;
+
+}
+
+void put_qpace(int ring_num, int  n_consumed_entries)
+{
+
 }
 
 #endif

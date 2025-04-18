@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2013-2021, Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef PHY_QCOM_UFS_H_
@@ -11,6 +11,7 @@ struct phy;
 
 void ufs_qcom_phy_ctrl_rx_linecfg(struct phy *generic_phy, bool ctrl);
 void ufs_qcom_phy_set_tx_lane_enable(struct phy *generic_phy, u32 tx_lanes);
+int ufs_qcom_phy_tx_hs_equalizer_config(struct phy *generic_phy);
 int ufs_qcom_phy_get_tx_hs_equalizer(struct phy *generic_phy, u32 gear, u32 *val);
 void ufs_qcom_phy_dbg_register_dump(struct phy *generic_phy);
 void ufs_qcom_phy_dbg_register_save(struct phy *generic_phy);

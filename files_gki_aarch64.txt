@@ -512,6 +512,7 @@ block/blk-crypto.c
 block/blk-flush.c
 block/blk-ia-ranges.c
 block/blk-ioc.c
+block/blk-iocost.c
 block/blk-ioprio.c
 block/blk-ioprio.h
 block/blk-lib.c
@@ -538,6 +539,7 @@ block/blk-stat.h
 block/blk-sysfs.c
 block/blk-throttle.h
 block/blk-timeout.c
+block/blk-wbt.c
 block/blk-wbt.h
 block/blk-zoned.c
 block/blk.h
@@ -754,10 +756,15 @@ drivers/block/zram/zram_drv.c
 drivers/block/zram/zram_drv.h
 drivers/bluetooth/btbcm.c
 drivers/bluetooth/btbcm.h
+drivers/bluetooth/btintel.c
 drivers/bluetooth/btintel.h
+drivers/bluetooth/btmtk.h
 drivers/bluetooth/btqca.c
 drivers/bluetooth/btqca.h
+drivers/bluetooth/btrtl.c
+drivers/bluetooth/btrtl.h
 drivers/bluetooth/btsdio.c
+drivers/bluetooth/btusb.c
 drivers/bluetooth/hci_bcm.c
 drivers/bluetooth/hci_h4.c
 drivers/bluetooth/hci_ldisc.c
@@ -872,6 +879,7 @@ drivers/dma-buf/dma-fence.c
 drivers/dma-buf/dma-heap.c
 drivers/dma-buf/dma-resv.c
 drivers/dma-buf/sync_file.c
+drivers/dma-buf/udmabuf.c
 drivers/dma/dmaengine.c
 drivers/dma/dmaengine.h
 drivers/dma/of-dma.c
@@ -897,6 +905,7 @@ drivers/firmware/arm_scmi/bus.c
 drivers/firmware/arm_scmi/clock.c
 drivers/firmware/arm_scmi/common.h
 drivers/firmware/arm_scmi/driver.c
+drivers/firmware/arm_scmi/msg.c
 drivers/firmware/arm_scmi/notify.c
 drivers/firmware/arm_scmi/notify.h
 drivers/firmware/arm_scmi/perf.c
@@ -911,6 +920,7 @@ drivers/firmware/arm_scmi/shmem.c
 drivers/firmware/arm_scmi/system.c
 drivers/firmware/arm_scmi/transports/mailbox.c
 drivers/firmware/arm_scmi/transports/smc.c
+drivers/firmware/arm_scmi/transports/virtio.c
 drivers/firmware/arm_scmi/voltage.c
 drivers/firmware/arm_scpi.c
 drivers/firmware/efi/arm-runtime.c
@@ -2023,17 +2033,20 @@ drivers/virt/gunyah/gunyah.c
 drivers/virt/gunyah/gunyah_ioeventfd.c
 drivers/virt/gunyah/gunyah_irqfd.c
 drivers/virt/gunyah/gunyah_platform_hooks.c
+drivers/virt/gunyah/gunyah_qtvm.c
 drivers/virt/gunyah/gunyah_vcpu.c
 drivers/virt/gunyah/rsc_mgr.c
 drivers/virt/gunyah/rsc_mgr.h
 drivers/virt/gunyah/rsc_mgr_rpc.c
 drivers/virt/gunyah/vm_mgr.c
 drivers/virt/gunyah/vm_mgr.h
+drivers/virt/gunyah/vm_mgr_cma_mem.c
 drivers/virt/gunyah/vm_mgr_mem.c
 drivers/virt/vmgenid.c
 drivers/virtio/virtio.c
 drivers/virtio/virtio_anchor.c
 drivers/virtio/virtio_balloon.c
+drivers/virtio/virtio_balloon_hyp_ops.c
 drivers/virtio/virtio_pci_common.c
 drivers/virtio/virtio_pci_common.h
 drivers/virtio/virtio_pci_legacy.c
@@ -2053,6 +2066,7 @@ fs/bad_inode.c
 fs/binfmt_elf.c
 fs/binfmt_misc.c
 fs/binfmt_script.c
+fs/bpf_fs_kfuncs.c
 fs/buffer.c
 fs/char_dev.c
 fs/compat_binfmt_elf.c
@@ -2470,6 +2484,7 @@ include/acpi/acexcep.h
 include/acpi/acnames.h
 include/acpi/acoutput.h
 include/acpi/acpi.h
+include/acpi/acpi_bus.h
 include/acpi/acpi_numa.h
 include/acpi/acpiosxf.h
 include/acpi/acpixf.h
@@ -3107,6 +3122,7 @@ include/linux/gpio/machine.h
 include/linux/gpio_keys.h
 include/linux/group_cpus.h
 include/linux/gunyah.h
+include/linux/gunyah_qtvm.h
 include/linux/hardirq.h
 include/linux/hash.h
 include/linux/hashtable.h
@@ -3362,7 +3378,6 @@ include/linux/math64.h
 include/linux/mbcache.h
 include/linux/mdio.h
 include/linux/mem_encrypt.h
-include/linux/mem_relinquish.h
 include/linux/memblock.h
 include/linux/memcontrol.h
 include/linux/memfd.h
@@ -3522,6 +3537,7 @@ include/linux/page_counter.h
 include/linux/page_ext.h
 include/linux/page_idle.h
 include/linux/page_owner.h
+include/linux/page_pinner.h
 include/linux/page_ref.h
 include/linux/page_reporting.h
 include/linux/page_table_check.h
@@ -4007,7 +4023,6 @@ include/linux/usb/uas.h
 include/linux/usb/usbnet.h
 include/linux/usb/uvc.h
 include/linux/usb/webusb.h
-include/linux/usb/xhci-sideband.h
 include/linux/usb_usual.h
 include/linux/usbdevice_fs.h
 include/linux/user-return-notifier.h
@@ -4029,6 +4044,7 @@ include/linux/vhost_iotlb.h
 include/linux/videodev2.h
 include/linux/virtio.h
 include/linux/virtio_anchor.h
+include/linux/virtio_balloon.h
 include/linux/virtio_byteorder.h
 include/linux/virtio_config.h
 include/linux/virtio_net.h
@@ -4078,6 +4094,7 @@ include/media/cec-pin.h
 include/media/cec.h
 include/media/frame_vector.h
 include/media/i2c/ir-kbd-i2c.h
+include/media/jpeg.h
 include/media/media-dev-allocator.h
 include/media/media-device.h
 include/media/media-devnode.h
@@ -4464,6 +4481,7 @@ include/trace/events/i2c.h
 include/trace/events/icmp.h
 include/trace/events/initcall.h
 include/trace/events/io_uring.h
+include/trace/events/iocost.h
 include/trace/events/iommu.h
 include/trace/events/ipi.h
 include/trace/events/irq.h
@@ -4525,18 +4543,21 @@ include/trace/events/vmalloc.h
 include/trace/events/vmscan.h
 include/trace/events/vsock_virtio_transport_common.h
 include/trace/events/watchdog.h
+include/trace/events/wbt.h
 include/trace/events/workqueue.h
 include/trace/events/writeback.h
 include/trace/events/xdp.h
 include/trace/hooks/avc.h
 include/trace/hooks/binder.h
 include/trace/hooks/bl_hib.h
+include/trace/hooks/blk.h
 include/trace/hooks/bug.h
 include/trace/hooks/cgroup.h
 include/trace/hooks/compaction.h
 include/trace/hooks/cpufreq.h
 include/trace/hooks/cpuidle.h
 include/trace/hooks/cpuidle_psci.h
+include/trace/hooks/cpuinfo.h
 include/trace/hooks/creds.h
 include/trace/hooks/debug.h
 include/trace/hooks/dmabuf.h
@@ -4550,6 +4571,7 @@ include/trace/hooks/ftrace_dump.h
 include/trace/hooks/futex.h
 include/trace/hooks/gic.h
 include/trace/hooks/gic_v3.h
+include/trace/hooks/gunyah.h
 include/trace/hooks/hung_task.h
 include/trace/hooks/iommu.h
 include/trace/hooks/logbuf.h
@@ -4562,6 +4584,7 @@ include/trace/hooks/power.h
 include/trace/hooks/preemptirq.h
 include/trace/hooks/printk.h
 include/trace/hooks/psci.h
+include/trace/hooks/psi.h
 include/trace/hooks/reboot.h
 include/trace/hooks/regmap.h
 include/trace/hooks/remoteproc.h
@@ -4835,6 +4858,7 @@ include/uapi/linux/netfilter/xt_CONNSECMARK.h
 include/uapi/linux/netfilter/xt_CT.h
 include/uapi/linux/netfilter/xt_DSCP.h
 include/uapi/linux/netfilter/xt_IDLETIMER.h
+include/uapi/linux/netfilter/xt_LOG.h
 include/uapi/linux/netfilter/xt_NFLOG.h
 include/uapi/linux/netfilter/xt_NFQUEUE.h
 include/uapi/linux/netfilter/xt_SECMARK.h
@@ -5010,6 +5034,7 @@ include/uapi/linux/tty.h
 include/uapi/linux/tty_flags.h
 include/uapi/linux/types.h
 include/uapi/linux/ublk_cmd.h
+include/uapi/linux/udmabuf.h
 include/uapi/linux/udp.h
 include/uapi/linux/uhid.h
 include/uapi/linux/uinput.h
@@ -5054,6 +5079,7 @@ include/uapi/linux/virtio_ids.h
 include/uapi/linux/virtio_net.h
 include/uapi/linux/virtio_pci.h
 include/uapi/linux/virtio_ring.h
+include/uapi/linux/virtio_scmi.h
 include/uapi/linux/virtio_types.h
 include/uapi/linux/virtio_vsock.h
 include/uapi/linux/vm_sockets.h
@@ -5220,10 +5246,12 @@ kernel/bpf/arraymap.c
 kernel/bpf/bloom_filter.c
 kernel/bpf/bpf_cgrp_storage.c
 kernel/bpf/bpf_fuse.c
+kernel/bpf/bpf_inode_storage.c
 kernel/bpf/bpf_iter.c
 kernel/bpf/bpf_local_storage.c
 kernel/bpf/bpf_lru_list.c
 kernel/bpf/bpf_lru_list.h
+kernel/bpf/bpf_lsm.c
 kernel/bpf/bpf_struct_ops.c
 kernel/bpf/bpf_task_storage.c
 kernel/bpf/btf.c
@@ -5370,6 +5398,7 @@ kernel/locking/rwsem.c
 kernel/locking/semaphore.c
 kernel/locking/spinlock.c
 kernel/locking/ww_mutex.h
+kernel/module/gki_module.c
 kernel/module/internal.h
 kernel/module/kallsyms.c
 kernel/module/kmod.c
@@ -5570,7 +5599,6 @@ kernel/vhost_task.c
 kernel/watchdog.c
 kernel/workqueue.c
 kernel/workqueue_internal.h
-lib/alloc_tag.c
 lib/argv_split.c
 lib/asn1_decoder.c
 lib/assoc_array.c
@@ -5590,7 +5618,6 @@ lib/checksum.c
 lib/clz_ctz.c
 lib/clz_tab.c
 lib/cmdline.c
-lib/codetag.c
 lib/compat_audit.c
 lib/cpu_rmap.c
 lib/cpumask.c
@@ -5885,6 +5912,7 @@ lib/zstd/zstd_compress_module.c
 lib/zstd/zstd_decompress_module.c
 mm/backing-dev.c
 mm/balloon_compaction.c
+mm/cleancache.c
 mm/cma.c
 mm/cma.h
 mm/cma_debug.c
@@ -5948,6 +5976,7 @@ mm/page_ext.c
 mm/page_io.c
 mm/page_isolation.c
 mm/page_owner.c
+mm/page_pinner.c
 mm/page_reporting.c
 mm/page_reporting.h
 mm/page_vma_mapped.c
@@ -6123,6 +6152,7 @@ net/core/net-sysfs.c
 net/core/net-sysfs.h
 net/core/net-traces.c
 net/core/net_namespace.c
+net/core/netclassid_cgroup.c
 net/core/netdev-genl-gen.c
 net/core/netdev-genl-gen.h
 net/core/netdev-genl.c
@@ -6454,6 +6484,7 @@ net/netfilter/nf_conntrack_standalone.c
 net/netfilter/nf_conntrack_tftp.c
 net/netfilter/nf_internals.h
 net/netfilter/nf_log.c
+net/netfilter/nf_log_syslog.c
 net/netfilter/nf_nat_amanda.c
 net/netfilter/nf_nat_bpf.c
 net/netfilter/nf_nat_core.c
@@ -6476,6 +6507,7 @@ net/netfilter/xt_CONNSECMARK.c
 net/netfilter/xt_CT.c
 net/netfilter/xt_DSCP.c
 net/netfilter/xt_IDLETIMER.c
+net/netfilter/xt_LOG.c
 net/netfilter/xt_MASQUERADE.c
 net/netfilter/xt_NETMAP.c
 net/netfilter/xt_NFLOG.c
@@ -6736,6 +6768,7 @@ scripts/sorttable.c
 scripts/sorttable.h
 scripts/ssl-common.h
 scripts/unifdef.c
+security/bpf/hooks.c
 security/commoncap.c
 security/device_cgroup.c
 security/inode.c

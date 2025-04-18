@@ -4,6 +4,7 @@ arm_smmu.ko
 gic_intr_routing.ko
 llcc-qcom.ko
 cambistmclkcc-canoe.ko
+camcc-alor.ko
 camcc-canoe.ko
 clk-dummy.ko
 clk-qcom.ko
@@ -71,6 +72,7 @@ qrtr.ko
 msm_qmp.ko
 qnoc-qos.ko
 qnoc-canoe.ko
+qnoc-alor.ko
 qcom_iommu_debug.ko
 qcom_ipc_logging.ko
 iommu-logger.ko

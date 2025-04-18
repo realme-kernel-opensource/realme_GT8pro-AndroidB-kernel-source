@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -183,7 +183,7 @@ static int heuristics_scid_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int heuristics_scid_remove(struct platform_device *pdev)
+static void heuristics_scid_remove(struct platform_device *pdev)
 {
 	bool flag = false;
 
@@ -196,7 +196,6 @@ static int heuristics_scid_remove(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, NULL);
-	return 0;
 }
 
 static const struct of_device_id heuristics_scid_table[] = {

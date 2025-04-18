@@ -670,6 +670,8 @@ static int qcom_glink_send_rx_done(struct qcom_glink *glink,
 	cmd.lcid = cid;
 	cmd.liid = iid;
 
+	intent->offset = 0;
+
 	ret = qcom_glink_tx(glink, &cmd, sizeof(cmd), NULL, 0, wait);
 	if (ret)
 		return ret;
@@ -678,14 +680,12 @@ static int qcom_glink_send_rx_done(struct qcom_glink *glink,
 	if (!intent->size)
 		intent->data = NULL;
 
-	ret = intent->offset;
-
 	if (!reuse) {
 		kfree(intent->data);
 		kfree(intent);
 	}
 
-	CH_INFO(channel, "reuse:%d liid:%d data_size:%d", reuse, iid, ret);
+	CH_INFO(channel, "reuse:%d liid:%d", reuse, iid);
 	return 0;
 }
 
@@ -1152,11 +1152,9 @@ static int qcom_glink_rx_thread(void *data)
 			}
 
 			if (qcom_glink_is_wakeup(true))
-				pr_info("%s[%d:%d] %s: wakeup packet size:%d\n",
+				pr_info("%s[%d:%d] %s: wakeup packet\n",
 					channel->name, channel->lcid, channel->rcid,
-					__func__, intent->offset);
-
-			intent->offset = 0;
+					__func__);
 
 			if (!(qcom_glink_rx_done_supported(&channel->ept) && ret == RPMSG_DEFER))
 				__qcom_glink_rx_done(glink, channel, intent, true);

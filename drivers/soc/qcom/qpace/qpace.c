@@ -13,8 +13,6 @@
 #include <linux/pm_qos.h>
 #include <linux/cpu.h>
 #include <linux/interconnect.h>
-#include <linux/qtee_shmbridge.h>
-#include <linux/firmware/qcom/si_object.h>
 #include <dt-bindings/interconnect/qcom,icc.h>
 
 #include "qpace-constants.h"
@@ -467,6 +465,8 @@ static inline int init_event_ring(int er_num, bool reinit_ring)
 	QPACE_WRITE_ER_REG(er_num, QPACE_DMA_ER_MGR_0_RD_PTR_L_OFFSET,
 			   FIELD_GET(GENMASK(31, 0), ring_end_phys) - DESCRIPTOR_SIZE);
 
+	ev_rings[er_num].cycle_bit = false;
+
 	/*
 	 * Since struct event_ring->cycle_bit is zero initialized, for the initial pass
 	 * by HW, an invalid ED will need to have a cycle bit of 1 / true, which will be
@@ -512,35 +512,60 @@ static int init_event_rings(void)
 	return 0;
 }
 
-static DEFINE_SPINLOCK(qpace_ref_lock);
+static DEFINE_MUTEX(qpace_ref_lock);
 static int active_rings;
 
-static void get_qpace(int ring_num)
+static bool rings_inited_since_activation[NUM_RINGS];
+
+/*
+ * get_qpace() - prepare a given ring for usage and ref count its usage
+ * @ring_num: the ring we want to use
+ *
+ * Call the necessary PM callbacks on the first get_qpace() call. Initialize
+ * @ring_num if it has not been initialized already for the current usage
+ * period. This function implicitly increments a reference counter that
+ * tracks the number of items in the ring.
+ */
+void get_qpace(int ring_num)
 {
 	struct transfer_ring *tr = &tr_rings[ring_num];
 
-	spin_lock(&qpace_ref_lock);
+	mutex_lock(&qpace_ref_lock);
 	if (!active_rings) {
 		pm_stay_awake(qpace_dev);
 		dev_pm_qos_update_request(&qos_req, 300);
 	}
 
 	if (!tr->item_count) {
-		init_event_ring(ring_num, true);
-		init_transfer_ring(ring_num, true);
+		if (!rings_inited_since_activation[ring_num]) {
+			rings_inited_since_activation[ring_num] = true;
+			init_event_ring(ring_num, true);
+			init_transfer_ring(ring_num, true);
+		}
 
 		active_rings++;
 	}
 	tr->item_count++;
 
-	spin_unlock(&qpace_ref_lock);
+	mutex_unlock(&qpace_ref_lock);
 }
+EXPORT_SYMBOL_GPL(get_qpace);
 
-static void put_qpace(int ring_num, int  n_consumed_entries)
+/*
+ * put_qpace() - Reduce the number of items tracked by a ring
+ * @ring_num: The ring we're modifying usage stats for
+ * @n_consumed_entries: The number of items we want to mark as unused
+ *
+ * Reduces the number of items tracked by a ring. If a ring has no more
+ * queued items, it becomes inactive. If all rings become inactive, then
+ * we call the necessary PM callbacks to allow QPaCE's resources to be
+ * collapsed.
+ */
+void put_qpace(int ring_num, int  n_consumed_entries)
 {
 	struct transfer_ring *tr = &tr_rings[ring_num];
 
-	spin_lock(&qpace_ref_lock);
+	mutex_lock(&qpace_ref_lock);
 	tr->item_count -= n_consumed_entries;
 
 	if (!tr->item_count)
@@ -549,10 +574,14 @@ static void put_qpace(int ring_num, int  n_consumed_entries)
 	if (!active_rings) {
 		dev_pm_qos_update_request(&qos_req, PM_QOS_RESUME_LATENCY_DEFAULT_VALUE);
 		pm_relax(qpace_dev);
+
+		for (int i = 0; i < ARRAY_SIZE(rings_inited_since_activation); i++)
+			rings_inited_since_activation[i] = false;
 	}
 
-	spin_unlock(&qpace_ref_lock);
+	mutex_unlock(&qpace_ref_lock);
 }
+EXPORT_SYMBOL_GPL(put_qpace);
 
 /*
  * =============================================================================
@@ -1141,84 +1170,10 @@ static int qpace_register_interrupts(struct platform_device *pdev)
 	return 0;
 }
 
-struct enforce_hw_feature_id {
-	uint32_t feature_id;
-	uint32_t hw_feature_status;
-};
-
-#define CPFM_UID 119
-#define QPACE_FID  3600
-#define IPFM_ENFORCE_HW_FEATURES 24
-
-bool is_qpace_enabled(void)
-{
-	struct si_object_invoke_ctx oic;
-	int ret, result;
-	u32 fid = QPACE_FID;
-	u32 interface_version_out;
-	struct enforce_hw_feature_id feature_status = {fid, -1};
-
-	/* Cache the return value for whether QPaCE is enabled or not */
-	static bool already_executed;
-	static bool qpace_enabled;
-
-	struct si_object *service;
-	struct si_object *client_env;
-
-	struct si_arg args[4] = { 0 };
-
-	if (already_executed)
-		return qpace_enabled;
-
-	/* On account of TZ limitations, increase the size of the FID and feature status fields */
-	args[0].type = SI_AT_IB;
-	args[0].b = (struct si_buffer) {{&fid}, 4 * sizeof(fid)};
-	args[1].type = SI_AT_OB;
-	args[1].b = (struct si_buffer) {{&interface_version_out}, sizeof(interface_version_out)};
-	args[2].type = SI_AT_OB;
-	args[2].b = (struct si_buffer) {{&feature_status}, 8 * sizeof(feature_status)};
-	args[3].type = SI_AT_END;
-
-	ret = si_core_get_client_env(&oic, &client_env);
-	if (ret) {
-		pr_err("qpace, failed to get client env\n");
-		qpace_enabled = false;
-		goto mark_executed;
-	}
-
-	ret = si_core_client_env_open(&oic, client_env, CPFM_UID, &service);
-	if (ret) {
-		pr_err("qpace, failed to get service\n");
-		qpace_enabled = false;
-		goto put_client;
-	}
-
-	ret = si_object_do_invoke(&oic, service, IPFM_ENFORCE_HW_FEATURES, args, &result);
-
-	if (ret || result) {
-		pr_err("qpace enablement check failed %d(ret = %d)\n", result, ret);
-		qpace_enabled = false;
-	} else {
-		qpace_enabled = feature_status.hw_feature_status == 1;
-	}
-
-	put_si_object(service);
-put_client:
-	put_si_object(client_env);
-mark_executed:
-	already_executed = true;
-
-	return qpace_enabled;
-}
-EXPORT_SYMBOL_GPL(is_qpace_enabled);
-
 static int qpace_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	int ret;
-
-	if (!is_qpace_enabled())
-		return 0;
 
 	ret = qpace_register_interrupts(pdev);
 	if (ret)
@@ -1248,9 +1203,6 @@ power_off:
 
 static void qpace_remove(struct platform_device *pdev)
 {
-	if (!is_qpace_enabled())
-		return;
-
 	deinit_transfer_rings(NUM_RINGS);
 	deinit_event_rings(NUM_RINGS);
 	qpace_power_off(&pdev->dev);

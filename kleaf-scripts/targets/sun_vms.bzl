@@ -23,6 +23,7 @@ def define_sun_vms(vm_image_opts = vm_image_opts()):
         dist_targets = (
             ["sun-{}_{}_vm_dist".format(vt, variant) for vt in vm_types] +
             ["sun-{}_{}_dist".format(vt, variant) for vt in vm_types] +
+            [":sun-{}_{}_modules_install".format(vt, variant) for vt in vm_types] +
             [":sun-{}_{}_signed_modules".format(vt, variant) for vt in vm_types] +
             ["sun-{}_{}_merge_msm_uapi_headers".format(vt, variant) for vt in vm_types] +
             [base_kernel] +

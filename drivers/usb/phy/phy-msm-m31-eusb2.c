@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/err.h>
@@ -255,6 +255,11 @@ static void msm_m31_eusb2_phy_clocks(struct m31_eusb2_phy *phy, bool on)
 
 		if (phy->ref_clk)
 			clk_prepare_enable(phy->ref_clk);
+	/* HPG section 5.1.2 PLL Control mentions stabilization time of
+	 * output clocks PLLCK120, PLLCK480, CLK48M while re-enabling them
+	 * to take  around 1.5 ms.
+	 */
+	usleep_range(1500, 2000);
 	} else {
 		if (phy->ref_clk)
 			clk_disable_unprepare(phy->ref_clk);
@@ -626,7 +631,7 @@ static int msm_m31_eusb2_phy_set_suspend(struct usb_phy *uphy, int suspend)
 		}
 
 		/* With EUD spoof disconnect, keep clk and ldos on */
-		if (phy->phy.flags & EUD_SPOOF_DISCONNECT)
+		if (phy->phy.flags & EUD_SPOOF_DISCONNECT || is_eud_debug_mode_active(phy))
 			goto suspend_exit;
 
 		if (phy->ref_clk && phy->ref_clk_enable) {
@@ -698,6 +703,9 @@ static void msm_m31_eusb2_phy_vbus_draw_work(struct work_struct *w)
 static int msm_m31_eusb2_phy_set_power(struct usb_phy *uphy, unsigned int mA)
 {
 	struct m31_eusb2_phy *phy = container_of(uphy, struct m31_eusb2_phy, phy);
+
+	if (phy->cable_connected && (mA == 0))
+		return 0;
 
 	phy->vbus_draw = mA;
 	schedule_work(&phy->vbus_draw_work);

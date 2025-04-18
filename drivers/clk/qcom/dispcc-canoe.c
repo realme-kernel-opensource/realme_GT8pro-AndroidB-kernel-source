@@ -85,7 +85,7 @@ static const struct alpha_pll_config disp_cc_pll0_config = {
 	.cal_l = 0x48,
 	.alpha = 0x6492,
 	.config_ctl_val = 0x25c400e7,
-	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi_val = 0x0a8062e0,
 	.config_ctl_hi1_val = 0xf51dea20,
 	.user_ctl_val = 0x00000008,
 	.user_ctl_hi_val = 0x00000002,
@@ -111,7 +111,7 @@ static struct clk_alpha_pll disp_cc_pll0 = {
 			.vdd_class = &vdd_mm,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -126,7 +126,7 @@ static const struct alpha_pll_config disp_cc_pll1_config = {
 	.cal_l = 0x48,
 	.alpha = 0xa000,
 	.config_ctl_val = 0x25c400e7,
-	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi_val = 0x0a8062e0,
 	.config_ctl_hi1_val = 0xf51dea20,
 	.user_ctl_val = 0x00000008,
 	.user_ctl_hi_val = 0x00000002,
@@ -151,7 +151,7 @@ static struct clk_alpha_pll disp_cc_pll1 = {
 			.vdd_class = &vdd_mm,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -2143,7 +2143,7 @@ static struct gdsc disp_cc_mdss_core_gdsc = {
 		.name = "disp_cc_mdss_core_gdsc",
 	},
 	.pwrsts = PWRSTS_OFF_ON,
-	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_SKIP_DIS | HW_CTRL_TRIGGER | HW_CTRL,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | HW_CTRL_SKIP_DIS | HW_CTRL_TRIGGER,
 	.supply = "vdd_mm",
 };
 
@@ -2193,9 +2193,51 @@ static struct qcom_cc_desc disp_cc_canoe_desc = {
 
 static const struct of_device_id disp_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-dispcc" },
+	{ .compatible = "qcom,alor-dispcc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, disp_cc_canoe_match_table);
+
+static struct clk_init_data disp_cc_mdss_mdp_clk_src_init = {
+	.name = "disp_cc_mdss_mdp_clk_src",
+	.parent_data = disp_cc_parent_data_9,
+	.num_parents = ARRAY_SIZE(disp_cc_parent_data_9),
+	.flags = CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT,
+	.ops = &clk_rcg2_ops,
+};
+
+static struct clk_init_data disp_cc_pll0_init = {
+	.name = "disp_cc_pll0",
+	.parent_data = &(const struct clk_parent_data) {
+		.fw_name = "bi_tcxo",
+		.name = "bi_tcxo",
+	},
+	.num_parents = 1,
+	.flags = CLK_GET_RATE_NOCACHE,
+	.ops = &clk_alpha_pll_taycan_eko_t_ops,
+};
+
+static void disp_cc_alor_fixup(struct regmap *regmap)
+{
+	/* Remove cesta ops until crm enablement for alor*/
+	disp_cc_pll0.clkr.hw.init = &disp_cc_pll0_init;
+	disp_cc_mdss_mdp_clk_src.clkr.hw.init = &disp_cc_mdss_mdp_clk_src_init;
+}
+
+static int disp_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,alor-dispcc"))
+		disp_cc_alor_fixup(regmap);
+
+	return 0;
+}
 
 static int disp_cc_canoe_probe(struct platform_device *pdev)
 {
@@ -2217,6 +2259,10 @@ static int disp_cc_canoe_probe(struct platform_device *pdev)
 	clk_taycan_eko_t_pll_configure(&disp_cc_pll0, regmap, &disp_cc_pll0_config);
 	clk_taycan_eko_t_pll_configure(&disp_cc_pll1, regmap, &disp_cc_pll1_config);
 	clk_pongo_eko_t_pll_configure(&disp_cc_pll2, regmap, &disp_cc_pll2_config);
+
+	ret = disp_cc_canoe_fixup(pdev, regmap);
+	if (ret)
+		return ret;
 
 	/* Enable clock gating for MDP clocks */
 	regmap_update_bits(regmap, DISP_CC_MISC_CMD, 0x10, 0x10);

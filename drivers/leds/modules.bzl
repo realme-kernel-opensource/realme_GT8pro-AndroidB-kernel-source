@@ -49,3 +49,16 @@ def register_modules(registry):
             "drivers/leds/trigger/ledtrig-pattern.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/leds/leds-qpnp-vibrator-ldo",
+        out = "leds-qpnp-vibrator-ldo.ko",
+        config = "CONFIG_LEDS_QPNP_VIBRATOR_LDO",
+        srcs = [
+            # do not sort
+            "drivers/leds/leds-qpnp-vibrator-ldo.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )

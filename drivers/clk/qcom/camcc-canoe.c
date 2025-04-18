@@ -79,7 +79,7 @@ static const struct alpha_pll_config cam_cc_pll0_config = {
 	.cal_l = 0x48,
 	.alpha = 0x8000,
 	.config_ctl_val = 0x25c400e7,
-	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi_val = 0x0a8062e0,
 	.config_ctl_hi1_val = 0xf51dea20,
 	.user_ctl_val = 0x00008408,
 	.user_ctl_hi_val = 0x00000002,
@@ -104,7 +104,7 @@ static struct clk_alpha_pll cam_cc_pll0 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -165,7 +165,7 @@ static const struct alpha_pll_config cam_cc_pll1_config = {
 	.cal_l = 0x48,
 	.alpha = 0xa2aa,
 	.config_ctl_val = 0x25c400e7,
-	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi_val = 0x0a8062e0,
 	.config_ctl_hi1_val = 0xf51dea20,
 	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
@@ -189,7 +189,7 @@ static struct clk_alpha_pll cam_cc_pll1 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -227,7 +227,7 @@ static const struct alpha_pll_config cam_cc_pll2_config = {
 	.cal_l = 0x48,
 	.alpha = 0x4aaa,
 	.config_ctl_val = 0x25c400e7,
-	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi_val = 0x0a8062e0,
 	.config_ctl_hi1_val = 0xf51dea20,
 	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
@@ -251,7 +251,7 @@ static struct clk_alpha_pll cam_cc_pll2 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -289,7 +289,7 @@ static const struct alpha_pll_config cam_cc_pll3_config = {
 	.cal_l = 0x48,
 	.alpha = 0x8777,
 	.config_ctl_val = 0x25c400e7,
-	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi_val = 0x0a8062e0,
 	.config_ctl_hi1_val = 0xf51dea20,
 	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
@@ -313,7 +313,7 @@ static struct clk_alpha_pll cam_cc_pll3 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -351,7 +351,7 @@ static const struct alpha_pll_config cam_cc_pll4_config = {
 	.cal_l = 0x48,
 	.alpha = 0x8777,
 	.config_ctl_val = 0x25c400e7,
-	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi_val = 0x0a8062e0,
 	.config_ctl_hi1_val = 0xf51dea20,
 	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
@@ -375,7 +375,7 @@ static struct clk_alpha_pll cam_cc_pll4 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -413,7 +413,7 @@ static const struct alpha_pll_config cam_cc_pll5_config = {
 	.cal_l = 0x48,
 	.alpha = 0x8777,
 	.config_ctl_val = 0x25c400e7,
-	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi_val = 0x0a8062e0,
 	.config_ctl_hi1_val = 0xf51dea20,
 	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
@@ -437,7 +437,7 @@ static struct clk_alpha_pll cam_cc_pll5 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -475,7 +475,7 @@ static const struct alpha_pll_config cam_cc_pll6_config = {
 	.cal_l = 0x48,
 	.alpha = 0x0,
 	.config_ctl_val = 0x25c400e7,
-	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi_val = 0x0a8062e0,
 	.config_ctl_hi1_val = 0xf51dea20,
 	.user_ctl_val = 0x00008408,
 	.user_ctl_hi_val = 0x00000002,
@@ -499,7 +499,7 @@ static struct clk_alpha_pll cam_cc_pll6 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -560,7 +560,7 @@ static const struct alpha_pll_config cam_cc_pll7_config = {
 	.cal_l = 0x48,
 	.alpha = 0x1555,
 	.config_ctl_val = 0x25c400e7,
-	.config_ctl_hi_val = 0x0a8060e0,
+	.config_ctl_hi_val = 0x0a8062e0,
 	.config_ctl_hi1_val = 0xf51dea20,
 	.user_ctl_val = 0x00000408,
 	.user_ctl_hi_val = 0x00000002,
@@ -584,7 +584,7 @@ static struct clk_alpha_pll cam_cc_pll7 = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER_D2] = 621000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -727,6 +727,7 @@ static const struct clk_parent_data cam_cc_parent_data_8[] = {
 };
 
 static const struct freq_tbl ftbl_cam_cc_camnoc_rt_axi_clk_src[] = {
+	F(19200000, P_BI_TCXO, 1, 0, 0),
 	F(200000000, P_CAM_CC_PLL0_OUT_EVEN, 3, 0, 0),
 	F(300000000, P_CAM_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(400000000, P_CAM_CC_PLL0_OUT_EVEN, 1.5, 0, 0),
@@ -3082,12 +3083,15 @@ static int cam_cc_canoe_probe(struct platform_device *pdev)
 
 	ret = qcom_cc_really_probe(&pdev->dev, &cam_cc_canoe_desc, regmap);
 	if (ret) {
-		dev_err(&pdev->dev, "Failed to register CAM CC clocks ret=%d\n", ret);
-		return ret;
+		if (ret != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "Failed to register CAM CC clocks ret=%d\n", ret);
+		goto err;
 	}
 
-	pm_runtime_put_sync(&pdev->dev);
 	dev_info(&pdev->dev, "Registered CAM CC clocks\n");
+
+err:
+	pm_runtime_put_sync(&pdev->dev);
 
 	return ret;
 }

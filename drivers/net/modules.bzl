@@ -22,3 +22,17 @@ def register_modules(registry):
             "net/core/failover",
         ],
     )
+
+    registry.register(
+        name = "drivers/net/virtio_net",
+        out = "virtio_net.ko",
+        config = "CONFIG_VIRTIO_NET",
+        srcs = [
+            # do not sort
+            "drivers/net/virtio_net.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/net/net_failover",
+        ],
+    )

@@ -2099,6 +2099,24 @@ static void ufs_qcom_set_tx_hs_equalizer(struct ufs_hba *hba,
 	u32 equalizer_val = 0;
 	int ret, i;
 
+	/*
+	 * There are two methods to enable the TX de-emphasis.
+	 * The first method involves setting the UFS PHY register
+	 * UFS_PHY_TX_POST_EMP_xx_xx during the PHY calibration and
+	 * one time setting after phy init.
+	 * The second method involves sending a DME command to select
+	 * the TX_HS_EQUALIZER setting prior to each PMC command.
+	 * Only one method should be implemented. Not both.
+	 */
+	ret = ufs_qcom_phy_tx_hs_equalizer_config(phy);
+	if (!ret)
+		return;
+
+	/*
+	 * Try the second method. With this method, the UFS_PHY_TX_POST_EMP_xx_xx
+	 * regiter should not have been set (use its default setting) during the
+	 * phy calibration.
+	 */
 	ret = ufs_qcom_phy_get_tx_hs_equalizer(phy, gear, &equalizer_val);
 	if (ret)
 		return;
@@ -4065,7 +4083,7 @@ static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, unsigned long freq)
 	return ret;
 }
 
-static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba)
+static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba, unsigned long freq)
 {
 	int err;
 
@@ -4075,9 +4093,7 @@ static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba)
 		return err;
 	}
 
-	err = ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(hba);
-
-	return err;
+	return ufs_qcom_core_clk_ctrl(hba, freq);
 }
 
 static int ufs_qcom_clk_scale_up_post_change(struct ufs_hba *hba)
@@ -4095,13 +4111,10 @@ static int ufs_qcom_clk_scale_down_pre_change(struct ufs_hba *hba)
 	return 0;
 }
 
-static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
+static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba, unsigned long freq)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufs_pa_layer_attr *attr = &host->dev_req_params;
-	struct ufs_clk_info *clki;
-	struct list_head *head = &hba->clk_list_head;
-	unsigned long curr_freq = 0;
 	unsigned long flags;
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
@@ -4111,19 +4124,12 @@ static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
 	if (attr)
 		ufs_qcom_cfg_timers(hba, false);
 
-	list_for_each_entry(clki, head, list) {
-		if (!IS_ERR_OR_NULL(clki->clk) &&
-		    (!strcmp(clki->name, "core_clk_unipro"))) {
-			curr_freq = clk_get_rate(clki->clk);
-			break;
-		}
-	}
-
-	return ufs_qcom_core_clk_ctrl(hba, curr_freq);
+	return ufs_qcom_core_clk_ctrl(hba, freq);
 }
 
-static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
-		bool scale_up, enum ufs_notify_change_status status)
+static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba, bool scale_up,
+				     unsigned long target_freq,
+				     enum ufs_notify_change_status status)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufs_pa_layer_attr *dev_req_params = &host->dev_req_params;
@@ -4139,7 +4145,7 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 		if (err)
 			return err;
 		if (scale_up) {
-			err = ufs_qcom_clk_scale_up_pre_change(hba);
+			err = ufs_qcom_clk_scale_up_pre_change(hba, target_freq);
 		} else {
 			err = ufs_qcom_clk_scale_down_pre_change(hba);
 			cancel_dwork_unvote_cpufreq(hba);
@@ -4151,7 +4157,7 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 		if (scale_up)
 			err = ufs_qcom_clk_scale_up_post_change(hba);
 		else
-			err = ufs_qcom_clk_scale_down_post_change(hba);
+			err = ufs_qcom_clk_scale_down_post_change(hba, target_freq);
 
 
 		if (err || !dev_req_params) {
@@ -5242,6 +5248,36 @@ static int ufs_qcom_config_esi(struct ufs_hba *hba)
 	return ret;
 }
 
+static u32 ufs_qcom_freq_to_gear_speed(struct ufs_hba *hba, unsigned long freq)
+{
+	u32 gear = 0;
+
+	switch (freq) {
+	case 403000000:
+		gear = UFS_HS_G5;
+		break;
+	case 300000000:
+		gear = UFS_HS_G4;
+		break;
+	case 201500000:
+		gear = UFS_HS_G3;
+		break;
+	case 150000000:
+	case 100000000:
+		gear = UFS_HS_G2;
+		break;
+	case 75000000:
+	case 37500000:
+		gear = UFS_HS_G1;
+		break;
+	default:
+		dev_err(hba->dev, "%s: Unsupported clock freq : %lu\n", __func__, freq);
+		break;
+	}
+
+	return gear;
+}
+
 /*
  * struct ufs_hba_qcom_vops - UFS QCOM specific variant operations
  *
@@ -5273,6 +5309,7 @@ static const struct ufs_hba_variant_ops ufs_hba_qcom_vops = {
 	.op_runtime_config	= ufs_qcom_op_runtime_config,
 	.get_outstanding_cqs	= ufs_qcom_get_outstanding_cqs,
 	.config_esi		= ufs_qcom_config_esi,
+	.freq_to_gear_speed	= ufs_qcom_freq_to_gear_speed,
 };
 
 /**

@@ -450,6 +450,15 @@ config SM_GCC_ALOR
 	  Say Y if you want to use peripheral devices such as UART,
 	  SPI, I2C, USB, SD/UFS, PCIe etc.
 
+config SM_CAMCC_ALOR
+	tristate "ALOR Camera Clock Controller"
+	depends on SM_GCC_ALOR
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc
+	  Alor devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
 config VIRTIO_CLK
         tristate "Virtio clock driver"
         depends on VIRTIO
@@ -504,5 +513,14 @@ config SC_VIDEOCC_7280
 	  SC7280 devices.
 	  Say Y if you want to support video devices and functionality such as
 	  video encode/decode.
+
+config SC_DEBUGCC_7280
+	tristate "SC7280 Debug Clock Controller"
+	depends on SC_GCC_7280
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc.
+	  SC7280 devices.
+	  Say Y if you want to support the debug clocks such as clock measurement
+	  functionality.
 
 endif

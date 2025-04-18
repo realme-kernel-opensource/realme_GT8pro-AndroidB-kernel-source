@@ -9,6 +9,7 @@
 #include <linux/highmem.h>
 #include <linux/mem-buf-exporter.h>
 #include <linux/gunyah/gh_mem_notifier.h>
+#include <linux/debugfs.h>
 #include "mem-buf-dev.h"
 #include "mem-buf-gh.h"
 #include "mem-buf-ids.h"
@@ -29,6 +30,7 @@ struct mem_buf_vmperm {
 	unsigned int max_acl_entries;
 	struct dma_buf *dmabuf;
 	struct sg_table *sgt;
+	size_t size;
 	gh_memparcel_handle_t memparcel_hdl;
 	struct mutex lock;
 	mem_buf_dma_buf_destructor dtor;
@@ -133,7 +135,8 @@ static struct mem_buf_vmperm *mem_buf_vmperm_alloc_flags(
 	gh_memparcel_handle_t hdl)
 {
 	struct mem_buf_vmperm *vmperm;
-	int ret;
+	struct scatterlist *sg;
+	int ret, i;
 
 	vmperm = kzalloc(sizeof(*vmperm), GFP_KERNEL);
 	if (!vmperm)
@@ -150,6 +153,9 @@ static struct mem_buf_vmperm *mem_buf_vmperm_alloc_flags(
 					nr_acl_entries);
 	mutex_unlock(&vmperm->lock);
 	vmperm->sgt = sgt;
+	for_each_sgtable_sg(sgt, sg, i)
+		vmperm->size += sg->length;
+
 	vmperm->flags = flags;
 	vmperm->memparcel_hdl = hdl;
 	vmperm->kref_release = release;
@@ -290,23 +296,41 @@ EXPORT_SYMBOL_GPL(mem_buf_vmperm_free);
  *
  * This function can fail; the hypervisor or other system entities
  * may hold references to memory in a secure state.
+ *
+ * When called from a gunyah notifier, do nothing unless in 'zombie state'.
+ * A memory-region is considered a 'zombie' if the local dma-buf is closed.
+ *
+ * We won't/can't 'unwind' the destructor if reclaim fails.
  */
-int mem_buf_vmperm_try_reclaim(struct mem_buf_vmperm *vmperm)
+int mem_buf_vmperm_try_reclaim(struct mem_buf_vmperm *vmperm, bool from_notifier)
 {
 	int ret = 0;
 
-	if (vmperm->dtor) {
-		ret = vmperm->dtor(vmperm->dtor_data);
-		if (ret)
-			return ret;
+	mutex_lock(&vmperm->lock);
+	if (from_notifier && !(vmperm->flags & MEM_BUF_WRAPPER_FLAG_ZOMBIE)) {
+		mutex_unlock(&vmperm->lock);
+		return 0;
 	}
 
-	mutex_lock(&vmperm->lock);
+	if (vmperm->dtor) {
+		ret = vmperm->dtor(vmperm->dtor_data);
+		if (ret) {
+			pr_err_ratelimited("dma-buf destructor %pS failed with %d\n",
+					vmperm->dtor, ret);
+			goto out;
+		}
+		/* Ensure dtor only called once if it succeeds */
+		vmperm->dtor = NULL;
+	}
+
 	if (vmperm->flags & MEM_BUF_WRAPPER_FLAG_LENDSHARE)
 		ret = __mem_buf_vmperm_reclaim(vmperm);
 	else if (vmperm->flags & MEM_BUF_WRAPPER_FLAG_ACCEPT)
 		ret = mem_buf_vmperm_relinquish(vmperm);
 
+out:
+	if (ret)
+		vmperm->flags |= MEM_BUF_WRAPPER_FLAG_ZOMBIE;
 	mutex_unlock(&vmperm->lock);
 
 	return ret;
@@ -343,8 +367,10 @@ int mem_buf_dma_buf_set_destructor(struct dma_buf *buf,
 	if (IS_ERR(vmperm))
 		return PTR_ERR(vmperm);
 
+	mutex_lock(&vmperm->lock);
 	vmperm->dtor = dtor;
 	vmperm->dtor_data = dtor_data;
+	mutex_unlock(&vmperm->lock);
 
 	return 0;
 }
@@ -625,15 +651,20 @@ static int mem_buf_lend_internal(struct dma_buf *dmabuf,
 	kref_get(vmperm->kref);
 	mutex_unlock(&vmperm->lock);
 
-	ret = xa_insert(&vmperm_xa, vmperm->memparcel_hdl, vmperm,
-				GFP_KERNEL);
-	if (ret)
-		goto err_xa;
-	mem_buf_lend_notify(vmperm);
+	if (vmperm->memparcel_hdl != MEM_BUF_MEMPARCEL_INVALID) {
+		ret = xa_insert(&vmperm_xa, vmperm->memparcel_hdl, vmperm,
+					GFP_KERNEL);
+		if (ret) {
+			pr_err_ratelimited("xa_insert failed for memparcel %x\n",
+						vmperm->memparcel_hdl);
+			goto err_xa;
+		}
+		mem_buf_lend_notify(vmperm);
+	}
 
 	return 0;
 err_xa:
-	mem_buf_vmperm_try_reclaim(vmperm);
+	mem_buf_vmperm_try_reclaim(vmperm, false);
 	return ret;
 
 err_assign:
@@ -747,13 +778,16 @@ bool mem_buf_dma_buf_exclusive_owner(struct dma_buf *dmabuf)
 {
 	struct mem_buf_vmperm *vmperm;
 	bool ret = false;
+	u32 flags = MEM_BUF_WRAPPER_FLAG_STATIC_VM |
+		MEM_BUF_WRAPPER_FLAG_LENDSHARE |
+		MEM_BUF_WRAPPER_FLAG_ACCEPT;
 
 	vmperm = to_mem_buf_vmperm(dmabuf);
 	if (WARN_ON(IS_ERR(vmperm)))
 		return false;
 
 	mutex_lock(&vmperm->lock);
-	ret = !vmperm->flags;
+	ret = !(vmperm->flags & flags);
 	mutex_unlock(&vmperm->lock);
 	return ret;
 }
@@ -873,10 +907,68 @@ static void mem_buf_vmperm_gh_notifier(enum gh_mem_notifier_tag tag, unsigned lo
 		return;
 	}
 
-	mem_buf_vmperm_try_reclaim(vmperm);
+	mem_buf_vmperm_try_reclaim(vmperm, true);
 	/* Drop refcount from vmperm_lookup */
 	kref_put(vmperm->kref, vmperm->kref_release);
 }
+
+struct summary_data {
+	int vmid;
+	size_t total;
+	size_t total_pss;
+};
+
+#define TO_MB(x) (x >> 20)
+
+static int summary_show(struct seq_file *s, void *unused)
+{
+	struct summary_data d[] = {
+		{.vmid = VMID_TVM},
+		{.vmid = VMID_OEMVM},
+		{.vmid = VMID_CP_BITSTREAM},
+		{.vmid = VMID_CP_PIXEL},
+		{.vmid = VMID_CP_NON_PIXEL},
+	};
+	struct mem_buf_vmperm *vmperm;
+	size_t total_pss = 0;
+	int i, j;
+
+	mutex_lock(&vmperm_list_lock);
+	list_for_each_entry(vmperm, &vmperm_list, list) {
+		mutex_lock(&vmperm->lock);
+		for (i = 0; i < vmperm->nr_acl_entries; i++) {
+			for (j = 0; j < ARRAY_SIZE(d); j++) {
+				if (vmperm->vmids[i] == d[j].vmid) {
+					d[j].total += vmperm->size;
+					d[j].total_pss += vmperm->size / vmperm->nr_acl_entries;
+					total_pss += d[j].total_pss;
+				}
+			}
+		}
+		mutex_unlock(&vmperm->lock);
+	}
+	mutex_unlock(&vmperm_list_lock);
+
+	seq_printf(s, "%10s %10s %10s\n", "VMID", "SIZE-MB", "PSS-SIZE-MB");
+	for (j = 0; j < ARRAY_SIZE(d); j++)
+		seq_printf(s, "%#10x %10zu %10zu\n", d[j].vmid, TO_MB(d[j].total),
+			   TO_MB(d[j].total_pss));
+	seq_printf(s, "\nTotal Pss: %zu\n", TO_MB(total_pss));
+
+	return 0;
+}
+
+static int summary_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, summary_show, NULL);
+}
+
+static const struct file_operations summary_fops = {
+	.open		= summary_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= seq_release,
+};
 
 int mem_buf_dma_buf_init(void)
 {
@@ -887,5 +979,7 @@ int mem_buf_dma_buf_init(void)
 		return PTR_ERR(gh_rm_mem_notifier_cookie);
 	}
 
+	debugfs_create_file("mem_buf_summary", 0400, mem_buf_debugfs_root, NULL,
+			    &summary_fops);
 	return 0;
 }

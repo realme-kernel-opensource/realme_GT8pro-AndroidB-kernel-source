@@ -2551,6 +2551,57 @@ static const struct adsp_data vienna_mpss_resource = {
 	.both_dumps = true,
 };
 
+static const struct adsp_data yupik_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+};
+
+static const struct adsp_data yupik_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.pas_id = 18,
+	.minidump_id = 7,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+	.uses_elf64 = true,
+};
+
+static const struct adsp_data yupik_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+};
+
+static const struct adsp_data yupik_wpss_resource = {
+	.crash_reason_smem = 626,
+	.firmware_name = "wpss.mdt",
+	.pas_id = 6,
+	.minidump_id = 4,
+	.load_state = "wpss",
+	.ssr_name = "wpss",
+	.uses_elf64 = true,
+	.sysmon_name = "wpss",
+	.ssctl_id = 0x19,
+};
+
+
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
 	{ .compatible = "qcom,msm8953-adsp-pil", .data = &msm8996_adsp_resource},
@@ -2625,6 +2676,10 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,vienna-adsp-pas", .data = &vienna_adsp_resource},
 	{ .compatible = "qcom,vienna-cdsp-pas", .data = &vienna_cdsp_resource},
 	{ .compatible = "qcom,vienna-modem-pas", .data = &vienna_mpss_resource},
+	{ .compatible = "qcom,yupik-wpss-pas", .data = &yupik_wpss_resource},
+	{ .compatible = "qcom,yupik-adsp-pas", .data = &yupik_adsp_resource},
+	{ .compatible = "qcom,yupik-cdsp-pas", .data = &yupik_cdsp_resource},
+	{ .compatible = "qcom,yupik-modem-pas", .data = &yupik_mpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "clk: %s: " fmt, __func__
@@ -324,11 +324,11 @@ static const char *const disp_cc_debug_mux_parent_names[] = {
 	"disp_cc_mdss_pclk0_clk",
 	"disp_cc_mdss_pclk1_clk",
 	"disp_cc_mdss_pclk2_clk",
-	"disp_cc_mdss_rscc_ahb_clk",
-	"disp_cc_mdss_rscc_vsync_clk",
 	"disp_cc_mdss_vsync1_clk",
 	"disp_cc_mdss_vsync_clk",
 	"disp_cc_osc_clk",
+	"measure_only_disp_cc_mdss_rscc_ahb_clk",
+	"measure_only_disp_cc_mdss_rscc_vsync_clk",
 	"measure_only_disp_cc_sleep_clk",
 	"measure_only_disp_cc_xo_clk",
 };
@@ -380,11 +380,11 @@ static int disp_cc_debug_mux_sels[] = {
 	0xF,		/* disp_cc_mdss_pclk0_clk */
 	0x10,		/* disp_cc_mdss_pclk1_clk */
 	0x11,		/* disp_cc_mdss_pclk2_clk */
-	0x40,		/* disp_cc_mdss_rscc_ahb_clk */
-	0x3F,		/* disp_cc_mdss_rscc_vsync_clk */
 	0x3C,		/* disp_cc_mdss_vsync1_clk */
 	0x15,		/* disp_cc_mdss_vsync_clk */
 	0x37,		/* disp_cc_osc_clk */
+	0x40,		/* measure_only_disp_cc_mdss_rscc_ahb_clk */
+	0x3F,		/* measure_only_disp_cc_mdss_rscc_vsync_clk */
 	0x50,		/* measure_only_disp_cc_sleep_clk */
 	0x4E,		/* measure_only_disp_cc_xo_clk */
 };
@@ -471,7 +471,6 @@ static const char *const gcc_debug_mux_parent_names[] = {
 	"gcc_cfg_noc_usb3_prim_axi_clk",
 	"gcc_cnoc_pcie_sf_axi_clk",
 	"gcc_ddrss_pcie_sf_qtb_clk",
-	"gcc_disp_ahb_clk",
 	"gcc_disp_hf_axi_clk",
 	"gcc_disp_sf_axi_clk",
 	"gcc_eva_axi0_clk",
@@ -493,16 +492,6 @@ static const char *const gcc_debug_mux_parent_names[] = {
 	"gcc_pdm2_clk",
 	"gcc_pdm_ahb_clk",
 	"gcc_pdm_xo4_clk",
-	"gcc_qmip_camera_cmd_ahb_clk",
-	"gcc_qmip_camera_nrt_ahb_clk",
-	"gcc_qmip_camera_rt_ahb_clk",
-	"gcc_qmip_disp_dcp_sf_ahb_clk",
-	"gcc_qmip_gpu_ahb_clk",
-	"gcc_qmip_pcie_ahb_clk",
-	"gcc_qmip_video_cv_cpu_ahb_clk",
-	"gcc_qmip_video_cvp_ahb_clk",
-	"gcc_qmip_video_v_cpu_ahb_clk",
-	"gcc_qmip_video_vcodec_ahb_clk",
 	"gcc_qupv3_i2c_core_clk",
 	"gcc_qupv3_i2c_s0_clk",
 	"gcc_qupv3_i2c_s1_clk",
@@ -616,7 +605,6 @@ static int gcc_debug_mux_sels[] = {
 	0x24,		/* gcc_cfg_noc_usb3_prim_axi_clk */
 	0x1E,		/* gcc_cnoc_pcie_sf_axi_clk */
 	0x123,		/* gcc_ddrss_pcie_sf_qtb_clk */
-	0x7C,		/* gcc_disp_ahb_clk */
 	0x7E,		/* gcc_disp_hf_axi_clk */
 	0x7D,		/* gcc_disp_sf_axi_clk */
 	0x8C,		/* gcc_eva_axi0_clk */
@@ -638,16 +626,6 @@ static int gcc_debug_mux_sels[] = {
 	0xF5,		/* gcc_pdm2_clk */
 	0xF3,		/* gcc_pdm_ahb_clk */
 	0xF4,		/* gcc_pdm_xo4_clk */
-	0x73,		/* gcc_qmip_camera_cmd_ahb_clk */
-	0x71,		/* gcc_qmip_camera_nrt_ahb_clk */
-	0x72,		/* gcc_qmip_camera_rt_ahb_clk */
-	0x80,		/* gcc_qmip_disp_dcp_sf_ahb_clk */
-	0x1AE,		/* gcc_qmip_gpu_ahb_clk */
-	0x174,		/* gcc_qmip_pcie_ahb_clk */
-	0x86,		/* gcc_qmip_video_cv_cpu_ahb_clk */
-	0x83,		/* gcc_qmip_video_cvp_ahb_clk */
-	0x85,		/* gcc_qmip_video_v_cpu_ahb_clk */
-	0x84,		/* gcc_qmip_video_vcodec_ahb_clk */
 	0xC0,		/* gcc_qupv3_i2c_core_clk */
 	0xC1,		/* gcc_qupv3_i2c_s0_clk */
 	0xC2,		/* gcc_qupv3_i2c_s1_clk */
@@ -1004,6 +982,22 @@ static struct clk_dummy measure_only_cnoc_clk = {
 	.rrate = 1000,
 	.hw.init = &(const struct clk_init_data){
 		.name = "measure_only_cnoc_clk",
+		.ops = &clk_dummy_ops,
+	},
+};
+
+static struct clk_dummy measure_only_disp_cc_mdss_rscc_ahb_clk = {
+	.rrate = 1000,
+	.hw.init = &(const struct clk_init_data){
+		.name = "measure_only_disp_cc_mdss_rscc_ahb_clk",
+		.ops = &clk_dummy_ops,
+	},
+};
+
+static struct clk_dummy measure_only_disp_cc_mdss_rscc_vsync_clk = {
+	.rrate = 1000,
+	.hw.init = &(const struct clk_init_data){
+		.name = "measure_only_disp_cc_mdss_rscc_vsync_clk",
 		.ops = &clk_dummy_ops,
 	},
 };
@@ -1367,6 +1361,8 @@ static struct clk_hw *debugcc_canoe_hws[] = {
 	&measure_only_cam_cc_gdsc_clk.hw,
 	&measure_only_cam_cc_sleep_clk.hw,
 	&measure_only_cnoc_clk.hw,
+	&measure_only_disp_cc_mdss_rscc_ahb_clk.hw,
+	&measure_only_disp_cc_mdss_rscc_vsync_clk.hw,
 	&measure_only_disp_cc_sleep_clk.hw,
 	&measure_only_disp_cc_xo_clk.hw,
 	&measure_only_eva_cc_ahb_clk.hw,

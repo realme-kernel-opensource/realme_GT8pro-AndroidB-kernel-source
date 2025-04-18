@@ -70,7 +70,7 @@ static struct clk_alpha_pll cam_bist_mclk_cc_pll0 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOW] = 1171200000},
+				[VDD_LOW_L1] = 1171200000},
 		},
 	},
 };
@@ -461,9 +461,33 @@ static struct qcom_cc_desc cam_bist_mclk_cc_canoe_desc = {
 
 static const struct of_device_id cam_bist_mclk_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-cambistmclkcc" },
+	{ .compatible = "qcom,alor-cambistmclkcc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, cam_bist_mclk_cc_canoe_match_table);
+
+static void cam_bist_mclk_cc_canoe_fixup_alor(struct regmap *regmap)
+{
+	cam_bist_mclk_cc_canoe_clocks[CAM_BIST_MCLK_CC_MCLK6_CLK] = NULL;
+	cam_bist_mclk_cc_canoe_clocks[CAM_BIST_MCLK_CC_MCLK6_CLK_SRC] = NULL;
+	cam_bist_mclk_cc_canoe_clocks[CAM_BIST_MCLK_CC_MCLK7_CLK] = NULL;
+	cam_bist_mclk_cc_canoe_clocks[CAM_BIST_MCLK_CC_MCLK7_CLK_SRC] = NULL;
+}
+
+static int cam_bist_mclk_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,alor-cambistmclkcc"))
+		cam_bist_mclk_cc_canoe_fixup_alor(regmap);
+
+	return 0;
+}
 
 static int cam_bist_mclk_cc_canoe_probe(struct platform_device *pdev)
 {
@@ -482,6 +506,10 @@ static int cam_bist_mclk_cc_canoe_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	ret = cam_bist_mclk_cc_canoe_fixup(pdev, regmap);
+	if (ret)
+		return ret;
+
 	clk_rivian_eko_t_pll_configure(&cam_bist_mclk_cc_pll0, regmap,
 				       &cam_bist_mclk_cc_pll0_config);
 
@@ -493,12 +521,16 @@ static int cam_bist_mclk_cc_canoe_probe(struct platform_device *pdev)
 
 	ret = qcom_cc_really_probe(&pdev->dev, &cam_bist_mclk_cc_canoe_desc, regmap);
 	if (ret) {
-		dev_err(&pdev->dev, "Failed to register CAM BIST MCLK CC clocks ret=%d\n", ret);
-		return ret;
+		if (ret != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "Failed to register CAM BIST MCLK CC clocks ret=%d\n",
+				ret);
+		goto err;
 	}
 
-	pm_runtime_put_sync(&pdev->dev);
 	dev_info(&pdev->dev, "Registered CAM BIST MCLK CC clocks\n");
+
+err:
+	pm_runtime_put_sync(&pdev->dev);
 
 	return ret;
 }

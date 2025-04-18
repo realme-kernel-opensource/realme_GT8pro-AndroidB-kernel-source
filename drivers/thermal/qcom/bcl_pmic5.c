@@ -38,6 +38,7 @@
 #define BCL_IBAT_READ         0x86
 #define BCL_IBAT_SCALING_UA   78127
 #define BCL_IBAT_CCM_SCALING_UA   15625
+#define BCL_IBAT_CCM_LANDO_SCALING_UA   39062
 #define BCL_IBAT_SCALING_REV4_UA  93753
 
 #define BCL_VBAT_READ         0x76
@@ -66,6 +67,10 @@
 #define BCL_IBAT_CCM_OFFSET   800
 #define BCL_IBAT_CCM_LSB      100
 #define BCL_IBAT_CCM_MAX_VAL  14
+
+#define BCL_IBAT_CCM_LANDO_OFFSET   900
+#define BCL_IBAT_CCM_LANDO_LSB      150
+#define BCL_IBAT_CCM_LANDO_MAX_VAL  16
 
 #define BCL_VBAT_4G_NO_READING 0x7fff
 #define BCL_GEN4_MAJOR_REV    5
@@ -171,6 +176,7 @@ struct bcl_device {
 	void				*ipc_log;
 	int				bcl_monitor_type;
 	bool				ibat_ccm_enabled;
+	bool				ibat_ccm_lando_enabled;
 	bool				ibat_use_qg_adc;
 	bool				no_bit_shift;
 	uint32_t			ibat_ext_range_factor;
@@ -320,17 +326,18 @@ static void convert_adc_to_ibat_val(struct bcl_device *bcl_perph, int *val, int 
 				1000 * bcl_ibat_ext_ranges[BCL_IBAT_RANGE_LVL0]);
 }
 
-static int8_t convert_ibat_to_ccm_val(int ibat)
+static int8_t convert_ibat_to_ccm_val(int ibat,
+	int ibat_ccm_max_val, int ibat_ccm_offset, int ibat_ccm_lsb)
 {
-	int8_t val = BCL_IBAT_CCM_MAX_VAL;
+	int8_t val = ibat_ccm_max_val;
 
-	val = (int8_t)((ibat - BCL_IBAT_CCM_OFFSET) / BCL_IBAT_CCM_LSB);
+	val = (int8_t)((ibat - ibat_ccm_offset) / ibat_ccm_lsb);
 
-	if (val > BCL_IBAT_CCM_MAX_VAL) {
+	if (val > ibat_ccm_max_val) {
 		pr_err(
 		"CCM thresh:%d is invalid, use MAX supported threshold\n",
 			ibat);
-		val = BCL_IBAT_CCM_MAX_VAL;
+		val = ibat_ccm_max_val;
 	}
 
 	return val;
@@ -363,6 +370,10 @@ static int bcl_set_ibat(struct thermal_zone_device *tz, int low, int high)
 		convert_ibat_to_adc_val(bat_data->dev, &thresh_value,
 				BCL_IBAT_CCM_SCALING_UA *
 				bat_data->dev->ibat_ext_range_factor);
+	else if (bat_data->dev->ibat_ccm_lando_enabled)
+		convert_ibat_to_adc_val(bat_data->dev, &thresh_value,
+				BCL_IBAT_CCM_LANDO_SCALING_UA *
+				bat_data->dev->ibat_ext_range_factor);
 	else if (bat_data->dev->dig_major >= BCL_GEN4_MAJOR_REV)
 		convert_ibat_to_adc_val(bat_data->dev, &thresh_value,
 				BCL_IBAT_THRESH_SCALING_REV5_UA *
@@ -390,7 +401,12 @@ static int bcl_set_ibat(struct thermal_zone_device *tz, int low, int high)
 			bat_data->dev->bcl_param_1 & BCL_PARAM_HAS_IBAT_ADC)
 			addr = BCL_IBAT_TOO_HIGH_REV4;
 		if (bat_data->dev->ibat_ccm_enabled)
-			val = convert_ibat_to_ccm_val(ibat_ua);
+			val = convert_ibat_to_ccm_val(ibat_ua,
+				BCL_IBAT_CCM_MAX_VAL, BCL_IBAT_CCM_OFFSET, BCL_IBAT_CCM_LSB);
+		if (bat_data->dev->ibat_ccm_lando_enabled)
+			val = convert_ibat_to_ccm_val(ibat_ua,
+				BCL_IBAT_CCM_LANDO_MAX_VAL, BCL_IBAT_CCM_LANDO_OFFSET,
+				BCL_IBAT_CCM_LANDO_LSB);
 		pr_debug("ibat too high threshold:%d mA ADC:0x%02x\n",
 				ibat_ua, val);
 		break;
@@ -444,6 +460,10 @@ static int bcl_read_ibat(struct thermal_zone_device *tz, int *adc_value)
 		if (bat_data->dev->ibat_ccm_enabled)
 			convert_adc_to_ibat_val(bat_data->dev, adc_value,
 				BCL_IBAT_CCM_SCALING_UA *
+				bat_data->dev->ibat_ext_range_factor);
+		else if (bat_data->dev->ibat_ccm_lando_enabled)
+			convert_adc_to_ibat_val(bat_data->dev, adc_value,
+				BCL_IBAT_CCM_LANDO_SCALING_UA *
 				bat_data->dev->ibat_ext_range_factor);
 		else if (bat_data->dev->dig_major >= BCL_GEN4_MAJOR_REV)
 			convert_adc_nu_to_mu_val(adc_value,
@@ -781,7 +801,8 @@ static int bcl_get_devicetree_data(struct platform_device *pdev,
 				"qcom,pmic7-threshold");
 	bcl_perph->ibat_ccm_enabled =  of_property_read_bool(dev_node,
 						"qcom,ibat-ccm-hw-support");
-
+	bcl_perph->ibat_ccm_lando_enabled = of_property_read_bool(dev_node,
+						"qcom,ibat-ccm-lando-hw-support");
 	ret = bcl_get_ibat_ext_range_factor(pdev,
 					&bcl_perph->ibat_ext_range_factor);
 

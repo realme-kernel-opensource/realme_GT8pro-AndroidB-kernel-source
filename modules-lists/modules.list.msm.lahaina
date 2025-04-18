@@ -15,6 +15,8 @@ qcom_rpmh.ko
 crm-v2.ko
 debug-regulator.ko
 gdsc-regulator.ko
+gcc-sc7280.ko
+dispcc-sc7280.ko
 smem.ko
 debug_symbol.ko
 socinfo.ko
@@ -51,6 +53,7 @@ qcom_aoss.ko
 qrtr.ko
 msm_qmp.ko
 qnoc-qos.ko
+qnoc-yupik.ko
 qcom_iommu_debug.ko
 qcom_ipc_logging.ko
 iommu-logger.ko
@@ -64,11 +67,13 @@ qcom_dma_heaps.ko
 ufshcd-crypto-qti.ko
 qcom_ice.ko
 ufs-qcom.ko
+phy-qcom-ufs-qmp-v4-yupik.ko
 phy-qcom-ufs-qrbtc-sdm845.ko
 phy-qcom-ufs.ko
 sg.ko
 gh_arm_drv.ko
 gh_dbl.ko
+gh_mem_notifier.ko
 gh_msgq.ko
 gh_rm_drv.ko
 gunyah.ko
@@ -83,3 +88,4 @@ qcom_tzmem.ko
 icc-clk.ko
 cqhci.ko
 sdhci-msm.ko
+deferred-free-helper.ko

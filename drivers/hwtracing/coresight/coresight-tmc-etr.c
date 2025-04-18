@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright(C) 2016 Linaro Limited. All rights reserved.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Author: Mathieu Poirier <mathieu.poirier@linaro.org>
  */
 
@@ -889,13 +889,27 @@ static inline int tmc_etr_mode_alloc_buf(int mode,
 	}
 }
 
-static void get_etr_buf_hw(struct device *dev, struct etr_buf_hw *buf_hw)
+static int get_etr_buf_hw(struct device *dev, struct etr_buf_hw *buf_hw)
 {
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	int mapping_config = 0;
+	struct iommu_domain *domain;
 
-	buf_hw->has_iommu = iommu_get_domain_for_dev(dev->parent);
+	domain = iommu_get_domain_for_dev(dev->parent);
+	if (domain) {
+		mapping_config = qcom_iommu_get_mappings_configuration(domain);
+		if (mapping_config < 0)
+			return -ENOMEM;
+		if (mapping_config & QCOM_IOMMU_MAPPING_CONF_S1_BYPASS)
+			buf_hw->has_iommu = false;
+		else
+			buf_hw->has_iommu = true;
+	} else {
+		buf_hw->has_iommu = false;
+	}
 	buf_hw->has_etr_sg = tmc_etr_has_cap(drvdata, TMC_ETR_SG);
 	buf_hw->has_catu = !!tmc_etr_get_catu_device(drvdata);
+	return 0;
 }
 
 static bool etr_can_use_flat_mode(struct etr_buf_hw *buf_hw, ssize_t etr_buf_size)
@@ -922,7 +936,8 @@ static struct etr_buf *tmc_alloc_etr_buf(struct tmc_drvdata *drvdata,
 	struct etr_buf_hw buf_hw;
 	struct device *dev = &drvdata->csdev->dev;
 
-	get_etr_buf_hw(dev, &buf_hw);
+	if (get_etr_buf_hw(dev, &buf_hw))
+		return ERR_PTR(-ENOMEM);
 	etr_buf = kzalloc(sizeof(*etr_buf), GFP_KERNEL);
 	if (!etr_buf)
 		return ERR_PTR(-ENOMEM);

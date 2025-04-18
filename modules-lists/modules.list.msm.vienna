@@ -36,15 +36,19 @@ stub-regulator.ko
 clk-dummy.ko
 icc-clk.ko
 clk-qcom.ko
+gic_intr_routing.ko
 gdsc-regulator.ko
 smem.ko
 socinfo.ko
 qcom_hwspinlock.ko
 qcom-ipcc.ko
+cqhci.ko
+sdhci-msm.ko
 llcc-qcom.ko
 qcom_cpucp.ko
 qcom_scmi_vendor.ko
 qcom_scmi_client.ko
+qcom_cpu_vendor_hooks.ko
 dcvs_fp.ko
 qcom-dcvs.ko
 qcom_llcc_pmu.ko
@@ -52,6 +56,9 @@ qcom-pmu-lib.ko
 kryo_arm64_edac.ko
 qcom_wdt_core.ko
 gh_virt_wdt.ko
+qcom_logbuf_vendor_hooks.ko
+qcom_logbuf_boot_log.ko
+debug_symbol.ko
 qcom-dload-mode.ko
 gunyah.ko
 gunyah_hypercall.ko
@@ -61,6 +68,7 @@ gunyah_rsc_mgr.ko
 qcom_edac.ko
 qcom_aoss.ko
 msm_qmp.ko
+qcom-reboot-reason.ko
 qrtr.ko
 gcc-vienna.ko
 gpucc-vienna.ko
@@ -86,3 +94,9 @@ sched-walt.ko
 phy-msm-m31-eusb2.ko
 rdbg.ko
 deferred-free-helper.ko
+repeater.ko
+repeater-qti-pmic-eusb2.ko
+f_fs_ipc_log.ko
+msm_sharedmem.ko
+minidump.ko
+qcom_ice.ko

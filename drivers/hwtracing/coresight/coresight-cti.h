@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2018 Linaro Limited, All rights reserved.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Author: Mike Leach <mike.leach@linaro.org>
  */
 
@@ -169,6 +169,7 @@ struct cti_config {
 	int enable_req_count;
 	bool hw_enabled;
 	bool hw_powered;
+	bool hw_enabled_store;
 
 	/* registered triggers and filtering */
 	DECLARE_BITMAP(trig_in_use, CTIINOUTEN_MAX);

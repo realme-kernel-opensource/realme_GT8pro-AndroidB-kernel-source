@@ -12,6 +12,7 @@
 
 #include <linux/tracepoint.h>
 
+#include "voter.h"
 #include "walt.h"
 
 struct rq;
@@ -2057,25 +2058,52 @@ TRACE_EVENT(sched_client_vote,
 
 TRACE_EVENT(sched_votable_result,
 
-	TP_PROTO(const char *votable_name, int effective_client_id, int effective_result),
+	TP_PROTO(struct votable *votable),
 
-	TP_ARGS(votable_name, effective_client_id, effective_result),
+	TP_ARGS(votable),
 
 	TP_STRUCT__entry(
 		__array(char,		votable_name, TASK_COMM_LEN)
 		__field(int,		effective_client_id)
 		__field(int,		effective_result)
+		__array(int,		enable, NUM_MAX_CLIENTS)
+		__array(int,		vote, NUM_MAX_CLIENTS)
 		),
 
 	TP_fast_assign(
-		memcpy(__entry->votable_name, votable_name, TASK_COMM_LEN);
-		__entry->effective_client_id	= effective_client_id;
-		__entry->effective_result	= effective_result;
+		memcpy(__entry->votable_name, votable->name, TASK_COMM_LEN);
+		__entry->effective_client_id	= votable->effective_client_id;
+		__entry->effective_result	= votable->effective_result;
+		__entry->enable[0]		= votable->votes[0].enabled;
+		__entry->vote[0]		= votable->votes[0].value;
+		__entry->enable[1]		= votable->votes[1].enabled;
+		__entry->vote[1]		= votable->votes[1].value;
+		__entry->enable[2]		= votable->votes[2].enabled;
+		__entry->vote[2]		= votable->votes[2].value;
+		__entry->enable[3]		= votable->votes[3].enabled;
+		__entry->vote[3]		= votable->votes[3].value;
+		__entry->enable[4]		= votable->votes[4].enabled;
+		__entry->vote[4]		= votable->votes[4].value;
+		__entry->enable[5]		= votable->votes[5].enabled;
+		__entry->vote[5]		= votable->votes[5].value;
+		__entry->enable[6]		= votable->votes[6].enabled;
+		__entry->vote[6]		= votable->votes[6].value;
+		__entry->enable[7]		= votable->votes[7].enabled;
+		__entry->vote[7]		= votable->votes[7].value;
 		),
 
-	TP_printk("votable_name=%s eff_client=%d eff_result=%d",
+	TP_printk("votable_name=%s eff_client=%d eff_result=%d (client's vote: %d:%d,  %d:%d %d:%d %d:%d %d:%d %d:%d %d:%d %d:%d)",
 			__entry->votable_name, __entry->effective_client_id,
-			__entry->effective_result)
+			__entry->effective_result,
+			__entry->enable[0], __entry->vote[0],
+			__entry->enable[1], __entry->vote[1],
+			__entry->enable[2], __entry->vote[2],
+			__entry->enable[3], __entry->vote[3],
+			__entry->enable[4], __entry->vote[4],
+			__entry->enable[5], __entry->vote[5],
+			__entry->enable[6], __entry->vote[6],
+			__entry->enable[7], __entry->vote[7]
+		 )
 );
 
 #endif /* _TRACE_WALT_H */

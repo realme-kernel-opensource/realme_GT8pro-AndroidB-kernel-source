@@ -1,4 +1,5 @@
 load(":drivers/soc/qcom/dcvs/modules.bzl", register_dcvs = "register_modules")
+load(":drivers/soc/qcom/hab/modules.bzl", register_hab = "register_modules")
 load(":drivers/soc/qcom/mem_buf/modules.bzl", register_mem_buf = "register_modules")
 load(":drivers/soc/qcom/memshare/modules.bzl", register_memshare = "register_modules")
 load(":drivers/soc/qcom/mpam/modules.bzl", register_mpam = "register_modules")
@@ -12,6 +13,7 @@ def register_modules(registry):
     register_sps(registry)
     register_qpace(registry)
     register_mpam(registry)
+    register_hab(registry)
 
     registry.register(
         name = "drivers/soc/qcom/adsp_sleepmon",
@@ -375,6 +377,20 @@ def register_modules(registry):
             "drivers/soc/qcom/llcc_events.h",
             "drivers/soc/qcom/llcc_perfmon.c",
             "drivers/soc/qcom/llcc_perfmon.h",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/llcc_heuristics",
+        out = "llcc_heuristics.ko",
+        config = "CONFIG_QCOM_LLCC_HEURISTICS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/llcc_heuristics.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
         ],
     )
 
@@ -1018,6 +1034,16 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/qfprom-sys",
+        out = "qfprom-sys.ko",
+        config = "CONFIG_QCOM_QFPROM_SYS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qfprom-sys.c",
         ],
     )
 

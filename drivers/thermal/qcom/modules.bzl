@@ -198,3 +198,13 @@ def register_modules(registry):
             "drivers/soc/qcom/smem",
         ],
     )
+
+    registry.register(
+        name = "drivers/thermal/qcom/qti_thermal_vendor_hooks",
+        out = "qti_thermal_vendor_hooks.ko",
+        config = "CONFIG_QTI_THERMAL_VENDOR_HOOK",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/qti_thermal_vendor_hooks.c",
+        ],
+    )
