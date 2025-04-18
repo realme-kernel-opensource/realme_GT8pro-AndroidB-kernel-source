@@ -11,6 +11,8 @@ clk-rpmh.ko
 clk-scmi.ko
 sched-walt.ko
 sched-walt-debug.ko
+thermal_pause.ko
+cpu_hotplug.ko
 cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko
@@ -99,5 +101,6 @@ qcom_tzmem.ko
 icc-clk.ko
 cqhci.ko
 sdhci-msm.ko
+bcl_pmic5.ko
 arm_smmu_pmu.ko
 deferred-free-helper.ko
