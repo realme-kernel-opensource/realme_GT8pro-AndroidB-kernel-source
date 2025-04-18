@@ -638,6 +638,26 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
 	u64 load, tt_load = 0, kload = 0;
 	struct task_struct *cpu_ksoftirqd = per_cpu(ksoftirqd, cpu_of(rq));
 
+	if (walt_rotation_enabled) {
+		load = sched_ravg_window;
+		*reason = CPUFREQ_REASON_BTR_BIT;
+		goto out_max;
+	}
+
+	if (walt_trailblazer_tasks(cpu_of(rq)) && walt_feat(WALT_FEAT_TRAILBLAZER_BIT)) {
+		load = sched_ravg_window;
+		*reason = CPUFREQ_REASON_TRAILBLAZER_CPU_BIT;
+		goto out_max;
+	}
+
+	if (should_apply_suh_freq_boost(cluster)) {
+		if (is_suh_max()) {
+			load = sched_ravg_window;
+			*reason = CPUFREQ_REASON_SUH_BIT;
+			goto out_max;
+		}
+	}
+
 	if (sched_freq_aggr_en) {
 		load = wrq->prev_runnable_sum + aggr_grp_load;
 		*reason = CPUFREQ_REASON_FREQ_AGR_BIT;
@@ -661,11 +681,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
 	}
 
 	if (should_apply_suh_freq_boost(cluster)) {
-		if (is_suh_max())
-			load = sched_ravg_window;
-		else
-			load = div64_u64(load * sysctl_sched_user_hint,
-					 (u64)100);
+		load = div64_u64(load * sysctl_sched_user_hint, (u64)100);
 		*reason = CPUFREQ_REASON_SUH_BIT;
 	}
 
@@ -683,16 +699,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
 		*reason = CPUFREQ_REASON_PIPELINE_BUSY_BIT;
 	}
 
-	if (walt_rotation_enabled) {
-		load = sched_ravg_window;
-		*reason = CPUFREQ_REASON_BTR_BIT;
-	}
-
-	if (walt_trailblazer_tasks(cpu_of(rq)) && walt_feat(WALT_FEAT_TRAILBLAZER_BIT)) {
-		load = sched_ravg_window;
-		*reason = CPUFREQ_REASON_TRAILBLAZER_CPU_BIT;
-	}
-
+out_max:
 	if (trace)
 		trace_sched_load_to_gov(rq, aggr_grp_load, tt_load, sched_freq_aggr_en,
 				*non_boosted_load, load, 0, walt_rotation_enabled,
