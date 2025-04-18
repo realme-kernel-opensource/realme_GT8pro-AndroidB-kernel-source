@@ -467,8 +467,6 @@ static inline int init_event_ring(int er_num, bool reinit_ring)
 	QPACE_WRITE_ER_REG(er_num, QPACE_DMA_ER_MGR_0_RD_PTR_L_OFFSET,
 			   FIELD_GET(GENMASK(31, 0), ring_end_phys) - DESCRIPTOR_SIZE);
 
-	ev_rings[er_num].cycle_bit = false;
-
 	/*
 	 * Since struct event_ring->cycle_bit is zero initialized, for the initial pass
 	 * by HW, an invalid ED will need to have a cycle bit of 1 / true, which will be
@@ -514,60 +512,35 @@ static int init_event_rings(void)
 	return 0;
 }
 
-static DEFINE_MUTEX(qpace_ref_lock);
+static DEFINE_SPINLOCK(qpace_ref_lock);
 static int active_rings;
 
-static bool rings_inited_since_activation[NUM_RINGS];
-
-/*
- * get_qpace() - prepare a given ring for usage and ref count its usage
- * @ring_num: the ring we want to use
- *
- * Call the necessary PM callbacks on the first get_qpace() call. Initialize
- * @ring_num if it has not been initialized already for the current usage
- * period. This function implicitly increments a reference counter that
- * tracks the number of items in the ring.
- */
-void get_qpace(int ring_num)
+static void get_qpace(int ring_num)
 {
 	struct transfer_ring *tr = &tr_rings[ring_num];
 
-	mutex_lock(&qpace_ref_lock);
+	spin_lock(&qpace_ref_lock);
 	if (!active_rings) {
 		pm_stay_awake(qpace_dev);
 		dev_pm_qos_update_request(&qos_req, 300);
 	}
 
 	if (!tr->item_count) {
-		if (!rings_inited_since_activation[ring_num]) {
-			rings_inited_since_activation[ring_num] = true;
-			init_event_ring(ring_num, true);
-			init_transfer_ring(ring_num, true);
-		}
+		init_event_ring(ring_num, true);
+		init_transfer_ring(ring_num, true);
 
 		active_rings++;
 	}
 	tr->item_count++;
 
-	mutex_unlock(&qpace_ref_lock);
+	spin_unlock(&qpace_ref_lock);
 }
-EXPORT_SYMBOL_GPL(get_qpace);
 
-/*
- * put_qpace() - Reduce the number of items tracked by a ring
- * @ring_num: The ring we're modifying usage stats for
- * @n_consumed_entries: The number of items we want to mark as unused
- *
- * Reduces the number of items tracked by a ring. If a ring has no more
- * queued items, it becomes inactive. If all rings become inactive, then
- * we call the necessary PM callbacks to allow QPaCE's resources to be
- * collapsed.
- */
-void put_qpace(int ring_num, int  n_consumed_entries)
+static void put_qpace(int ring_num, int  n_consumed_entries)
 {
 	struct transfer_ring *tr = &tr_rings[ring_num];
 
-	mutex_lock(&qpace_ref_lock);
+	spin_lock(&qpace_ref_lock);
 	tr->item_count -= n_consumed_entries;
 
 	if (!tr->item_count)
@@ -576,14 +549,10 @@ void put_qpace(int ring_num, int  n_consumed_entries)
 	if (!active_rings) {
 		dev_pm_qos_update_request(&qos_req, PM_QOS_RESUME_LATENCY_DEFAULT_VALUE);
 		pm_relax(qpace_dev);
-
-		for (int i = 0; i < ARRAY_SIZE(rings_inited_since_activation); i++)
-			rings_inited_since_activation[i] = false;
 	}
 
-	mutex_unlock(&qpace_ref_lock);
+	spin_unlock(&qpace_ref_lock);
 }
-EXPORT_SYMBOL_GPL(put_qpace);
 
 /*
  * =============================================================================
