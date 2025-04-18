@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CORESIGHT_CORESIGHT_TPDM_H
@@ -105,10 +105,10 @@
 #define TPDM_ITCNTRL		(0xF00)
 
 /* Register value for integration test */
-#define ATBCNTRL_VAL_32		0xC00F1409
-#define ATBCNTRL_VAL_64		0xC01F1409
-#define ATBCNTRL_VAL_32_CMB	0x400e9540
-#define ATBCNTRL_VAL_64_CMB	0x401e9540
+#define ATBCNTRL_VAL_32		0x400e9700
+#define ATBCNTRL_VAL_64		0x401e9700
+#define ATBCNTRL_VAL_32_CMB	0x400e9600
+#define ATBCNTRL_VAL_64_CMB	0x401e9600
 
 /*
  * Number of cycles to write value when
