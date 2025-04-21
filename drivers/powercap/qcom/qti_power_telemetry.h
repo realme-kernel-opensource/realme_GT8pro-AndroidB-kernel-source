@@ -117,7 +117,7 @@ struct qpt_sdam {
  * @data_offset:	qpt channel power data offset from DATA sdam base
  * @last_data:	qpt channel last adc data from SDAM
  * @last_data_uw:	qpt channel last cumulative data without time
- * @total_energey_uj:	qpt channel cumulative energy data after read
+ * @total_energy_uj:	qpt channel cumulative energy data after read
  * @pavg:	qpt channel average power data over reporting interval
  * @prev_buffer_energy:	 Previously accumulated energy before overflow
  * @prev_buffer_data_uw:  Previously accumulated power value before overflow
@@ -136,7 +136,7 @@ struct qpt_device {
 	uint8_t				data_offset;
 	u64				last_data;
 	u64				last_data_uw;
-	u64				total_energey_uj;
+	u64				total_energy_uj;
 	u64				pavg;
 	u64				prev_buffer_energy;
 	u64				prev_buffer_data_uw;
