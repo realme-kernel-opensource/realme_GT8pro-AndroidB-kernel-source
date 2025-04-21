@@ -1095,7 +1095,8 @@ static int qpace_init(void)
 
 	/* Select CPU SCID for our system cache slice */
 	reg_val = QPACE_READ_GEN_REG(QPACE_CORE_QNS4_CFG_OFFSET);
-	reg_val |= FIELD_PREP(CORE_QNS4_CFG_TRTYPE, 0x1);
+	reg_val &= ~CORE_QNS4_CFG_CACHEINDEX;
+	reg_val |= FIELD_PREP(CORE_QNS4_CFG_CACHEINDEX, 0x1);
 	QPACE_WRITE_GEN_REG(QPACE_CORE_QNS4_CFG_OFFSET, reg_val);
 
 	/*
