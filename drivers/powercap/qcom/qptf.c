@@ -28,6 +28,7 @@ struct qptm_heirarchy {
 };
 static struct qptm_heirarchy *qh;
 static const char *constraint_name = "Dummy";
+static BLOCKING_NOTIFIER_HEAD(qptm_update_notifier);
 
 static int get_time_window_us(struct powercap_zone *pcz, int cid, u64 *window)
 {
@@ -92,7 +93,14 @@ static int __get_energy_uj(struct qptm *qptm, u64 *energy_uj)
 
 static int get_energy_uj(struct powercap_zone *pcz, u64 *energy_uj)
 {
-	return __get_energy_uj(to_qptm(pcz), energy_uj);
+	int ret = 0;
+	struct qptm *qptm = to_qptm(pcz);
+
+	mutex_lock(&qptm->lock);
+	ret = __get_energy_uj(qptm, energy_uj);
+	mutex_unlock(&qptm->lock);
+
+	return ret;
 }
 
 static int __get_power_uw(struct qptm *qptm, u64 *power_uw)
@@ -121,7 +129,14 @@ static int __get_power_uw(struct qptm *qptm, u64 *power_uw)
 
 static int get_power_uw(struct powercap_zone *pcz, u64 *power_uw)
 {
-	return __get_power_uw(to_qptm(pcz), power_uw);
+	int ret = 0;
+	struct qptm *qptm = to_qptm(pcz);
+
+	mutex_lock(&qptm->lock);
+	ret = __get_power_uw(qptm, power_uw);
+	mutex_unlock(&qptm->lock);
+
+	return ret;
 }
 
 static int qptm_release_zone(struct powercap_zone *pcz)
@@ -216,6 +231,7 @@ static int qptm_register(const char *name, struct qptm *qptm, struct qptm *paren
 		list_add_tail(&qptm->sibling, &qh->root->children);
 		qptm->parent = qh->root;
 	}
+	qptm->enabled = true;
 
 	pr_debug("Registered qptm node '%s'\n", qptm->zone.name);
 
@@ -272,26 +288,163 @@ out:
 }
 
 /**
- * qptm_powerzone_update - Notify qptf about new power update.
- * @pz: a pointer to a powerzone structure corresponding to the channel
- * to be removed
+ * qptm_data_update_notifier_register - register for data update notification
+ * @n: notifier_block pointer.
  *
- * Remove qptm node that powerzone channel is belonging to.
+ * It registers a client blocking notifier for qptm data update notification.
+ *
+ * Return: Nothing.
  */
-void qptm_powerzone_update(struct powerzone *pz)
+void qptm_data_update_notifier_register(struct notifier_block *n)
 {
-	struct qptm *qptm;
-	struct qptm_heirarchy *qh;
-
-	if (!pz || pz->qptm)
-		return;
-
-	qptm = pz->qptm;
-	qh = qptm->dev;
-
-	sysfs_notify(&qh->pct->dev.kobj, NULL, "enabled");
+	blocking_notifier_chain_register(&qptm_update_notifier, n);
 }
-EXPORT_SYMBOL_GPL(qptm_powerzone_update);
+EXPORT_SYMBOL_GPL(qptm_data_update_notifier_register);
+
+/**
+ * qptm_data_update_notifier_unregister - unregister for data update notification
+ * @n: notifier_block pointer.
+ *
+ * It unregisters a client blocking notifier for qptm data update notification.
+ *
+ * Return: Nothing.
+ */
+void qptm_data_update_notifier_unregister(struct notifier_block *n)
+{
+	blocking_notifier_chain_unregister(&qptm_update_notifier, n);
+}
+EXPORT_SYMBOL_GPL(qptm_data_update_notifier_unregister);
+
+/**
+ * qptm_for_each_node - It iterates for each qptm with provided callback
+ * @cb: callback pointer to be called for each qptm.
+ * @data: a cookie will be passed via callback.
+ *
+ * It iterates for each enabled qptm node and invokes provided callback
+ * with each qptm.
+ *
+ * Return: zero on success, a negative in case of error.
+ */
+int qptm_for_each_node(int (*cb)(struct qptm *, void *), void *data)
+{
+	struct qptm *pos;
+	int ret = 0;
+
+	mutex_lock(&qptm_list_lock);
+	list_for_each_entry(pos, &qptm_list, node) {
+		if (!pos->enabled)
+			continue;
+		ret = cb(pos, data);
+		if (ret < 0) {
+			mutex_unlock(&qptm_list_lock);
+			return ret;
+		}
+	}
+	mutex_unlock(&qptm_list_lock);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(qptm_for_each_node);
+
+/**
+ * qptm_available_node_count - get available qptm count.
+ *
+ * Return: valid qptm count on success, a negative value in case of error.
+ */
+int qptm_available_node_count(void)
+{
+	struct qptm *pos;
+	int count = 0;
+
+	if (list_empty(&qptm_list))
+		return -ENODEV;
+
+	mutex_lock(&qptm_list_lock);
+	list_for_each_entry(pos, &qptm_list, node)
+		if (pos->enabled)
+			count++;
+	mutex_unlock(&qptm_list_lock);
+
+	return count;
+}
+EXPORT_SYMBOL_GPL(qptm_available_node_count);
+
+/**
+ * qptm_get_node_name - get qptm node name
+ * @qptm: a pointer to qptm.
+ *
+ * It gives node name of a given qptm.
+ *
+ * Return: valid name on success, a NULL in case of error.
+ */
+const char *qptm_get_node_name(struct qptm *qptm)
+{
+	if (!qptm)
+		return NULL;
+
+	return qptm->name;
+}
+EXPORT_SYMBOL_GPL(qptm_get_node_name);
+
+/**
+ * qptm_get_node_id - get qptm node id for a qptm
+ * @qptm: a pointer to qptm.
+ *
+ * It gives first powerzone channel id of a given qptm node.
+ *
+ * Return: valid channel id on success, a negative in case of error.
+ */
+int qptm_get_node_id(struct qptm *qptm)
+{
+	struct powerzone *pz = NULL;
+
+	if (!qptm)
+		return -ENODEV;
+
+	/* For virtual qptm node, return node id as zero */
+	if (!qptm->ops)
+		return 0;
+
+	/* Always give channel id of 1st power zone */
+	pz = list_first_entry_or_null(&qptm->pz_list,
+		struct powerzone, qnode);
+	if (!pz)
+		return -ENODEV;
+
+	return pz->ch_id;
+}
+EXPORT_SYMBOL_GPL(qptm_get_node_id);
+
+/**
+ * get_qptm_by_powerzone - get qptm structure from a power zone channel
+ * @pz: a pointer to powerzone structure
+ *
+ * It gives qptm node info for a given valid powerzone variable.
+ *
+ * Return: valid qptm pointer on success, a NULL in case of error.
+ */
+struct qptm *get_qptm_by_powerzone(struct powerzone *pz)
+{
+	if (!pz)
+		return NULL;
+
+	return pz->qptm;
+}
+EXPORT_SYMBOL_GPL(get_qptm_by_powerzone);
+
+/**
+ * qptm_power_data_update - Notify qptf about new power update.
+ *
+ * It notifies all clients who registered for qptm data update
+ * notification.
+ *
+ * Return: Nothing
+ */
+void qptm_power_data_update(void)
+{
+	blocking_notifier_call_chain(&qptm_update_notifier, 0, NULL);
+}
+EXPORT_SYMBOL_GPL(qptm_power_data_update);
 
 static u64 qptf_get_qptm_power_uw(struct qptm *qptm)
 {
@@ -305,6 +458,38 @@ static u64 qptf_get_qptm_power_uw(struct qptm *qptm)
 	return tot_power;
 }
 
+/**
+ * qptm_get_power_in_uw - get current average power for given qptm
+ * @qptm: a qptm structure pointer
+ * @power: a pointer to store energy value
+ *
+ * It gets current average power for a qptm node.
+ * If it is virtual qptm node, it will get aggregated power of its children.
+ *
+ * Return: zero on success, a negative value in case of error.
+ */
+int qptm_get_power_in_uw(struct qptm *qptm, u64 *power)
+{
+	int ret = 0;
+
+	if (!qptm)
+		return -ENODEV;
+
+	if (!qptm->ops) {
+		mutex_lock(&qptm->lock);
+		ret = __get_power_uw(qptm, power);
+		mutex_unlock(&qptm->lock);
+		return ret;
+	}
+
+	mutex_lock(&qptm->lock);
+	*power = qptf_get_qptm_power_uw(qptm);
+	mutex_unlock(&qptm->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qptm_get_power_in_uw);
+
 static u64 qptf_get_qptm_energy_uj(struct qptm *qptm)
 {
 	struct powerzone *pos;
@@ -316,6 +501,38 @@ static u64 qptf_get_qptm_energy_uj(struct qptm *qptm)
 
 	return tot_energy;
 }
+
+/**
+ * qptm_get_energy_in_uj - get current energy for given qptm
+ * @qptm: a qptm structure pointer
+ * @energy: a pointer to store energy value
+ *
+ * It gets current cumulative eneregy for a qptm node.
+ * If it is virtual qptm node, it will get aggregated eneregy of its children.
+ *
+ * Return: zero on success, a negative value in case of error.
+ */
+int qptm_get_energy_in_uj(struct qptm *qptm, u64 *energy)
+{
+	int ret = 0;
+
+	if (!qptm)
+		return -ENODEV;
+
+	if (!qptm->ops) {
+		mutex_lock(&qptm->lock);
+		ret = __get_energy_uj(qptm, energy);
+		mutex_unlock(&qptm->lock);
+		return ret;
+	}
+
+	mutex_lock(&qptm->lock);
+	*energy = qptf_get_qptm_energy_uj(qptm);
+	mutex_unlock(&qptm->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qptm_get_energy_in_uj);
 
 static int qptm_set_enable(struct qptm *qptm, bool mode)
 {
