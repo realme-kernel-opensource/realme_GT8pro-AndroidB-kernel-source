@@ -119,7 +119,11 @@ def define_qtvm():
         out = "kconfig.qtvm/Kconfig.ext",
     )
     define_qc_core_header_config("qc_core_kernel_header_config")
-    define_qc_core_kernel("kernel_aarch64_qtvm", "arch/arm64/configs/generic_vm_defconfig")
+    define_qc_core_kernel(
+        "kernel_aarch64_qtvm",
+        "arch/arm64/configs/generic_vm_defconfig",
+        defconfig_fragments = ["arch/arm64/configs/generic_vm_cmdline.fragment"],
+    )
     define_qc_core_kernel(
         "kernel_aarch64_qtvm_debug",
         "arch/arm64/configs/generic_vm_defconfig",
