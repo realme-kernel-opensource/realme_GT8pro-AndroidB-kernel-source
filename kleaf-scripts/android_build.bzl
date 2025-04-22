@@ -18,6 +18,7 @@ load(":kleaf-scripts/consolidate.bzl", "define_consolidated_kernel")
 load(":kleaf-scripts/dtbs.bzl", "define_qcom_dtbs")
 load(":kleaf-scripts/modules_unprotected.bzl", "get_unprotected_vendor_modules_list")
 load(":kleaf-scripts/msm_dtc.bzl", "define_dtc_dist")
+load(":kleaf-scripts/techpack_modules.bzl", "define_techpack_modules")
 load(":qcom_modules.bzl", "registry")
 
 def define_common_android_rules():
@@ -297,6 +298,8 @@ def define_single_android_build(
     define_abl_dist(stem, name, variant)
 
     define_dtc_dist(stem, name, variant)
+
+    define_techpack_modules(stem, name, variant)
 
     define_extras(stem, kbuild_config = base_kernel)
 
