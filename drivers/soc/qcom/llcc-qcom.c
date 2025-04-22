@@ -764,16 +764,18 @@ static const struct llcc_slice_config alor_data[] = {
 							0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 33},
 	{LLCC_CAMRTIP,		13, 2304, 4, 1, 0xFFFFFF, 0, 0, 0, 0,
 							0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 33},
-	{LLCC_CAMSRTIP,		14, 1024, 4, 1, 0xFFFFFF, 0, 0, 0, 0,
-							0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 33},
 	{LLCC_CAMRTRF,		10, 2304, 3, 1, 0xFFFFFF, 0, 0, 0, 0,
 							0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 33},
 	{LLCC_CAMSRTRF,		21, 2304, 1, 1, 0xFFFFFF, 0, 0, 0, 0,
 							0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 33},
-	{LLCC_CPUSS_OPP,	32, 5120, 0, 1, 0xFFFFFF, 0, 0, 0, 0,
+	{LLCC_CPUSS_OPP,	32, 0, 0, 1, 0xFFFFFF, 0, 0, 0, 0,
 							0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,  0},
 	{LLCC_CPUSS_MPAM1,	17, 2048, 1, 1, 0xFFFFFF, 0, 0, 0, 0,
 							0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0,  0},
+	{LLCC_CAM_IPE_STROV,	14, 400, 5, 1, 0xFFFFFF, 0, 0, 0, 0,
+							0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,  33},
+	{LLCC_CAM_OFE_STROV,	22, 400, 5, 1, 0xFFFFFF, 0, 0, 0, 0,
+							0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,  33},
 };
 
 static const struct llcc_edac_reg_offset llcc_v1_edac_reg_offset = {
