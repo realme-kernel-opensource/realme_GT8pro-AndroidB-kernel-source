@@ -468,6 +468,8 @@ static int ufs_qcom_get_pwr_dev_param(struct ufs_qcom_dev_params *qcom_param,
 	int min_dev_gear;
 	bool is_dev_sup_hs = false;
 	bool is_qcom_max_hs = false;
+	struct ufs_qcom_host *host =
+		container_of(qcom_param, struct ufs_qcom_host, host_pwr_cap);
 
 	if (dev_max->pwr_rx == FAST_MODE)
 		is_dev_sup_hs = true;
@@ -538,6 +540,11 @@ static int ufs_qcom_get_pwr_dev_param(struct ufs_qcom_dev_params *qcom_param,
 		agreed_pwr->gear_rx = agreed_pwr->gear_tx = min_dev_gear;
 	else
 		agreed_pwr->gear_rx = agreed_pwr->gear_tx = min_qcom_gear;
+
+	if (host->cap_hs_gear_limit && is_qcom_max_hs) {
+		dev_info(host->hba->dev, "Gear limit active: setting to UFS_HS_G1\n");
+		agreed_pwr->gear_rx = agreed_pwr->gear_tx = min_qcom_gear = UFS_HS_G1;
+	}
 
 	agreed_pwr->hs_rate = qcom_param->hs_rate;
 	return 0;
@@ -5689,6 +5696,34 @@ static ssize_t boost_monitor_timer_ms_show(struct device *dev,
 
 static DEVICE_ATTR_RW(boost_monitor_timer_ms);
 
+static ssize_t cap_hs_gear_limit_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", !!host->cap_hs_gear_limit);
+}
+
+static ssize_t cap_hs_gear_limit_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	bool value;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
+	if (kstrtobool(buf, &value))
+		return -EINVAL;
+
+	host->cap_hs_gear_limit = !!value;
+	return count;
+}
+
+static DEVICE_ATTR_RW(cap_hs_gear_limit);
+
 static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_err_state.attr,
 	&dev_attr_power_mode.attr,
@@ -5703,6 +5738,7 @@ static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_boost_min_threshold.attr,
 	&dev_attr_boost_max_threshold.attr,
 	&dev_attr_boost_monitor_timer_ms.attr,
+	&dev_attr_cap_hs_gear_limit.attr,
 	NULL
 };
 
