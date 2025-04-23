@@ -186,4 +186,16 @@ config GUNYAH_TRACE
 	  The driver can help to dump gunyah trace buffer continuously and
 	  provide interface to control gunyah trace.
 
+config GH_RM_HEAP_MANAGER
+	tristate "Gunyah RM Heap Manager"
+	depends on GUNYAH
+	depends on MEM_PROT
+	help
+	  Enable kernel support for managing the RM Heap memory where
+	  Kernel will add extra RM heap memory when required.
+	  The memory being added to RM heap needs to come from
+	  a memory protected region.
+	  Say Y/M here if unsure and you want to support Gunyah VMs.
+
 endif
+
