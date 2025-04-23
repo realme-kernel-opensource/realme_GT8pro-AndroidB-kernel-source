@@ -1629,6 +1629,9 @@ struct qmp_combo {
 	void __iomem *dp_dp_phy;
 
 	struct clk *pipe_clk;
+	struct clk *pipe_clk_mux;
+	struct clk *pipe_clk_ext_src;
+	struct clk *ref_clk_src;
 	struct clk_bulk_data *clks;
 	int num_clks;
 	struct reset_control_bulk_data *resets;
@@ -2854,6 +2857,7 @@ static int qmp_combo_usb_power_on(struct phy *phy)
 
 	qmp_configure(serdes, cfg->serdes_tbl, cfg->serdes_tbl_num);
 
+	clk_set_parent(qmp->pipe_clk_mux, qmp->pipe_clk_ext_src);
 	ret = clk_prepare_enable(qmp->pipe_clk);
 	if (ret) {
 		dev_err(qmp->dev, "pipe_clk enable failed err=%d\n", ret);
@@ -2903,6 +2907,7 @@ static int qmp_combo_usb_power_off(struct phy *phy)
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
 
 	clk_disable_unprepare(qmp->pipe_clk);
+	clk_set_parent(qmp->pipe_clk_mux, qmp->ref_clk_src);
 
 	/* PHY reset */
 	qphy_setbits(qmp->pcs, cfg->regs[QPHY_SW_RESET], SW_RESET);
@@ -3054,6 +3059,7 @@ static int __maybe_unused qmp_combo_runtime_suspend(struct device *dev)
 	genpd->flags |= GENPD_FLAG_ALWAYS_ON;
 
 	clk_disable_unprepare(qmp->pipe_clk);
+	clk_set_parent(qmp->pipe_clk_mux, qmp->ref_clk_src);
 	clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
 
 	return 0;
@@ -3080,6 +3086,7 @@ static int __maybe_unused qmp_combo_runtime_resume(struct device *dev)
 	if (ret)
 		return ret;
 
+	clk_set_parent(qmp->pipe_clk_mux, qmp->pipe_clk_ext_src);
 	ret = clk_prepare_enable(qmp->pipe_clk);
 	if (ret) {
 		dev_err(dev, "pipe_clk enable failed, err=%d\n", ret);
@@ -3648,6 +3655,24 @@ static int qmp_combo_parse_dt(struct qmp_combo *qmp)
 	if (IS_ERR(qmp->pipe_clk)) {
 		return dev_err_probe(dev, PTR_ERR(qmp->pipe_clk),
 				"failed to get usb3_pipe clock\n");
+	}
+
+	qmp->pipe_clk_mux = devm_clk_get(dev, "pipe_clk_mux");
+	if (IS_ERR(qmp->pipe_clk_mux)) {
+		dev_err(dev, "failed to get usb3_pipe_src clock\n");
+		qmp->pipe_clk_mux = NULL;
+	}
+
+	qmp->pipe_clk_ext_src = devm_clk_get(dev, "pipe_clk_ext_src");
+	if (IS_ERR(qmp->pipe_clk_ext_src)) {
+		dev_err(dev, "failed to get pipe_clk_ext_src clock\n");
+		qmp->pipe_clk_ext_src = NULL;
+	}
+
+	qmp->ref_clk_src = devm_clk_get(dev, "ref");
+	if (IS_ERR(qmp->ref_clk_src)) {
+		dev_err(dev, "failed to get ref_clk_src clock\n");
+		qmp->ref_clk_src = NULL;
 	}
 
 	return 0;
