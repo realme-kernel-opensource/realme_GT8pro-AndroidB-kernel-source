@@ -17,6 +17,8 @@
 #include <linux/memory.h>
 #include <linux/genalloc.h>
 #include <linux/mem-buf-altmap.h>
+#include <linux/scatterlist.h>
+#include <linux/gunyah/gh_rm_heap_manager.h>
 
 #include <linux/mem-buf.h>
 #include "mem-buf-dev.h"
@@ -33,6 +35,11 @@ EXPORT_SYMBOL_GPL(dmabuf_mem_pool);
 
 struct dentry *mem_buf_debugfs_root;
 EXPORT_SYMBOL_GPL(mem_buf_debugfs_root);
+
+static uint64_t total_hyp_heap_size;
+static uint64_t total_dmabuf_assigned;
+
+static DEFINE_MUTEX(mem_buf_heap_lock);
 
 #define POOL_MIN_ALLOC_ORDER SECTION_SIZE_BITS
 
@@ -57,20 +64,79 @@ int mem_buf_hyp_assign_table(struct sg_table *sgt, u32 *src_vmid, int source_nel
 	return ret;
 }
 
+static int mem_buf_increase_hyp_heap(size_t dmabuf_size)
+{
+	int ret;
+	size_t total_heap_needed, heap_memory_increase = 0;
+
+	total_heap_needed = gh_get_dmabuf_hyp_heap_size(total_dmabuf_assigned + dmabuf_size);
+
+	if (total_hyp_heap_size < total_heap_needed)
+		heap_memory_increase = total_heap_needed - total_hyp_heap_size;
+
+	if (!heap_memory_increase)
+		return 0;
+
+	ret = gh_rm_heap_add_dmabuf(heap_memory_increase);
+	if (ret) {
+		pr_err("%s: failed to increase hyp heap memory size: 0x%zx\n",
+				__func__, heap_memory_increase);
+		return -EINVAL;
+	}
+
+	total_hyp_heap_size += heap_memory_increase;
+	pr_info("inceased hyp heap memory size: 0x%zx total heap: 0x%llx\n",
+			heap_memory_increase, total_hyp_heap_size);
+
+	return 0;
+}
+
+static int mem_buf_reclaim_hyp_heap(size_t size)
+{
+	int ret;
+
+	ret = gh_rm_heap_remove_dmabuf(size);
+	if (ret) {
+		pr_err("%s: failed to reclaim hyp heap memory size: 0x%zx\n", __func__, size);
+		return -EINVAL;
+	}
+
+	total_hyp_heap_size -= size;
+	pr_info("reclaimed hyp heap memory size: 0x%zx total heap: 0x%llx\n",
+			size, total_hyp_heap_size);
+
+	return 0;
+}
+
 int mem_buf_assign_mem(u32 op, struct sg_table *sgt,
 		       struct mem_buf_lend_kernel_arg *arg)
 {
 	int src_vmid[] = {current_vmid};
 	int src_perms[] = {PERM_READ | PERM_WRITE | PERM_EXEC};
-	int ret, ret2;
+	int ret, ret2, i;
+	struct scatterlist *sg;
+	size_t dmabuf_size = 0;
 
 	if (!sgt || !arg->nr_acl_entries || !arg->vmids || !arg->perms)
 		return -EINVAL;
 
+	mutex_lock(&mem_buf_heap_lock);
+
+	for_each_sgtable_sg(sgt, sg, i)
+		dmabuf_size += sg->length;
+
+	/* check if we need to increase hypervisor heap memory for Gunyah VM usecase */
+	ret = mem_buf_vm_uses_gunyah(arg->vmids, arg->nr_acl_entries);
+	if (ret > 0) {
+		ret = mem_buf_increase_hyp_heap(dmabuf_size);
+		if (ret)
+			goto out_err;
+	}
+
 	ret = mem_buf_hyp_assign_table(sgt, src_vmid, ARRAY_SIZE(src_vmid), arg->vmids, arg->perms,
 					arg->nr_acl_entries);
 	if (ret)
-		return ret;
+		goto out_err;
 
 	ret = mem_buf_assign_mem_gunyah(op, sgt, arg);
 	if (ret) {
@@ -79,9 +145,15 @@ int mem_buf_assign_mem(u32 op, struct sg_table *sgt,
 		if (ret2 < 0) {
 			pr_err("hyp_assign failed while recovering from another error: %d\n",
 			       ret2);
-			return -EADDRNOTAVAIL;
+			ret = -EADDRNOTAVAIL;
+			goto out_err;
 		}
+	} else {
+		total_dmabuf_assigned += dmabuf_size;
 	}
+
+out_err:
+	mutex_unlock(&mem_buf_heap_lock);
 
 	return ret;
 }
@@ -93,19 +165,41 @@ int mem_buf_unassign_mem(struct sg_table *sgt, int *src_vmids,
 {
 	int dst_vmid[] = {current_vmid};
 	int dst_perm[] = {PERM_READ | PERM_WRITE | PERM_EXEC};
-	int ret;
+	int ret, i;
+	size_t hyp_heap_free;
+	struct scatterlist *sg;
 
 	if (!sgt || !src_vmids || !nr_acl_entries)
 		return -EINVAL;
 
+	mutex_lock(&mem_buf_heap_lock);
+
+	/* reclaim any free hyp heap memory */
+	if (total_hyp_heap_size) {
+		hyp_heap_free = gh_get_hyp_heap_free();
+		hyp_heap_free = min(hyp_heap_free, total_hyp_heap_size);
+		ret = mem_buf_reclaim_hyp_heap(hyp_heap_free);
+		if (ret)
+			goto out_err;
+	}
+
 	if (memparcel_hdl != MEM_BUF_MEMPARCEL_INVALID) {
 		ret = mem_buf_unassign_mem_gunyah(memparcel_hdl);
 		if (ret)
-			return ret;
+			goto out_err;
 	}
 
 	ret = mem_buf_hyp_assign_table(sgt, src_vmids, nr_acl_entries,
 			       dst_vmid, dst_perm, ARRAY_SIZE(dst_vmid));
+	if (!ret) {
+		for_each_sgtable_sg(sgt, sg, i) {
+			total_dmabuf_assigned -= sg->length;
+		}
+	}
+
+out_err:
+	mutex_unlock(&mem_buf_heap_lock);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(mem_buf_unassign_mem);
