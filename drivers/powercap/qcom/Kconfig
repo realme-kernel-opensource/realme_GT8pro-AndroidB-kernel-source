@@ -19,3 +19,11 @@ config QCOM_POWER_TELEMETRY_HW
 	  power devices like pmic regulator, bobs etc. It registers each power/energy
 	  channel to power telemetry framework.
 
+config QCOM_POWER_TELEMETRY_DATA_SHARE
+	tristate "Qualcomm Technologies, Inc. Power Telemetry Data Sharing module"
+	depends on QCOM_POWER_TELEMETRY_FRAMEWORK
+	help
+	  This enables Qualcomm Technologies, Inc. power telemetry
+	  data sharing module. It allows sharing of power and energy data collected
+	  by the Power Telemetry Hardware driver with other components via a
+	  dedicated shared memory data structure.
