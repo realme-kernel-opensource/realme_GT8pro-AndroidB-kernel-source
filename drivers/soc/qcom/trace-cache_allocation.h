@@ -72,9 +72,105 @@ TRACE_EVENT(cache_alloc_config_update,
 		__entry->config2 = config2;
 	),
 
-	TP_printk("config1=%d config2=%d",
+	TP_printk("set config, config1=%d, config2=%d",
 		__entry->config1,
 		__entry->config2)
+);
+
+TRACE_EVENT(cache_alloc_config_check,
+
+	TP_PROTO(int gov, int config1, int config2),
+
+	TP_ARGS(gov, config1, config2),
+
+	TP_STRUCT__entry(
+		__field(int, gov)
+		__field(int, config1)
+		__field(int, config2)
+	),
+
+	TP_fast_assign(
+		__entry->gov = gov;
+		__entry->config1 = config1;
+		__entry->config2 = config2;
+	),
+
+	TP_printk("check config, gov=%d, config1=%d, config2=%d",
+		__entry->gov,
+		__entry->config1,
+		__entry->config2)
+);
+
+TRACE_EVENT(cache_alloc_timestamp,
+
+	TP_PROTO(u64 timestamp, int idx),
+
+	TP_ARGS(timestamp, idx),
+
+	TP_STRUCT__entry(
+		__field(u64, timestamp)
+		__field(int, idx)
+	),
+
+	TP_fast_assign(
+		__entry->timestamp = timestamp;
+		__entry->idx = idx;
+	),
+
+	TP_printk("timestamp=%llu idx=%d",
+		__entry->timestamp,
+		__entry->idx)
+);
+
+TRACE_EVENT(cache_alloc_byte_cnt,
+
+	TP_PROTO(u64 byte_cnt, int idx),
+
+	TP_ARGS(byte_cnt, idx),
+
+	TP_STRUCT__entry(
+		__field(u64, byte_cnt)
+		__field(int, idx)
+	),
+
+	TP_fast_assign(
+		__entry->byte_cnt = byte_cnt;
+		__entry->idx = idx;
+	),
+
+	TP_printk("byte_cnt=%llu idx=%d",
+		__entry->byte_cnt,
+		__entry->idx)
+);
+
+TRACE_EVENT(cache_alloc_bw_ratio,
+
+	TP_PROTO(u64 m_bw, u64 l_bw, u64 cpu_bw, u64 gpu_bw, u64 bw_ratio),
+
+	TP_ARGS(m_bw, l_bw, cpu_bw, gpu_bw, bw_ratio),
+
+	TP_STRUCT__entry(
+		__field(u64, m_bw)
+		__field(u64, l_bw)
+		__field(u64, cpu_bw)
+		__field(u64, gpu_bw)
+		__field(u64, bw_ratio)
+	),
+
+	TP_fast_assign(
+		__entry->m_bw = m_bw;
+		__entry->l_bw = l_bw;
+		__entry->cpu_bw = cpu_bw;
+		__entry->gpu_bw = gpu_bw;
+		__entry->bw_ratio = bw_ratio;
+	),
+
+	TP_printk("cpu_m_bw=%llu, cpu_l_bw=%llu, cpu_bw=%llu, gpu_bw=%llu, bw_ratio=%llu",
+		__entry->m_bw,
+		__entry->l_bw,
+		__entry->cpu_bw,
+		__entry->gpu_bw,
+		__entry->bw_ratio)
 );
 
 #endif /* _TRACE_CACHE_ALLOC_H */

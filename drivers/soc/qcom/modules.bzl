@@ -735,6 +735,7 @@ def register_modules(registry):
         ],
         deps = [
             # do not sort
+            "drivers/soc/qcom/mpam/mpam",
             "drivers/soc/qcom/mpam/mpam_msc",
         ],
     )
