@@ -3020,16 +3020,35 @@ static int sdhci_msm_ice_init(struct sdhci_msm_host *msm_host,
 
 static void sdhci_msm_ice_enable(struct sdhci_msm_host *msm_host)
 {
+	int err = 0;
 	if (msm_host->mmc->caps2 & MMC_CAP2_CRYPTO)
-		qcom_ice_enable(msm_host->ice);
+		err = qcom_ice_enable(msm_host->ice);
+
+	if (err) {
+		dev_warn(
+			mmc_dev(msm_host->mmc),
+			"Could not enable ICE err=%d, Disabling inline encryption capability.\n",
+			err);
+		msm_host->mmc->caps2 &= ~MMC_CAP2_CRYPTO;
+	}
 }
 
 static __maybe_unused int sdhci_msm_ice_resume(struct sdhci_msm_host *msm_host)
 {
-	if (msm_host->mmc->caps2 & MMC_CAP2_CRYPTO)
-		return qcom_ice_resume(msm_host->ice);
+	int err = 0;
 
-	return 0;
+	if (msm_host->mmc->caps2 & MMC_CAP2_CRYPTO)
+		err = qcom_ice_resume(msm_host->ice);
+
+	if (err) {
+		dev_warn(
+			mmc_dev(msm_host->mmc),
+			"Could not resume ICE err=%d, Disabling inline encryption capability.\n",
+			err);
+		msm_host->mmc->caps2 &= ~MMC_CAP2_CRYPTO;
+	}
+
+	return err;
 }
 
 static __maybe_unused int sdhci_msm_ice_suspend(struct sdhci_msm_host *msm_host)
