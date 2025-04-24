@@ -293,6 +293,8 @@ def register_modules(registry):
             "drivers/clk/qcom/clk-opp.h",
             "drivers/clk/qcom/clk-pll.c",
             "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-pm.c",
+            "drivers/clk/qcom/clk-pm.h",
             "drivers/clk/qcom/clk-rcg.c",
             "drivers/clk/qcom/clk-rcg.h",
             "drivers/clk/qcom/clk-rcg2.c",
