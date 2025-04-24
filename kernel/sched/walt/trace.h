@@ -1771,9 +1771,9 @@ TRACE_EVENT(sched_update_updown_migrate_values,
 TRACE_EVENT(sched_pipeline_tasks,
 
 	TP_PROTO(int type, int index, struct walt_task_struct *heavy_wts, int nr, u32 total_util,
-		bool pipeline_pinning, int config),
+		bool pipeline_pinning, int config, bool t0_bias),
 
-	TP_ARGS(type, index, heavy_wts, nr, total_util, pipeline_pinning, config),
+	TP_ARGS(type, index, heavy_wts, nr, total_util, pipeline_pinning, config, t0_bias),
 
 	TP_STRUCT__entry(
 		__field(int, index)
@@ -1795,6 +1795,7 @@ TRACE_EVENT(sched_pipeline_tasks,
 		__field(u64, scaled_gold_demand)
 		__field(u64, scaled_prime_demand)
 		__field(int, config)
+		__field(bool, t0_bias)
 	),
 
 	TP_fast_assign(
@@ -1817,9 +1818,10 @@ TRACE_EVENT(sched_pipeline_tasks,
 		pipeline_demand(heavy_wts, &__entry->scaled_gold_demand,
 			&__entry->scaled_prime_demand);
 		__entry->config		= config;
+		__entry->t0_bias	= t0_bias;
 	),
 
-	TP_printk("type=%d index=%d pid=%d comm=%s demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d special_pid=%d util_thres=%u total_util=%u pipeline_pin=%d event_windows=%d pipeline_activity_cnt=%u lst=%d gold_demand=%llu prime_demand=%llu config=%d",
+	TP_printk("type=%d index=%d pid=%d comm=%s demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d special_pid=%d util_thres=%u total_util=%u pipeline_pin=%d event_windows=%d pipeline_activity_cnt=%u lst=%d gold_demand=%llu prime_demand=%llu config=%d t0_bias=%d",
 			__entry->type, __entry->index, __entry->pid,
 			__entry->comm, __entry->demand_scaled, __entry->coloc_demand,
 			__entry->pipeline_cpu, __entry->low_latency, __entry->nr,
@@ -1827,7 +1829,7 @@ TRACE_EVENT(sched_pipeline_tasks,
 			__entry->pipeline_pinning, __entry->event_windows,
 			__entry->pipeline_activity_cnt, __entry->lst,
 			__entry->scaled_gold_demand, __entry->scaled_prime_demand,
-			__entry->config)
+			__entry->config, __entry->t0_bias)
 );
 
 TRACE_EVENT(sched_pipeline_swapped,
