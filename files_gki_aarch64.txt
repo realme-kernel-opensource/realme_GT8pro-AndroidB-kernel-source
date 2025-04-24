@@ -4578,6 +4578,7 @@ include/trace/hooks/fpsimd.h
 include/trace/hooks/fs.h
 include/trace/hooks/fsnotify.h
 include/trace/hooks/ftrace_dump.h
+include/trace/hooks/fuse.h
 include/trace/hooks/futex.h
 include/trace/hooks/gic.h
 include/trace/hooks/gic_v3.h
