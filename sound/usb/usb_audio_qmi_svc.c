@@ -1337,8 +1337,7 @@ static int check_valid_request(struct qmi_uaudio_stream_req_msg_v01 *req_msg,
 
 	if (!subs) {
 		uaudio_err("invalid substream\n");
-		ret = -EFAULT;
-		goto response;
+		return -EFAULT;
 	}
 
 	chip = uadev[pcm_card_num].chip;

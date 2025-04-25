@@ -13,6 +13,8 @@
 #include <linux/pm_qos.h>
 #include <linux/cpu.h>
 #include <linux/interconnect.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
 #include <dt-bindings/interconnect/qcom,icc.h>
 
 #include "qpace-constants.h"
@@ -122,9 +124,6 @@ static inline void program_urg_comp_context(int urg_reg_num)
 	urg_cmd_settings |= FIELD_PREP(URG_CMD_0_CFG_CNTXT_MISC_DCTX,
 				       DEFAULT_SMMU_CONTEXT);
 
-	/* Cache accesses in the system cache during compression */
-	urg_cmd_settings |= FIELD_PREP(URG_CMD_0_CFG_CNTXT_MISC_WA, 1);
-
 	QPACE_WRITE_URG_CMD_CTX_REG(QPACE_URG_CMD_0_CFG_CNTXT_MISC_n_OFFSET,
 				    urg_reg_num, URG_COMP_CNTXT,
 				    urg_cmd_settings);
@@ -147,9 +146,6 @@ static inline void program_urg_decomp_context(int urg_reg_num)
 				       DEFAULT_SMMU_CONTEXT);
 	urg_cmd_settings |= FIELD_PREP(URG_CMD_0_CFG_CNTXT_MISC_DCTX,
 				       DEFAULT_SMMU_CONTEXT);
-
-	/* Cache accesses in the system cache during decompression */
-	urg_cmd_settings |= FIELD_PREP(URG_CMD_0_CFG_CNTXT_MISC_WA, 1);
 
 	QPACE_WRITE_URG_CMD_CTX_REG(QPACE_URG_CMD_0_CFG_CNTXT_MISC_n_OFFSET,
 				    urg_reg_num, URG_DECOMP_CNTXT,
@@ -622,9 +618,6 @@ int qpace_queue_copy(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr, siz
 	td->size = copy_size;
 	td->operation = COPY;
 
-	/* Deallocate cache line from system cache during copy */
-	td->rf = 1;
-
 	/* Page count not needed for copy */
 
 	/* Use default SIDs */
@@ -661,9 +654,6 @@ int qpace_queue_compress(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr)
 
 	td->size = (PAGE_SIZE) - 1;
 	td->operation = COMP;
-
-	/* Cache accesses in the system cache during compression */
-	td->wa = 1;
 
 	/* Leave page count as order 0 */
 
@@ -1169,6 +1159,24 @@ static int qpace_register_interrupts(struct platform_device *pdev)
 
 	return 0;
 }
+
+bool is_qpace_dev_available(void)
+{
+	struct device_node *node;
+
+	node = of_find_node_by_name(NULL, "qcom,qpace");
+	if (!node) {
+		pr_warn("qpace: qpace device node not found\n");
+		return false;
+	}
+	if (!of_device_is_available(node)) {
+		pr_warn("qpace: qpace device node not found\n");
+		of_node_put(node);
+		return false;
+	}
+	return true;
+}
+EXPORT_SYMBOL_GPL(is_qpace_dev_available);
 
 static int qpace_probe(struct platform_device *pdev)
 {
