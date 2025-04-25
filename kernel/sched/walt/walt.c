@@ -2242,6 +2242,7 @@ static inline u32 scale_util_to_time(u16 util)
 	return util * walt_scale_demand_divisor;
 }
 
+#define PIPELINE_IDLE_MS 100000000
 static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 		u32 runtime, u16 runtime_scaled, u32 *demand, u16 *trailblazer_demand)
 {
@@ -2249,6 +2250,10 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	bool is_prev_trailblazer = walt_flag_test(p, WALT_TRAILBLAZER_BIT);
 	u64 trailblazer_capacity;
+
+	if (sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
+		((wts->mark_start + PIPELINE_IDLE_MS) <  walt_rq_clock(rq)))
+		wts->high_util_history = 0;
 
 	if (!pipeline_in_progress() && sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
 			(((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
