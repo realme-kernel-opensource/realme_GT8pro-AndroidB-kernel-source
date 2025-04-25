@@ -422,7 +422,7 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 				(retry_cnt++ < MAX_SHARED_MEM_RETRY_CNT))
 			;
 
-		if (retry_cnt == MAX_SHARED_MEM_RETRY_CNT)
+		if (retry_cnt >= MAX_SHARED_MEM_RETRY_CNT)
 			return -EINVAL;
 
 		/* Read as zero if monitor not enabled */
