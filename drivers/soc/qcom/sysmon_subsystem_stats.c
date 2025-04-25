@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
@@ -11,8 +11,19 @@
 #include <linux/soc/qcom/smem.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/cdev.h>
 #include <linux/soc/qcom/sysmon_subsystem_stats.h>
+#include <uapi/misc/sysmon_subsystem_stats_ioctl.h>
 
+struct subsystem_stats {
+	dev_t devno;
+	struct device *dev;
+	struct cdev sysmon_cdev;
+	struct class *dev_class;
+};
+static struct subsystem_stats g_subsystem_stats;
+#define SUBSYSTEMSTATS_CLASS_NAME_LOCAL                          "class_subsystem_stats"
+#define SUBSYSTEMSTATS_DEVICE_NAME_LOCAL                         "sysmon_subsystem_stats"
 #define SYSMON_SMEM_ID					634
 #define SLEEPSTATS_SMEM_ID_ADSP			606
 #define SLEEPSTATS_SMEM_ID_CDSP			607
@@ -1516,8 +1527,87 @@ static int master_cdsp_stats_show(struct seq_file *s, void *d)
 
 DEFINE_SHOW_ATTRIBUTE(master_cdsp_stats);
 
+static long dsp_utilization_stats_ioctl(struct file *file, unsigned int ioctl_num,
+			unsigned long ioctl_params)
+{
+	u32 util;
+	u32 q6_avg_load;
+	u32 retVal;
+
+	switch (ioctl_num) {
+	case HVX_UTILIZATION_QUERY:
+		retVal = sysmon_stats_query_hvx_utlization(&util);
+		if (retVal) {
+			pr_err("sysmon_stats_query_hvx_utlization failed with return value: %d\n",
+				retVal);
+			return retVal;
+		}
+
+		if (!access_ok((u32 __user *)ioctl_params, sizeof(u32))) {
+			pr_err("User-space pointer is not accessible\n");
+			return -EFAULT;
+		}
+
+		if (copy_to_user((u32 __user *)ioctl_params, &util, sizeof(u32))) {
+			pr_err("copy_to_user failed in HVX Utilization data read\n");
+			return -EFAULT;
+		}
+
+		break;
+	case HMX_UTILIZATION_QUERY:
+		retVal = sysmon_stats_query_hmx_utlization(&util);
+		if (retVal) {
+			pr_err("sysmon_stats_query_hmx_utlization failed with return value: %d\n",
+					retVal);
+			return retVal;
+		}
+
+		if (!access_ok((u32 __user *)ioctl_params, sizeof(u32))) {
+			pr_err("User-space pointer is not accessible\n");
+			return -EFAULT;
+		}
+
+		if (copy_to_user((u32 __user *)ioctl_params, &util, sizeof(u32))) {
+			pr_err("copy_to_user failed in HMX Utilization data read\n");
+			return -EFAULT;
+		}
+
+		break;
+	case Q6_CDSP_UTILIZATION:
+		retVal = sysmon_stats_query_q6_load(CDSP, &q6_avg_load);
+		if (retVal) {
+			pr_err("sysmon_stats_query_q6_load failed with return value: %d\n",
+				retVal);
+			return retVal;
+		}
+
+		if (!access_ok((u32 __user *)ioctl_params, sizeof(u32))) {
+			pr_err("User-space pointer is not accessible\n");
+			return -EFAULT;
+		}
+
+		if (copy_to_user((u32 __user *)ioctl_params, &q6_avg_load, sizeof(u32))) {
+			pr_err("copy_to_user failed in Q6 load data read\n");
+			return -EFAULT;
+		}
+
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static const struct file_operations sysmon_fops = {
+	.owner = THIS_MODULE,
+	.unlocked_ioctl = dsp_utilization_stats_ioctl,
+};
+
 static int  __init sysmon_stats_init(void)
 {
+
+	u32 ret;
+	struct subsystem_stats *me = &g_subsystem_stats;
 
 	g_sysmon_stats.debugfs_dir = debugfs_create_dir("sysmon_subsystem_stats", NULL);
 
@@ -1525,6 +1615,7 @@ static int  __init sysmon_stats_init(void)
 		pr_err("Failed to create debugfs directory for sysmon_subsystem_stats\n");
 		goto debugfs_bail;
 	}
+
 	g_sysmon_stats.debugfs_master_adsp_stats =
 			debugfs_create_file("master_adsp_stats",
 			 0444, g_sysmon_stats.debugfs_dir, NULL, &master_adsp_stats_fops);
@@ -1539,13 +1630,58 @@ static int  __init sysmon_stats_init(void)
 	if (!g_sysmon_stats.debugfs_master_cdsp_stats)
 		pr_err("Failed to create debugfs file for CDSP master stats\n");
 
+	ret = alloc_chrdev_region(&me->devno, 0, 1, SUBSYSTEMSTATS_DEVICE_NAME_LOCAL);
+
+	if (ret != 0) {
+		pr_err("Cannot create sysmon_subsystem_stats char device\n");
+		goto chardev_region_fail;
+	}
+
+	cdev_init(&me->sysmon_cdev, &sysmon_fops);
+	me->sysmon_cdev.owner = THIS_MODULE;
+
+	if ((cdev_add(&me->sysmon_cdev, MKDEV(MAJOR(me->devno), 0), 1)) != 0) {
+		pr_err("Cannot add the subsystem stats device to the system\n");
+		goto cdev_add_fail;
+	}
+
+	me->dev_class = class_create(SUBSYSTEMSTATS_CLASS_NAME_LOCAL);
+
+	if (IS_ERR(me->dev_class)) {
+		pr_err("Cannot create the subsystem stats class\n");
+		goto class_bail;
+	}
+
+	if (IS_ERR(device_create(me->dev_class, NULL,
+						MKDEV(MAJOR(me->devno), 0),
+						NULL,
+						SUBSYSTEMSTATS_DEVICE_NAME_LOCAL))) {
+		pr_err("Cannot create subsystem stats Device\n");
+		goto device_bail;
+	}
+
+	pr_debug("Subsystem stats device inserted\n");
+	return 0;
+device_bail:
+	class_destroy(me->dev_class);
+class_bail:
+	cdev_del(&g_subsystem_stats.sysmon_cdev);
+cdev_add_fail:
+	unregister_chrdev_region(me->devno, 1);
+chardev_region_fail:
+	debugfs_remove_recursive(g_sysmon_stats.debugfs_dir);
 debugfs_bail:
-		return 0;
+	return 0;
 }
 
 static void __exit sysmon_stats_exit(void)
 {
 	debugfs_remove_recursive(g_sysmon_stats.debugfs_dir);
+	device_destroy(g_subsystem_stats.dev_class, g_subsystem_stats.sysmon_cdev.dev);
+	class_destroy(g_subsystem_stats.dev_class);
+	cdev_del(&g_subsystem_stats.sysmon_cdev);
+	unregister_chrdev_region(g_subsystem_stats.devno, 1);
+	pr_debug("Removed subsystem stats device\n");
 }
 
 module_init(sysmon_stats_init);
