@@ -15,6 +15,7 @@
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
 #include "clk-pll.h"
+#include "clk-pm.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
 #include "clk-regmap-divider.h"
@@ -153,7 +154,7 @@ static struct clk_alpha_pll gcc_gpll1 = {
 };
 
 /* 732.0 MHz Configuration */
-static const struct alpha_pll_config gcc_gpll10_config = {
+static struct alpha_pll_config gcc_gpll10_config = {
 	.l = 0x26,
 	.cal_l = 0x48,
 	.alpha = 0x2000,
@@ -169,6 +170,7 @@ static struct clk_alpha_pll gcc_gpll10 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &gcc_gpll10_config,
 	.clkr = {
 		.enable_reg = 0x52020,
 		.enable_mask = BIT(10),
@@ -194,7 +196,7 @@ static struct clk_alpha_pll gcc_gpll10 = {
 };
 
 /* 400.0 MHz Configuration */
-static const struct alpha_pll_config gcc_gpll11_config = {
+static struct alpha_pll_config gcc_gpll11_config = {
 	.l = 0x14,
 	.cal_l = 0x48,
 	.alpha = 0xd555,
@@ -210,6 +212,7 @@ static struct clk_alpha_pll gcc_gpll11 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &gcc_gpll11_config,
 	.clkr = {
 		.enable_reg = 0x52020,
 		.enable_mask = BIT(11),
@@ -258,7 +261,7 @@ static struct clk_alpha_pll_postdiv gcc_gpll11_out_even = {
 };
 
 /* 285.0 MHz Configuration */
-static const struct alpha_pll_config gcc_gpll12_config = {
+static struct alpha_pll_config gcc_gpll12_config = {
 	.l = 0xe,
 	.cal_l = 0x48,
 	.alpha = 0xd800,
@@ -274,6 +277,7 @@ static struct clk_alpha_pll gcc_gpll12 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &gcc_gpll12_config,
 	.clkr = {
 		.enable_reg = 0x52020,
 		.enable_mask = BIT(12),
@@ -407,7 +411,7 @@ static struct clk_alpha_pll gcc_gpll4 = {
 };
 
 /* 808.0 MHz Configuration */
-static const struct alpha_pll_config gcc_gpll7_config = {
+static struct alpha_pll_config gcc_gpll7_config = {
 	.l = 0x2a,
 	.cal_l = 0x48,
 	.alpha = 0x1555,
@@ -423,6 +427,7 @@ static struct clk_alpha_pll gcc_gpll7 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &gcc_gpll7_config,
 	.clkr = {
 		.enable_reg = 0x52020,
 		.enable_mask = BIT(7),
@@ -448,7 +453,7 @@ static struct clk_alpha_pll gcc_gpll7 = {
 };
 
 /* 960.0 MHz Configuration */
-static const struct alpha_pll_config gcc_gpll8_config = {
+static struct alpha_pll_config gcc_gpll8_config = {
 	.l = 0x32,
 	.cal_l = 0x32,
 	.alpha = 0x0,
@@ -463,6 +468,7 @@ static struct clk_alpha_pll gcc_gpll8 = {
 	.vco_table = rivian_eko_t_vco,
 	.num_vco = ARRAY_SIZE(rivian_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_RIVIAN_EKO_T],
+	.config = &gcc_gpll8_config,
 	.clkr = {
 		.enable_reg = 0x52020,
 		.enable_mask = BIT(8),
@@ -484,7 +490,7 @@ static struct clk_alpha_pll gcc_gpll8 = {
 };
 
 /* 732.0 MHz Configuration */
-static const struct alpha_pll_config gcc_gpll9_config = {
+static struct alpha_pll_config gcc_gpll9_config = {
 	.l = 0x26,
 	.cal_l = 0x48,
 	.alpha = 0x2000,
@@ -500,6 +506,7 @@ static struct clk_alpha_pll gcc_gpll9 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &gcc_gpll9_config,
 	.clkr = {
 		.enable_reg = 0x52020,
 		.enable_mask = BIT(9),
@@ -3725,6 +3732,24 @@ static struct clk_regmap *gcc_vienna_clocks[] = {
 	[GCC_VIDEO_VENUS_CTL_CLK] = &gcc_video_venus_ctl_clk.clkr,
 };
 
+/*
+ * Keep clocks always enabled:
+ *	gcc_camera_ahb_clk
+ *	gcc_camera_xo_clk
+ *	gcc_disp_ahb_clk
+ *	gcc_gpu_cfg_ahb_clk
+ *	gcc_video_ahb_clk
+ *	gcc_video_xo_clk
+ */
+static struct critical_clk_offset critical_clk_list[] = {
+	{ .offset = 0x2d008, .mask = BIT(0) },
+	{ .offset = 0x2d040, .mask = BIT(0) },
+	{ .offset = 0x27004, .mask = BIT(0) },
+	{ .offset = 0x71004, .mask = BIT(0) },
+	{ .offset = 0x2d004, .mask = BIT(0) },
+	{ .offset = 0x2d03c, .mask = BIT(0) },
+};
+
 static const struct qcom_reset_map gcc_vienna_resets[] = {
 	[GCC_CAMSS_OPE_BCR] = { 0x31000 },
 	[GCC_CAMSS_TFE_BCR] = { 0x30000 },
@@ -3782,7 +3807,7 @@ static const struct regmap_config gcc_vienna_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc gcc_vienna_desc = {
+static struct qcom_cc_desc gcc_vienna_desc = {
 	.config = &gcc_vienna_regmap_config,
 	.clks = gcc_vienna_clocks,
 	.num_clks = ARRAY_SIZE(gcc_vienna_clocks),
@@ -3790,6 +3815,8 @@ static const struct qcom_cc_desc gcc_vienna_desc = {
 	.num_resets = ARRAY_SIZE(gcc_vienna_resets),
 	.clk_regulators = gcc_vienna_regulators,
 	.num_clk_regulators = ARRAY_SIZE(gcc_vienna_regulators),
+	.critical_clk_en = critical_clk_list,
+	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 };
 
 static const struct of_device_id gcc_vienna_match_table[] = {
@@ -3807,6 +3834,10 @@ static int gcc_vienna_probe(struct platform_device *pdev)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
+	ret = register_qcom_clks_pm(pdev, false, &gcc_vienna_desc);
+	if (ret)
+		dev_err(&pdev->dev, "Failed to register for pm ops\n");
+
 	clk_taycan_eko_t_pll_configure(&gcc_gpll10, regmap, &gcc_gpll10_config);
 	clk_taycan_eko_t_pll_configure(&gcc_gpll11, regmap, &gcc_gpll11_config);
 	clk_taycan_eko_t_pll_configure(&gcc_gpll12, regmap, &gcc_gpll12_config);
@@ -3819,21 +3850,8 @@ static int gcc_vienna_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	/*
-	 * Keep clocks always enabled:
-	 *	gcc_camera_ahb_clk
-	 *	gcc_camera_xo_clk
-	 *	gcc_disp_ahb_clk
-	 *	gcc_gpu_cfg_ahb_clk
-	 *	gcc_video_ahb_clk
-	 *	gcc_video_xo_clk
-	 */
-	regmap_update_bits(regmap, 0x2d008, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x2d040, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x27004, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x71004, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x2d004, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x2d03c, BIT(0), BIT(0));
+	/* Enalbling always ON clocks */
+	clk_restore_critical_clocks(&pdev->dev);
 
 	ret = qcom_cc_really_probe(&pdev->dev, &gcc_vienna_desc, regmap);
 	if (ret) {
