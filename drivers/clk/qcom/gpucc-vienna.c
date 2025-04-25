@@ -437,32 +437,6 @@ static struct clk_branch gpu_cc_memnoc_gfx_clk = {
 	},
 };
 
-static struct clk_branch gpu_cc_mnd1x_0_gfx3d_clk = {
-	.halt_reg = 0x92a4,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0x92a4,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gpu_cc_mnd1x_0_gfx3d_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gpu_cc_mnd1x_1_gfx3d_clk = {
-	.halt_reg = 0x92a8,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0x92a8,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gpu_cc_mnd1x_1_gfx3d_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_regmap *gpu_cc_vienna_clocks[] = {
 	[GPU_CC_AHB_CLK] = &gpu_cc_ahb_clk.clkr,
 	[GPU_CC_CRC_AHB_CLK] = &gpu_cc_crc_ahb_clk.clkr,
@@ -478,8 +452,6 @@ static struct clk_regmap *gpu_cc_vienna_clocks[] = {
 	[GPU_CC_HUB_CLK_SRC] = &gpu_cc_hub_clk_src.clkr,
 	[GPU_CC_HUB_CX_INT_CLK] = &gpu_cc_hub_cx_int_clk.clkr,
 	[GPU_CC_MEMNOC_GFX_CLK] = &gpu_cc_memnoc_gfx_clk.clkr,
-	[GPU_CC_MND1X_0_GFX3D_CLK] = &gpu_cc_mnd1x_0_gfx3d_clk.clkr,
-	[GPU_CC_MND1X_1_GFX3D_CLK] = &gpu_cc_mnd1x_1_gfx3d_clk.clkr,
 	[GPU_CC_PLL0] = &gpu_cc_pll0.clkr,
 	[GPU_CC_PLL1] = &gpu_cc_pll1.clkr,
 };
