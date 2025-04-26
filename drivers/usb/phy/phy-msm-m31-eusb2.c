@@ -148,7 +148,6 @@ static const struct eusb_phy_tbl m31_eusb_phy_tbl[] = {
 	EUSB_PHY_INIT_CFG(USB_PHY_CFG0, BIT(1), 1),
 	EUSB_PHY_INIT_CFG(USB_PHY_UTMI_CTRL5, BIT(1), 1),
 	EUSB_PHY_INIT_CFG(USB_PHY_HS_PHY_CTRL_COMMON0, BIT(0), 1),
-	EUSB_PHY_INIT_CFG(USB_PHY_CFG1, BIT(0), 1),
 	EUSB_PHY_INIT_CFG(USB_PHY_FSEL_SEL, BIT(0), 1),
 };
 
@@ -506,11 +505,23 @@ static void msm_m31_eusb2_parameter_override(struct m31_eusb2_phy *phy)
 
 static void msm_m31_eusb2_ref_clk_init(struct usb_phy *uphy)
 {
+	unsigned long ref_clk_freq;
 	struct m31_eusb2_phy *phy = container_of(uphy, struct m31_eusb2_phy, phy);
 
-	msm_m31_eusb2_write_readback(phy->base, USB_PHY_HS_PHY_CTRL_COMMON0,
-						FSEL, FSEL_38_4_MHZ_VAL);
-
+	ref_clk_freq = clk_get_rate(phy->ref_clk_src);
+	switch (ref_clk_freq) {
+	case 19200000:
+		msm_m31_eusb2_write_readback(phy->base, USB_PHY_HS_PHY_CTRL_COMMON0,
+							FSEL, FSEL_19_2_MHZ_VAL);
+		break;
+	case 38400000:
+		msm_m31_eusb2_write_readback(phy->base, USB_PHY_HS_PHY_CTRL_COMMON0,
+							FSEL, FSEL_38_4_MHZ_VAL);
+		break;
+	default:
+		dev_err(uphy->dev, "unsupported ref_clk_freq:%lu\n",
+						ref_clk_freq);
+	}
 }
 
 static int msm_m31_eusb2_repeater_reset_and_init(struct m31_eusb2_phy *phy)
