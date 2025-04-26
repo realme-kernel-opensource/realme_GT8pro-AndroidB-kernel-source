@@ -1,3 +1,5 @@
+# Disable target visibility check for techpack modules build
+common --check_visibility=false
 # Disable debug symbol compression for dump parsing tools
 common --no//build/kernel/kleaf:zstd_dwarf_compression
 # Unsafe headers needed by our modules
