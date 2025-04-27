@@ -100,3 +100,4 @@ f_fs_ipc_log.ko
 msm_sharedmem.ko
 minidump.ko
 qcom_ice.ko
+panel_event_notifier.ko
