@@ -4062,6 +4062,7 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 				bool is_pipeline_sync_migration, struct cpumask *lock_cpus)
 {
 	struct walt_sched_cluster *cluster;
+	bool force_fmax;
 	struct rq *rq;
 	int cpu;
 	u64 wc;
@@ -4127,6 +4128,7 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 		cpumask_and(&cluster_online_cpus, &cluster->cpus,
 						cpu_online_mask);
 		num_cpus = cpumask_weight(&cluster_online_cpus);
+		force_fmax = false;
 		for_each_cpu(cpu, &cluster_online_cpus) {
 			int wflag = 0;
 
@@ -4146,15 +4148,28 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 				wflag |= WALT_CPUFREQ_ROLLOVER_BIT;
 			}
 
-			if (i == num_cpus)
+			if (walt_rotation_enabled ||
+				(should_apply_suh_freq_boost(cluster) && is_suh_max()) ||
+				(walt_trailblazer_tasks(cpu)
+					&& walt_feat(WALT_FEAT_TRAILBLAZER_BIT))) {
+				force_fmax = true;
+			}
+
+			if (i == num_cpus || force_fmax)
 				waltgov_run_callback(cpu_rq(cpu), wflag);
 			else
 				waltgov_run_callback(cpu_rq(cpu), wflag |
 							WALT_CPUFREQ_CONTINUE_BIT);
 			i++;
 
-			if (!is_migration)
+			if (force_fmax)
+				break;
+		}
+
+		if (!is_migration) {
+			for_each_cpu(cpu, &cluster_online_cpus) {
 				walt_update_irqload(rq);
+			}
 		}
 	}
 
