@@ -3317,7 +3317,7 @@ static void walt_init_cycle_counter(void)
 
 static void transfer_busy_time(struct rq *rq,
 				struct walt_related_thread_group *grp,
-					struct task_struct *p, int event);
+					struct task_struct *p, int event, u64 wallclock);
 
 /*
  * Enable colocation and frequency aggregation for all threads in a process.
@@ -3366,12 +3366,11 @@ void update_best_cluster(struct walt_related_thread_group *grp,
 		grp->downmigrate_ts = 0;
 }
 
-static void _set_preferred_cluster(struct walt_related_thread_group *grp)
+static void _set_preferred_cluster(struct walt_related_thread_group *grp, u64 wallclock)
 {
 	struct task_struct *p;
 	u64 combined_demand = 0;
 	bool group_boost = false;
-	u64 wallclock;
 	bool prev_skip_min = grp->skip_min;
 	struct walt_task_struct *wts;
 
@@ -3389,8 +3388,6 @@ static void _set_preferred_cluster(struct walt_related_thread_group *grp)
 		grp->skip_min = false;
 		goto out;
 	}
-
-	wallclock = walt_sched_clock();
 
 	/*
 	 * wakeup of two or more related tasks could race with each other and
@@ -3435,10 +3432,10 @@ out:
 	}
 }
 
-static void set_preferred_cluster(struct walt_related_thread_group *grp)
+static void set_preferred_cluster(struct walt_related_thread_group *grp, u64 wallclock)
 {
 	raw_spin_lock(&grp->lock);
-	_set_preferred_cluster(grp);
+	_set_preferred_cluster(grp, wallclock);
 	raw_spin_unlock(&grp->lock);
 }
 
@@ -3504,18 +3501,20 @@ static void remove_task_from_group(struct task_struct *p)
 	struct rq *rq;
 	int empty_group = 1;
 	struct rq_flags rf;
+	u64 wallclock;
 
 	raw_spin_lock(&grp->lock);
 
 	rq = __task_rq_lock(p, &rf);
-	transfer_busy_time(rq, wts->grp, p, REM_TASK);
+	wallclock = walt_sched_clock();
+	transfer_busy_time(rq, wts->grp, p, REM_TASK, wallclock);
 	list_del_init(&wts->grp_list);
 	rcu_assign_pointer(wts->grp, NULL);
 	__task_rq_unlock(rq, &rf);
 
 	if (!list_empty(&grp->tasks)) {
 		empty_group = 0;
-		_set_preferred_cluster(grp);
+		_set_preferred_cluster(grp, wallclock);
 	}
 
 	raw_spin_unlock(&grp->lock);
@@ -3535,6 +3534,7 @@ add_task_to_group(struct task_struct *p, struct walt_related_thread_group *grp)
 	struct rq *rq;
 	struct rq_flags rf;
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
+	u64 wallclock;
 
 	raw_spin_lock(&grp->lock);
 
@@ -3543,12 +3543,13 @@ add_task_to_group(struct task_struct *p, struct walt_related_thread_group *grp)
 	 * reference of wts->grp in various hot-paths
 	 */
 	rq = __task_rq_lock(p, &rf);
-	transfer_busy_time(rq, grp, p, ADD_TASK);
+	wallclock = walt_sched_clock();
+	transfer_busy_time(rq, grp, p, ADD_TASK, wallclock);
 	list_add(&wts->grp_list, &grp->tasks);
 	rcu_assign_pointer(wts->grp, grp);
 	__task_rq_unlock(rq, &rf);
 
-	_set_preferred_cluster(grp);
+	_set_preferred_cluster(grp, wallclock);
 
 	raw_spin_unlock(&grp->lock);
 
@@ -3806,9 +3807,8 @@ static void note_task_waking(struct task_struct *p, u64 wallclock)
  */
 static void transfer_busy_time(struct rq *rq,
 				struct walt_related_thread_group *grp,
-					struct task_struct *p, int event)
+					struct task_struct *p, int event, u64 wallclock)
 {
-	u64 wallclock;
 	struct group_cpu_time *cpu_time;
 	u64 *src_curr_runnable_sum, *dst_curr_runnable_sum;
 	u64 *src_prev_runnable_sum, *dst_prev_runnable_sum;
@@ -3821,7 +3821,6 @@ static void transfer_busy_time(struct rq *rq,
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
-	wallclock = walt_sched_clock();
 
 	walt_update_task_ravg(p, rq, TASK_UPDATE, wallclock, 0);
 
@@ -5026,7 +5025,7 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 	rcu_read_lock();
 	grp = task_related_thread_group(p);
 	if (should_update_preferred_cluster(grp, p, old_load, false, wallclock))
-		set_preferred_cluster(grp);
+		set_preferred_cluster(grp, wallclock);
 	rcu_read_unlock();
 }
 
@@ -5169,7 +5168,7 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 	rcu_read_lock();
 	grp = task_related_thread_group(rq->curr);
 	if (should_update_preferred_cluster(grp, rq->curr, old_load, true, rq->clock))
-		set_preferred_cluster(grp);
+		set_preferred_cluster(grp, rq->clock);
 	rcu_read_unlock();
 
 	walt_lb_tick(rq);
