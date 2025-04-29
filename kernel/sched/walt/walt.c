@@ -300,15 +300,12 @@ void walt_rq_dump(int cpu)
 				wrq->load_subs[i].new_subs);
 	}
 	walt_task_dump(tsk);
-	for (i = 0; i < ANDROID_CGROUPS; i++) {
-		SCHED_PRINT(sched_capacity_margin_up[i][cpu_cluster(cpu)->id]);
-		SCHED_PRINT(sched_capacity_margin_down[i][cpu_cluster(cpu)->id]);
-	}
 }
 
 void walt_dump(void)
 {
-	int cpu;
+	int cpu, i;
+	struct walt_sched_cluster *cluster;
 
 	printk_deferred("============ WALT RQ DUMP START ==============\n");
 	printk_deferred("Sched clock: %llu\n", walt_sched_clock());
@@ -324,6 +321,14 @@ void walt_dump(void)
 	for_each_online_cpu(cpu)
 		walt_rq_dump(cpu);
 	SCHED_PRINT(max_possible_cluster_id);
+
+	for_each_sched_cluster(cluster) {
+		for (i = 0; i < ANDROID_CGROUPS; i++)
+			printk_deferred("up=%u down=%u cluster=%d cgroup=%s\n",
+					sched_capacity_margin_up[i][cluster->id],
+					sched_capacity_margin_down[i][cluster->id],
+					cluster->id, cgroup_names[i]);
+	}
 	printk_deferred("============ WALT RQ DUMP END ==============\n");
 }
 
