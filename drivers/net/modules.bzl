@@ -1,4 +1,7 @@
+load(":drivers/net/pcs/modules.bzl", register_pcs = "register_modules")
+
 def register_modules(registry):
+    register_pcs(registry)
     registry.register(
         name = "net/core/failover",
         out = "failover.ko",
