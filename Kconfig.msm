@@ -126,6 +126,8 @@ source "$(KCONFIG_EXT_PREFIX)net/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)sound/usb/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/block/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)Kconfig.qtvm"
 
 endmenu
