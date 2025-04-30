@@ -37,5 +37,6 @@ menuconfig NETDEVICES
 if NETDEVICES
 
 source "$(KCONFIG_EXT_PREFIX)drivers/net/pcs/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/net/ethernet/Kconfig"
 
 endif # NETDEVICES
