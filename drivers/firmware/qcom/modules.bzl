@@ -15,6 +15,7 @@ def register_modules(registry):
             "drivers/firmware/qcom/qcom_tzmem.h",
             "drivers/firmware/qcom/qcom_scm.h",
             "drivers/firmware/qcom/qtee_shmbridge_internal.h",
+            "drivers/firmware/qcom/lcp-ppddr-internal.h",
         ],
         hdrs = [
             "include/linux/firmware/qcom/qcom_scm.h",
