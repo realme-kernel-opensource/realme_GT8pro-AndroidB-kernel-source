@@ -40,6 +40,7 @@ enum vmid {
 	VMID_NAV = 0x2B,
 	VMID_TVM = 0x2D,
 	VMID_OEMVM = 0x31,
+	VMID_GH_RM = 0xFF,
 	VMID_LAST,
 	VMID_INVAL = -1
 };
