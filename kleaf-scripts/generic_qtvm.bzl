@@ -127,5 +127,8 @@ def define_qtvm():
     define_qc_core_kernel(
         "kernel_aarch64_qtvm_debug",
         "arch/arm64/configs/generic_vm_defconfig",
-        defconfig_fragments = ["arch/arm64/configs/generic_vm_debug.fragment"],
+        defconfig_fragments = [
+            "arch/arm64/configs/generic_vm_cmdline.fragment",
+            "arch/arm64/configs/generic_vm_debug.fragment",
+        ],
     )
