@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/memory.h>
@@ -973,14 +973,14 @@ static ssize_t store_anon_migrate(struct kobject *kobj,
 	return size;
 }
 
-#ifdef CONFIG_MEM_OFFLINE_ZONE_BALANCING
+#ifdef CONFIG_QCOM_MEM_OFFLINE_ZONE_BALANCING
 
 static unsigned long get_anon_movable_pages(
 			struct movable_zone_fill_control *fc,
 			unsigned long start_pfn,
 			unsigned long end_pfn, struct list_head *list)
 {
-	int found = 0, pfn, ret;
+	int found = 0, pfn;
 	int limit = min_t(int, fc->target, (int)pageblock_nr_pages);
 
 	fc->nr_migrate_pages = 0;
@@ -1003,7 +1003,7 @@ static unsigned long get_anon_movable_pages(
 			unsigned long freepage_order;
 
 			freepage_order = READ_ONCE(page_private(page));
-			if (freepage_order > 0 && freepage_order < MAX_ORDER)
+			if (freepage_order > 0 && freepage_order < MAX_PAGE_ORDER)
 				pfn += (1 << page_private(page)) - 1;
 			continue;
 		}
@@ -1014,7 +1014,7 @@ static unsigned long get_anon_movable_pages(
 			continue;
 		}
 
-		if (!isolate_anon_lru_page(page))
+		if (isolate_anon_lru_page(page) <= 0)
 			continue;
 
 		list_add_tail(&page->lru, list);
@@ -1056,7 +1056,7 @@ static void isolate_free_pages(struct movable_zone_fill_control *fc)
 	unsigned long flags;
 	unsigned long start_pfn = fc->start_pfn;
 	unsigned long end_pfn = fc->end_pfn;
-	LIST_HEAD(tmp);
+	struct list_head tmp[NR_PAGE_ORDERS];
 	struct zone *dst_zone;
 
 	if (!(start_pfn < end_pfn))
@@ -1066,6 +1066,8 @@ static void isolate_free_pages(struct movable_zone_fill_control *fc)
 	if (zone_page_state(dst_zone, NR_FREE_PAGES) < high_wmark_pages(dst_zone))
 		return;
 
+	for (int i = 0; i < NR_PAGE_ORDERS; ++i)
+		INIT_LIST_HEAD(&tmp[i]);
 	spin_lock_irqsave(&fc->zone->lock, flags);
 	for (; start_pfn < end_pfn; start_pfn++) {
 		unsigned long isolated;
@@ -1104,14 +1106,13 @@ static void isolate_free_pages(struct movable_zone_fill_control *fc)
 		if (!PageBuddy(page))
 			continue;
 
-		INIT_LIST_HEAD(&tmp);
-		isolated = isolate_and_split_free_page(page, &tmp);
+		isolated = isolate_and_split_free_page(page, tmp);
 		if (!isolated) {
 			fc->start_pfn = ALIGN(fc->start_pfn, pageblock_nr_pages);
 			goto out;
 		}
 
-		list_splice(&tmp, &fc->freepages);
+		list_splice_init(&tmp[0], &fc->freepages);
 		fc->nr_free_pages += isolated;
 		start_pfn += isolated - 1;
 	}
@@ -1120,10 +1121,11 @@ out:
 	spin_unlock_irqrestore(&fc->zone->lock, flags);
 }
 
-static struct page *movable_page_alloc(struct page *page, unsigned long data)
+static struct folio *movable_page_alloc(struct folio *folio, unsigned long data)
 {
 	struct movable_zone_fill_control *fc;
 	struct page *freepage;
+	struct folio *freefolio;
 
 	fc = (struct movable_zone_fill_control *)data;
 	if (list_empty(&fc->freepages)) {
@@ -1133,15 +1135,17 @@ static struct page *movable_page_alloc(struct page *page, unsigned long data)
 	}
 
 	freepage = list_entry(fc->freepages.next, struct page, lru);
+	freefolio = page_folio(freepage);
 	list_del(&freepage->lru);
 	fc->nr_free_pages--;
 
-	return freepage;
+	return freefolio;
 }
 
-static void movable_page_free(struct page *page, unsigned long data)
+static void movable_page_free(struct folio *folio, unsigned long data)
 {
 	struct movable_zone_fill_control *fc;
+	struct page *page = folio_page(folio, 0);
 
 	fc = (struct movable_zone_fill_control *)data;
 	list_add(&page->lru, &fc->freepages);
