@@ -1772,7 +1772,6 @@ static void zram_compress_success_handler(struct qpace_event_descriptor *ed, int
 
 	unsigned long alloced_pages;
 	void *dst;
-	bool page_straddle;
 
 	pr_debug("comp-success-handler, index: %d\n", ed_index);
 
@@ -1829,26 +1828,22 @@ static void zram_compress_success_handler(struct qpace_event_descriptor *ed, int
 		return;
 	}
 
-	dst = zs_map_object_straddle_info(zmeta->zram->mem_pool, handle, ZS_MM_WO, &page_straddle);
+	dst = zs_map_object(zmeta->zram->mem_pool, handle, ZS_MM_WO);
 
-	if (page_straddle) {
-		memcpy(dst, phys_to_virt(comp_source), comp_len);
+	memcpy(dst, phys_to_virt(comp_source), comp_len);
 
-		/*
-		 * The object in the zspage straddles two physical pages. This means
-		 * that zs_unmap_object() will do the final copy for us.
-		 * Mark the underlying bio as complete.
-		 */
-		zs_unmap_object(zmeta->zram->mem_pool, handle);
-		atomic64_add(comp_len, &zmeta->zram->stats.compr_data_size);
-		zram_write_finish(zdata, comp_len, 0, 0);
-	} else {
-		zs_unmap_object(zmeta->zram->mem_pool, handle);
-		zram_copy_queue(zdata, comp_source, virt_to_phys(dst), comp_len);
-	}
+	/*
+	 * The object in the zspage straddles two physical pages. This means
+	 * that zs_unmap_object() will do the final copy for us.
+	 * Mark the underlying bio as complete.
+	 */
+	zs_unmap_object(zmeta->zram->mem_pool, handle);
+	atomic64_add(comp_len, &zmeta->zram->stats.compr_data_size);
+	zram_write_finish(zdata, comp_len, 0, 0);
 }
 
-static void zram_copy_success_handler(struct qpace_event_descriptor *ed, int ed_index)
+static void __maybe_unused zram_copy_success_handler(struct qpace_event_descriptor *ed,
+						     int ed_index)
 {
 	struct qpace_request_data *zdata = &copy_out_queue.request_arr[ed_index].zdata;
 	struct qpace_request_meta *zmeta = zdata->zmeta;
@@ -1862,7 +1857,8 @@ static void zram_copy_success_handler(struct qpace_event_descriptor *ed, int ed_
 	zram_write_finish(zdata, ed->size, 0, 0);
 }
 
-static void zram_copy_failure_handler(struct qpace_event_descriptor *ed, int ed_index)
+static void __maybe_unused zram_copy_failure_handler(struct qpace_event_descriptor *ed,
+						     int ed_index)
 {
 	struct qpace_request_data *zdata = &copy_out_queue.request_arr[ed_index].zdata;
 	struct qpace_request_meta *zmeta = zdata->zmeta;
@@ -1874,7 +1870,7 @@ static void zram_copy_failure_handler(struct qpace_event_descriptor *ed, int ed_
 
 static void zram_qpace_work_fn(struct work_struct *work)
 {
-	bool triggered_compress, triggered_copy;
+	bool triggered_compress;
 	int n_entries_consumed;
 
 	get_qpace(COMPRESS_RING);
@@ -1945,20 +1941,6 @@ static void zram_qpace_work_fn(struct work_struct *work)
 	mutex_unlock(&zram_comp_queue_overflow_list_lock);
 
 	mutex_unlock(&zram_comp_queue_lock);
-
-	/* At this point, we've freed up the compression ring */
-	pr_debug("Triggering copy\n");
-	triggered_copy = qpace_trigger_tr(COPY_RING);
-
-	if (triggered_copy) {
-		pr_debug("waiting for copy to finish!\n");
-		qpace_wait_for_tr_consumption(COPY_RING, true);
-		pr_debug("copy finished!\n");
-		qpace_consume_er(COPY_RING, zram_copy_success_handler,
-				 zram_copy_failure_handler);
-	} else {
-		pr_debug("Nothing to copy.\n");
-	}
 
 	put_qpace(COMPRESS_RING, 1);
 }
