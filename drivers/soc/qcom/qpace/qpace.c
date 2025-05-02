@@ -819,28 +819,34 @@ static inline void consume_ed(struct qpace_event_descriptor *ed, int ed_index,
 		fail_handler(ed, ed_index);
 }
 
-static inline void event_ring_increment(struct event_ring *ring)
+static inline struct qpace_event_descriptor *event_ring_increment(struct event_ring *ring)
 {
+	struct qpace_event_descriptor *prev_rd_ptr = ring->hw_read_ptr;
+
 	if (ring->hw_read_ptr == ring->ring_buffer_start + DESCRIPTORS_PER_RING - 1)
 		ring->hw_read_ptr = ring->ring_buffer_start;
 	else
 		ring->hw_read_ptr++;
+
+	return prev_rd_ptr;
 }
 
 int qpace_consume_er(int er_num,
 		     process_ed_fn success_handler,
-		     process_ed_fn fail_handler)
+		     process_ed_fn fail_handler,
+			 bool consume)
 {
 	struct event_ring *ring = &ev_rings[er_num];
-	struct qpace_event_descriptor *ed;
+	struct qpace_event_descriptor *ed, *old_rd_ptr;
 	int ed_offset;
 	int n_consumed_entries = 0;
+	bool orig_cycle_bit = ring->cycle_bit;
 
 	/*
 	 * The read pointer indicates the last ED processed by SW, so we
 	 * increment the read pointer by one to get the first new ED.
 	 */
-	event_ring_increment(ring);
+	old_rd_ptr = event_ring_increment(ring);
 
 	/* Initialize loop iterator */
 	ed = ring->hw_read_ptr;
@@ -863,11 +869,14 @@ loop_again:
 		goto loop_again;
 	}
 
-	ring->hw_write_ptr = ed;
-
-	qpace_free_er_entries(er_num, n_consumed_entries);
-	qpace_free_tr_entries(er_num, n_consumed_entries);
-
+	if (consume) {
+		ring->hw_write_ptr = ed;
+		qpace_free_er_entries(er_num, n_consumed_entries);
+		qpace_free_tr_entries(er_num, n_consumed_entries);
+	} else {
+		ring->hw_read_ptr = old_rd_ptr;
+		ring->cycle_bit = orig_cycle_bit;
+	}
 
 	return n_consumed_entries;
 }
