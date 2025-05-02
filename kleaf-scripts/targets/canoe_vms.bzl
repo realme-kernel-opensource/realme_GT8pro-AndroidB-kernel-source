@@ -61,6 +61,17 @@ def define_canoe_vms(vm_image_opts = vm_image_opts()):
             log = "info",
         )
 
+        archive_targets = ["canoe-{}_{}_unstripped_modules_tar".format(vt, variant) for vt in vm_types]
+        copy_to_dist_dir(
+            name = "{}_{}_um_dist".format(target_name, variant),
+            archives = archive_targets,
+            dist_dir = "{}/dist".format(get_out_dir(target_name, variant)),
+            flat = True,
+            wipe_dist_dir = False,
+            allow_duplicate_filenames = True,
+            log = "info",
+        )
+
         define_dtc_dist("{}_{}".format(target_name, variant), target_name, variant)
         define_extras(base_tv, kbuild_config = base_kernel, alias = "{}_{}".format(target_name, variant))
         define_combined_vm_image(target_name, variant, vm_image_opts.vm_size_ext4)

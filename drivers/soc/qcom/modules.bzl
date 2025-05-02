@@ -1031,7 +1031,7 @@ def register_modules(registry):
     )
 
     registry.register(
-        name = "drivers/soc/qcom/qcom_tlmm_vm_irqchip.ko",
+        name = "drivers/soc/qcom/qcom_tlmm_vm_irqchip",
         out = "qcom_tlmm_vm_irqchip.ko",
         config = "CONFIG_QCOM_TLMM_VM_IRQCHIP",
         srcs = [
