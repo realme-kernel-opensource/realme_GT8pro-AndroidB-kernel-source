@@ -2614,6 +2614,60 @@ static const struct adsp_data alor_wpss_resource = {
 	.ssctl_id = 0x19,
 };
 
+static const struct adsp_data alor_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.dtb_firmware_name = "modem_dtb.mdt",
+	.pas_id = 4,
+	.dtb_pas_id = 0x26,
+	.minidump_id = 3,
+	.decrypt_shutdown = true,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.region_assign_idx = 3,
+	.region_assign_count = 2,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+	.dma_phys_below_32b = true,
+	.both_dumps = true,
+};
+
+static const struct adsp_data alor_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.dtb_firmware_name = "adsp_dtb.mdt",
+	.pas_id = 1,
+	.dtb_pas_id = 0x24,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
+	.auto_boot = true,
+};
+
+static const struct adsp_data alor_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.minidump_id = 7,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+	.uses_elf64 = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
+	.auto_boot = true,
+};
+
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
 	{ .compatible = "qcom,msm8953-adsp-pil", .data = &msm8996_adsp_resource},
@@ -2693,6 +2747,9 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,yupik-cdsp-pas", .data = &yupik_cdsp_resource},
 	{ .compatible = "qcom,yupik-modem-pas", .data = &yupik_mpss_resource},
 	{ .compatible = "qcom,alor-wpss-pas", .data = &alor_wpss_resource},
+	{ .compatible = "qcom,alor-modem-pas", .data = &alor_mpss_resource},
+	{ .compatible = "qcom,alor-adsp-pas", .data = &alor_adsp_resource},
+	{ .compatible = "qcom,alor-cdsp-pas", .data = &alor_cdsp_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);
