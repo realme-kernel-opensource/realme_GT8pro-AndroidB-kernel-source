@@ -132,6 +132,9 @@ static ssize_t cpu_select_write(struct file *file, const char __user *buf, size_
 	int ret;
 	int i;
 
+	if (count/2 > num_cpus)
+		return -EINVAL;
+
 	kbuf = kmalloc_array(count + 1, sizeof(char), GFP_KERNEL);
 	if (!kbuf)
 		return -ENOMEM;
@@ -145,11 +148,6 @@ static ssize_t cpu_select_write(struct file *file, const char __user *buf, size_
 	}
 
 	memset(valid_cpus, -1, num_cpus * sizeof(int));
-	if (count > sizeof(valid_cpus) - 1) {
-		kfree(kbuf);
-		kfree(valid_cpus);
-		return -EINVAL;
-	}
 
 	if (copy_from_user(debugfs_buf, buf, count)) {
 		kfree(kbuf);
