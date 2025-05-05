@@ -30,6 +30,7 @@ autogvm_perf_config = {
     "CONFIG_PINCTRL_MONACO_AUTO": "m",
     "CONFIG_POWER_RESET_QCOM_VM": "m",
     "CONFIG_VIRTIO_BLK": "m",
+    "CONFIG_VIRTIO_BLK_QTI_CRYPTO": "m",
     "CONFIG_RENAME_DEVICES": "m",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
