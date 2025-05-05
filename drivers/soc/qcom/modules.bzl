@@ -1450,3 +1450,13 @@ def register_modules(registry):
             "drivers/soc/qcom/rq_stats.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom-geni-se-msm",
+        out = "qcom-geni-se-msm.ko",
+        config = "CONFIG_QCOM_GENI_SE_MSM",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom-geni-se-msm.c",
+        ],
+    )
