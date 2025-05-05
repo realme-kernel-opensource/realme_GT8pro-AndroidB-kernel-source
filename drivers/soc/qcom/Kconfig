@@ -766,6 +766,15 @@ config QCOM_INLINE_CRYPTO_ENGINE
 	tristate
 	select QCOM_SCM
 
+config QTI_CRYPTO_VIRTUALIZATION
+	tristate "Enable hypervysor to be used for FBE"
+	depends on MSM_HAB
+	help
+	 Say 'Y or M' to enable routing of crypto requests to different operating
+	 system in virtualized environment. Driver uses a hardware abstraction(hab)
+	 layer where the APIs exposed by that operationg systems are used to send
+	 requests to perform the hardware crypto operation.
+
 config QTI_PAGE_COMPRESSION_ENGINE
 	tristate "QTI Page Compression Engine Driver"
 	depends on ARCH_QCOM
