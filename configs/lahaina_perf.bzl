@@ -116,6 +116,7 @@ lahaina_perf_config = {
     "CONFIG_NITRO_ENCLAVES": "n",
     "CONFIG_NL80211_TESTMODE": "y",
     "CONFIG_NOP_USB_XCEIV": "m",
+    "CONFIG_QCOM_QFPROM_SYS": "m",
     "CONFIG_NVMEM_QCOM_QFPROM": "m",
     "CONFIG_NVMEM_SPMI_SDAM": "m",
     "CONFIG_PCI_MSM": "m",
