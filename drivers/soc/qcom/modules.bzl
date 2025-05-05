@@ -306,6 +306,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qcom_fdcvs",
+        out = "qcom_fdcvs.ko",
+        config = "CONFIG_QCOM_FDCVS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_fdcvs.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_aoss",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/gh_tlmm_vm_mem_access",
         out = "gh_tlmm_vm_mem_access.ko",
         config = "CONFIG_GH_TLMM_VM_MEM_ACCESS",
@@ -446,6 +460,19 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/mem-hooks",
+        out = "mem-hooks.ko",
+        config = "CONFIG_QCOM_MEM_HOOKS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/mem-hooks.c",
+        ],
+        deps = [
+            # do not sort
         ],
     )
 
@@ -721,6 +748,7 @@ def register_modules(registry):
         ],
         deps = [
             # do not sort
+            "drivers/soc/qcom/mpam/mpam",
             "drivers/soc/qcom/mpam/mpam_msc",
         ],
     )
@@ -1009,6 +1037,16 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom_voltage_adj",
+        out = "qcom_voltage_adj.ko",
+        config = "CONFIG_QCOM_VADJ",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_voltage_adj.c",
         ],
     )
 
@@ -1385,5 +1423,15 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/soc/qcom/qcom-pmic-ecid.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/rq_stats",
+        out = "rq_stats.ko",
+        config = "CONFIG_QCOM_RUN_QUEUE_STATS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/rq_stats.c",
         ],
     )

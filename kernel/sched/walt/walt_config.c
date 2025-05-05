@@ -117,7 +117,7 @@ void walt_config(void)
 		return;
 
 	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP") || !strcmp(name, "CANOE")
-			|| !strcmp(name, "ALOR_INTERPOSER")) {
+			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")) {
 		sysctl_sched_suppress_region2		= 1;
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);

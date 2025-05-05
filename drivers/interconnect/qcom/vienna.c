@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -19,7 +19,6 @@
 
 enum {
 	VOTER_IDX_HLOS,
-	VOTER_IDX_DISP,
 };
 
 static const struct regmap_config icc_regmap_config = {
@@ -50,7 +49,7 @@ static struct qcom_icc_node qhm_qdss_bam = {
 	.links = { SLAVE_A1NOC_SNOC },
 };
 
-static struct qcom_icc_qosbox qhm_qup0_qos = {
+static struct qcom_icc_qosbox qhm_qup1_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 1,
 	.offsets = { 0x17000 },
@@ -61,13 +60,13 @@ static struct qcom_icc_qosbox qhm_qup0_qos = {
 	},
 };
 
-static struct qcom_icc_node qhm_qup0 = {
-	.name = "qhm_qup0",
-	.id = MASTER_QUP_0,
+static struct qcom_icc_node qhm_qup1 = {
+	.name = "qhm_qup1",
+	.id = MASTER_QUP_1,
 	.channels = 1,
 	.buswidth = 4,
 	.noc_ops = &qcom_qnoc4_ops,
-	.qosbox = &qhm_qup0_qos,
+	.qosbox = &qhm_qup1_qos,
 	.num_links = 1,
 	.links = { SLAVE_A1NOC_SNOC },
 };
@@ -226,14 +225,14 @@ static struct qcom_icc_node xm_usb2_0 = {
 	.links = { SLAVE_A1NOC_SNOC },
 };
 
-static struct qcom_icc_node qup0_core_master = {
-	.name = "qup0_core_master",
-	.id = MASTER_QUP_CORE_0,
+static struct qcom_icc_node qup1_core_master = {
+	.name = "qup1_core_master",
+	.id = MASTER_QUP_CORE_1,
 	.channels = 1,
 	.buswidth = 4,
 	.noc_ops = &qcom_qnoc4_ops,
 	.num_links = 1,
-	.links = { SLAVE_QUP_CORE_0 },
+	.links = { SLAVE_QUP_CORE_1 },
 };
 
 static struct qcom_icc_node qsm_cfg = {
@@ -249,7 +248,7 @@ static struct qcom_icc_node qsm_cfg = {
 		   SLAVE_IMEM_CFG, SLAVE_IPC_ROUTER_CMP_L0,
 		   SLAVE_IPC_ROUTER_CMP_L1, SLAVE_IPC_ROUTER_PERIPH,
 		   SLAVE_CNOC_MSS, SLAVE_QDSS_CFG,
-		   SLAVE_QUP_0, SLAVE_SDCC_1,
+		   SLAVE_QUP_1, SLAVE_SDCC_1,
 		   SLAVE_SDCC_2, SLAVE_TCSR,
 		   SLAVE_TLMM, SLAVE_USB2_0,
 		   SLAVE_VENUS_CFG, SLAVE_VSENSE_CTRL_CFG,
@@ -750,66 +749,6 @@ static struct qcom_icc_node qnm_aggre_noc = {
 	.links = { SLAVE_SNOC_GEM_NOC_SF },
 };
 
-static struct qcom_icc_node qnm_mnoc_hf_disp = {
-	.name = "qnm_mnoc_hf_disp",
-	.id = MASTER_MNOC_HF_MEM_NOC_DISP,
-	.channels = 1,
-	.buswidth = 32,
-	.noc_ops = &qcom_qnoc4_ops,
-	.num_links = 1,
-	.links = { SLAVE_LLCC_DISP },
-};
-
-static struct qcom_icc_node qnm_mnoc_sf_disp = {
-	.name = "qnm_mnoc_sf_disp",
-	.id = MASTER_MNOC_SF_MEM_NOC_DISP,
-	.channels = 1,
-	.buswidth = 32,
-	.noc_ops = &qcom_qnoc4_ops,
-	.num_links = 1,
-	.links = { SLAVE_LLCC_DISP },
-};
-
-static struct qcom_icc_node qnm_pcie_disp = {
-	.name = "qnm_pcie_disp",
-	.id = MASTER_ANOC_PCIE_GEM_NOC_DISP,
-	.channels = 1,
-	.buswidth = 16,
-	.noc_ops = &qcom_qnoc4_ops,
-	.num_links = 1,
-	.links = { SLAVE_LLCC_DISP },
-};
-
-static struct qcom_icc_node llcc_mc_disp = {
-	.name = "llcc_mc_disp",
-	.id = MASTER_LLCC_DISP,
-	.channels = 1,
-	.buswidth = 4,
-	.noc_ops = &qcom_qnoc4_ops,
-	.num_links = 1,
-	.links = { SLAVE_EBI1_DISP },
-};
-
-static struct qcom_icc_node qnm_mdp_disp = {
-	.name = "qnm_mdp_disp",
-	.id = MASTER_MDP_DISP,
-	.channels = 1,
-	.buswidth = 32,
-	.noc_ops = &qcom_qnoc4_ops,
-	.num_links = 1,
-	.links = { SLAVE_MNOC_HF_MEM_NOC_DISP },
-};
-
-static struct qcom_icc_node qnm_mdss_dcp_disp = {
-	.name = "qnm_mdss_dcp_disp",
-	.id = MASTER_MDSS_DCP_DISP,
-	.channels = 1,
-	.buswidth = 8,
-	.noc_ops = &qcom_qnoc4_ops,
-	.num_links = 1,
-	.links = { SLAVE_MNOC_SF_MEM_NOC_DISP },
-};
-
 static struct qcom_icc_node qns_a1noc_snoc = {
 	.name = "qns_a1noc_snoc",
 	.id = SLAVE_A1NOC_SNOC,
@@ -820,9 +759,9 @@ static struct qcom_icc_node qns_a1noc_snoc = {
 	.links = { MASTER_A1NOC_SNOC },
 };
 
-static struct qcom_icc_node qup0_core_slave = {
-	.name = "qup0_core_slave",
-	.id = SLAVE_QUP_CORE_0,
+static struct qcom_icc_node qup1_core_slave = {
+	.name = "qup1_core_slave",
+	.id = SLAVE_QUP_CORE_1,
 	.channels = 1,
 	.buswidth = 4,
 	.init_peak = INT_MAX,
@@ -939,9 +878,9 @@ static struct qcom_icc_node qhs_qdss_cfg = {
 	.num_links = 0,
 };
 
-static struct qcom_icc_node qhs_qup0 = {
-	.name = "qhs_qup0",
-	.id = SLAVE_QUP_0,
+static struct qcom_icc_node qhs_qup1 = {
+	.name = "qhs_qup1",
+	.id = SLAVE_QUP_1,
 	.channels = 1,
 	.buswidth = 4,
 	.noc_ops = &qcom_qnoc4_ops,
@@ -1317,45 +1256,6 @@ static struct qcom_icc_node qns_gemnoc_sf = {
 	.links = { MASTER_SNOC_SF_MEM_NOC },
 };
 
-static struct qcom_icc_node qns_llcc_disp = {
-	.name = "qns_llcc_disp",
-	.id = SLAVE_LLCC_DISP,
-	.channels = 1,
-	.buswidth = 16,
-	.noc_ops = &qcom_qnoc4_ops,
-	.num_links = 1,
-	.links = { MASTER_LLCC_DISP },
-};
-
-static struct qcom_icc_node ebi_disp = {
-	.name = "ebi_disp",
-	.id = SLAVE_EBI1_DISP,
-	.channels = 1,
-	.buswidth = 4,
-	.noc_ops = &qcom_qnoc4_ops,
-	.num_links = 0,
-};
-
-static struct qcom_icc_node qns_mem_noc_hf_disp = {
-	.name = "qns_mem_noc_hf_disp",
-	.id = SLAVE_MNOC_HF_MEM_NOC_DISP,
-	.channels = 1,
-	.buswidth = 32,
-	.noc_ops = &qcom_qnoc4_ops,
-	.num_links = 1,
-	.links = { MASTER_MNOC_HF_MEM_NOC_DISP },
-};
-
-static struct qcom_icc_node qns_mem_noc_sf_disp = {
-	.name = "qns_mem_noc_sf_disp",
-	.id = SLAVE_MNOC_SF_MEM_NOC_DISP,
-	.channels = 1,
-	.buswidth = 32,
-	.noc_ops = &qcom_qnoc4_ops,
-	.num_links = 1,
-	.links = { MASTER_MNOC_SF_MEM_NOC_DISP },
-};
-
 static struct qcom_icc_bcm bcm_acv = {
 	.name = "ACV",
 	.type = QCOM_ICC_BCM_TYPE_MASK,
@@ -1404,7 +1304,7 @@ static struct qcom_icc_bcm bcm_cn1 = {
 	.name = "CN1",
 	.voter_idx = VOTER_IDX_HLOS,
 	.num_nodes = 2,
-	.nodes = { &qhs_qup0, &qhs_display_cfg },
+	.nodes = { &qhs_qup1, &qhs_display_cfg },
 };
 
 static struct qcom_icc_bcm bcm_co0 = {
@@ -1413,13 +1313,6 @@ static struct qcom_icc_bcm bcm_co0 = {
 	.enable_mask = 0x1,
 	.num_nodes = 2,
 	.nodes = { &qnm_nsp, &qns_nsp_gemnoc },
-};
-
-static struct qcom_icc_bcm bcm_lp0 = {
-	.name = "LP0",
-	.voter_idx = VOTER_IDX_HLOS,
-	.num_nodes = 2,
-	.nodes = { &qnm_lpass_lpinoc, &qns_lpass_aggnoc },
 };
 
 static struct qcom_icc_bcm bcm_mc0 = {
@@ -1447,12 +1340,12 @@ static struct qcom_icc_bcm bcm_mm1 = {
 		   &qxm_video_v_cpu, &qns_mem_noc_sf },
 };
 
-static struct qcom_icc_bcm bcm_qup0 = {
-	.name = "QUP0",
+static struct qcom_icc_bcm bcm_qup1 = {
+	.name = "QUP1",
 	.voter_idx = VOTER_IDX_HLOS,
 	.vote_scale = 1,
 	.num_nodes = 1,
-	.nodes = { &qup0_core_slave },
+	.nodes = { &qup1_core_slave },
 };
 
 static struct qcom_icc_bcm bcm_sh0 = {
@@ -1499,60 +1392,13 @@ static struct qcom_icc_bcm bcm_sn4 = {
 	.nodes = { &qns_pcie_mem_noc },
 };
 
-static struct qcom_icc_bcm bcm_acv_disp = {
-	.name = "ACV",
-	.type = QCOM_ICC_BCM_TYPE_MASK,
-	.voter_idx = VOTER_IDX_HLOS,
-	.perf_mode_mask = 0x2,
-	.num_nodes = 1,
-	.nodes = { &ebi_disp },
-};
-
-static struct qcom_icc_bcm bcm_mc0_disp = {
-	.name = "MC0",
-	.voter_idx = VOTER_IDX_HLOS,
-	.num_nodes = 1,
-	.nodes = { &ebi_disp },
-};
-
-static struct qcom_icc_bcm bcm_mm0_disp = {
-	.name = "MM0",
-	.voter_idx = VOTER_IDX_HLOS,
-	.num_nodes = 1,
-	.nodes = { &qns_mem_noc_hf_disp },
-};
-
-static struct qcom_icc_bcm bcm_mm1_disp = {
-	.name = "MM1",
-	.voter_idx = VOTER_IDX_DISP,
-	.enable_mask = 0x1,
-	.num_nodes = 2,
-	.nodes = { &qnm_mdss_dcp_disp, &qns_mem_noc_sf_disp },
-};
-
-static struct qcom_icc_bcm bcm_sh0_disp = {
-	.name = "SH0",
-	.voter_idx = VOTER_IDX_HLOS,
-	.num_nodes = 1,
-	.nodes = { &qns_llcc_disp },
-};
-
-static struct qcom_icc_bcm bcm_sh1_disp = {
-	.name = "SH1",
-	.voter_idx = VOTER_IDX_HLOS,
-	.enable_mask = 0x1,
-	.num_nodes = 3,
-	.nodes = { &qnm_mnoc_hf_disp, &qnm_mnoc_sf_disp,
-		   &qnm_pcie_disp },
-};
-
 static struct qcom_icc_bcm *aggre_noc_bcms[] = {
 	&bcm_ce0,
 };
 
 static struct qcom_icc_node *aggre_noc_nodes[] = {
 	[MASTER_QDSS_BAM] = &qhm_qdss_bam,
-	[MASTER_QUP_0] = &qhm_qup0,
+	[MASTER_QUP_1] = &qhm_qup1,
 	[MASTER_CRYPTO] = &qxm_crypto,
 	[MASTER_IPA] = &qxm_ipa,
 	[MASTER_QDSS_ETR] = &xm_qdss_etr_0,
@@ -1578,12 +1424,12 @@ static struct qcom_icc_desc vienna_aggre_noc = {
 };
 
 static struct qcom_icc_bcm *clk_virt_bcms[] = {
-	&bcm_qup0,
+	&bcm_qup1,
 };
 
 static struct qcom_icc_node *clk_virt_nodes[] = {
-	[MASTER_QUP_CORE_0] = &qup0_core_master,
-	[SLAVE_QUP_CORE_0] = &qup0_core_slave,
+	[MASTER_QUP_CORE_1] = &qup1_core_master,
+	[SLAVE_QUP_CORE_1] = &qup1_core_slave,
 };
 
 static char *clk_virt_voters[] = {
@@ -1619,7 +1465,7 @@ static struct qcom_icc_node *cnoc_cfg_nodes[] = {
 	[SLAVE_IPC_ROUTER_PERIPH] = &qhs_ipc_router_periph,
 	[SLAVE_CNOC_MSS] = &qhs_mss_cfg,
 	[SLAVE_QDSS_CFG] = &qhs_qdss_cfg,
-	[SLAVE_QUP_0] = &qhs_qup0,
+	[SLAVE_QUP_1] = &qhs_qup1,
 	[SLAVE_SDCC_1] = &qhs_sdc1,
 	[SLAVE_SDCC_2] = &qhs_sdc2,
 	[SLAVE_TCSR] = &qhs_tcsr,
@@ -1688,8 +1534,6 @@ static struct qcom_icc_desc vienna_cnoc_main = {
 static struct qcom_icc_bcm *gem_noc_bcms[] = {
 	&bcm_sh0,
 	&bcm_sh1,
-	&bcm_sh0_disp,
-	&bcm_sh1_disp,
 };
 
 static struct qcom_icc_node *gem_noc_nodes[] = {
@@ -1708,10 +1552,6 @@ static struct qcom_icc_node *gem_noc_nodes[] = {
 	[SLAVE_GEM_NOC_CNOC] = &qns_gem_noc_cnoc,
 	[SLAVE_LLCC] = &qns_llcc,
 	[SLAVE_MEM_NOC_PCIE_SNOC] = &qns_pcie,
-	[MASTER_MNOC_HF_MEM_NOC_DISP] = &qnm_mnoc_hf_disp,
-	[MASTER_MNOC_SF_MEM_NOC_DISP] = &qnm_mnoc_sf_disp,
-	[MASTER_ANOC_PCIE_GEM_NOC_DISP] = &qnm_pcie_disp,
-	[SLAVE_LLCC_DISP] = &qns_llcc_disp,
 };
 
 static char *gem_noc_voters[] = {
@@ -1751,7 +1591,6 @@ static struct qcom_icc_desc vienna_lpass_ag_noc = {
 };
 
 static struct qcom_icc_bcm *lpass_lpiaon_noc_bcms[] = {
-	&bcm_lp0,
 };
 
 static struct qcom_icc_node *lpass_lpiaon_noc_nodes[] = {
@@ -1798,15 +1637,11 @@ static struct qcom_icc_desc vienna_lpass_lpicx_noc = {
 static struct qcom_icc_bcm *mc_virt_bcms[] = {
 	&bcm_acv,
 	&bcm_mc0,
-	&bcm_acv_disp,
-	&bcm_mc0_disp,
 };
 
 static struct qcom_icc_node *mc_virt_nodes[] = {
 	[MASTER_LLCC] = &llcc_mc,
 	[SLAVE_EBI1] = &ebi,
-	[MASTER_LLCC_DISP] = &llcc_mc_disp,
-	[SLAVE_EBI1_DISP] = &ebi_disp,
 };
 
 static char *mc_virt_voters[] = {
@@ -1826,8 +1661,6 @@ static struct qcom_icc_desc vienna_mc_virt = {
 static struct qcom_icc_bcm *mmss_noc_bcms[] = {
 	&bcm_mm0,
 	&bcm_mm1,
-	&bcm_mm0_disp,
-	&bcm_mm1_disp,
 };
 
 static struct qcom_icc_node *mmss_noc_nodes[] = {
@@ -1841,10 +1674,6 @@ static struct qcom_icc_node *mmss_noc_nodes[] = {
 	[SLAVE_MNOC_HF_MEM_NOC] = &qns_mem_noc_hf,
 	[SLAVE_MNOC_SF_MEM_NOC] = &qns_mem_noc_sf,
 	[SLAVE_SERVICE_MNOC] = &srvc_mnoc,
-	[MASTER_MDP_DISP] = &qnm_mdp_disp,
-	[MASTER_MDSS_DCP_DISP] = &qnm_mdss_dcp_disp,
-	[SLAVE_MNOC_HF_MEM_NOC_DISP] = &qns_mem_noc_hf_disp,
-	[SLAVE_MNOC_SF_MEM_NOC_DISP] = &qns_mem_noc_sf_disp,
 };
 
 static char *mmss_noc_voters[] = {

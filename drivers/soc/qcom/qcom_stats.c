@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cdev.h>
@@ -36,6 +36,7 @@
 #define DDR_STATS_MAGIC_KEY	0xA1157A75
 #define DDR_STATS_MAX_NUM_MODES	0x14
 #define MAX_DRV			28
+#define MAX_INT_DRV			14
 #define MAX_MSG_LEN		64
 #define DRV_ABSENT		0xdeaddead
 #define DRV_INVALID		0xffffdead
@@ -673,17 +674,35 @@ static void cxvt_info_fill_data(void __iomem *reg, u32 entry_count,
 	}
 }
 
+static void cx_stats_get_drv_vote_info(int drv_entry, int drv_num,
+			       u32 *data, struct qcom_stats_cx_vote_info *vote_info)
+{
+	int i, j, k;
+	int group = 4;
+
+	for (i = 0, j = drv_entry; i < ((drv_num + 0x3) & (~0x3))/4; i++, j += 4) {
+		if (i == ((drv_num + 0x3) & (~0x3))/4 - 1) {
+			if (drv_num % 4 == 0)
+				group = 4;
+			else
+				group = drv_num % 4;
+		}
+
+		for (k = 0; k < group; k++)
+			vote_info[j+k].level = (data[i] >> (k * 8)) & 0xff;
+	}
+}
+
 int cx_stats_get_ss_vote_info(int ss_count,
 			       struct qcom_stats_cx_vote_info *vote_info)
 {
 	static const char buf[MAX_MSG_LEN] = "{class: misc_debug, res: cx_vote}";
 	void __iomem *reg;
 	int ret;
-	int i, j;
-	u32 data[((MAX_DRV + 0x3) & (~0x3))/4 + 1];
+	u32 data[((MAX_DRV + 0x3) & (~0x3))/4 + ((MAX_INT_DRV + 0x3) & (~0x3))/4 + 1];
 	u32 entry_count = 0;
 
-	if (!vote_info || !(ss_count == MAX_DRV) || !drv)
+	if (!vote_info || !(ss_count == (MAX_DRV + MAX_INT_DRV)) || !drv)
 		return -ENODEV;
 
 	if (!drv->qmp || !drv->config->cx_vote_offset)
@@ -705,19 +724,16 @@ int cx_stats_get_ss_vote_info(int ss_count,
 	}
 
 	if (drv->config->read_cx_final_vote)
-		entry_count = ((MAX_DRV + 0x3) & (~0x3))/4 + 1;
+		entry_count = ((MAX_DRV + 0x3) & (~0x3))/4 + ((MAX_INT_DRV + 0x3) & (~0x3))/4 + 1;
 	else
-		entry_count = ((MAX_DRV + 0x3) & (~0x3))/4;
+		entry_count = ((MAX_DRV + 0x3) & (~0x3))/4 + ((MAX_INT_DRV + 0x3) & (~0x3))/4;
 	cxvt_info_fill_data(reg, entry_count, data);
-	for (i = 0, j = 0; i < ((MAX_DRV + 0x3) & (~0x3))/4; i++, j += 4) {
-		vote_info[j].level = (data[i] & 0xff);
-		vote_info[j+1].level = ((data[i] & 0xff00) >> 8);
-		vote_info[j+2].level = ((data[i] & 0xff0000) >> 16);
-		vote_info[j+3].level = ((data[i] & 0xff000000) >> 24);
-	}
+
+	cx_stats_get_drv_vote_info(0, MAX_DRV, data, vote_info);
+	cx_stats_get_drv_vote_info(MAX_DRV, MAX_INT_DRV, data, vote_info);
 
 	if (drv->config->read_cx_final_vote)
-		vote_info[j].level = (u8)data[i];
+		vote_info[MAX_DRV + MAX_INT_DRV].level = (u8)data[entry_count - 1];
 
 	mutex_unlock(&drv->lock);
 	return 0;

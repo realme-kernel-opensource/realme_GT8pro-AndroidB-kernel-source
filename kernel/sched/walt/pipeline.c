@@ -818,7 +818,7 @@ bool enable_load_sync(int cpu)
 int pipeline_fits_smaller_cpus(struct task_struct *p)
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
-	unsigned int pipeline_cpu = wts->pipeline_cpu;
+	int pipeline_cpu = wts->pipeline_cpu;
 
 	if (pipeline_cpu == -1)
 		return -1;

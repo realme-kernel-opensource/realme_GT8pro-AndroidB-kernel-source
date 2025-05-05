@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -2521,8 +2521,20 @@ static const struct msm_pinctrl_soc_data alor_tlmm = {
 	.egpio_func = 11,
 };
 
+static const struct msm_pinctrl_soc_data alor_vm_tlmm = {
+	.pins = alor_pins,
+	.npins = ARRAY_SIZE(alor_pins),
+	.functions = alor_functions,
+	.nfunctions = ARRAY_SIZE(alor_functions),
+	.groups = alor_groups,
+	.ngroups = ARRAY_SIZE(alor_groups),
+	.ngpios = 206,
+	.egpio_func = 11,
+};
+
 static const struct of_device_id alor_tlmm_of_match[] = {
 	{ .compatible = "qcom,alor-tlmm", .data = &alor_tlmm},
+	{ .compatible = "qcom,alor-vm-tlmm", .data = &alor_vm_tlmm},
 	{},
 };
 

@@ -78,6 +78,8 @@ static int glink_probe_smem_reg(struct edge_info *einfo)
 	}
 	GLINK_INFO("register successful for %s\n", einfo->ssr_label);
 
+	qcom_glink_smem_start(einfo->glink);
+
 	return 0;
 }
 

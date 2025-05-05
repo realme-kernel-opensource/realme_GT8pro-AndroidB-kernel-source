@@ -89,3 +89,5 @@ icc-clk.ko
 cqhci.ko
 sdhci-msm.ko
 deferred-free-helper.ko
+msm_sharedmem.ko
+nvmem_qfprom.ko

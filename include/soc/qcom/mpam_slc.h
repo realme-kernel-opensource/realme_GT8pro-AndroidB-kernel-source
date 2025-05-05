@@ -1,67 +1,85 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _QCOM_MPAM_SLC_H
 #define _QCOM_MPAM_SLC_H
 
-#define MAX_NUM_GEARS		3
-#define MAX_PART_ID		10
+enum slc_clients_id {
+	APPS,
+	GPU,
+	NSP,
+	SLC_CLIENT_MAX,
+};
+
+enum slc_gears {
+	SLC_GEAR_HIGH,
+	SLC_GEAR_LOW,
+	SLC_GEAR_BYPASS,
+	MAX_NUM_GEARS,
+};
+
+static char gear_index[][25] = {
+	"SLC_GEAR_HIGH",
+	"SLC_GEAR_LOW",
+	"SLC_GEAR_BYPASS",
+	"",
+};
+
+#define CLIENT_NAME_LEN         16
+
+#define QCOM_SLC_MPAM_SCMI_STR	0x534c434d50414d /* SLCMPAM */
 #define SLC_INVALID_PARTID      ((1 << 16) - 1)
 #define SLC_NUM_PARTIDS		5
 
-/* slc Monitor capability */
-struct slc_mon_capability {
-	uint32_t read_miss_config_available;
-	uint32_t capacity_config_available;
+enum mpam_slc_get_param_ids {
+	PARAM_GET_CLIENT_INFO_MSC = 1,
+	PARAM_GET_CACHE_CAPABILITY_MSC = 2,
+	PARAM_GET_CACHE_PARTITION_MSC = 3,
+	PARAM_GET_SLC_MPAM_VERSION = 4,
 };
 
-struct slc_mon_configured {
-	uint32_t read_miss_configured;
-	uint32_t capacity_configured;
+enum mpam_slc_set_param_ids {
+	PARAM_SET_CACHE_PARTITION_MSC = 1,
+	PARAM_RESET_CACHE_PARTITION_MSC = 2,
+	PARAM_SET_CONFIG_MON_MSC = 3,
+	PARAM_SET_CONFIG_SLC_MPAM_START_STOP = 4,
 };
 
-/* slc device capability */
+/* GET_PARAM */
+/* PARAM_GET_CLIENT_INFO_MSC  */
+struct slc_client_info {
+	uint16_t client_id;
+	uint16_t num_part_id;
+} __packed;
 
+/* PARAM_GET_CACHE_CAPABILITY_MSC */
 struct slc_partid_capability {
 	uint8_t part_id;
 	uint8_t num_gears;
 	uint8_t part_id_gears[MAX_NUM_GEARS];
 } __packed;
 
-struct slc_client_info {
-	uint16_t client_id;
-	uint16_t num_part_id;
-} __packed;
-
-struct slc_client_capability {
-	struct slc_client_info client_info;
-	struct slc_partid_capability *slc_partid_cap;
-	uint8_t enabled;
-	const char *client_name;
-} __packed;
-
-struct qcom_slc_capability {
-	uint32_t num_clients;
-	struct slc_client_capability *slc_client_cap;
-	struct slc_mon_capability slc_mon_list;
-	struct slc_mon_configured slc_mon_configured;
-} __packed;
-
-/* slc slice configuration */
-
+/* PARAM_GET_CACHE_PARTITION_MSC */
 struct qcom_slc_gear_val {
 	uint32_t gear_val;
 } __packed;
 
+/* PARAM_GET_SLC_MPAM_VERSION */
+struct qcom_slc_firmware_version {
+	uint32_t firmware_version;
+} __packed;
+
+/* SET_PARAM */
+/* PARAM_SET_CACHE_PARTITION_MSC  */
+/* PARAM_RESET_CACHE_PARTITION_MSC */
 struct slc_partid_config {
 	struct msc_query query;
 	struct qcom_slc_gear_val gear_config;
 } __packed;
 
-/* slc mon configuration */
-
+/* PARAM_SET_CONFIG_MON_MSC */
 enum slc_mon_function {
 	CACHE_CAPACITY_CONFIG,
 	CACHE_READ_MISS_CONFIG,
@@ -78,6 +96,13 @@ struct slc_mon_config {
 } __packed;
 
 /* PARAM_SET_CONFIG_SLC_MPAM_START_STOP */
+enum mpam_enable_val {
+	mpam_slc_reset = 0,
+	mpam_slc_mpam_init_v0 = 1,
+	mpam_slc_client_info_v1 = 2,
+	mpam_slc_mon_init_v1 = 3,
+};
+
 struct mpam_enable {
 	uint32_t value;
 } __packed;
@@ -87,7 +112,7 @@ struct qcom_slc_mpam_enable_cfg {
 	struct mpam_enable enable;
 } __packed;
 
-/* slc monitor shared memory */
+/* shared memory SLC monitor */
 struct slc_capacity {
 	uint32_t num_cache_lines;
 	uint32_t cap_enabled;
@@ -104,6 +129,24 @@ struct slc_partid_info {
 	uint32_t part_id;
 } __packed;
 
+struct slc_client_details {
+	uint16_t client_id;
+	char client_name[CLIENT_NAME_LEN];
+} __packed;
+
+struct slc_mon_details {
+	uint32_t num_cap_monitor;
+	uint32_t num_miss_monitor;
+	uint32_t num_slc_fe_bw_mnitor;
+	uint32_t num_slc_be_bw_mnitor;
+} __packed;
+
+struct slc_sct_client_info {
+	uint32_t num_clients;
+	struct slc_mon_details slc_mon_info;
+	struct slc_client_details client;
+} __packed;
+
 struct qcom_slc_mon_data {
 	struct slc_partid_info part_info;
 	struct slc_capacity cap_stats;
@@ -118,6 +161,34 @@ struct qcom_slc_mon_mem {
 	uint64_t last_capture_time;
 } __packed;
 
+/* slc Monitor capability */
+struct slc_mon_capability {
+	uint32_t read_miss_config_available;
+	uint32_t capacity_config_available;
+};
+
+struct slc_mon_configured {
+	uint32_t read_miss_configured;
+	uint32_t capacity_configured;
+};
+
+/* msc slc capability */
+struct slc_client_capability {
+	struct slc_client_info client_info;
+	struct slc_partid_capability *slc_partid_cap;
+	uint8_t enabled;
+	char *client_name;
+} __packed;
+
+struct qcom_slc_capability {
+	uint32_t num_clients;
+	struct slc_client_capability *slc_client_cap;
+	struct slc_mon_capability slc_mon_list;
+	struct slc_mon_configured slc_mon_configured;
+	struct qcom_slc_firmware_version firmware_ver;
+} __packed;
+
+/* slc mon API parameters */
 struct capacity_info  {
 	uint32_t slc_mon_function;
 	uint64_t last_capture_time;
@@ -141,26 +212,5 @@ union mon_values {
 	struct miss_info misses;
 	struct mon_ref ref;
 } __packed;
-
-enum slc_clients_id {
-	APPS,
-	GPU,
-	NSP,
-	SLC_CLIENT_MAX,
-};
-
-enum gear_val {
-	GEAR_HIGH,
-	GEAR_LOW,
-	GEAR_BYPASS,
-	GEAR_MAX,
-};
-
-static char gear_index[][25] = {
-	"SLC_GEAR_HIGH",
-	"SLC_GEAR_LOW",
-	"SLC_GEAR_BYPASS",
-	"",
-};
 
 #endif /* _QCOM_MPAM_SLC_H */

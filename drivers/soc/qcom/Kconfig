@@ -260,6 +260,14 @@ config QCOM_RPMH_TIMEOUT
 	  response from RPMh for the resource request from APSS.
 	  Wait this much time before a warning is emitted.
 
+config QCOM_RUN_QUEUE_STATS
+	tristate "Enable collection and exporting of QTI Run Queue stats to userspace"
+	help
+	  This option enables the driver to periodically collecting the statistics
+	  of kernel run queue information and calculate the load of the system.
+	  This information is exported to usespace via sysfs entries and userspace
+	  algorithms uses info and decide when to turn on/off the cpu cores.
+
 config QCOM_SMEM
 	tristate "Qualcomm Shared Memory Manager (SMEM)"
 	depends on ARCH_QCOM || COMPILE_TEST
@@ -1029,4 +1037,25 @@ config QCOM_PMIC_ECID
 	  This driver reads the chipset ECID details from the respective address and
 	  exposes the details via sysfs interface.
 	  This helps in identification of PMIC part information.
+
+config QCOM_VADJ
+	tristate "Qualcomm voltage adjustment driver"
+	default n
+	help
+	  This is a qcom voltage adjustment driver. This driver realizes two APIs and two
+	  debugfs nodes for set/get global/CPUSS rails overrides settings. For example,
+	  Users could call the set API to select global rails overrides set number, then
+	  after system reboots, the selected set would take effect. For CPUSS rails, Users
+	  could also select a set number, after system reboots, it will take effect.
+
+config QCOM_FDCVS
+	tristate "Qualcomm Technologies Inc. FDCVS"
+	default n
+	help
+	  This is a FDCVS driver. It realizes various sysfs nodes which could be used
+	  to config fdcvs. These config parameters would be sent to AOP in the format
+	  of QMP message for further processing.
+
+	  Users could dynamically select different fdcvs configs according to different
+	  use cases.
 endmenu

@@ -523,4 +523,13 @@ config SC_DEBUGCC_7280
 	  Say Y if you want to support the debug clocks such as clock measurement
 	  functionality.
 
+config SM_DEBUGCC_ALOR
+	tristate "ALOR Debug Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc
+	  ALOR devices.
+	  Say Y if you want to support the debug clocks such as clock
+	  measurement functionality.
+
 endif

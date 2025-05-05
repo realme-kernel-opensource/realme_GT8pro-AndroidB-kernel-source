@@ -49,6 +49,7 @@ arch/arm64/include/asm/brk-imm.h
 arch/arm64/include/asm/bug.h
 arch/arm64/include/asm/cache.h
 arch/arm64/include/asm/cacheflush.h
+arch/arm64/include/asm/cfi.h
 arch/arm64/include/asm/checksum.h
 arch/arm64/include/asm/clocksource.h
 arch/arm64/include/asm/cmpxchg.h
@@ -355,6 +356,8 @@ arch/arm64/kvm/hyp/include/nvhe/memory.h
 arch/arm64/kvm/hyp/include/nvhe/mm.h
 arch/arm64/kvm/hyp/include/nvhe/modules.h
 arch/arm64/kvm/hyp/include/nvhe/pkvm.h
+arch/arm64/kvm/hyp/include/nvhe/pviommu-host.h
+arch/arm64/kvm/hyp/include/nvhe/pviommu.h
 arch/arm64/kvm/hyp/include/nvhe/refcount.h
 arch/arm64/kvm/hyp/include/nvhe/rwlock.h
 arch/arm64/kvm/hyp/include/nvhe/serial.h
@@ -377,6 +380,8 @@ arch/arm64/kvm/hyp/nvhe/hyp-main.c
 arch/arm64/kvm/hyp/nvhe/hyp-smp.c
 arch/arm64/kvm/hyp/nvhe/hyp.lds.S
 arch/arm64/kvm/hyp/nvhe/iommu/iommu.c
+arch/arm64/kvm/hyp/nvhe/iommu/pviommu-host.c
+arch/arm64/kvm/hyp/nvhe/iommu/pviommu.c
 arch/arm64/kvm/hyp/nvhe/list_debug.c
 arch/arm64/kvm/hyp/nvhe/mem_protect.c
 arch/arm64/kvm/hyp/nvhe/mm.c
@@ -1596,6 +1601,7 @@ drivers/pinctrl/pinctrl-utils.h
 drivers/pinctrl/pinmux.c
 drivers/pinctrl/pinmux.h
 drivers/pmdomain/arm/scmi_perf_domain.c
+drivers/pmdomain/arm/scmi_pm_domain.c
 drivers/pmdomain/core.c
 drivers/pmdomain/governor.c
 drivers/power/reset/hisi-reboot.c
@@ -1925,6 +1931,7 @@ drivers/usb/host/xhci-plat.c
 drivers/usb/host/xhci-plat.h
 drivers/usb/host/xhci-port.h
 drivers/usb/host/xhci-ring.c
+drivers/usb/host/xhci-sideband.c
 drivers/usb/host/xhci-trace.c
 drivers/usb/host/xhci-trace.h
 drivers/usb/host/xhci.c
@@ -2532,7 +2539,6 @@ include/asm-generic/bitops/sched.h
 include/asm-generic/bitsperlong.h
 include/asm-generic/bug.h
 include/asm-generic/cacheflush.h
-include/asm-generic/cfi.h
 include/asm-generic/checksum.h
 include/asm-generic/codetag.lds.h
 include/asm-generic/compat.h
@@ -3108,6 +3114,7 @@ include/linux/futex.h
 include/linux/fwnode.h
 include/linux/fwnode_mdio.h
 include/linux/gcd.h
+include/linux/gcma.h
 include/linux/genalloc.h
 include/linux/generic-radix-tree.h
 include/linux/getcpu.h
@@ -4023,6 +4030,7 @@ include/linux/usb/uas.h
 include/linux/usb/usbnet.h
 include/linux/usb/uvc.h
 include/linux/usb/webusb.h
+include/linux/usb/xhci-sideband.h
 include/linux/usb_usual.h
 include/linux/usbdevice_fs.h
 include/linux/user-return-notifier.h
@@ -4520,6 +4528,7 @@ include/trace/events/rpm.h
 include/trace/events/rtc.h
 include/trace/events/rwmmio.h
 include/trace/events/sched.h
+include/trace/events/sched_ext.h
 include/trace/events/scmi.h
 include/trace/events/scsi.h
 include/trace/events/signal.h
@@ -4567,7 +4576,9 @@ include/trace/hooks/fault.h
 include/trace/hooks/fips140.h
 include/trace/hooks/fpsimd.h
 include/trace/hooks/fs.h
+include/trace/hooks/fsnotify.h
 include/trace/hooks/ftrace_dump.h
+include/trace/hooks/fuse.h
 include/trace/hooks/futex.h
 include/trace/hooks/gic.h
 include/trace/hooks/gic_v3.h
@@ -5472,6 +5483,7 @@ kernel/sched/cpupri.h
 kernel/sched/cputime.c
 kernel/sched/deadline.c
 kernel/sched/debug.c
+kernel/sched/ext.c
 kernel/sched/ext.h
 kernel/sched/fair.c
 kernel/sched/features.h
@@ -5925,6 +5937,9 @@ mm/execmem.c
 mm/fadvise.c
 mm/filemap.c
 mm/folio-compat.c
+mm/gcma.c
+mm/gcma_sysfs.c
+mm/gcma_sysfs.h
 mm/gup.c
 mm/highmem.c
 mm/huge_memory.c
@@ -6578,6 +6593,7 @@ net/sched/act_skbedit.c
 net/sched/cls_api.c
 net/sched/cls_basic.c
 net/sched/cls_bpf.c
+net/sched/cls_cgroup.c
 net/sched/cls_flow.c
 net/sched/cls_fw.c
 net/sched/cls_matchall.c
