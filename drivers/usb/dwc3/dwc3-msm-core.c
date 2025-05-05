@@ -363,12 +363,6 @@ static const char *const usb_dr_modes[] = {
 	[USB_DR_MODE_OTG]		= "otg",
 };
 
-enum dp_lane {
-	DP_NONE = 0,
-	DP_2_LANE = 2,
-	DP_4_LANE = 4,
-};
-
 static const char *dwc3_drd_state_string(enum dwc3_drd_state state)
 {
 	if (state < 0 || state >= ARRAY_SIZE(state_names))
@@ -5574,6 +5568,7 @@ static void dwc3_msm_clear_dp_only_params(struct dwc3_msm *mdwc)
 	dbg_log_string("resetting params for USB ss\n");
 	mdwc->ss_release_called = false;
 	dwc3_msm_clear_usbphy_flags(mdwc->ss_phy, PHY_DP_MODE);
+	phy_set_mode_ext(mdwc->usb3_phy, PHY_MODE_INVALID, DP_NONE);
 	dwc3_msm_set_max_speed(mdwc, USB_SPEED_UNKNOWN);
 
 	usb_redriver_notify_disconnect(mdwc->redriver);
@@ -5589,6 +5584,7 @@ static void dwc3_msm_set_dp_only_params(struct dwc3_msm *mdwc)
 	mdwc->ss_release_called = true;
 	dwc3_msm_set_max_speed(mdwc, USB_SPEED_HIGH);
 	dwc3_msm_set_usbphy_flags(mdwc->ss_phy, PHY_DP_MODE);
+	phy_set_mode_ext(mdwc->usb3_phy, PHY_MODE_INVALID, DP_4_LANE);
 }
 
 int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes)
@@ -5634,6 +5630,7 @@ int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes)
 		}
 
 		dwc3_msm_clear_usbphy_flags(mdwc->ss_phy, PHY_USB_DP_CONCURRENT_MODE);
+		phy_set_mode_ext(mdwc->usb3_phy, PHY_MODE_USB_HOST, DP_NONE);
 		mutex_unlock(&mdwc->role_switch_mutex);
 		return 0;
 	}
@@ -5650,6 +5647,7 @@ int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes)
 				ORIENTATION_CC1 : ORIENTATION_CC2, 2);
 		pm_runtime_get_sync(&mdwc->dwc3->dev);
 		dwc3_msm_set_usbphy_flags(mdwc->ss_phy, PHY_USB_DP_CONCURRENT_MODE);
+		phy_set_mode_ext(mdwc->usb3_phy, PHY_MODE_USB_HOST, DP_2_LANE);
 		pm_runtime_put_sync(&mdwc->dwc3->dev);
 		dbg_log_string("Set DP 2 lanes: success, refcnt:%d\n", mdwc->refcnt_dp_usb);
 		return 0;
@@ -6498,6 +6496,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	if (dwc3_msm_check_extcon_prop(pdev))
 		goto put_dwc3;
+
+	mdwc->dp_state = DP_NONE;
 
 	return 0;
 

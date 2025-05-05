@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __LINUX_USB_DWC3_MSM_H
@@ -40,6 +40,12 @@
 
 /* EBC TRB parameters */
 #define EBC_TRB_SIZE			16384
+
+enum dp_lane {
+	DP_NONE = 1,
+	DP_2_LANE = 2,
+	DP_4_LANE = 4,
+};
 
 /* Operations codes for GSI enabled EPs */
 enum gsi_ep_op {
