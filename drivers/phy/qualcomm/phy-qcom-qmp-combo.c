@@ -20,6 +20,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
+#include <linux/usb/dwc3-msm.h>
 #include <linux/usb/typec.h>
 #include <linux/usb/typec_mux.h>
 
@@ -1642,6 +1643,7 @@ struct qmp_combo {
 
 	struct phy *usb_phy;
 	enum phy_mode mode;
+	int dp_mode;
 	unsigned int usb_init_count;
 
 	struct phy *dp_phy;
@@ -2714,10 +2716,11 @@ static int qmp_combo_com_init(struct qmp_combo *qmp, bool force)
 
 	qphy_setbits(com, QPHY_V3_DP_COM_POWER_DOWN_CTRL, SW_PWRDN);
 
-	/* override hardware control for reset of qmp phy */
-	qphy_setbits(com, QPHY_V3_DP_COM_RESET_OVRD_CTRL,
-			SW_DPPHY_RESET_MUX | SW_DPPHY_RESET |
-			SW_USB3PHY_RESET_MUX | SW_USB3PHY_RESET);
+	if (qmp->dp_mode != DP_2_LANE)
+		/* override hardware control for reset of qmp phy */
+		qphy_setbits(com, QPHY_V3_DP_COM_RESET_OVRD_CTRL,
+			     SW_DPPHY_RESET_MUX | SW_DPPHY_RESET |
+			     SW_USB3PHY_RESET_MUX | SW_USB3PHY_RESET);
 
 	/* Use software based port select and switch on typec orientation */
 	val = SW_PORTSELECT_MUX;
@@ -2726,10 +2729,11 @@ static int qmp_combo_com_init(struct qmp_combo *qmp, bool force)
 	writel(val, com + QPHY_V3_DP_COM_TYPEC_CTRL);
 	writel(USB3_MODE | DP_MODE, com + QPHY_V3_DP_COM_PHY_MODE_CTRL);
 
-	/* bring both QMP USB and QMP DP PHYs PCS block out of reset */
-	qphy_clrbits(com, QPHY_V3_DP_COM_RESET_OVRD_CTRL,
-			SW_DPPHY_RESET_MUX | SW_DPPHY_RESET |
-			SW_USB3PHY_RESET_MUX | SW_USB3PHY_RESET);
+	if (qmp->dp_mode != DP_2_LANE)
+		/* bring both QMP USB and QMP DP PHYs PCS block out of reset */
+		qphy_clrbits(com, QPHY_V3_DP_COM_RESET_OVRD_CTRL,
+			     SW_DPPHY_RESET_MUX | SW_DPPHY_RESET |
+			     SW_USB3PHY_RESET_MUX | SW_USB3PHY_RESET);
 
 	qphy_clrbits(com, QPHY_V3_DP_COM_SWI_CTRL, 0x03);
 	qphy_clrbits(com, QPHY_V3_DP_COM_SW_RESET, SW_RESET);
@@ -2933,9 +2937,15 @@ static int qmp_combo_usb_power_off(struct phy *phy)
 static int qmp_combo_usb_init(struct phy *phy)
 {
 	struct qmp_combo *qmp = phy_get_drvdata(phy);
-	int ret;
+	int ret = 0;
 
 	mutex_lock(&qmp->phy_mutex);
+
+	if (qmp->dp_mode == DP_4_LANE) {
+		dev_dbg(qmp->dev, "QMP PHY in DP mode.Skip INIT\n");
+		goto out_unlock;
+	}
+
 	ret = qmp_combo_com_init(qmp, false);
 	if (ret)
 		goto out_unlock;
@@ -2956,9 +2966,15 @@ out_unlock:
 static int qmp_combo_usb_exit(struct phy *phy)
 {
 	struct qmp_combo *qmp = phy_get_drvdata(phy);
-	int ret;
+	int ret = 0;
 
 	mutex_lock(&qmp->phy_mutex);
+
+	if (qmp->dp_mode == DP_4_LANE || !qmp->usb_init_count) {
+		dev_dbg(qmp->dev, "QMP PHY in DP mode.Skip EXIT\n");
+		goto out_unlock;
+	}
+
 	ret = qmp_combo_usb_power_off(phy);
 	if (ret)
 		goto out_unlock;
@@ -2979,6 +2995,9 @@ static int qmp_combo_usb_set_mode(struct phy *phy, enum phy_mode mode, int submo
 	struct qmp_combo *qmp = phy_get_drvdata(phy);
 
 	qmp->mode = mode;
+
+	if (submode)
+		qmp->dp_mode = submode;
 
 	return 0;
 }
