@@ -5065,7 +5065,8 @@ static int dwc3_msm_set_role(struct dwc3_msm *mdwc, enum usb_role role)
 		mdwc->vbus_active = false;
 		mdwc->id_state = DWC3_ID_GROUND;
 		dbg_log_string("refcnt:%d start host mode\n", mdwc->refcnt_dp_usb);
-		mdwc->refcnt_dp_usb++;
+		if (cur_role != role)
+			mdwc->refcnt_dp_usb++;
 		break;
 
 	case USB_ROLE_DEVICE:
