@@ -90,3 +90,17 @@ def register_modules(registry):
             "drivers/firmware/qcom/qcom-scm",
         ],
     )
+
+    registry.register(
+        name = "drivers/usb/phy/phy-msm-snps-eusb2",
+        out = "phy-msm-snps-eusb2.ko",
+        config = "CONFIG_USB_MSM_EUSB2_PHY",
+        srcs = [
+            # do not sort
+            "drivers/usb/phy/phy-msm-snps-eusb2.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
