@@ -2733,9 +2733,6 @@ static int zram_add(void)
 	 */
 #if !IS_ENABLED(CONFIG_QTI_PAGE_COMPRESSION_ENGINE)
 	use_qpace = false;
-#else
-	if (!is_qpace_dev_available())
-		use_qpace = false;
 #endif
 	if (use_qpace) {
 		zram->qpace = true;

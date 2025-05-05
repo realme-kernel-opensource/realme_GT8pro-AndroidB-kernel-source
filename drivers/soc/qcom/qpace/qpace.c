@@ -13,8 +13,6 @@
 #include <linux/pm_qos.h>
 #include <linux/cpu.h>
 #include <linux/interconnect.h>
-#include <linux/of.h>
-#include <linux/of_device.h>
 #include <dt-bindings/interconnect/qcom,icc.h>
 
 #include "qpace-constants.h"
@@ -1159,24 +1157,6 @@ static int qpace_register_interrupts(struct platform_device *pdev)
 
 	return 0;
 }
-
-bool is_qpace_dev_available(void)
-{
-	struct device_node *node;
-
-	node = of_find_node_by_name(NULL, "qcom,qpace");
-	if (!node) {
-		pr_warn("qpace: qpace device node not found\n");
-		return false;
-	}
-	if (!of_device_is_available(node)) {
-		pr_warn("qpace: qpace device node not found\n");
-		of_node_put(node);
-		return false;
-	}
-	return true;
-}
-EXPORT_SYMBOL_GPL(is_qpace_dev_available);
 
 static int qpace_probe(struct platform_device *pdev)
 {
