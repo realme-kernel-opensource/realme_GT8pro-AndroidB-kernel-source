@@ -14,7 +14,6 @@ COPY_FILES = [
     "drivers/leds/trigger/ledtrig-pattern.c",
     "drivers/char/virtio_console.c",
     "drivers/virtio/virtio_input.c",
-    "drivers/block/virtio_blk.c",
     "net/core/failover.c",
     "drivers/net/net_failover.c",
     "drivers/net/virtio_net.c",
