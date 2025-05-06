@@ -313,8 +313,8 @@ __clk_rcg2_recalc_rate(struct clk_hw *hw, unsigned long parent_rate, u32 cfg)
 	src &= CFG_SRC_SEL_MASK;
 	src >>= CFG_SRC_SEL_SHIFT;
 
-	if (rcg->enable_safe_config && (!clk_hw_is_prepared(hw)
-				|| !clk_hw_is_enabled(hw)) && !src) {
+	if (rcg->enable_safe_config && (!rcg->is_enabled
+	    || !clk_hw_is_enabled(hw)) && !src) {
 		if (!rcg->current_freq)
 			rcg->current_freq = cxo_f.freq;
 		return rcg->current_freq;
@@ -740,7 +740,7 @@ static int __clk_rcg2_set_rate(struct clk_hw *hw, unsigned long rate,
 	 * Return if the RCG is currently disabled. This configuration update
 	 * will happen as part of the RCG enable sequence.
 	 */
-	if (rcg->enable_safe_config && !clk_hw_is_prepared(hw)) {
+	if (rcg->enable_safe_config && !rcg->is_enabled) {
 		rcg->current_freq = rate;
 		return 0;
 	}
@@ -948,8 +948,10 @@ static int clk_rcg2_enable(struct clk_hw *hw)
 	if (rcg->flags & FORCE_ENABLE_RCG)
 		clk_rcg2_set_force_enable(hw);
 
-	if (!rcg->enable_safe_config)
+	if (!rcg->enable_safe_config) {
+		rcg->is_enabled = true;
 		return 0;
+	}
 
 	/*
 	 * Switch from CXO to the stashed mux selection. Force enable and
@@ -981,6 +983,9 @@ static int clk_rcg2_enable(struct clk_hw *hw)
 	if (!(rcg->flags & FORCE_ENABLE_RCG))
 		clk_rcg2_clear_force_enable(hw);
 
+	if (!ret)
+		rcg->is_enabled = true;
+
 	return ret;
 }
 
@@ -988,6 +993,8 @@ static void clk_rcg2_disable(struct clk_hw *hw)
 {
 	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
 	int ret;
+
+	rcg->is_enabled = false;
 
 	if (!rcg->enable_safe_config) {
 		if (rcg->flags & FORCE_ENABLE_RCG)
