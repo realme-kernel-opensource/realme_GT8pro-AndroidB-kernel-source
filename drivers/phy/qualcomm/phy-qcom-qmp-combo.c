@@ -1636,6 +1636,8 @@ struct qmp_combo {
 	struct clk_bulk_data *clks;
 	int num_clks;
 	struct reset_control_bulk_data *resets;
+	struct reset_control *phy_reset;
+	struct reset_control *global_phy_reset;
 	struct regulator_bulk_data *vregs;
 
 	struct mutex phy_mutex;
@@ -2682,6 +2684,45 @@ static int qmp_combo_dp_calibrate(struct phy *phy)
 	return ret;
 }
 
+static int qmp_combo_reset(struct qmp_combo *qmp)
+{
+	int ret;
+
+	/* Assert USB3 PHY CSR reset */
+	ret = reset_control_assert(qmp->phy_reset);
+	if (ret) {
+		dev_err(qmp->dev, "phy_reset assert failed\n");
+		return ret;
+	}
+
+	/* Deassert USB3 PHY CSR reset */
+	ret = reset_control_deassert(qmp->phy_reset);
+	if (ret) {
+		dev_err(qmp->dev, "phy_reset deassert failed\n");
+		return ret;
+	}
+
+	/* Dont do global reset when in DP mode */
+	if (qmp->dp_mode == DP_2_LANE)
+		return 0;
+
+	/* Assert USB3 PHY CSR reset */
+	ret = reset_control_assert(qmp->global_phy_reset);
+	if (ret) {
+		dev_err(qmp->dev, "global_phy_reset assert failed\n");
+		return ret;
+	}
+
+	/* Deassert USB3 PHY CSR reset */
+	ret = reset_control_deassert(qmp->global_phy_reset);
+	if (ret) {
+		dev_err(qmp->dev, "global_phy_reset deassert failed\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 static int qmp_combo_com_init(struct qmp_combo *qmp, bool force)
 {
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
@@ -2698,17 +2739,9 @@ static int qmp_combo_com_init(struct qmp_combo *qmp, bool force)
 		goto err_decrement_count;
 	}
 
-	ret = reset_control_bulk_assert(cfg->num_resets, qmp->resets);
-	if (ret) {
-		dev_err(qmp->dev, "reset assert failed\n");
+	ret = qmp_combo_reset(qmp);
+	if (ret)
 		goto err_disable_regulators;
-	}
-
-	ret = reset_control_bulk_deassert(cfg->num_resets, qmp->resets);
-	if (ret) {
-		dev_err(qmp->dev, "reset deassert failed\n");
-		goto err_disable_regulators;
-	}
 
 	ret = clk_bulk_prepare_enable(qmp->num_clks, qmp->clks);
 	if (ret)
@@ -2744,7 +2777,8 @@ static int qmp_combo_com_init(struct qmp_combo *qmp, bool force)
 	return 0;
 
 err_assert_reset:
-	reset_control_bulk_assert(cfg->num_resets, qmp->resets);
+	reset_control_assert(qmp->phy_reset);
+	reset_control_assert(qmp->global_phy_reset);
 err_disable_regulators:
 	regulator_bulk_disable(cfg->num_vregs, qmp->vregs);
 err_decrement_count:
@@ -3165,22 +3199,23 @@ static int qmp_combo_vreg_init(struct qmp_combo *qmp)
 
 static int qmp_combo_reset_init(struct qmp_combo *qmp)
 {
-	const struct qmp_phy_cfg *cfg = qmp->cfg;
 	struct device *dev = qmp->dev;
-	int i;
 	int ret;
 
-	qmp->resets = devm_kcalloc(dev, cfg->num_resets,
-				   sizeof(*qmp->resets), GFP_KERNEL);
-	if (!qmp->resets)
-		return -ENOMEM;
+	qmp->phy_reset = devm_reset_control_get(dev, "phy");
+	if (IS_ERR(qmp->phy_reset)) {
+		ret = PTR_ERR(qmp->phy_reset);
+		dev_err(dev, "failed to get phy_reset\n");
+		return ret;
+	}
 
-	for (i = 0; i < cfg->num_resets; i++)
-		qmp->resets[i].id = cfg->reset_list[i];
-
-	ret = devm_reset_control_bulk_get_exclusive(dev, cfg->num_resets, qmp->resets);
-	if (ret)
-		return dev_err_probe(dev, ret, "failed to get resets\n");
+	qmp->global_phy_reset = devm_reset_control_get(dev,
+					"common");
+	if (IS_ERR(qmp->global_phy_reset)) {
+		ret = PTR_ERR(qmp->global_phy_reset);
+		dev_err(dev, "failed to get global_phy_reset\n");
+		return ret;
+	}
 
 	return 0;
 }
