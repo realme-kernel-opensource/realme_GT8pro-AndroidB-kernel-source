@@ -1460,3 +1460,21 @@ def register_modules(registry):
             "drivers/soc/qcom/qcom-geni-se-msm.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/crypto-qti-virt",
+        out = "crypto-qti-virt.ko",
+        config = "CONFIG_QTI_CRYPTO_VIRTUALIZATION",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/crypto-qti-virt.c",
+        ],
+        hdrs = [
+            "include/linux/habmm.h",
+        ],
+        includes = ["include/linux"],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/hab/msm_hab",
+        ],
+    )
