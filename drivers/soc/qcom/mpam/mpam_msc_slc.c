@@ -19,12 +19,15 @@
 #include <soc/qcom/mpam_slc.h>
 
 #define SCMI_GET_PARAM_LEN	64
+/* Older firmware Client details */
 static uint16_t slc_client_id[] = {
 	APPS,
 	GPU,
 	NSP,
 	SLC_CLIENT_MAX,
 };
+
+#define SLC_MPAM_VERSION_1	0x00000001   /* SLC Client info Version */
 
 static int mpam_msc_slc_set_params(struct device *dev, void *param, int param_len,
 		uint32_t param_id)
@@ -62,6 +65,15 @@ static int mpam_msc_slc_get_params(struct device *dev, void *param_in, int param
 	return ret;
 }
 
+static int qcom_mpam_msc_enabled(struct qcom_mpam_msc *qcom_msc)
+{
+	if ((qcom_msc == NULL) || (qcom_msc->msc_capability == NULL) ||
+			 (qcom_msc->mpam_available & MPAM_AVAILABLE) == 0)
+		return -EINVAL;
+
+	return 0;
+}
+
 static struct qcom_mpam_msc *slc_capability_check(struct device *dev, struct msc_query *query)
 {
 	struct qcom_mpam_msc *qcom_msc;
@@ -73,7 +85,7 @@ static struct qcom_mpam_msc *slc_capability_check(struct device *dev, struct msc
 	partid_idx = query->part_id;
 
 	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
-	if (qcom_msc == NULL)
+	if (qcom_mpam_msc_enabled(qcom_msc))
 		return NULL;
 
 	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
@@ -228,23 +240,37 @@ static int slc_get_cache_partition_capability(struct device *dev, void *msc_part
 			sizeof(struct slc_partid_capability), PARAM_GET_CACHE_CAPABILITY_MSC);
 }
 
-static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id)
+static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
+		struct qcom_slc_capability *slc_capability)
 {
 	int mon_idx;
-	struct qcom_slc_mon_mem *mon_mem = (struct qcom_slc_mon_mem *)mem;
+	union qcom_slc_monitor_memory *mon_mem = (union qcom_slc_monitor_memory *)mem;
 	struct slc_partid_info *part_info;
+	struct qcom_slc_mon_data *data;
+	struct slc_client_capability *slc_client_cap;
+	int client_idx, part_idx;
 
-	for (mon_idx = 0; mon_idx < SLC_NUM_PARTIDS; mon_idx++) {
-		part_info = &mon_mem->data[mon_idx].part_info;
-		if ((client_id == part_info->client_id) &&
-				(part_id == part_info->part_id))
-			break;
+	data = &(mon_mem->mem_v1.data[0]);
+	if (slc_capability->firmware_ver.firmware_version == 0)
+		data = &(mon_mem->mem_v0.data[0]);
+
+	mon_idx = 0;
+	slc_client_cap = slc_capability->slc_client_cap;
+	for (client_idx = 0; client_idx < slc_capability->num_clients; client_idx++) {
+		for (part_idx = 0; part_idx < slc_client_cap->client_info.num_part_id; part_idx++) {
+			part_info = &(data->part_info);
+			if ((client_id == part_info->client_id) &&
+					(part_id == part_info->part_id))
+				return mon_idx;
+
+			data++;
+			mon_idx++;
+		}
+
+		slc_client_cap++;
 	}
 
-	if (mon_idx == SLC_NUM_PARTIDS)
-		return -EINVAL;
-
-	return mon_idx;
+	return -EINVAL;
 }
 
 static struct qcom_mpam_msc *slc_config_request_check(struct device *dev, struct msc_query *query,
@@ -259,7 +285,8 @@ static struct qcom_mpam_msc *slc_config_request_check(struct device *dev, struct
 		return NULL;
 
 	slc_capability =  (struct qcom_slc_capability *)qcom_msc->msc_capability;
-	mon_idx = mon_idx_lookup(qcom_msc->mon_base, query->client_id, query->part_id);
+	mon_idx = mon_idx_lookup(qcom_msc->mon_base, query->client_id, query->part_id,
+			slc_capability);
 	if (mon_idx < 0)
 		return NULL;
 
@@ -320,7 +347,8 @@ static int update_mon_stats(struct device *dev, struct msc_query *query,
 		return -EINVAL;
 
 	slc_capability =  (struct qcom_slc_capability *)qcom_msc->msc_capability;
-	mon_idx = mon_idx_lookup(qcom_msc->mon_base, query->client_id, query->part_id);
+	mon_idx = mon_idx_lookup(qcom_msc->mon_base, query->client_id, query->part_id,
+			slc_capability);
 	if (mon_idx < 0)
 		return -EINVAL;
 
@@ -397,28 +425,41 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 {
 	struct qcom_mpam_msc *qcom_msc;
+	struct qcom_slc_capability *slc_capability;
 	struct msc_query *query;
-	struct qcom_slc_mon_mem *mon_mem;
+	union qcom_slc_monitor_memory *mon_mem;
 	union mon_values *mon_data;
 	struct qcom_slc_mon_data *data_mem;
 	int mon_idx;
 	uint32_t match_seq, retry_cnt, match_seq_cnt = 0;
+	uint32_t *match_seq_ptr;
+	uint64_t *last_capture_time;
 
 	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
-	if (qcom_msc == NULL)
+	if (qcom_mpam_msc_enabled(qcom_msc))
 		return -EINVAL;
 
 	query = (struct msc_query *)msc_partid;
 	mon_data = (union mon_values *)data;
-	mon_idx = mon_idx_lookup(qcom_msc->mon_base, query->client_id, query->part_id);
+	slc_capability =  (struct qcom_slc_capability *)qcom_msc->msc_capability;
+	mon_idx = mon_idx_lookup(qcom_msc->mon_base, query->client_id, query->part_id,
+			slc_capability);
 	if (mon_idx < 0)
 		return -EINVAL;
 
-	mon_mem = (struct qcom_slc_mon_mem *)qcom_msc->mon_base;
-	data_mem = &(mon_mem->data[mon_idx]);
+	mon_mem = (union qcom_slc_monitor_memory *)qcom_msc->mon_base;
+	data_mem = &(mon_mem->mem_v1.data[mon_idx]);
+	match_seq_ptr = &(mon_mem->mem_v1.match_seq);
+	last_capture_time = &(mon_mem->mem_v1.last_capture_time);
+	if (slc_capability->firmware_ver.firmware_version == 0) {
+		data_mem = &(mon_mem->mem_v0.data[mon_idx]);
+		match_seq_ptr = &(mon_mem->mem_v0.match_seq);
+		last_capture_time = &(mon_mem->mem_v0.last_capture_time);
+	}
+
 	do {
 		retry_cnt = 0;
-		while (unlikely((match_seq = mon_mem->match_seq) % 2) &&
+		while (unlikely((match_seq = *match_seq_ptr) % 2) &&
 				(retry_cnt++ < MAX_SHARED_MEM_RETRY_CNT))
 			;
 
@@ -435,8 +476,8 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 				(data_mem->rd_miss_stats.miss_enabled))
 			mon_data->misses.num_rd_misses = data_mem->rd_miss_stats.rd_misses;
 
-		mon_data->ref.last_capture_time = mon_mem->last_capture_time;
-	} while ((match_seq != mon_mem->match_seq) &&
+		mon_data->ref.last_capture_time = *last_capture_time;
+	} while ((match_seq != *match_seq_ptr) &&
 			(match_seq_cnt++ < MAX_SHARED_MATCH_SEQ_CNT));
 
 	if (match_seq_cnt == MAX_SHARED_MATCH_SEQ_CNT)
@@ -461,7 +502,7 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 	struct qcom_mpam_msc *qcom_msc;
 	struct slc_client_capability *client_cap;
 	struct qcom_slc_capability *slc_capability;
-	struct qcom_slc_mon_mem *mon_mem;
+	struct qcom_slc_mon_mem_v1 *mon_mem;
 	struct slc_sct_client_info *client_info;
 	struct slc_client_details *client_details;
 
@@ -474,7 +515,7 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 	query.qcom_msc_id.qcom_msc_class = qcom_msc->qcom_msc_id.qcom_msc_class;
 	query.qcom_msc_id.idx = qcom_msc->qcom_msc_id.idx;
 	if (slc_capability->firmware_ver.firmware_version != 0) {
-		mon_mem = (struct qcom_slc_mon_mem *) qcom_msc->mon_base;
+		mon_mem = (struct qcom_slc_mon_mem_v1 *)qcom_msc->mon_base;
 		client_info = (struct slc_sct_client_info *)&(mon_mem->data);
 		slc_capability->num_clients = client_info->num_clients;
 		slc_capability->slc_mon_list.capacity_config_available =
@@ -483,8 +524,10 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 			client_info->slc_mon_info.num_miss_monitor;
 		if ((slc_capability->num_clients == 0) ||
 				(client_info->slc_mon_info.num_cap_monitor == 0) ||
-				(client_info->slc_mon_info.num_miss_monitor == 0))
+				(client_info->slc_mon_info.num_miss_monitor == 0)) {
+			pr_err("SLC Client info population Failed!\n");
 			return -EINVAL;
+		}
 
 		pr_info("Number of SLC MPAM clients %d\n", slc_capability->num_clients);
 		slc_capability->slc_client_cap = devm_kcalloc(dev, slc_capability->num_clients,
@@ -637,7 +680,7 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 	struct device_node *node;
 	struct qcom_mpam_msc *qcom_msc;
 	struct qcom_slc_capability *qcom_slc_capability;
-	struct qcom_slc_mon_mem *mon_mem;
+	struct qcom_slc_mon_mem_v0 *mon_mem;
 	struct resource *res;
 
 	qcom_msc = devm_kzalloc(&pdev->dev, sizeof(struct qcom_mpam_msc), GFP_KERNEL);
@@ -697,7 +740,7 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(qcom_msc->mon_base),
 				"ioremap slc mpam_mon_base failed!\n");
 
-	mon_mem = (struct qcom_slc_mon_mem *) qcom_msc->mon_base;
+	mon_mem = (struct qcom_slc_mon_mem_v0 *) qcom_msc->mon_base;
 	if (mon_mem->msc_id != qcom_msc->msc_id)
 		return dev_err_probe(&pdev->dev, -EINVAL, "IMEM Init failure!\n");
 
@@ -714,15 +757,19 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 
 	qcom_slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
 	qcom_slc_capability->firmware_ver.firmware_version = firmware_ver;
-	if (slc_client_info_read(&pdev->dev, node)) {
+	ret = slc_client_info_read(&pdev->dev, node);
+	if (ret) {
 		dev_err(&pdev->dev, "Failed to detect SLC device\n");
 		goto err_detach;
 	}
 
 	if (qcom_slc_capability->firmware_ver.firmware_version != 0) {
 		/* SLC Monitor memory programmed here on updated firmware */
-		if (slc_mpam_start_stop(&pdev->dev, mpam_slc_mon_init_v1))
-			return dev_err_probe(&pdev->dev, -EINVAL, "MON Memory init Failure!\n");
+		ret = slc_mpam_start_stop(&pdev->dev, mpam_slc_mon_init_v1);
+		if (ret) {
+			dev_err(&pdev->dev, "MON Memory init Failure!\n");
+			goto err_detach;
+		}
 	}
 
 	qcom_slc_capability->slc_mon_configured.read_miss_configured = 0;
@@ -732,8 +779,7 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 
 err_detach:
 	detach_mpam_msc(&pdev->dev, qcom_msc, SLC);
-	return dev_err_probe(&pdev->dev, PTR_ERR(qcom_msc->mon_base),
-			"MPAM SLC driver probe failed!\n");
+	return dev_err_probe(&pdev->dev, ret, "MPAM SLC driver probe failed!\n");
 }
 
 static void mpam_msc_slc_remove(struct platform_device *pdev)
