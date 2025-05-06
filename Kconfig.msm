@@ -60,6 +60,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/misc/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/mmc/host/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/net/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/pci/controller/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/perf/Kconfig"
