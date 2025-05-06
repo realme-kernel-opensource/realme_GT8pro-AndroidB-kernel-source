@@ -16,6 +16,10 @@
 #define WATCHDOG_MANAGE_OP_FREEZE_AND_RESET	1
 #define WATCHDOG_MANAGE_OP_UNFREEZE		2
 
+#define GH_VCPU_WFI			1
+#define GH_VCPU_CPU_SUSPEND		2
+#define GH_VCPU_SYSTEM_SUSPEND		3
+
 static inline int gh_hcall_wdog_manage(gh_capid_t wdog_capid, u16 operation)
 {
 	int ret;
