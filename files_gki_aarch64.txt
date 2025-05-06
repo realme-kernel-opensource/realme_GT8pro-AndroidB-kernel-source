@@ -761,15 +761,10 @@ drivers/block/zram/zram_drv.c
 drivers/block/zram/zram_drv.h
 drivers/bluetooth/btbcm.c
 drivers/bluetooth/btbcm.h
-drivers/bluetooth/btintel.c
 drivers/bluetooth/btintel.h
-drivers/bluetooth/btmtk.h
 drivers/bluetooth/btqca.c
 drivers/bluetooth/btqca.h
-drivers/bluetooth/btrtl.c
-drivers/bluetooth/btrtl.h
 drivers/bluetooth/btsdio.c
-drivers/bluetooth/btusb.c
 drivers/bluetooth/hci_bcm.c
 drivers/bluetooth/hci_h4.c
 drivers/bluetooth/hci_ldisc.c
@@ -783,6 +778,7 @@ drivers/char/hw_random/arm_smccc_trng.c
 drivers/char/hw_random/cctrng.c
 drivers/char/hw_random/cctrng.h
 drivers/char/hw_random/core.c
+drivers/char/hw_random/iproc-rng200.c
 drivers/char/mem.c
 drivers/char/misc.c
 drivers/char/random.c
@@ -1696,6 +1692,8 @@ drivers/scsi/sd.c
 drivers/scsi/sd.h
 drivers/scsi/sd_trace.h
 drivers/scsi/sd_zbc.c
+drivers/soc/bcm/brcmstb/biuctrl.c
+drivers/soc/bcm/brcmstb/common.c
 drivers/soc/qcom/qcom-geni-se.c
 drivers/soc/qcom/smem_state.c
 drivers/soc/sunxi/sunxi_mbus.c
@@ -1739,6 +1737,7 @@ drivers/tty/pty.c
 drivers/tty/serdev/core.c
 drivers/tty/serdev/serdev-ttyport.c
 drivers/tty/serial/8250/8250.h
+drivers/tty/serial/8250/8250_bcm7271.c
 drivers/tty/serial/8250/8250_core.c
 drivers/tty/serial/8250/8250_dma.c
 drivers/tty/serial/8250/8250_dw.c
@@ -2491,7 +2490,6 @@ include/acpi/acexcep.h
 include/acpi/acnames.h
 include/acpi/acoutput.h
 include/acpi/acpi.h
-include/acpi/acpi_bus.h
 include/acpi/acpi_numa.h
 include/acpi/acpiosxf.h
 include/acpi/acpixf.h
@@ -3839,6 +3837,7 @@ include/linux/slab.h
 include/linux/smp.h
 include/linux/smp_types.h
 include/linux/smpboot.h
+include/linux/soc/brcmstb/brcmstb.h
 include/linux/soc/mediatek/gzvm_drv.h
 include/linux/soc/qcom/geni-se.h
 include/linux/soc/qcom/smem_state.h
@@ -4146,6 +4145,7 @@ include/net/bluetooth/bluetooth.h
 include/net/bluetooth/coredump.h
 include/net/bluetooth/hci.h
 include/net/bluetooth/hci_core.h
+include/net/bluetooth/hci_drv.h
 include/net/bluetooth/hci_mon.h
 include/net/bluetooth/hci_sock.h
 include/net/bluetooth/hci_sync.h
@@ -4590,6 +4590,7 @@ include/trace/hooks/madvise.h
 include/trace/hooks/mm.h
 include/trace/hooks/mpam.h
 include/trace/hooks/net.h
+include/trace/hooks/ogki_honor.h
 include/trace/hooks/pm_domain.h
 include/trace/hooks/power.h
 include/trace/hooks/preemptirq.h
@@ -6079,6 +6080,7 @@ net/bluetooth/hci_conn.c
 net/bluetooth/hci_core.c
 net/bluetooth/hci_debugfs.c
 net/bluetooth/hci_debugfs.h
+net/bluetooth/hci_drv.c
 net/bluetooth/hci_event.c
 net/bluetooth/hci_sock.c
 net/bluetooth/hci_sync.c
