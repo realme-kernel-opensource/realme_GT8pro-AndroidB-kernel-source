@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023, 2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_CLK_QCOM_DISP_CC_SUN_H
@@ -88,15 +88,17 @@
 #define DISP_CC_MDSS_VSYNC1_CLK					78
 #define DISP_CC_MDSS_VSYNC_CLK					79
 #define DISP_CC_MDSS_VSYNC_CLK_SRC				80
-#define DISP_CC_OSC_CLK						81
-#define DISP_CC_OSC_CLK_SRC					82
 #define DISP_CC_PLL0						83
 #define DISP_CC_PLL1						84
-#define DISP_CC_PLL2						85
 #define DISP_CC_SLEEP_CLK					86
 #define DISP_CC_SLEEP_CLK_SRC					87
 #define DISP_CC_XO_CLK						88
 #define DISP_CC_XO_CLK_SRC					89
+
+/* DISP_CC MX clocks */
+#define DISP_CC_OSC_CLK						0
+#define DISP_CC_OSC_CLK_SRC					1
+#define DISP_CC_PLL2						2
 
 /* DISP_CC power domains */
 #define DISP_CC_MDSS_CORE_GDSC					0

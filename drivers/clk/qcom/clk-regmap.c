@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2014, 2019-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -314,6 +315,12 @@ int clk_runtime_get_regmap(struct clk_regmap *rclk)
 {
 	int ret;
 
+	if (rclk->dev->parent && pm_runtime_enabled(rclk->dev->parent)) {
+		ret = pm_runtime_get_sync(rclk->dev->parent);
+		if (ret < 0)
+			return ret;
+	}
+
 	if (pm_runtime_enabled(rclk->dev)) {
 		ret = pm_runtime_get_sync(rclk->dev);
 		if (ret < 0)
@@ -328,5 +335,8 @@ void clk_runtime_put_regmap(struct clk_regmap *rclk)
 {
 	if (pm_runtime_enabled(rclk->dev))
 		pm_runtime_put_sync(rclk->dev);
+
+	if (rclk->dev->parent && pm_runtime_enabled(rclk->dev->parent))
+		pm_runtime_put_sync(rclk->dev->parent);
 }
 EXPORT_SYMBOL(clk_runtime_put_regmap);
