@@ -1479,3 +1479,33 @@ def register_modules(registry):
             "drivers/soc/qcom/hab/msm_hab",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom_hib",
+        out = "qcom_hib.ko",
+        config = "CONFIG_QCOM_S2D_VENDOR_HOOK",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_hib.c",
+        ],
+        hdrs = [
+            "include/soc/qcom/qcom_hibernation.h",
+        ],
+        includes = ["include"],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom_secure_hibernation",
+        out = "qcom_secure_hibernation.ko",
+        config = "CONFIG_QCOM_SECURE_HIBERNATION",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_secure_hibernation.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/misc/qseecom_proxy",
+            "drivers/soc/qcom/qcom_hib",
+        ],
+        includes = ["include"],
+    )
