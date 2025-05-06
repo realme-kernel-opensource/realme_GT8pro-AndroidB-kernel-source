@@ -95,6 +95,12 @@
 #define DDR_STATS_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 13, \
 				     struct sleep_stats *)
 
+#define SOCCP_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 14, \
+				     struct sleep_stats *)
+
+#define DCP_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 15, \
+				     struct sleep_stats *)
+
 struct subsystem_data {
 	const char *name;
 	u32 smem_item;
@@ -116,6 +122,8 @@ static struct subsystem_data subsystems[] = {
 	{ "adsp_island", 613, 2 },
 	{ "slpi_island", 613, 3 },
 	{ "apss", 631, QCOM_SMEM_HOST_ANY },
+	{ "soccp", 607, 19 },
+	{ "dcp", 607, 22 },
 };
 
 struct stats_config {
@@ -449,6 +457,12 @@ static long qcom_stats_device_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case APSS_IOCTL:
 		subsystem = &subsystems[12];
+		break;
+	case SOCCP_IOCTL:
+		subsystem = &subsystems[13];
+		break;
+	case DCP_IOCTL:
+		subsystem = &subsystems[14];
 		break;
 	case AOSD_IOCTL:
 		stats_id = 0;
