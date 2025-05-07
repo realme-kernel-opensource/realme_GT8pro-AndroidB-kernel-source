@@ -26,6 +26,7 @@ struct qptm {
 	char name[QPTM_NAME_MAX];
 	struct device_node *np;
 	int count;
+	bool enabled;
 	struct list_head pz_list;
 	struct list_head node;
 	struct mutex lock;
