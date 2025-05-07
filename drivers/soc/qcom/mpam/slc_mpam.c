@@ -245,10 +245,24 @@ static ssize_t slc_mpam_available_gear_show(struct config_item *item,
 		return scnprintf(page, PAGE_SIZE,
 			"failed to get available gear %d\n", ret);
 
-	for (i = 0; i < slc_partid_cap.num_gears; i++) {
-		gear_num = slc_partid_cap.part_id_gears[i];
-		len += scnprintf(page + len, PAGE_SIZE - len,
-			"%d - %s\n", gear_num, gear_index[gear_num]);
+	if (slc_partid_cap.gear_def.cap_cfg.gear_flds_bitmap) {
+		for (gear_num = 0, i = 0; gear_num < slc_partid_cap.num_gears; gear_num++, i++) {
+			if (((1 << i) & slc_partid_cap.gear_def.cap_cfg.gear_flds_bitmap) == 0)
+				continue;
+
+			if (gear_num >= slc_partid_cap.num_gears)
+				break;
+
+			len += scnprintf(page + len, PAGE_SIZE - len,
+					"%d - %d\n", gear_num,
+					i * slc_partid_cap.gear_def.cap_cfg.slc_bitfield_capacity);
+		}
+	} else {
+		for (i = 0; i < slc_partid_cap.num_gears; i++) {
+			gear_num = slc_partid_cap.gear_def.gear_cfg.part_id_gears[i];
+			len += scnprintf(page + len, PAGE_SIZE - len,
+				"%d - %s\n", gear_num, gear_index[gear_num]);
+		}
 	}
 
 	return len;

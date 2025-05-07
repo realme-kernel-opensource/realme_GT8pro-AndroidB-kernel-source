@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _QCOM_MPAM_MSC_H
@@ -87,38 +87,38 @@ static inline int msc_system_get_device_capability(uint32_t msc_id, void *arg1, 
 	return -EINVAL;
 }
 
-static inline int msc_system_get_partition(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_get_partition(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
-static inline int msc_system_set_partition(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_set_partition(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
-static inline int msc_system_reset_partition(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_reset_partition(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
-static inline int msc_system_mon_read_miss_info(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_mon_read_miss_info(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
-static inline int msc_system_mon_alloc_info(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_mon_alloc_info(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
-static inline int msc_system_mon_config(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_mon_config(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
 static inline int attach_mpam_msc(struct device *dev, struct qcom_mpam_msc *qcom_msc,
-		uint32_t msc_type);
+		uint32_t msc_type)
 {
 	return -EINVAL;
 }
