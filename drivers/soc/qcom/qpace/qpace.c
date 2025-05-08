@@ -124,9 +124,6 @@ static inline void program_urg_comp_context(int urg_reg_num)
 	urg_cmd_settings |= FIELD_PREP(URG_CMD_0_CFG_CNTXT_MISC_DCTX,
 				       DEFAULT_SMMU_CONTEXT);
 
-	/* Cache accesses in the system cache during compression */
-	urg_cmd_settings |= FIELD_PREP(URG_CMD_0_CFG_CNTXT_MISC_WA, 1);
-
 	QPACE_WRITE_URG_CMD_CTX_REG(QPACE_URG_CMD_0_CFG_CNTXT_MISC_n_OFFSET,
 				    urg_reg_num, URG_COMP_CNTXT,
 				    urg_cmd_settings);
@@ -149,9 +146,6 @@ static inline void program_urg_decomp_context(int urg_reg_num)
 				       DEFAULT_SMMU_CONTEXT);
 	urg_cmd_settings |= FIELD_PREP(URG_CMD_0_CFG_CNTXT_MISC_DCTX,
 				       DEFAULT_SMMU_CONTEXT);
-
-	/* Cache accesses in the system cache during decompression */
-	urg_cmd_settings |= FIELD_PREP(URG_CMD_0_CFG_CNTXT_MISC_WA, 1);
 
 	QPACE_WRITE_URG_CMD_CTX_REG(QPACE_URG_CMD_0_CFG_CNTXT_MISC_n_OFFSET,
 				    urg_reg_num, URG_DECOMP_CNTXT,
@@ -624,9 +618,6 @@ int qpace_queue_copy(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr, siz
 	td->size = copy_size;
 	td->operation = COPY;
 
-	/* Deallocate cache line from system cache during copy */
-	td->rf = 1;
-
 	/* Page count not needed for copy */
 
 	/* Use default SIDs */
@@ -663,9 +654,6 @@ int qpace_queue_compress(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr)
 
 	td->size = (PAGE_SIZE) - 1;
 	td->operation = COMP;
-
-	/* Cache accesses in the system cache during compression */
-	td->wa = 1;
 
 	/* Leave page count as order 0 */
 
@@ -1095,7 +1083,8 @@ static int qpace_init(void)
 
 	/* Select CPU SCID for our system cache slice */
 	reg_val = QPACE_READ_GEN_REG(QPACE_CORE_QNS4_CFG_OFFSET);
-	reg_val |= FIELD_PREP(CORE_QNS4_CFG_TRTYPE, 0x1);
+	reg_val &= ~CORE_QNS4_CFG_CACHEINDEX;
+	reg_val |= FIELD_PREP(CORE_QNS4_CFG_CACHEINDEX, 0x1);
 	QPACE_WRITE_GEN_REG(QPACE_CORE_QNS4_CFG_OFFSET, reg_val);
 
 	/*
