@@ -551,6 +551,7 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 			return -EINVAL;
 		}
 
+		pr_info("SLC Monitor size %lld\n", mon_mem->slc_mpam_monitor_size);
 		pr_info("Number of SLC MPAM clients %d\n", slc_capability->num_clients);
 		slc_capability->slc_client_cap = devm_kcalloc(dev, slc_capability->num_clients,
 				sizeof(struct slc_client_capability), GFP_KERNEL);

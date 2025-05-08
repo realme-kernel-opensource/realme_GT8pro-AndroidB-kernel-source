@@ -183,6 +183,7 @@ struct qcom_slc_mon_mem_v1 {
 	uint16_t msc_id;
 	uint16_t num_active_mon;
 	uint64_t last_capture_time;
+	uint64_t slc_mpam_monitor_size;
 	struct qcom_slc_mon_data data[];
 } __packed;
 
