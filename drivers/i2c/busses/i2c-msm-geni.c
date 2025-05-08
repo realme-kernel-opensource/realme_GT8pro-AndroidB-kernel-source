@@ -122,13 +122,14 @@ if (dev) \
  */
 #define MAX_NUM_TRE_MSGS	448
 #define NUM_TRE_MSGS_PER_INTR	64
-#define IMMEDIATE_DMA_LEN	8
 #define MIN_NUM_MSGS_FOR_MULTI_DESC_MODE	4
 
 #define I2C_HS_MODE_FREQ	3400000
 #define I2C_HS_SRC_SE_FREQ	100000000
 #define I2C_HS_TLOW_CNT		38
 #define I2C_HS_TCYCLE_CNT	28
+
+#define MAX_SPLIT_TRE_MSGS	3
 
 /* FTRACE Logging */
 void i2c_trace_log(struct device *dev, const char *fmt, ...)
@@ -202,7 +203,7 @@ struct geni_i2c_dev {
 	struct msm_gpi_tre cfg0_t;
 	struct msm_gpi_tre cfg1_t;
 	struct msm_gpi_tre go_t;
-	struct msm_gpi_tre tx_t;
+	struct msm_gpi_tre tx_t[MAX_SPLIT_TRE_MSGS];
 	struct msm_gpi_tre rx_t;
 	dma_addr_t tx_ph[MAX_NUM_TRE_MSGS];
 	dma_addr_t rx_ph;
@@ -239,6 +240,14 @@ struct geni_i2c_dev {
 	atomic_t is_xfer_in_progress; /* Used to maintain xfer inprogress status */
 	bool bus_recovery_enable; /* To be enabled by client if needed */
 	bool i2c_test_dev; /* Set this DT flag to enable test bus dump for an SE */
+	bool is_split_tx_dma_tre;
+	u32 i2c_msg_len_orignial; /*original i2c message len */
+	u8 *i2c_msg_buf_original; /*original i2c message buffer address*/
+	u32 split_msg_len[MAX_SPLIT_TRE_MSGS];
+	u8 *split_msg_buf[MAX_SPLIT_TRE_MSGS];
+	u8 *split_allocated_buf;
+	u8 *split_aligned_buf;
+	int split_msg_cnt;
 };
 
 static struct geni_i2c_dev *gi2c_dev_dbg[MAX_SE];
@@ -1156,8 +1165,16 @@ void gi2c_gsi_tx_unmap(struct geni_i2c_dev *gi2c, u32 msg_idx, u32 wr_idx)
 	if (gi2c->msgs[msg_idx].len > IMMEDIATE_DMA_LEN) {
 		geni_se_common_iommu_unmap_buf(gi2c->wrapper_dev, &gi2c->tx_ph[wr_idx],
 					       gi2c->msgs[msg_idx].len, DMA_TO_DEVICE);
-		i2c_put_dma_safe_msg_buf(gi2c->gsi_tx.dma_buf[wr_idx],
-					 &gi2c->msgs[msg_idx], !gi2c->err);
+		if (gi2c->split_allocated_buf) {
+			I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
+				    "%s:freeing splig alloc buf\n", __func__);
+			kfree(gi2c->split_allocated_buf);
+			gi2c->split_allocated_buf = NULL;
+			gi2c->split_aligned_buf = NULL;
+		} else {
+			i2c_put_dma_safe_msg_buf(gi2c->gsi_tx.dma_buf[wr_idx],
+						 &gi2c->msgs[msg_idx], !gi2c->err);
+		}
 	}
 }
 
@@ -1452,9 +1469,10 @@ void geni_i2c_get_immediate_dma_data(u8 *dword, int len, uint8_t *buf)
 }
 
 static struct msm_gpi_tre *setup_tx_tre(struct geni_i2c_dev *gi2c,
-			struct i2c_msg msgs[], int i, int num, bool *gsi_bei, int wr_idx)
+			struct i2c_msg msgs[], int i, int num, bool *gsi_bei, int wr_idx,
+			bool dma_chain, int tre_idx)
 {
-	struct msm_gpi_tre *tx_t = &gi2c->tx_t;
+	struct msm_gpi_tre *tx_t = &gi2c->tx_t[tre_idx];
 	bool is_immediate_dma = false;
 
 	if (msgs[i].len <= IMMEDIATE_DMA_LEN)
@@ -1491,27 +1509,47 @@ static struct msm_gpi_tre *setup_tx_tre(struct geni_i2c_dev *gi2c,
 		geni_i2c_get_immediate_dma_data((uint8_t *)&tx_t->dword[0],
 						msgs[i].len, msgs[i].buf);
 		tx_t->dword[2] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD2(msgs[i].len);
-		if (gi2c->is_shared && i == (num - 1))
-			/*
-			 * For Tx: unlock tre is send for last transfer
-			 * so set chain bit for last transfer DMA tre.
-			 */
-			tx_t->dword[3] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD3(0, *gsi_bei, 1, 0, 1);
-		else
-			tx_t->dword[3] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD3(0, *gsi_bei, 1, 0, 0);
+		if (gi2c->is_split_tx_dma_tre) {
+			if (dma_chain)
+				tx_t->dword[3] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD3(0, 0, 0, 0, 1);
+			else
+				tx_t->dword[3] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD3(0,
+									*gsi_bei, 1, 0, 0);
+		} else {
+			if (gi2c->is_shared && i == (num - 1))
+				/*
+				 * For Tx: unlock tre is send for last transfer
+				 * so set chain bit for last transfer DMA tre.
+				 */
+				tx_t->dword[3] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD3(0,
+									*gsi_bei, 1, 0, 1);
+			else
+				tx_t->dword[3] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD3(0,
+									*gsi_bei, 1, 0, 0);
+		}
 	} else {
 		tx_t->dword[0] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD0(gi2c->tx_ph[wr_idx]);
 		tx_t->dword[1] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD1(gi2c->tx_ph[wr_idx]);
 		tx_t->dword[2] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD2(msgs[i].len);
 
-		if (gi2c->is_shared && (i == num - 1))
-			/*
-			 * For Tx: unlock tre is send for last transfer
-			 * so set chain bit for last transfer DMA tre.
-			 */
-			tx_t->dword[3] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0, *gsi_bei, 1, 0, 1);
-		else
-			tx_t->dword[3] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0, *gsi_bei, 1, 0, 0);
+		if (gi2c->is_split_tx_dma_tre) {
+			if (dma_chain)
+				tx_t->dword[3] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0, 0, 0, 0, 1);
+			else
+				tx_t->dword[3] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0,
+									*gsi_bei, 1, 0, 0);
+		} else {
+			if (gi2c->is_shared && (i == num - 1))
+				/*
+				 * For Tx: unlock tre is send for last transfer
+				 * so set chain bit for last transfer DMA tre.
+				 */
+				tx_t->dword[3] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0,
+									*gsi_bei, 1, 0, 1);
+			else
+				tx_t->dword[3] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0,
+									*gsi_bei, 1, 0, 0);
+		}
 	}
 
 	I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "tx_tre 0x%x 0x%x 0x%x 0x%x imm_dma:%d bei:%d\n",
@@ -1823,7 +1861,7 @@ static void geni_i2c_check_for_gsi_multi_desc_mode(struct geni_i2c_dev *gi2c, st
 {
 	u32 i = 0;
 
-	if (num >= MIN_NUM_MSGS_FOR_MULTI_DESC_MODE) {
+	if (!gi2c->is_split_tx_dma_tre && num >= MIN_NUM_MSGS_FOR_MULTI_DESC_MODE) {
 		gi2c->gsi_tx.is_multi_descriptor = true;
 		/* assumes multi descriptor supports only for continuous writes */
 		for (i = 0; i < num; i++)
@@ -1960,14 +1998,18 @@ static int geni_i2c_gsi_write(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[],
 			      int num, int segs, int *sg_index, u32 *wr_index)
 {
 	struct msm_gpi_tre *tx_t = NULL;
-	int ret = 0;
+	int ret = 0, idx;
 	int index = *sg_index;
 	dma_cookie_t tx_cookie;
 	bool gsi_bei = false;
 
 	if (msgs[msg_index].len > IMMEDIATE_DMA_LEN) {
-		gi2c->gsi_tx.dma_buf[*wr_index] =
-			i2c_get_dma_safe_msg_buf(&msgs[msg_index], 1);
+		if (gi2c->split_aligned_buf)
+			gi2c->gsi_tx.dma_buf[*wr_index] = gi2c->split_aligned_buf;
+		else
+			gi2c->gsi_tx.dma_buf[*wr_index] =
+				i2c_get_dma_safe_msg_buf(&msgs[msg_index], 1);
+
 		if (!gi2c->gsi_tx.dma_buf[*wr_index]) {
 			gi2c->err = -ENOMEM;
 			I2C_LOG_ERR(gi2c->ipcl, true, gi2c->dev,
@@ -1983,10 +2025,9 @@ static int geni_i2c_gsi_write(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[],
 		if (ret) {
 			I2C_LOG_ERR(gi2c->ipcl, true, gi2c->dev,
 				    "geni iommu_map_buf for tx failed :%d\n", ret);
-			i2c_put_dma_safe_msg_buf
-			(gi2c->gsi_tx.dma_buf[*wr_index],
-			 &msgs[msg_index],
-			 false);
+			if (!gi2c->split_aligned_buf)
+				i2c_put_dma_safe_msg_buf(gi2c->gsi_tx.dma_buf[*wr_index],
+							 &msgs[msg_index], false);
 			gi2c->err = ret;
 			return GENI_I2C_GSI_XFER_OUT;
 
@@ -1997,11 +2038,31 @@ static int geni_i2c_gsi_write(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[],
 				(void *)&gi2c->tx_ph[*wr_index];
 		}
 	}
+
 	I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
 		    "msg[%d].len:%d W cnt:%d idx:%d\n",
 		     msg_index, gi2c->cur->len, gi2c->gsi_tx.msg_cnt, *wr_index);
-	tx_t = setup_tx_tre(gi2c, msgs, msg_index, num, &gsi_bei, *wr_index);
-	sg_set_buf(&gi2c->tx_sg[index++], tx_t, sizeof(gi2c->tx_t));
+
+	if (gi2c->is_split_tx_dma_tre) {
+		bool chain;
+
+		for (idx = 0; idx < gi2c->split_msg_cnt; idx++) {
+			/* set chain bit for last split message */
+			chain = (idx == gi2c->split_msg_cnt - 1) ? false : true;
+			msgs[msg_index].len  = gi2c->split_msg_len[idx];
+			msgs[msg_index].buf = gi2c->split_msg_buf[idx];
+			tx_t = setup_tx_tre(gi2c, msgs, msg_index, num, &gsi_bei, *wr_index,
+					    chain, idx);
+			sg_set_buf(&gi2c->tx_sg[index++], tx_t, sizeof(struct msm_gpi_tre));
+		}
+
+		msgs[msg_index].len  = gi2c->i2c_msg_len_orignial;
+		msgs[msg_index].buf = gi2c->i2c_msg_buf_original;
+	} else {
+		tx_t = setup_tx_tre(gi2c, msgs, msg_index, num, &gsi_bei, *wr_index, false, 0);
+		sg_set_buf(&gi2c->tx_sg[index++], tx_t, sizeof(struct msm_gpi_tre));
+	}
+
 	if (gi2c->is_shared && (msg_index == (num - 1))) {
 		/* Send unlock tre at the end of last transfer */
 		sg_set_buf(&gi2c->tx_sg[index++],
@@ -2271,6 +2332,132 @@ static int geni_i2c_gsi_channel_init_and_lock(struct geni_i2c_dev *gi2c)
 	return 0;
 }
 
+/**
+ * geni_i2c_split_dma_tx_xfer() - check split tre msgs
+ * @gi2c:geni i2c structure as a pointer
+ * @msg: i2c messgage handle
+ *
+ * This function splits large I2C TX messages into smaller DMA TX Buffers
+ * based on the message length.
+ *
+ * Return: num of split msgs count.
+ */
+static int geni_i2c_split_dma_tx_xfer(struct geni_i2c_dev *gi2c, struct i2c_msg *msg)
+{
+	u32 tx_len[3], remaining_bytes, align_memory_bytes = 16;
+	int idx = 0, i;
+	u32 original_len;
+	u8 *buf_ptr;
+
+	for (i = 0; i < MAX_SPLIT_TRE_MSGS; i++) {
+		gi2c->split_msg_len[i] = 0;
+		gi2c->split_msg_buf[i] = NULL;
+	}
+
+	gi2c->i2c_msg_len_orignial = msg->len;
+	gi2c->i2c_msg_buf_original = msg->buf;
+	original_len = msg->len;
+
+	/* < 16 bytes we are using immediate dma mode, so using client passed buffer */
+	if (msg->len < align_memory_bytes || ((u64)msg->buf % align_memory_bytes) == 0) {
+		buf_ptr = msg->buf;
+		I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "using client buffer\n");
+	} else {
+		buf_ptr = kzalloc(msg->len + align_memory_bytes, GFP_KERNEL);
+		if (!buf_ptr)
+			return -ENOMEM;
+
+		gi2c->split_allocated_buf = buf_ptr;
+		/* Align memory with 16 bytes */
+		buf_ptr = buf_ptr + (align_memory_bytes -
+				((u64)buf_ptr % align_memory_bytes));
+		memcpy(buf_ptr, msg->buf,  msg->len);
+		gi2c->split_aligned_buf = buf_ptr;
+		I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "allocating 16 byte aligned\n");
+	}
+
+	if (original_len < 16) {
+		tx_len[0] = (original_len > 8) ? 8 : original_len;
+		tx_len[1] = (original_len > 8) ? (original_len - 8) : 0;
+
+		gi2c->split_msg_len[idx] = tx_len[0];
+		gi2c->split_msg_buf[idx] = buf_ptr;
+		idx++;
+		if (tx_len[1]) {
+			gi2c->split_msg_len[idx] = tx_len[1];
+			gi2c->split_msg_buf[idx] = buf_ptr + tx_len[0];
+			idx++;
+		}
+	} else if ((original_len % 16) != 0) {
+		remaining_bytes =  original_len % 16;
+		tx_len[0] = original_len - remaining_bytes;
+
+		if (remaining_bytes > 8) {
+			tx_len[1] = 8;
+			tx_len[2] = remaining_bytes - 8;
+		} else {
+			tx_len[1] = remaining_bytes;
+			tx_len[2] = 0;
+		}
+
+		gi2c->split_msg_len[idx] = tx_len[0];
+		gi2c->split_msg_buf[idx] = buf_ptr;
+		idx++;
+		if (tx_len[1]) {
+			gi2c->split_msg_len[idx] = tx_len[1];
+			gi2c->split_msg_buf[idx] = buf_ptr + tx_len[0];
+			idx++;
+		}
+
+		if (tx_len[2]) {
+			gi2c->split_msg_len[idx] = tx_len[2];
+			gi2c->split_msg_buf[idx] = buf_ptr + tx_len[0] + tx_len[1];
+			idx++;
+		}
+	} else {
+		gi2c->split_msg_len[idx] = original_len;
+		gi2c->split_msg_buf[idx] = buf_ptr;
+		idx++;
+	}
+	return idx;
+}
+
+/**
+ * geni_i2c_sg_init() - geni i2c scatter-gather init
+ * @gi2c:geni i2c structure as a pointer
+ * @msg_idx: message index
+ * @segs:segmen tnumber
+ * @sg_index: Scatter gather index
+ * @num: i2c num of messages
+ * This function init's the scatter-gather table
+ *
+ * Return: None
+ */
+void geni_i2c_sg_init(struct geni_i2c_dev *gi2c, int msg_idx, int *segs, int *sg_index, int num,
+		      struct msm_gpi_tre *lock_t)
+{
+	if (!gi2c->cfg_sent) {
+		*segs = *segs + 1;
+		if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ)
+			*segs = *segs + 1;
+	}
+
+	if (gi2c->is_shared && (msg_idx == 0 || msg_idx == (num - 1))) {
+		*segs = *segs + 1;
+		if (num == 1)
+			*segs = *segs + 1;
+		sg_init_table(gi2c->tx_sg, *segs);
+		if (msg_idx == 0) {
+			/* Send lock tre for first transfer in a msg */
+			sg_set_buf(&gi2c->tx_sg[*sg_index], lock_t,
+				   sizeof(gi2c->lock_t));
+			*sg_index = *sg_index + 1;
+		}
+	} else {
+		sg_init_table(gi2c->tx_sg, *segs);
+	}
+}
+
 static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 			     int num)
 {
@@ -2320,6 +2507,9 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 		op = (msgs[i].flags & I2C_M_RD) ? 2 : 1;
 		segs = 3 - op;
 		index = 0;
+		gi2c->split_msg_cnt = 0;
+		gi2c->split_allocated_buf = NULL;
+		gi2c->split_aligned_buf = NULL;
 		/**
 		 * sometimes all tre's may process without
 		 * waiting for timer thread, so declared
@@ -2337,23 +2527,17 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 
 		qcom_geni_i2c_calc_timeout(gi2c);
 
-		if (!gi2c->cfg_sent) {
-			segs++;
-			if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ)
-				segs++;
+		if (gi2c->is_split_tx_dma_tre && !(msgs[i].flags & I2C_M_RD)) {
+			gi2c->split_msg_cnt = geni_i2c_split_dma_tx_xfer(gi2c, &msgs[i]);
+			if (gi2c->split_msg_cnt < 0) {
+				I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
+					    "%s: split tx dma tre failed ret:%d\n", __func__, ret);
+				return ret;
+			}
+			segs = segs + gi2c->split_msg_cnt - 1;
 		}
-		if (gi2c->is_shared && (i == 0 || i == num-1)) {
-			segs++;
-			if (num == 1)
-				segs++;
-			sg_init_table(gi2c->tx_sg, segs);
-			if (i == 0)
-				/* Send lock tre for first transfer in a msg */
-				sg_set_buf(&gi2c->tx_sg[index++], lock_t,
-					sizeof(gi2c->lock_t));
-		} else {
-			sg_init_table(gi2c->tx_sg, segs);
-		}
+
+		geni_i2c_sg_init(gi2c, i, &segs, &index, num, lock_t);
 
 		/* Send cfg tre when cfg not sent already */
 		if (!gi2c->cfg_sent) {
@@ -3099,6 +3283,11 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "Multi-EE usecase\n");
 	}
 
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,split-tx-dma-tre")) {
+		gi2c->is_split_tx_dma_tre  = true;
+		dev_dbg(&pdev->dev, "%s: Multiple Tx DMA TRE support is enabled\n", __func__);
+	}
+
 	//Strictly only for debug, it's client/slave device decision for an SE.
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,bus-recovery")) {
 		gi2c->bus_recovery_enable  = true;
@@ -3114,7 +3303,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		}
 	}
 
-	gi2c->tx_sg = dmam_alloc_coherent(gi2c->dev, 6 * sizeof(struct scatterlist),
+	gi2c->tx_sg = dmam_alloc_coherent(gi2c->dev, 8 * sizeof(struct scatterlist),
 					  &gi2c->tx_sg_dma, GFP_KERNEL);
 	if (!gi2c->tx_sg) {
 		dev_err(&pdev->dev, "could not allocate for tx_sg\n");
