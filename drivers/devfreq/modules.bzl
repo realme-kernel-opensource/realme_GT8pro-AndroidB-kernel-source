@@ -26,3 +26,13 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/devfreq/governor_msm_adreno_ro",
+        out = "governor_msm_adreno_ro.ko",
+        config = "CONFIG_DEVFREQ_GOV_QCOM_ADRENO_RO",
+        srcs = [
+            # do not sort
+            "drivers/devfreq/governor_msm_adreno_ro.c",
+        ],
+    )
