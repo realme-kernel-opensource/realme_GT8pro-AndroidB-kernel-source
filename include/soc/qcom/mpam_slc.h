@@ -32,6 +32,9 @@ static char gear_index[][25] = {
 #define QCOM_SLC_MPAM_SCMI_STR	0x534c434d50414d /* SLCMPAM */
 #define SLC_INVALID_PARTID      ((1 << 16) - 1)
 
+#define SLC_MPAM_VERSION_0	0x00000000	/* Base firmware */
+#define SLC_MPAM_VERSION_1	0x00000002	/* SLC MPAM More gear support */
+
 enum mpam_slc_get_param_ids {
 	PARAM_GET_CLIENT_INFO_MSC = 1,
 	PARAM_GET_CACHE_CAPABILITY_MSC = 2,
