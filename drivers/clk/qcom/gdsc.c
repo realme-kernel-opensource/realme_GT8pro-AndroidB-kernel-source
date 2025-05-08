@@ -144,10 +144,20 @@ static int gdsc_toggle_logic(struct gdsc *sc, enum gdsc_status status,
 	int ret = 0;
 	u32 val;
 
-	if (status == GDSC_ON && sc->rsupply) {
-		ret = regulator_enable(sc->rsupply);
-		if (ret < 0)
-			return ret;
+	if (status == GDSC_ON) {
+		if (sc->rsupply) {
+			ret = regulator_enable(sc->rsupply);
+			if (ret < 0)
+				return ret;
+		}
+
+		if (sc->path) {
+			ret = icc_set_bw(sc->path, 0, 1);
+			if (ret < 0) {
+				regulator_disable(sc->rsupply);
+				return ret;
+			}
+		}
 	}
 
 	regmap_read(sc->regmap, sc->gdscr, &val);
@@ -187,10 +197,18 @@ static int gdsc_toggle_logic(struct gdsc *sc, enum gdsc_status status,
 	WARN(ret, "%s status stuck at 'o%s'", sc->pd.name, status ? "ff" : "n");
 
 out:
-	if (!ret && status == GDSC_OFF && sc->rsupply) {
-		ret = regulator_disable(sc->rsupply);
-		if (ret < 0)
-			return ret;
+	if (!ret && status == GDSC_OFF) {
+		if (sc->path) {
+			ret = icc_set_bw(sc->path, 0, 0);
+			if (ret < 0)
+				return ret;
+		}
+
+		if (sc->rsupply) {
+			ret = regulator_disable(sc->rsupply);
+			if (ret < 0)
+				return ret;
+		}
 	}
 
 	return ret;
@@ -553,6 +571,15 @@ int gdsc_register(struct gdsc_desc *desc,
 
 			scs[i]->rsupply = NULL;
 		}
+	}
+
+	for (i = 0; i < num; i++) {
+		if (!scs[i] || !scs[i]->path_name)
+			continue;
+
+		scs[i]->path = devm_of_icc_get(dev, scs[i]->path_name);
+		if (IS_ERR(scs[i]->path))
+			return PTR_ERR(scs[i]->path);
 	}
 
 	data->num_domains = num;
