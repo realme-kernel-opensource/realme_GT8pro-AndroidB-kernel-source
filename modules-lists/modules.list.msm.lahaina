@@ -41,6 +41,7 @@ nvmem_qcom-spmi-sdam.ko
 rtc-pm8xxx.ko
 pmic-pon-log.ko
 qcom-pdc.ko
+minidump.ko
 qcom-dload-mode.ko
 pinctrl-msm.ko
 pinctrl-yupik.ko
