@@ -74,11 +74,16 @@ struct slc_partid_capacity_config {
 	uint32_t slc_bitfield_capacity;
 } __packed;
 
+enum slc_mintor_support {
+	cap_mon_support,
+	read_miss_mon_support,
+};
 
 struct slc_partid_capability_v1 {
 	uint8_t part_id;
 	uint8_t num_gears;
 	struct slc_partid_capacity_config cap_cfg;
+	uint32_t mon_support;
 } __packed;
 
 union slc_partid_capability_def {

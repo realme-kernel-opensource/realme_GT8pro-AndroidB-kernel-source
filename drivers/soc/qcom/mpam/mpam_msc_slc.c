@@ -419,10 +419,13 @@ static int update_mon_stats(struct device *dev, struct msc_query *query,
 static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partconfig)
 {
 	struct qcom_mpam_msc *qcom_msc;
+	struct qcom_slc_capability *slc_capability;
 	struct msc_query *query;
 	struct slc_mon_config_val *mon_cfg_val;
+	struct slc_partid_capability_v1 partid_cap = { 0 };
 	struct slc_mon_config mon_cfg = {0};
 	int ret = -EINVAL;
+	uint32_t firmware_ver;
 
 	query = (struct msc_query *)msc_partid;
 	mon_cfg_val = (struct slc_mon_config_val *)msc_partconfig;
@@ -430,6 +433,33 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 	qcom_msc = slc_config_request_check(dev, query, mon_cfg_val);
 	if (qcom_msc == NULL)
 		return ret;
+
+	firmware_ver = SLC_MPAM_VERSION_0;
+	msc_system_get_mpam_version(SLC, &firmware_ver);
+	if (firmware_ver != SLC_MPAM_VERSION_0) {
+		ret = msc_system_get_device_capability(SLC, query, &partid_cap);
+		if (ret) {
+			pr_err("Failed to Config SLC Mon\n");
+			return ret;
+		}
+
+		slc_capability =  (struct qcom_slc_capability *)qcom_msc->msc_capability;
+		switch (mon_cfg_val->slc_mon_function) {
+		default:
+			break;
+
+		case CACHE_CAPACITY_CONFIG:
+			if ((partid_cap.mon_support & (1 << cap_mon_support)) == 0)
+				return -EPERM;
+			break;
+
+		case CACHE_READ_MISS_CONFIG:
+			if ((partid_cap.mon_support & (1 << read_miss_mon_support)) == 0)
+				return -EPERM;
+			break;
+
+		}
+	}
 
 	memcpy(&mon_cfg.query, msc_partid, sizeof(struct msc_query));
 	memcpy(&mon_cfg.config, msc_partconfig, sizeof(struct slc_mon_config_val));
@@ -607,10 +637,11 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 					continue;
 				}
 
-				pr_info("SLC Client Name:%s\tIdx:%d, PartID Idx:%d enabled\n",
-						client_details->client_name,
-						client_cap->client_info.client_id,
-						query.part_id);
+				pr_info("Client Name:%s\tIdx:%d, PartID:%d Monitor support %x\n",
+					client_details->client_name,
+					client_cap->client_info.client_id,
+					query.part_id,
+					client_cap->slc_partid_cap[partid_idx].v1_cap.mon_support);
 			}
 
 		}
