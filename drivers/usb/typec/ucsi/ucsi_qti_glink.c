@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt)	"UCSI: %s: " fmt, __func__
 
@@ -500,6 +500,7 @@ static int ucsi_qti_read_message_in(struct ucsi *ucsi, void *val,
 static const struct ucsi_operations ucsi_qti_ops = {
 	.read_version = ucsi_qti_read_version,
 	.read_cci = ucsi_qti_read_cci,
+	.poll_cci = ucsi_qti_read_cci,
 	.read_message_in = ucsi_qti_read_message_in,
 	.sync_control = ucsi_qti_sync_control,
 	.async_control = ucsi_qti_async_control,
