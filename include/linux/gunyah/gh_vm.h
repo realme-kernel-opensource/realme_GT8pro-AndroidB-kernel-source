@@ -53,7 +53,7 @@ static inline int gh_unregister_vm_notifier(struct notifier_block *nb)
 }
 #endif
 
-#if IS_ENABLED(CONFIG_GH_PROXY_SCHED)
+#if IS_ENABLED(CONFIG_GH_PROXY_SCHED) || IS_ENABLED(CONFIG_GH_VCPU_MGR)
 int gh_poll_vcpu_run(gh_vmid_t vmid);
 #else
 static inline int gh_poll_vcpu_run(gh_vmid_t vmid)

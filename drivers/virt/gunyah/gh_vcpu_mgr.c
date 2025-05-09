@@ -15,6 +15,9 @@
 #include <trace/hooks/gunyah.h>
 #include "gh_vcpu_mgr.h"
 
+#define CREATE_TRACE_POINTS
+#include "gh_vcpu_mgr_trace.h"
+
 struct gh_proxy_vcpu {
 	struct gh_proxy_vm *vm;
 	gh_capid_t cap_id;
@@ -244,6 +247,67 @@ static void gh_populate_all_res_info(gh_vmid_t vmid, bool res_populated)
 unlock:
 	mutex_unlock(&gh_vm_mutex);
 }
+
+static int gh_get_nr_vcpus(gh_vmid_t vmid)
+{
+	struct gh_proxy_vm *vm;
+
+	vm = gh_get_vm(vmid);
+	if (vm && vm->is_vcpu_info_populated)
+		return vm->vcpu_count;
+
+	return 0;
+}
+
+int gh_poll_vcpu_run(gh_vmid_t vmid)
+{
+	struct gh_hcall_vcpu_run_resp resp;
+	struct gh_proxy_vcpu *vcpu;
+	struct gh_proxy_vm *vm;
+	unsigned int vcpu_id;
+	int poll_nr_vcpus;
+	ktime_t start_ts, yield_ts;
+	int ret = -EPERM;
+
+	vm = gh_get_vm(vmid);
+	if (!vm || !vm->is_active)
+		return ret;
+
+	poll_nr_vcpus = gh_get_nr_vcpus(vmid);
+	if (poll_nr_vcpus < 0) {
+		printk_deferred("Failed to get vcpu count for VM %d ret %d\n",
+						vmid, poll_nr_vcpus);
+		ret = poll_nr_vcpus;
+		return ret;
+	}
+
+	for (vcpu_id = 0; vcpu_id < poll_nr_vcpus; vcpu_id++) {
+		vcpu = xa_load(&vm->vcpus, vcpu_id);
+		if (!vcpu)
+			return -EPERM;
+
+		if (vcpu->cap_id == GH_CAPID_INVAL)
+			return -EPERM;
+
+		do {
+			start_ts = ktime_get();
+			ret = gh_hcall_vcpu_run(vcpu->cap_id, 0, 0, 0, &resp);
+			yield_ts = ktime_get() - start_ts;
+			trace_gh_hcall_vcpu_run(ret, vcpu->vm->id, vcpu_id, yield_ts,
+						resp.vcpu_state, resp.vcpu_suspend_state);
+			if (ret == GH_ERROR_OK) {
+				if (resp.vcpu_state != GUNYAH_VCPU_STATE_READY &&
+					resp.vcpu_state != GUNYAH_VCPU_STATE_EXPECTS_WAKEUP)
+					printk_deferred("VCPU STATE: state=%llu VCPU=%u of VM=%d\n",
+							resp.vcpu_state, vcpu_id, vmid);
+				break;
+			}
+		} while (ret == GH_ERROR_RETRY);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(gh_poll_vcpu_run);
 
 static void android_rvh_gh_before_vcpu_run(void *unused, u16 vmid, u32 vcpu_id)
 {
