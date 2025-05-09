@@ -14,7 +14,7 @@
 int mem_prot_pool_alloc(size_t size, phys_addr_t *phys, enum cfg_phys_ddr_protection_cmd prot_type);
 int mem_prot_pool_free(phys_addr_t phys, size_t size, enum cfg_phys_ddr_protection_cmd prot_type);
 #else
-phys_addr_t mem_prot_pool_alloc(size_t size, enum cfg_phys_ddr_protection_cmd prot_type)
+int mem_prot_pool_alloc(size_t size, phys_addr_t *phys, enum cfg_phys_ddr_protection_cmd prot_type)
 {
 	return -EINVAL;
 }
