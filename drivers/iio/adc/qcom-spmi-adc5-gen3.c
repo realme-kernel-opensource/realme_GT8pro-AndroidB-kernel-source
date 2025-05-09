@@ -21,6 +21,7 @@
 #include <linux/regmap.h>
 #include <linux/thermal.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/adc/qcom-vadc-common.h>
 
@@ -2037,7 +2038,7 @@ static void adc5_gen3_exit(struct platform_device *pdev)
 	ipc_log_context_destroy(adc->ipc_log);
 }
 
-static int __maybe_unused adc5_gen3_freeze(struct device *dev)
+static int adc5_gen3_freeze(struct device *dev)
 {
 	struct adc5_chip *adc = dev_get_drvdata(dev);
 	int i = 0;
@@ -2052,7 +2053,7 @@ static int __maybe_unused adc5_gen3_freeze(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused adc5_gen3_restore(struct device *dev)
+static int adc5_gen3_restore(struct device *dev)
 {
 	struct adc5_chip *adc = dev_get_drvdata(dev);
 	int i = 0;
@@ -2068,9 +2069,25 @@ static int __maybe_unused adc5_gen3_restore(struct device *dev)
 	return ret;
 }
 
-static const struct dev_pm_ops __maybe_unused adc5_gen3_pm_ops = {
-	.freeze = pm_ptr(adc5_gen3_freeze),
-	.restore = pm_ptr(adc5_gen3_restore),
+static int adc5_gen3_suspend(struct device *dev)
+{
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		return adc5_gen3_freeze(dev);
+	return 0;
+}
+
+static int adc5_gen3_resume(struct device *dev)
+{
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		return adc5_gen3_restore(dev);
+	return 0;
+}
+
+static const struct dev_pm_ops adc5_gen3_pm_ops = {
+	.freeze = adc5_gen3_freeze,
+	.restore = adc5_gen3_restore,
+	.suspend = adc5_gen3_suspend,
+	.resume = adc5_gen3_resume,
 };
 
 static struct platform_driver adc5_gen3_driver = {
