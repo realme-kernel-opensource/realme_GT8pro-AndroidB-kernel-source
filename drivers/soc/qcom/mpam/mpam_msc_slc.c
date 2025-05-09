@@ -27,8 +27,6 @@ static uint16_t slc_client_id[] = {
 	SLC_CLIENT_MAX,
 };
 
-#define SLC_MPAM_VERSION_1	0x00000002   /* SLC iMPAM More gear support */
-#define SLC_FW_VERSION_GEAR	SLC_MPAM_VERSION_1
 
 static int mpam_msc_slc_set_params(struct device *dev, void *param, int param_len,
 		uint32_t param_id)
@@ -110,6 +108,21 @@ static struct qcom_mpam_msc *slc_capability_check(struct device *dev, struct msc
 	return qcom_msc;
 }
 
+static int slc_mpam_version(struct device *dev, void *val)
+{
+	struct qcom_mpam_msc *qcom_msc;
+	struct qcom_slc_capability *slc_capability;
+	uint32_t *firmware_ver = val;
+
+	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
+	if (qcom_mpam_msc_enabled(qcom_msc))
+		return -EINVAL;
+
+	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
+	*firmware_ver = slc_capability->firmware_ver.firmware_version;
+	return 0;
+}
+
 static int slc_set_cache_partition(struct device *dev, void *msc_partid, void *msc_partconfig)
 {
 	struct qcom_mpam_msc *qcom_msc;
@@ -128,7 +141,7 @@ static int slc_set_cache_partition(struct device *dev, void *msc_partid, void *m
 	slc_part_config.gear_config.gear_val =
 		((struct qcom_slc_gear_val *)msc_partconfig)->gear_val;
 
-	if (slc_capability->firmware_ver.firmware_version == 0) {
+	if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0) {
 		client_idx = slc_part_config.query.client_id;
 		partid_idx = slc_part_config.query.part_id;
 		slc_client_cap = &(slc_capability->slc_client_cap[client_idx]);
@@ -163,12 +176,8 @@ static int slc_reset_cache_partition(struct device *dev, void *msc_partid, void 
 	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
 	memcpy(&slc_part_config.query, msc_partid, sizeof(struct msc_query));
 
-	if (slc_capability->firmware_ver.firmware_version >= SLC_FW_VERSION_GEAR)
-		slc_part_config.gear_config.gear_val =
-			((struct qcom_slc_gear_val *)msc_partconfig)->gear_val;
-	else
-		memcpy(&slc_part_config.gear_config, msc_partconfig,
-				sizeof(struct qcom_slc_gear_val));
+	slc_part_config.gear_config.gear_val =
+		((struct qcom_slc_gear_val *)msc_partconfig)->gear_val;
 
 	return mpam_msc_slc_set_params(dev, &slc_part_config, sizeof(struct slc_partid_config),
 			PARAM_RESET_CACHE_PARTITION_MSC);
@@ -271,7 +280,7 @@ static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
 	int client_idx, part_idx;
 
 	data = &(mon_mem->mem_v1.data[0]);
-	if (slc_capability->firmware_ver.firmware_version == 0)
+	if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0)
 		data = &(mon_mem->mem_v0.data[0]);
 
 	mon_idx = 0;
@@ -471,7 +480,7 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 	data_mem = &(mon_mem->mem_v1.data[mon_idx]);
 	match_seq_ptr = &(mon_mem->mem_v1.match_seq);
 	last_capture_time = &(mon_mem->mem_v1.last_capture_time);
-	if (slc_capability->firmware_ver.firmware_version == 0) {
+	if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0) {
 		data_mem = &(mon_mem->mem_v0.data[mon_idx]);
 		match_seq_ptr = &(mon_mem->mem_v0.match_seq);
 		last_capture_time = &(mon_mem->mem_v0.last_capture_time);
@@ -507,6 +516,7 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 }
 
 static struct mpam_msc_ops slc_msc_ops = {
+	.get_firmware_version = slc_mpam_version,
 	.set_cache_partition = slc_set_cache_partition,
 	.get_cache_partition = slc_get_cache_partition,
 	.get_cache_partition_capability = slc_get_cache_partition_capability,
@@ -534,7 +544,7 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 	query.qcom_msc_id.qcom_msc_type = qcom_msc->qcom_msc_id.qcom_msc_type;
 	query.qcom_msc_id.qcom_msc_class = qcom_msc->qcom_msc_id.qcom_msc_class;
 	query.qcom_msc_id.idx = qcom_msc->qcom_msc_id.idx;
-	if (slc_capability->firmware_ver.firmware_version != 0) {
+	if (slc_capability->firmware_ver.firmware_version != SLC_MPAM_VERSION_0) {
 		mon_mem = (struct qcom_slc_mon_mem_v1 *)qcom_msc->mon_base;
 		client_info = (struct slc_sct_client_info *)&(mon_mem->data);
 		slc_capability->num_clients = client_info->num_clients;
@@ -551,6 +561,7 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 			return -EINVAL;
 		}
 
+		pr_info("SLC Monitor size %lld\n", mon_mem->slc_mpam_monitor_size);
 		pr_info("Number of SLC MPAM clients %d\n", slc_capability->num_clients);
 		slc_capability->slc_client_cap = devm_kcalloc(dev, slc_capability->num_clients,
 				sizeof(struct slc_client_capability), GFP_KERNEL);
@@ -749,7 +760,7 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, qcom_msc);
 	/* SCMI firmware query firmware version details */
 	if (slc_firmware_version_query(&pdev->dev, NULL, &firmware_ver))
-		firmware_ver = 0;
+		firmware_ver = SLC_MPAM_VERSION_0;
 
 	/* Depending on firmware version SLC Monitor may memory program here */
 	val = mpam_slc_mpam_init_v0;
@@ -789,7 +800,7 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 		goto err_detach;
 	}
 
-	if (qcom_slc_capability->firmware_ver.firmware_version != 0) {
+	if (qcom_slc_capability->firmware_ver.firmware_version != SLC_MPAM_VERSION_0) {
 		/* SLC Monitor memory programmed here on updated firmware */
 		ret = slc_mpam_start_stop(&pdev->dev, mpam_slc_mon_init_v1);
 		if (ret) {
