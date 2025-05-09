@@ -272,10 +272,6 @@ int qpace_urgent_decompress(phys_addr_t input_addr,
 
 	urg_reg_num = get_cpu();
 
-	QPACE_WRITE_URG_CMD_CTX_REG(QPACE_URG_CMD_0_CFG_CNTXT_SIZE_n_OFFSET,
-				    urg_reg_num, URG_DECOMP_CNTXT,
-				    input_size);
-
 	stat_reg = qpace_urgent_command_trigger(input_addr, output_addr, urg_reg_num,
 						URG_DECOMP_CNTXT);
 	put_cpu();
