@@ -57,26 +57,33 @@ struct slc_client_info {
 } __packed;
 
 /* PARAM_GET_CACHE_CAPABILITY_MSC */
+struct slc_partid_gear_config {
+	uint8_t part_id_gears[MAX_NUM_GEARS];
+} __packed;
+
+struct slc_partid_capability {
+	uint8_t part_id;
+	uint8_t num_gears;
+	struct slc_partid_gear_config gear_cfg;
+	uint32_t part_id_gears[MAX_NUM_GEARS];
+} __packed;
+
 struct slc_partid_capacity_config {
 	uint32_t gear_flds_bitmap;
 	uint16_t dflt_bitmap;
 	uint32_t slc_bitfield_capacity;
 } __packed;
 
-struct slc_partid_gear_config {
-	uint8_t part_id_gears[MAX_NUM_GEARS];
-} __packed;
 
-union partid_gear_def {
-	struct slc_partid_capacity_config cap_cfg;
-	struct slc_partid_gear_config gear_cfg;
-} __packed;
-
-struct slc_partid_capability {
+struct slc_partid_capability_v1 {
 	uint8_t part_id;
 	uint8_t num_gears;
-	union partid_gear_def gear_def;
-	uint32_t part_id_gears[MAX_NUM_GEARS];
+	struct slc_partid_capacity_config cap_cfg;
+} __packed;
+
+union slc_partid_capability_def {
+	struct slc_partid_capability v0_cap;
+	struct slc_partid_capability_v1 v1_cap;
 } __packed;
 
 /* PARAM_GET_CACHE_PARTITION_MSC */
@@ -162,7 +169,6 @@ struct slc_mon_details {
 struct slc_sct_client_info {
 	uint32_t num_clients;
 	struct slc_mon_details slc_mon_info;
-	uint32_t slc_bitfield_capacity;
 	struct slc_client_details client;
 } __packed;
 
@@ -209,14 +215,13 @@ struct slc_mon_configured {
 /* msc slc capability */
 struct slc_client_capability {
 	struct slc_client_info client_info;
-	struct slc_partid_capability *slc_partid_cap;
+	union slc_partid_capability_def *slc_partid_cap;
 	uint8_t enabled;
 	char *client_name;
 } __packed;
 
 struct qcom_slc_capability {
 	uint32_t num_clients;
-	uint32_t slc_bitfield_capacity;
 	struct slc_client_capability *slc_client_cap;
 	struct slc_mon_capability slc_mon_list;
 	struct slc_mon_configured slc_mon_configured;

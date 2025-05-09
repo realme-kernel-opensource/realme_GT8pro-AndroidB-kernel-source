@@ -129,7 +129,7 @@ static int slc_set_cache_partition(struct device *dev, void *msc_partid, void *m
 	struct slc_partid_config slc_part_config;
 	struct qcom_slc_capability *slc_capability;
 	struct slc_client_capability *slc_client_cap;
-	struct slc_partid_capability *slc_partid_cap;
+	struct slc_partid_capability *partid_cap;
 	int client_idx, partid_idx, gear_idx;
 
 	qcom_msc = slc_capability_check(dev, &slc_part_config.query);
@@ -145,15 +145,16 @@ static int slc_set_cache_partition(struct device *dev, void *msc_partid, void *m
 		client_idx = slc_part_config.query.client_id;
 		partid_idx = slc_part_config.query.part_id;
 		slc_client_cap = &(slc_capability->slc_client_cap[client_idx]);
-		slc_partid_cap = &(slc_client_cap->slc_partid_cap[partid_idx]);
+		partid_cap = (struct slc_partid_capability *)
+			&(slc_client_cap->slc_partid_cap[partid_idx]);
 
-		for (gear_idx = 0; gear_idx < slc_partid_cap->num_gears; gear_idx++) {
-			if (slc_partid_cap->gear_def.gear_cfg.part_id_gears[gear_idx] ==
+		for (gear_idx = 0; gear_idx < partid_cap->num_gears; gear_idx++) {
+			if (partid_cap->part_id_gears[gear_idx] ==
 					slc_part_config.gear_config.gear_val)
 				break;
 		}
 
-		if (gear_idx == slc_partid_cap->num_gears) {
+		if (gear_idx == partid_cap->num_gears) {
 			dev_err(dev, "GEAR config not valid!\n");
 			return -EINVAL;
 		}
@@ -244,29 +245,23 @@ static int slc_get_cache_partition_capability(struct device *dev, void *msc_part
 	struct qcom_mpam_msc *qcom_msc;
 	struct msc_query *query;
 	struct qcom_slc_capability *slc_capability;
-	struct slc_partid_capability *slc_partid_capability;
+	union slc_partid_capability_def *partid_cap;
 	struct slc_client_capability *slc_client_cap;
-	int ret;
 
 	query = (struct msc_query *)msc_partid;
 	qcom_msc = slc_capability_check(dev, query);
 	if (qcom_msc == NULL)
 		return -EINVAL;
 
-	slc_partid_capability = (struct slc_partid_capability *) msc_partconfig;
+	partid_cap = (union slc_partid_capability_def *)msc_partconfig;
 	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
 	slc_client_cap = &slc_capability->slc_client_cap[query->client_id];
 	if (slc_client_cap->enabled == false)
 		return -EINVAL;
 
-	ret = mpam_msc_slc_get_params(dev, query, sizeof(struct msc_query),
-			slc_partid_capability, sizeof(struct slc_partid_capability),
+	return mpam_msc_slc_get_params(dev, query, sizeof(struct msc_query),
+			partid_cap, sizeof(union slc_partid_capability_def),
 			PARAM_GET_CACHE_CAPABILITY_MSC);
-	if (ret == 0)
-		slc_partid_capability->gear_def.cap_cfg.slc_bitfield_capacity =
-			slc_capability->slc_bitfield_capacity;
-
-	return ret;
 }
 
 static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
@@ -552,11 +547,9 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 			client_info->slc_mon_info.num_cap_monitor;
 		slc_capability->slc_mon_list.read_miss_config_available =
 			client_info->slc_mon_info.num_miss_monitor;
-		slc_capability->slc_bitfield_capacity = client_info->slc_bitfield_capacity;
 		if ((slc_capability->num_clients == 0) ||
 				(client_info->slc_mon_info.num_cap_monitor == 0) ||
-				(client_info->slc_mon_info.num_miss_monitor == 0) ||
-				(slc_capability->slc_bitfield_capacity == 0)) {
+				(client_info->slc_mon_info.num_miss_monitor == 0)) {
 			pr_err("SLC Client info population Failed!\n");
 			return -EINVAL;
 		}
@@ -593,7 +586,7 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 			client_cap->client_name = devm_kzalloc(dev, CLIENT_NAME_LEN, GFP_KERNEL);
 
 			client_cap->slc_partid_cap = devm_kcalloc(dev, num_part_ids,
-					sizeof(struct slc_partid_capability), GFP_KERNEL);
+					sizeof(union slc_partid_capability_def), GFP_KERNEL);
 			if ((client_cap->client_name == NULL) ||
 					(client_cap->slc_partid_cap == NULL))
 				return -ENOMEM;
@@ -655,7 +648,7 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 
 			client_cap->enabled = true;
 			client_cap->slc_partid_cap = devm_kcalloc(dev, num_part_ids,
-					sizeof(struct slc_partid_capability), GFP_KERNEL);
+					sizeof(union slc_partid_capability_def), GFP_KERNEL);
 			if (client_cap->slc_partid_cap == NULL) {
 				ret = -ENOMEM;
 				break;
