@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011-2015, 2017, 2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitfield.h>
@@ -860,20 +860,16 @@ static int qpnp_tm_freeze(struct device *dev)
 
 static int qpnp_tm_suspend(struct device *dev)
 {
-#ifdef CONFIG_DEEPSLEEP
-	if (pm_suspend_via_firmware())
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		return qpnp_tm_freeze(dev);
-#endif
 
 	return 0;
 }
 
 static int qpnp_tm_resume(struct device *dev)
 {
-#ifdef CONFIG_DEEPSLEEP
-	if (pm_suspend_via_firmware())
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		return qpnp_tm_restore(dev);
-#endif
 
 	return 0;
 }
