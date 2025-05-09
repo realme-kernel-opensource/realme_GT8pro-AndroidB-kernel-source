@@ -36,6 +36,7 @@ iommu-logger.ko
 qcom_iommu_util.ko
 arm_smmu.ko
 crypto-qti-virt.ko
+virtio_blk_qti_crypto.ko
 virtio_blk.ko
 rename_devices.ko
 qcom-ipcc.ko
