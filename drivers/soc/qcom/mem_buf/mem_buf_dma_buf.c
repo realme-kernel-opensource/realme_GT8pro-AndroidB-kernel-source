@@ -358,6 +358,12 @@ struct mem_buf_vmperm *to_mem_buf_vmperm(struct dma_buf *dmabuf)
 }
 EXPORT_SYMBOL_GPL(to_mem_buf_vmperm);
 
+bool is_mem_buf_dma_buf(struct dma_buf *dmabuf)
+{
+	return !IS_ERR(to_mem_buf_vmperm(dmabuf));
+}
+EXPORT_SYMBOL_GPL(is_mem_buf_dma_buf);
+
 int mem_buf_dma_buf_set_destructor(struct dma_buf *buf,
 				   mem_buf_dma_buf_destructor dtor,
 				   void *dtor_data)
