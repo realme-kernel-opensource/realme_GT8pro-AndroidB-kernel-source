@@ -106,6 +106,20 @@ CONFIGFS_ATTR(slc_mpam_, schemata);
 static ssize_t slc_mpam_enable_cap_monitor_show(struct config_item *item,
 		char *page)
 {
+	union slc_partid_capability_def partid_cap = { 0 };
+	struct msc_query query;
+	uint32_t firmware_ver;
+	struct slc_mpam_item *pm_item = get_pm_item(item);
+
+	set_msc_query(&query, pm_item);
+	firmware_ver = SLC_MPAM_VERSION_0;
+	msc_system_get_mpam_version(SLC, &firmware_ver);
+	if (firmware_ver != SLC_MPAM_VERSION_0) {
+		msc_system_get_device_capability(SLC, &query, &partid_cap);
+		if ((partid_cap.v1_cap.mon_support & (1 << cap_mon_support)) == 0)
+			return scnprintf(page, PAGE_SIZE, "Monitor supported\n");
+	}
+
 	return scnprintf(page, PAGE_SIZE, "%s\n",
 		(get_pm_item(item)->cap_mon_enabled) ? "enabled" : "disabled");
 }
@@ -170,6 +184,20 @@ CONFIGFS_ATTR_RO(slc_mpam_, cap_monitor_data);
 static ssize_t slc_mpam_enable_miss_monitor_show(struct config_item *item,
 		char *page)
 {
+	union slc_partid_capability_def partid_cap = { 0 };
+	struct msc_query query;
+	uint32_t firmware_ver;
+	struct slc_mpam_item *pm_item = get_pm_item(item);
+
+	set_msc_query(&query, pm_item);
+	firmware_ver = SLC_MPAM_VERSION_0;
+	msc_system_get_mpam_version(SLC, &firmware_ver);
+	if (firmware_ver != SLC_MPAM_VERSION_0) {
+		msc_system_get_device_capability(SLC, &query, &partid_cap);
+		if ((partid_cap.v1_cap.mon_support & (1 << read_miss_mon_support)) == 0)
+			return scnprintf(page, PAGE_SIZE, "Monitor supported\n");
+	}
+
 	return scnprintf(page, PAGE_SIZE, "%s\n",
 		(get_pm_item(item)->miss_mon_enabled) ? "enabled" : "disabled");
 }
@@ -236,7 +264,7 @@ static ssize_t slc_mpam_available_gear_show(struct config_item *item,
 	int i, ret, gear_num;
 	ssize_t len = 0;
 	struct msc_query query;
-	struct slc_partid_capability partid_cap = { 0 };
+	union slc_partid_capability_def partid_cap = { 0 };
 	uint32_t firmware_ver;
 
 	set_msc_query(&query, get_pm_item(item));
@@ -249,22 +277,22 @@ static ssize_t slc_mpam_available_gear_show(struct config_item *item,
 	firmware_ver = SLC_MPAM_VERSION_0;
 	msc_system_get_mpam_version(SLC, &firmware_ver);
 	if (firmware_ver == SLC_MPAM_VERSION_0) {
-		for (i = 0; i < partid_cap.num_gears; i++) {
-			gear_num = partid_cap.gear_def.gear_cfg.part_id_gears[i];
+		for (i = 0; i < partid_cap.v0_cap.num_gears; i++) {
+			gear_num = partid_cap.v0_cap.gear_cfg.part_id_gears[i];
 			len += scnprintf(page + len, PAGE_SIZE - len,
 				"%d - %s\n", gear_num, gear_index[gear_num]);
 		}
 	} else {
-		for (gear_num = 0, i = 0; gear_num < partid_cap.num_gears; gear_num++, i++) {
-			if (((1 << i) & partid_cap.gear_def.cap_cfg.gear_flds_bitmap) == 0)
+		for (gear_num = 0, i = 0; gear_num < partid_cap.v1_cap.num_gears; gear_num++, i++) {
+			if (((1 << i) & partid_cap.v1_cap.cap_cfg.gear_flds_bitmap) == 0)
 				continue;
 
-			if (gear_num >= partid_cap.num_gears)
+			if (gear_num >= partid_cap.v1_cap.num_gears)
 				break;
 
 			len += scnprintf(page + len, PAGE_SIZE - len,
 					"%d - %d\n", gear_num,
-					i * partid_cap.gear_def.cap_cfg.slc_bitfield_capacity);
+					i * partid_cap.v1_cap.cap_cfg.slc_bitfield_capacity);
 		}
 	}
 
