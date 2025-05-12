@@ -269,7 +269,6 @@ void qmsgq_remove_sock(struct qmsgq_sock *qsk)
 {
 	qmsgq_remove_bound(qsk);
 	qmsgq_remove_connected(qsk);
-	qmsgq_port_remove(qsk);
 }
 EXPORT_SYMBOL_GPL(qmsgq_remove_sock);
 
@@ -398,22 +397,37 @@ static void __qmsgq_insert_bound(struct list_head *list,
 static int __qmsgq_connectible_bind(struct socket *sock, const struct sockaddr_vm *addr)
 {
 	struct qmsgq_sock *qsk = sk_qsk(sock->sk);
-	unsigned long flags;
-	int port;
-	int rc;
+	struct sockaddr_vm new_addr;
+	static u32 port;
 
-	/* First ensure this socket isn't already bound. */
-	if (__qmsgq_find_bound_socket(addr))
-		return -EINVAL;
+	if (!port)
+		port = get_random_u32_inclusive(QMSGQ_MIN_EPH_SOCKET, QMSGQ_MAX_EPH_SOCKET);
 
-	spin_lock_irqsave(&qmsgq_port_lock, flags);
-	port = addr->svm_port;
-	rc = qmsgq_port_assign(qsk, &port);
-	spin_unlock_irqrestore(&qmsgq_port_lock, flags);
-	if (rc)
-		return rc;
+	vsock_addr_init(&new_addr, addr->svm_cid, addr->svm_port);
 
-	vsock_addr_init(&qsk->local_addr, VMADDR_CID_HOST, port);
+	if (addr->svm_port == VMADDR_PORT_ANY) {
+		bool found = false;
+		unsigned int i;
+
+		for (i = QMSGQ_MIN_EPH_SOCKET; i < QMSGQ_MAX_EPH_SOCKET; i++) {
+			new_addr.svm_port = port++;
+			if (port >= QMSGQ_MAX_EPH_SOCKET)
+				port = QMSGQ_MIN_EPH_SOCKET;
+
+			if (!__qmsgq_find_bound_socket(&new_addr)) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+			return -EADDRNOTAVAIL;
+	} else {
+		if (__qmsgq_find_bound_socket(&new_addr))
+			return -EADDRINUSE;
+	}
+
+	vsock_addr_init(&qsk->local_addr, new_addr.svm_cid, new_addr.svm_port);
 
 	__qmsgq_insert_bound(QMSGQ_BOUND_SOCKETS(&qsk->local_addr), qsk);
 
@@ -547,7 +561,7 @@ static int qmsgq_accept(struct socket *sock, struct socket *newsock,
 			struct proto_accept_arg *arg)
 {
 	struct sock *listener = sock->sk;
-	struct qmsgq_sock *vconnected;
+	struct qmsgq_sock *qconnected;
 	struct sock *connected;
 	long timeout;
 	int err = 0;
@@ -594,10 +608,10 @@ static int qmsgq_accept(struct socket *sock, struct socket *newsock,
 		sk_acceptq_removed(listener);
 
 		lock_sock_nested(connected, SINGLE_DEPTH_NESTING);
-		vconnected = sk_qsk(connected);
+		qconnected = sk_qsk(connected);
 
 		if (err) {
-			vconnected->rejected = true;
+			qconnected->rejected = true;
 		} else {
 			newsock->state = SS_CONNECTED;
 			sock_graft(connected, newsock);
@@ -1192,7 +1206,8 @@ static void __qmsgq_release(struct sock *sk, int level)
 		if (!sock_flag(sk, SOCK_DEAD))
 			sk->sk_state_change(sk);
 
-		if (!sock_flag(sk, SOCK_ZAPPED))
+		if (!sock_flag(sk, SOCK_ZAPPED) &&
+		    !sock_type_connectible(sk->sk_type))
 			qmsgq_port_remove(qsk);
 
 		sock_orphan(sk);
