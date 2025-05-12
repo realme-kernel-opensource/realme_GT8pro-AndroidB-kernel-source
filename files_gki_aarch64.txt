@@ -293,6 +293,7 @@ arch/arm64/kernel/proton-pack.c
 arch/arm64/kernel/psci.c
 arch/arm64/kernel/ptrace.c
 arch/arm64/kernel/return_address.c
+arch/arm64/kernel/sdei.c
 arch/arm64/kernel/setup.c
 arch/arm64/kernel/signal.c
 arch/arm64/kernel/signal32.c
@@ -924,6 +925,7 @@ drivers/firmware/arm_scmi/transports/smc.c
 drivers/firmware/arm_scmi/transports/virtio.c
 drivers/firmware/arm_scmi/voltage.c
 drivers/firmware/arm_scpi.c
+drivers/firmware/arm_sdei.c
 drivers/firmware/efi/arm-runtime.c
 drivers/firmware/efi/earlycon.c
 drivers/firmware/efi/efi-init.c
