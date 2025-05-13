@@ -19,7 +19,7 @@
 ### Qualcomm customizations ###
 new_local_repository(
     name = "dtc",
-    path = "external/dtc",
+    path = "external/qcom-dtc",
     build_file_content = """
 cc_library(
     name = "libfdt",
