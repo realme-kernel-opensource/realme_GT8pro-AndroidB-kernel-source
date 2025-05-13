@@ -125,3 +125,22 @@ def register_modules(registry):
             "drivers/soc/qcom/smem",
         ],
     )
+
+    registry.register(
+        name = "drivers/rpmsg/qcom_glink_cma",
+        out = "qcom_glink_cma.ko",
+        config = "CONFIG_RPMSG_QCOM_GLINK_CMA",
+        srcs = [
+            # do not sort
+            "drivers/rpmsg/qcom_glink_cma.h",
+            "drivers/rpmsg/qcom_glink_native.h",
+            "drivers/rpmsg/virtio_glink_cma.c",
+            "drivers/rpmsg/qcom_glink_cma_core.c",
+        ],
+        deps = [
+            # do not sort
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/rpmsg/qcom_glink",
+            "drivers/remoteproc/rproc_qcom_common",
+        ],
+    )
