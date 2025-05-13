@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/soc/qcom/qcom_aoss.h>
 #include <linux/ipc_logging.h>
+#include <linux/suspend.h>
 
 #define CREATE_TRACE_POINTS
 #include "trace-aoss.h"
@@ -74,6 +75,7 @@ struct qmp_cooling_device {
  * @cooling_devs: thermal cooling devices
  * @debugfs_root: directory for the developer/tester interface
  * @debugfs_files: array of individual debugfs entries under debugfs_root
+ * @ds_entry: deepsleep entry path
  */
 struct qmp {
 	void __iomem *msgram;
@@ -96,6 +98,7 @@ struct qmp {
 	struct dentry *debugfs_files[QMP_DEBUGFS_FILES];
 	struct dentry *debugfs_file;
 #endif /* CONFIG_DEBUG_FS */
+	bool ds_entry;
 };
 
 /* IPC Logging helpers */
@@ -189,6 +192,8 @@ static int qmp_open(struct qmp *qmp)
 		goto timeout_close_channel;
 	}
 
+	qmp->ds_entry = false;
+
 	return 0;
 
 timeout_close_channel:
@@ -246,6 +251,9 @@ int __printf(2, 3) qmp_send(struct qmp *qmp, const char *fmt, ...)
 
 	if (WARN_ON(IS_ERR_OR_NULL(qmp) || !fmt))
 		return -EINVAL;
+
+	if (qmp->ds_entry)
+		return -ENXIO;
 
 	memset(buf, 0, sizeof(buf));
 	va_start(args, fmt);
@@ -719,9 +727,40 @@ static int aoss_qmp_mbox_restore(struct device *dev)
 	return 0;
 }
 
+static int aoss_qmp_mbox_suspend_noirq(struct device *dev)
+{
+	struct qmp *qmp = dev_get_drvdata(dev);
+
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+		qmp->ds_entry = true;
+		dev_info(dev, "AOSS: Deep sleep entry\n");
+	}
+
+	return 0;
+}
+
+static int aoss_qmp_mbox_resume_early(struct device *dev)
+{
+	struct qmp *qmp = dev_get_drvdata(dev);
+	int ret = 0;
+
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+		ret = qmp_open(qmp);
+
+		if (ret < 0)
+			dev_err(dev, "QMP restore failed, ret = %d\n", ret);
+
+		dev_info(dev, "AOSS: Deep sleep exit\n");
+	}
+
+	return ret;
+}
+
 static const struct dev_pm_ops aoss_qmp_mbox_pm_ops = {
 	.freeze_late = aoss_qmp_mbox_freeze,
 	.restore_early = aoss_qmp_mbox_restore,
+	.suspend_noirq = aoss_qmp_mbox_suspend_noirq,
+	.resume_early = aoss_qmp_mbox_resume_early,
 };
 
 static const struct of_device_id qmp_dt_match[] = {
