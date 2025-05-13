@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt) "%s:%s " fmt, KBUILD_MODNAME, __func__
 
 #include <linux/devfreq.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_device.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
 #include <linux/pm_qos.h>
@@ -15,25 +17,20 @@
 #include <linux/thermal.h>
 #include <linux/workqueue.h>
 
-#define MAX_RETRY_CNT 20
-#define RETRY_DELAY msecs_to_jiffies(1000)
 #define DEVFREQ_CDEV_NAME "gpu"
 #define DEVFREQ_CDEV "qcom-devfreq-cdev"
 
 struct devfreq_cdev_device {
-	struct device_node *np;
-	struct devfreq *devfreq;
+	struct device_node *gpu_np;
 	struct device *dev;
+	struct device *gpu_dev;
 	unsigned long *freq_table;
 	int cur_state;
 	int max_state;
 	int retry_cnt;
 	struct dev_pm_qos_request qos_max_freq_req;
-	struct delayed_work register_work;
 	struct thermal_cooling_device *cdev;
 };
-
-static struct devfreq_cdev_device *devfreq_cdev;
 
 static int devfreq_cdev_set_state(struct thermal_cooling_device *cdev,
 					unsigned long state)
@@ -47,10 +44,11 @@ static int devfreq_cdev_set_state(struct thermal_cooling_device *cdev,
 	if (state == cdev_data->cur_state)
 		return 0;
 	freq = cdev_data->freq_table[state];
-	pr_debug("cdev:%s Limit:%lu\n", cdev->type, freq);
+	dev_dbg(cdev_data->dev, "cdev:%s Limit:%lu\n", cdev->type, freq);
 	ret = dev_pm_qos_update_request(&cdev_data->qos_max_freq_req, freq);
 	if (ret < 0) {
-		pr_err("Error placing qos request:%lu. cdev:%s err:%d\n",
+		dev_err(cdev_data->dev,
+			"Error placing qos request:%lu. cdev:%s err:%d\n",
 				freq, cdev->type, ret);
 		return ret;
 	}
@@ -83,98 +81,102 @@ static struct thermal_cooling_device_ops devfreq_cdev_ops = {
 	.get_max_state = devfreq_cdev_get_max_state,
 };
 
-static void devfreq_cdev_work(struct work_struct *work)
+static int devfreq_cdev_probe(struct platform_device *pdev)
 {
-	struct devfreq *df = NULL;
+	struct device *dev = &pdev->dev;
 	unsigned long freq = ULONG_MAX;
 	unsigned long *freq_table;
 	struct dev_pm_opp *opp;
 	int ret = 0, freq_ct, i;
-	struct devfreq_cdev_device *cdev_data = container_of(work,
-						struct devfreq_cdev_device,
-						register_work.work);
-
-	df = devfreq_get_devfreq_by_node(cdev_data->np);
-	if (IS_ERR(df)) {
-		ret = PTR_ERR(df);
-		pr_debug("Devfreq not available:%d\n", ret);
-		if (--cdev_data->retry_cnt)
-			queue_delayed_work(system_highpri_wq,
-					&cdev_data->register_work,
-					RETRY_DELAY);
-		return;
-	}
-
-	cdev_data->dev = df->dev.parent;
-	cdev_data->devfreq = df;
-	freq_ct = dev_pm_opp_get_opp_count(cdev_data->dev);
-	freq_table = kcalloc(freq_ct, sizeof(*freq_table), GFP_KERNEL);
-	if (!freq_table) {
-		ret = -ENOMEM;
-		return;
-	}
-
-	for (i = 0, freq = ULONG_MAX; i < freq_ct; i++, freq--) {
-
-		opp = dev_pm_opp_find_freq_floor(cdev_data->dev, &freq);
-		if (IS_ERR(opp)) {
-			ret = PTR_ERR(opp);
-			goto qos_exit;
-		}
-		dev_pm_opp_put(opp);
-
-		freq_table[i] = DIV_ROUND_UP(freq, 1000); //hz to khz
-		pr_debug("%d. freq table:%lu\n", i, freq_table[i]);
-	}
-	cdev_data->max_state = freq_ct-1;
-	cdev_data->freq_table = freq_table;
-	ret = dev_pm_qos_add_request(cdev_data->dev,
-					&cdev_data->qos_max_freq_req,
-					DEV_PM_QOS_MAX_FREQUENCY,
-					PM_QOS_MAX_FREQUENCY_DEFAULT_VALUE);
-	if (ret < 0)
-		goto qos_exit;
-	cdev_data->cdev = thermal_cooling_device_register(DEVFREQ_CDEV_NAME,
-						cdev_data, &devfreq_cdev_ops);
-	if (IS_ERR(cdev_data->cdev)) {
-		pr_err("Cdev register failed for gpu, ret:%ld\n",
-			PTR_ERR(cdev_data->cdev));
-		cdev_data->cdev = NULL;
-		goto qos_exit;
-	}
-
-	return;
-
-qos_exit:
-	kfree(cdev_data->freq_table);
-	dev_pm_qos_remove_request(&cdev_data->qos_max_freq_req);
-}
-
-static int devfreq_cdev_probe(struct platform_device *pdev)
-{
-	struct device *dev = &pdev->dev;
+	struct devfreq_cdev_device *devfreq_cdev;
+	struct platform_device *gpu_pdev;
+	struct device_link *link;
 
 	devfreq_cdev = devm_kzalloc(dev, sizeof(*devfreq_cdev), GFP_KERNEL);
 	if (!devfreq_cdev)
 		return -ENOMEM;
 
-	devfreq_cdev->np = of_parse_phandle(pdev->dev.of_node,
+	devfreq_cdev->dev = dev;
+	devfreq_cdev->gpu_np = of_parse_phandle(pdev->dev.of_node,
 				"qcom,devfreq", 0);
-	devfreq_cdev->retry_cnt = MAX_RETRY_CNT;
 
-	INIT_DEFERRABLE_WORK(&devfreq_cdev->register_work, devfreq_cdev_work);
-	queue_delayed_work(system_highpri_wq, &devfreq_cdev->register_work, 0);
+	gpu_pdev = of_find_device_by_node(devfreq_cdev->gpu_np);
+	if (!gpu_pdev) {
+		dev_dbg(devfreq_cdev->dev, "Cannot find device node %s\n",
+			devfreq_cdev->gpu_np->name);
+		return -ENODEV;
+	}
+
+	link = device_link_add(devfreq_cdev->dev, &gpu_pdev->dev,
+		DL_FLAG_AUTOPROBE_CONSUMER);
+
+	put_device(&gpu_pdev->dev);
+	of_node_put(devfreq_cdev->gpu_np);
+
+	if (!link) {
+		dev_err(devfreq_cdev->dev, "add gpu device_link fail\n");
+		return -ENODEV;
+	}
+	if (link->status == DL_STATE_DORMANT) {
+		dev_dbg(devfreq_cdev->dev, "kgsl not probed yet:%d\n", ret);
+		return -EPROBE_DEFER;
+	}
+
+	devfreq_cdev->gpu_dev = &gpu_pdev->dev;
+	freq_ct = dev_pm_opp_get_opp_count(devfreq_cdev->gpu_dev);
+	freq_table = devm_kcalloc(devfreq_cdev->dev, freq_ct,
+					sizeof(*freq_table), GFP_KERNEL);
+	if (!freq_table)
+		return -ENOMEM;
+
+	for (i = 0, freq = ULONG_MAX; i < freq_ct; i++, freq--) {
+
+		opp = dev_pm_opp_find_freq_floor(devfreq_cdev->gpu_dev, &freq);
+		if (IS_ERR(opp)) {
+			ret = PTR_ERR(opp);
+			return ret;
+		}
+		dev_pm_opp_put(opp);
+
+		freq_table[i] = DIV_ROUND_UP(freq, 1000); //hz to khz
+		dev_dbg(devfreq_cdev->dev, "%d. freq table:%lu\n", i,
+						freq_table[i]);
+	}
+	devfreq_cdev->max_state = freq_ct-1;
+	devfreq_cdev->freq_table = freq_table;
+	ret = dev_pm_qos_add_request(devfreq_cdev->dev,
+					&devfreq_cdev->qos_max_freq_req,
+					DEV_PM_QOS_MAX_FREQUENCY,
+					PM_QOS_MAX_FREQUENCY_DEFAULT_VALUE);
+	if (ret < 0)
+		goto qos_exit;
+	devfreq_cdev->cdev = thermal_cooling_device_register(DEVFREQ_CDEV_NAME,
+					devfreq_cdev, &devfreq_cdev_ops);
+	if (IS_ERR(devfreq_cdev->cdev)) {
+		ret = PTR_ERR(devfreq_cdev->cdev);
+		dev_err(devfreq_cdev->dev,
+			"Cdev register failed for gpu, ret:%d\n", ret);
+		devfreq_cdev->cdev = NULL;
+		goto qos_exit;
+	}
+
+	platform_set_drvdata(pdev, devfreq_cdev);
 
 	return 0;
+
+qos_exit:
+	dev_pm_qos_remove_request(&devfreq_cdev->qos_max_freq_req);
+
+	return ret;
 }
 
 static void devfreq_cdev_remove(struct platform_device *pdev)
 {
+	struct devfreq_cdev_device *devfreq_cdev = platform_get_drvdata(pdev);
+
 	if (devfreq_cdev->cdev) {
 		thermal_cooling_device_unregister(devfreq_cdev->cdev);
 		dev_pm_qos_remove_request(&devfreq_cdev->qos_max_freq_req);
-		kfree(devfreq_cdev->freq_table);
-		devfreq_cdev->cdev = NULL;
 	}
 }
 
