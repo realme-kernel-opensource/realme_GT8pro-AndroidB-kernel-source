@@ -2949,15 +2949,15 @@ static struct qcom_iommu_ops arm_smmu_ops = {
 
 static void arm_smmu_device_reset(struct arm_smmu_device *smmu)
 {
-	int i;
 	u32 reg;
-	const char *prop;
+	struct device *dev = smmu->dev;
 
 	/* clear global FSR */
 	reg = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_sGFSR);
 	arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_sGFSR, reg);
-	if (of_property_read_string(smmu->dev->of_node,
-					"qcom,reset-stream-mapping-groups", &prop)) {
+	if (!of_property_read_bool(dev->of_node,
+					"qcom,reset-stream-mapping-groups")) {
+		int i = 0;
 	/*
 	 * Reset stream mapping groups: Initial values mark all SMRn as
 	 * invalid and all S2CRn as bypass unless overridden.
