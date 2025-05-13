@@ -131,39 +131,13 @@ static int qmsgq_gh_rm_cb(struct notifier_block *nb, unsigned long cmd, void *da
 	return NOTIFY_DONE;
 }
 
-static int qmsgq_gh_peer_lookup(struct qmsgq_gh_device *qdev)
-{
-	struct device_node *node;
-	u32 peer_vmid;
-	int rc;
-
-	node = of_get_child_by_name(of_find_node_by_path("/hypervisor"),
-				    "msgqsock-msgq-pair");
-	if (!node) {
-		dev_err(qdev->dev, "failed to get msgqsock-msgq-pair node\n");
-		return -EINVAL;
-	}
-
-	/* The peer_vimid indicates both VMs are ready to communicate */
-	rc = of_property_read_u32(node, "qcom,peer-vmid", &peer_vmid);
-	if (!rc) {
-		rc = qmsgq_gh_msgq_start(qdev);
-		if (rc) {
-			dev_err(qdev->dev, "msgq start failed rc[%d]\n", rc);
-			of_node_put(node);
-			return rc;
-		}
-	}
-
-	of_node_put(node);
-	return 0;
-}
-
 static int qmsgq_gh_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
 	struct device *dev = &pdev->dev;
 	struct qmsgq_gh_device *qdev;
+	enum gh_vm_names peer_vmname;
+	gh_vmid_t peer_vmid = 0;
 	int rc;
 
 	qdev = devm_kzalloc(dev, sizeof(*qdev), GFP_KERNEL);
@@ -191,20 +165,37 @@ static int qmsgq_gh_probe(struct platform_device *pdev)
 	qdev->rm_nb.notifier_call = qmsgq_gh_rm_cb;
 	gh_rm_register_notifier(&qdev->rm_nb);
 
-	rc = qmsgq_gh_peer_lookup(qdev);
+	rc = of_property_read_u32(np, "peer", &peer_vmname);
 	if (rc) {
-		gh_rm_unregister_notifier(&qdev->rm_nb);
-		return rc;
+		dev_err(dev, "failed to read peer vm info %d\n", rc);
+		goto out;
+	}
+
+	rc = ghd_rm_get_vmid(peer_vmname, &peer_vmid);
+	if (rc) {
+		dev_err(dev, "failed to get peer vmid %d\n", rc);
+		goto out;
+	}
+
+	if (peer_vmid != GH_VMID_INVAL) {
+		rc = qmsgq_gh_msgq_start(qdev);
+		if (rc) {
+			dev_err(qdev->dev, "msgq start failed rc[%d]\n", rc);
+			goto out;
+		}
 	}
 
 	rc = qmsgq_transport_init(qdev);
 	if (rc) {
-		gh_rm_unregister_notifier(&qdev->rm_nb);
-		return rc;
+		dev_err(qdev->dev, "qmsgq transport init failed rc[%d]\n", rc);
+		goto out;
 	}
 
 	qmsgq_endpoint_register(&qdev->ep);
 	return 0;
+out:
+	gh_rm_unregister_notifier(&qdev->rm_nb);
+	return rc;
 }
 
 static void qmsgq_gh_remove(struct platform_device *pdev)
