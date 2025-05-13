@@ -43,6 +43,7 @@
 #include <linux/qti-lcp-ppddr.h>
 #include <include/linux/arm-smccc.h>
 #include <linux/qtee_shmbridge.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
 
 #include "qcom_scm.h"
 #include "qcom_tzmem.h"
@@ -168,6 +169,11 @@ static const char * const qcom_scm_convention_names[] = {
 	[SMC_CONVENTION_ARM_64] = "smc arm 64",
 	[SMC_CONVENTION_LEGACY] = "smc legacy",
 };
+
+#define GIC_SPI_BASE        32
+#define GIC_MAX_SPI       1019  // SPIs in GICv3 spec range from 32..1019
+#define GIC_ESPI_BASE     4096
+#define GIC_MAX_ESPI      5119 // ESPIs in GICv3 spec range from 4096..5119
 
 static struct qcom_scm *__scm;
 
@@ -3174,15 +3180,36 @@ static int qcom_scm_do_restart(struct notifier_block *this, unsigned long event,
 	return NOTIFY_OK;
 }
 
+static int qcom_scm_fill_irq_fwspec_params(struct irq_fwspec *fwspec, u32 virq)
+{
+	if (virq >= GIC_SPI_BASE && virq <= GIC_MAX_SPI) {
+		fwspec->param[0] = GIC_SPI;
+		fwspec->param[1] = virq - GIC_SPI_BASE;
+	} else if (virq >= GIC_ESPI_BASE && virq <= GIC_MAX_ESPI) {
+		fwspec->param[0] = GIC_ESPI;
+		fwspec->param[1] = virq - GIC_ESPI_BASE;
+	} else {
+		WARN(1, "Unexpected virq: %d\n", virq);
+		return -ENXIO;
+	}
+	fwspec->param[2] = IRQ_TYPE_EDGE_RISING;
+	fwspec->param_count = 3;
+
+	return 0;
+}
+
 static int qcom_scm_query_wq_queue_info(struct qcom_scm *scm)
 {
 	int ret;
+	u32 hwirq;
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_WAITQ,
 		.cmd = QCOM_SCM_GET_WQ_QUEUE_INFO,
 		.owner = ARM_SMCCC_OWNER_SIP
 	};
 	struct qcom_scm_res res;
+	struct irq_fwspec fwspec;
+	struct device_node *parent_irq_node;
 
 	scm->waitq.wq_feature = QCOM_SCM_SINGLE_SMC_ALLOW;
 	ret = qcom_scm_call_atomic(__scm->dev, &desc, &res);
@@ -3192,8 +3219,17 @@ static int qcom_scm_query_wq_queue_info(struct qcom_scm *scm)
 	}
 
 	scm->waitq.call_ctx_cnt = res.result[0] & 0xFF;
-	scm->waitq.irq = res.result[1] & 0xFFFF;
+	hwirq = res.result[1] & 0xFFFF;
 	scm->waitq.wq_feature = QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW;
+
+	ret = qcom_scm_fill_irq_fwspec_params(&fwspec, hwirq);
+	if (ret)
+		return ret;
+	parent_irq_node = of_irq_find_parent(__scm->dev->of_node);
+
+	fwspec.fwnode = of_node_to_fwnode(parent_irq_node);
+
+	scm->waitq.irq = irq_create_fwspec_mapping(&fwspec);
 
 	pr_info("WQ Info, feature: %d call_ctx_cnt: %llu irq: %llu\n",
 		scm->waitq.wq_feature, scm->waitq.call_ctx_cnt, scm->waitq.irq);
@@ -3328,12 +3364,19 @@ static int __qcom_multi_smc_init(struct qcom_scm *__scm,
 	if (of_device_is_compatible(__scm->dev->of_node, "qcom,scm-v1.1")) {
 		INIT_WORK(&__scm->waitq.scm_irq_work, scm_irq_work);
 
-		irq = platform_get_irq(pdev, 0);
-		if (irq < 0) {
-			dev_err(__scm->dev, "WQ IRQ is not specified: %d\n", irq);
-			return irq;
+		/* Detect Multi SMC support present or not */
+		ret = qcom_scm_query_wq_queue_info(__scm);
+		if (!ret) {
+			irq = __scm->waitq.irq;
+			sema_init(&qcom_scm_sem_lock,
+					(int)__scm->waitq.call_ctx_cnt);
+		} else {
+			irq = platform_get_irq(pdev, 0);
+			if (irq < 0) {
+				dev_err(__scm->dev, "WQ IRQ is not specified: %d\n", irq);
+				return irq;
+			}
 		}
-
 		ret = devm_request_irq(__scm->dev, irq,
 				qcom_scm_irq_handler,
 				IRQF_ONESHOT, "qcom-scm", __scm);
@@ -3342,11 +3385,6 @@ static int __qcom_multi_smc_init(struct qcom_scm *__scm,
 			return ret;
 		}
 
-		/* Detect Multi SMC support present or not */
-		ret = qcom_scm_query_wq_queue_info(__scm);
-		if (!ret)
-			sema_init(&qcom_scm_sem_lock,
-					(int)__scm->waitq.call_ctx_cnt);
 	}
 
 	return ret;
