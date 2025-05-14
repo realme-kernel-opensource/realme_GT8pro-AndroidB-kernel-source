@@ -25,6 +25,7 @@ load(
 )
 load(":kleaf-scripts/targets/sun_vms.bzl", "define_sun_vms")
 load(":kleaf-scripts/targets/vienna.bzl", "define_vienna")
+load(":kleaf-scripts/targets/x1p42100.bzl", "define_x1p42100")
 
 exports_files(["android/abi_gki_aarch64_qcom"])
 
@@ -272,3 +273,5 @@ define_canoe_vms()
 define_vienna()
 
 define_lahaina()
+
+define_x1p42100()
