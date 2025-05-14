@@ -2035,7 +2035,7 @@ static int clk_rcg2_crmc_populate_freq(struct clk_hw *hw, unsigned int l,
 		return -EINVAL;
 	}
 
-	f->freq = calc_rate(prate, 0, 0, 0, f->pre_div);
+	f->freq = DIV_ROUND_UP((prate * 2), (f->pre_div + 1));
 
 	return 0;
 }
