@@ -78,9 +78,7 @@ static const struct wcd_usbss_reg_mask_val coeff_init[] = {
 	{WCD_USBSS_GND_COEF_R_K2_0,       0xFF, 0xE8},
 	{WCD_USBSS_GND_COEF_R_K4_0,       0xFF, 0x73},
 	{WCD_USBSS_RATIO_SPKR_REXT_L_LSB, 0xFF, 0x00},
-	{WCD_USBSS_RATIO_SPKR_REXT_L_MSB, 0x7F, 0x04},
 	{WCD_USBSS_RATIO_SPKR_REXT_R_LSB, 0xFF, 0x00},
-	{WCD_USBSS_RATIO_SPKR_REXT_R_MSB, 0x7F, 0x04},
 };
 
 static struct wcd_usbss_ctxt *wcd_usbss_ctxt_;
