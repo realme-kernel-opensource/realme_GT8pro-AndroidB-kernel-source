@@ -102,9 +102,6 @@
 #define GSI_CPHA		(BIT(4))
 #define GSI_CPOL		(BIT(5))
 
-#define MAX_TX_SG		(3)
-#define NUM_SPI_XFER		(8)
-
 /* SPI sampling registers */
 #define SE_GENI_CGC_CTRL	(0x28)
 #define SE_GENI_CFG_REG108	(0x2B0)
@@ -121,6 +118,15 @@
 #define DATA_BYTES_PER_LINE	(32)
 #define MAX_IPC_NAME_BUF	(36)
 #define SPI_DATA_DUMP_SIZE	(16)
+
+#define TX_SPLIT_ADDITIONAL_TRE	(2)
+#define MAX_TX_SG		(3 + TX_SPLIT_ADDITIONAL_TRE)
+#define NUM_SPI_XFER		(8 + TX_SPLIT_ADDITIONAL_TRE)
+#define MAX_TX_DMA_TRE		(1 + TX_SPLIT_ADDITIONAL_TRE)
+#define SPI_DMA_ADDR_ALIGN_BYTE	(16)
+#define SPI_SPLIT_DMA_TRE_SIZE	(16)
+#define SPI_DMA_BUF_SIZE_MAX	(64 * 1024)
+#define SPI_PREALLOC_BUF_SIZE	(SPI_DMA_BUF_SIZE_MAX + SPI_DMA_ADDR_ALIGN_BYTE)
 
 #define	SPI_SUPPORTED_MODES	(SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH)
 
@@ -184,7 +190,7 @@ struct spi_geni_gsi {
 	struct msm_gpi_tre unlock_t;
 	struct msm_gpi_tre config0_tre;
 	struct msm_gpi_tre go_tre;
-	struct msm_gpi_tre tx_dma_tre;
+	struct msm_gpi_tre tx_dma_tre[MAX_TX_DMA_TRE];
 	struct msm_gpi_tre rx_dma_tre;
 	struct scatterlist tx_sg[MAX_TX_SG];
 	struct scatterlist rx_sg;
@@ -195,6 +201,25 @@ struct spi_geni_gsi {
 	struct dma_async_tx_descriptor *tx_desc;
 	struct dma_async_tx_descriptor *rx_desc;
 	struct gsi_desc_cb desc_cb;
+};
+
+/**
+ * struct spi_split_dma_tre - holds information to split single tre into multiple tres
+ * @split_tx: boolean to indicate if the tx tre should be split
+ * @last_tx_dma_len: hold length of last tx tre
+ * @aligned_tx_buf: pointer to aligned address of tx buf
+ * @aligned_tx_buf_orig: pointer to allocated address of tx buf
+ * @aligned_tx_dma_buf: pointer to dma address of aligned_tx_buf
+ * @aligned_tx_dma_buf_orig: pointer to dma address of aligned_tx_buf_orig
+ *
+ */
+struct spi_split_dma_tre {
+	bool split_tx;
+	u32 last_tx_dma_len;
+	void *aligned_tx_buf;
+	void *aligned_tx_buf_orig;
+	dma_addr_t aligned_tx_dma_buf;
+	dma_addr_t aligned_tx_dma_buf_orig;
 };
 
 struct spi_geni_master {
@@ -259,6 +284,7 @@ struct spi_geni_master {
 	int max_data_dump_size;
 	unsigned int proto;
 	bool qspi_ddr_support;
+	struct spi_split_dma_tre split_tx_dma_tre;
 };
 
 /**
@@ -945,24 +971,30 @@ static struct msm_gpi_tre *setup_go_tre(int cmd, int cs, int rx_len, int flags,
 }
 
 static struct msm_gpi_tre *setup_dma_tre(struct msm_gpi_tre *tre, struct spi_transfer *xfer,
-					 dma_addr_t dma_buf, struct spi_geni_master *mas,
-					 bool is_tx)
+					 dma_addr_t dma_buf, const u8 *buf, unsigned int len,
+					 struct spi_geni_master *mas, bool is_tx,
+					 struct msm_tre_flags flags)
 {
 	if (IS_ERR_OR_NULL(tre))
 		return tre;
 
-	if (xfer->len <= IMMEDIATE_DMA_LEN && is_tx) {
+	if (len <= IMMEDIATE_DMA_LEN && is_tx) {
 		tre->dword[0] = 0;
 		tre->dword[1] = 0;
-		memcpy((u8 *)&tre->dword[0], (u8 *)xfer->tx_buf, xfer->len);
-		tre->dword[2] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD2(xfer->len);
-		tre->dword[3] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD3(0, 0, is_tx, 0, 0);
+		memcpy((u8 *)&tre->dword[0], (u8 *)buf, len);
+		tre->dword[2] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD2(len);
+		tre->dword[3] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD3(flags.link_rx, flags.bei,
+								 flags.ieot, flags.ieob,
+								 flags.chain);
 	} else {
 		tre->dword[0] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD0(dma_buf);
 		tre->dword[1] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD1(dma_buf);
-		tre->dword[2] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD2(xfer->len);
-		tre->dword[3] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0, 0, is_tx, 0, 0);
+		tre->dword[2] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD2(len);
+		tre->dword[3] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(flags.link_rx, flags.bei,
+								flags.ieot, flags.ieob,
+								flags.chain);
 	}
+
 	SPI_LOG_DBG(mas->ipc, false, mas->dev,
 		    "dma_tre: dword[0]:0x%x dword[1]:0x%x dword[2]:0x%x dword[3]:0x%x\n",
 		    tre->dword[0], tre->dword[1], tre->dword[2], tre->dword[3]);
@@ -1056,16 +1088,14 @@ static void spi_gsi_rx_callback(void *cb)
 			return;
 		}
 		if (cb_param->length == xfer->len) {
-			SPI_LOG_DBG(mas->ipc, false, mas->dev,
-			"%s\n", __func__);
-
+			SPI_LOG_DBG(mas->ipc, false, mas->dev, "GSI Rx Callback for %d bytes\n",
+				    xfer->len);
 			spi_dump_ipc(mas, "GSI Rx", (char *)xfer->rx_buf, xfer->len);
-
 			complete(&mas->rx_cb);
 		} else {
 			SPI_LOG_ERR(mas->ipc, true, mas->dev,
-			"%s: Length mismatch. Expected %d Callback %d\n",
-			__func__, xfer->len, cb_param->length);
+				    "GSI Rx Callback: Length mismatch. Expected %d Callback %d\n",
+				    xfer->len, cb_param->length);
 		}
 	}
 }
@@ -1077,6 +1107,7 @@ static void spi_gsi_tx_callback(void *cb)
 	struct spi_controller *spi;
 	struct spi_transfer *xfer;
 	struct spi_geni_master *mas;
+	u32 xfer_len;
 
 	if (!(cb_param && cb_param->userdata)) {
 		pr_err("%s: Invalid tx_cb buffer\n", __func__);
@@ -1097,7 +1128,7 @@ static void spi_gsi_tx_callback(void *cb)
 	 */
 	if (!xfer) {
 		SPI_LOG_DBG(mas->ipc, false, mas->dev,
-		"Lock/unlock IEOB received %s\n", __func__);
+			    "GSI Tx Callback: Lock/unlock IEOB received\n");
 		complete(&mas->tx_cb);
 		return;
 	}
@@ -1105,19 +1136,24 @@ static void spi_gsi_tx_callback(void *cb)
 	if (xfer->tx_buf) {
 		if (cb_param->status == MSM_GPI_TCE_UNEXP_ERR) {
 			SPI_LOG_ERR(mas->ipc, true, mas->dev,
-			"%s: Unexpected GSI CB error\n", __func__);
+				    "GSI Tx Callback: Unexpected GSI CB error\n");
 			return;
 		}
-		if (cb_param->length == xfer->len) {
-			SPI_LOG_DBG(mas->ipc, false, mas->dev,
-			"%s\n", __func__);
 
+		if (mas->split_tx_dma_tre.split_tx && mas->split_tx_dma_tre.last_tx_dma_len)
+			xfer_len = mas->split_tx_dma_tre.last_tx_dma_len;
+		else
+			xfer_len = xfer->len;
+
+		if (cb_param->length == xfer_len) {
+			SPI_LOG_DBG(mas->ipc, false, mas->dev, "GSI Tx Callback for %d bytes\n",
+				    xfer_len);
 			spi_dump_ipc(mas, "GSI Tx", (char *)xfer->tx_buf, xfer->len);
 			complete(&mas->tx_cb);
 		} else {
 			SPI_LOG_ERR(mas->ipc, true, mas->dev,
-			"%s: Length mismatch. Expected %d Callback %d\n",
-			__func__, xfer->len, cb_param->length);
+				    "GSI Tx Callback: Length mismatch. Expected %d Callback %d\n",
+				    xfer_len, cb_param->length);
 		}
 	}
 }
@@ -1316,6 +1352,32 @@ static int qspi_gsi_xfer_prepare(struct spi_transfer *xfer, struct spi_geni_mast
 }
 
 /**
+ * spi_split_xfer_tx_nent_update()- update number of spi tx entries
+ * @tx_len: length of tx transfer
+ * @tx_nent: pointer to number of tx entries
+ *
+ * Return: none
+ */
+static void spi_split_xfer_tx_nent_update(u32 tx_len, int *tx_nent)
+{
+	u32 rem;
+
+	while (tx_len) {
+		if (tx_len > SPI_SPLIT_DMA_TRE_SIZE) {
+			rem = tx_len % SPI_SPLIT_DMA_TRE_SIZE;
+			*tx_nent += 1;
+		} else if (tx_len > IMMEDIATE_DMA_LEN) {
+			rem = tx_len % IMMEDIATE_DMA_LEN;
+			*tx_nent += 1;
+		} else {
+			rem = 0;
+			*tx_nent += 1;
+		}
+		tx_len = rem;
+	}
+}
+
+/**
  * spi_xfer_cmd_update() - Update spi transfer command
  * @xfer: pointer to spi transfer
  * @mas: pointer to spi_geni_master
@@ -1335,12 +1397,22 @@ static void spi_xfer_cmd_update(struct spi_transfer *xfer, struct spi_geni_maste
 		else
 			*cmd = SPI_TX_RX;
 
-		*tx_nent += 2;
+		*tx_nent += 1;
 		*rx_nent += 1;
+
+		if (mas->split_tx_dma_tre.split_tx && (xfer->len % SPI_SPLIT_DMA_TRE_SIZE))
+			spi_split_xfer_tx_nent_update(xfer->len, tx_nent);
+		else
+			*tx_nent += 1;
 	} else if (xfer->tx_buf) {
 		*cmd = SPI_TX_ONLY;
-		*tx_nent += 2;
+		*tx_nent += 1;
 		*rx_len = 0;
+
+		if (mas->split_tx_dma_tre.split_tx && (xfer->len % SPI_SPLIT_DMA_TRE_SIZE))
+			spi_split_xfer_tx_nent_update(xfer->len, tx_nent);
+		else
+			*tx_nent += 1;
 	} else if (xfer->rx_buf) {
 		*cmd = SPI_RX_ONLY;
 		*tx_nent += 1;
@@ -1362,9 +1434,16 @@ static int spi_gsi_rx_xfer(struct spi_transfer *xfer, struct spi_geni_master *ma
 			   struct scatterlist *xfer_rx_sg, int rx_nent, unsigned long flags)
 {
 	struct msm_gpi_tre *rx_tre = NULL;
+	struct msm_tre_flags tre_flags;
+
+	tre_flags.link_rx = false;
+	tre_flags.bei = false;
+	tre_flags.ieot = false;
+	tre_flags.ieob = false;
+	tre_flags.chain = false;
 
 	rx_tre = &mas->gsi[mas->num_xfers].rx_dma_tre;
-	rx_tre = setup_dma_tre(rx_tre, xfer, xfer->rx_dma, mas, 0);
+	rx_tre = setup_dma_tre(rx_tre, xfer, xfer->rx_dma, NULL, xfer->len, mas, false, tre_flags);
 	if (IS_ERR_OR_NULL(rx_tre)) {
 		dev_err(mas->dev, "Err setting up rx tre\n");
 		return PTR_ERR(rx_tre);
@@ -1391,6 +1470,146 @@ static int spi_gsi_rx_xfer(struct spi_transfer *xfer, struct spi_geni_master *ma
 }
 
 /**
+ * spi_geni_free_aligned_dma_buffers() - deallocates the dma buffers
+ * @mas: pointer to spi_geni_master
+ *
+ * Return: none
+ */
+static void spi_geni_free_aligned_dma_buffers(struct spi_geni_master *mas)
+{
+	if (mas->split_tx_dma_tre.aligned_tx_buf_orig) {
+		geni_se_common_iommu_free_buf(mas->wrapper_dev,
+					      &mas->split_tx_dma_tre.aligned_tx_dma_buf_orig,
+					      mas->split_tx_dma_tre.aligned_tx_buf_orig,
+					      SPI_PREALLOC_BUF_SIZE);
+		mas->split_tx_dma_tre.aligned_tx_buf = NULL;
+		mas->split_tx_dma_tre.aligned_tx_buf_orig = NULL;
+	}
+}
+
+/**
+ * spi_geni_alloc_aligned_dma_buffers() - allocates and aligns dma buffers
+ * @mas: pointer to spi_geni_master
+ *
+ * Return: none
+ */
+static void spi_geni_alloc_aligned_dma_buffers(struct spi_geni_master *mas)
+{
+	if (mas->split_tx_dma_tre.aligned_tx_buf_orig)
+		return;
+
+	mas->split_tx_dma_tre.aligned_tx_buf =
+		geni_se_common_iommu_alloc_buf(mas->wrapper_dev,
+					       &mas->split_tx_dma_tre.aligned_tx_dma_buf,
+					       SPI_PREALLOC_BUF_SIZE);
+	if (IS_ERR_OR_NULL(mas->split_tx_dma_tre.aligned_tx_buf)) {
+		mas->split_tx_dma_tre.aligned_tx_buf_orig = NULL;
+		SPI_LOG_ERR(mas->ipc, false, mas->dev, "Tx DMA buffer allocation failed\n");
+		return;
+	}
+
+	mas->split_tx_dma_tre.aligned_tx_buf_orig = mas->split_tx_dma_tre.aligned_tx_buf;
+	mas->split_tx_dma_tre.aligned_tx_dma_buf_orig = mas->split_tx_dma_tre.aligned_tx_dma_buf;
+
+	/* Ensure DMA buffer address is aligned to SPI_DMA_ADDR_ALIGN_BYTE bytes */
+	if (!IS_ALIGNED(mas->split_tx_dma_tre.aligned_tx_dma_buf, SPI_DMA_ADDR_ALIGN_BYTE)) {
+		mas->split_tx_dma_tre.aligned_tx_dma_buf =
+			(dma_addr_t)ALIGN((uintptr_t)mas->split_tx_dma_tre.aligned_tx_dma_buf,
+			 SPI_DMA_ADDR_ALIGN_BYTE);
+		mas->split_tx_dma_tre.aligned_tx_buf =
+			(void *)ALIGN((uintptr_t)mas->split_tx_dma_tre.aligned_tx_buf,
+			 SPI_DMA_ADDR_ALIGN_BYTE);
+	}
+
+	SPI_LOG_DBG(mas->ipc, false, mas->dev, "SPI aligned tx_buf addr:0x%p, dma addr:0x%p\n",
+		    mas->split_tx_dma_tre.aligned_tx_buf,
+		    (void *)mas->split_tx_dma_tre.aligned_tx_dma_buf);
+}
+
+/**
+ * spi_geni_gsi_split_tx_xfer() - splits tx transfer into multiple tre
+ * @xfer: pointer to spi transfer
+ * @mas: pointer to spi_geni_master
+ * @xfer_tx_sg: pointer to tx scatter gather list
+ *
+ * Return: 0 on success, or a negative error code upon failure.
+ */
+static int spi_geni_gsi_split_tx_xfer(struct spi_transfer *xfer, struct spi_geni_master *mas,
+				      struct scatterlist *xfer_tx_sg)
+{
+	struct msm_gpi_tre *tx_tre = NULL;
+	u32 len = 0, rem = 0, offset = 0, idx = 0;
+	struct msm_tre_flags tre_flags;
+	bool aligned;
+
+	tre_flags.link_rx = false;
+	tre_flags.bei = false;
+	tre_flags.ieot = true;
+	tre_flags.ieob = false;
+	tre_flags.chain = false;
+
+	len = xfer->len;
+	while (len) {
+		aligned = true;
+		if (len > SPI_SPLIT_DMA_TRE_SIZE) {
+			rem = len % SPI_SPLIT_DMA_TRE_SIZE;
+			len = len - rem;
+			tre_flags.ieot = false;
+			tre_flags.chain = true;
+
+			if (!IS_ALIGNED(xfer->tx_dma, SPI_DMA_ADDR_ALIGN_BYTE)) {
+				if (len > SPI_DMA_BUF_SIZE_MAX)
+					return -EINVAL;
+				spi_geni_alloc_aligned_dma_buffers(mas);
+				if (!mas->split_tx_dma_tre.aligned_tx_buf_orig)
+					return -ENOMEM;
+				SPI_LOG_DBG(mas->ipc, false, mas->dev,
+					    "Using aligned address to tx first %d bytes\n", len);
+				memcpy(mas->split_tx_dma_tre.aligned_tx_buf, xfer->tx_buf, len);
+				aligned = false;
+			}
+		} else if (len > IMMEDIATE_DMA_LEN) {
+			rem = len % IMMEDIATE_DMA_LEN;
+			len = len - rem;
+			tre_flags.ieot = false;
+			tre_flags.chain = true;
+		} else {
+			rem = 0;
+			/*
+			 * Enable interrupt only for last Tx DMA TRE by using ieot and
+			 * chain bit flags, also store length of last Tx DMA packet
+			 * being sent in immediate DMA Mode to validate in gsi tx callback
+			 */
+			tre_flags.ieot = true;
+			tre_flags.chain = false;
+			mas->split_tx_dma_tre.last_tx_dma_len = len;
+		}
+
+		tx_tre = &mas->gsi[mas->num_xfers].tx_dma_tre[idx++];
+		if (aligned) {
+			tx_tre = setup_dma_tre(tx_tre, xfer, xfer->tx_dma, xfer->tx_buf + offset,
+					       len, mas, true, tre_flags);
+		} else {
+			tx_tre = setup_dma_tre(tx_tre, xfer,
+					       mas->split_tx_dma_tre.aligned_tx_dma_buf,
+					       mas->split_tx_dma_tre.aligned_tx_buf,
+					       len, mas, true, tre_flags);
+		}
+		if (IS_ERR_OR_NULL(tx_tre)) {
+			dev_err(mas->dev, "Err setting up split tx tre\n");
+			return PTR_ERR(tx_tre);
+		}
+
+		sg_set_buf(xfer_tx_sg++, tx_tre, sizeof(*tx_tre));
+		if (tre_flags.chain)
+			offset += len;
+		len = rem;
+	}
+
+	return 0;
+}
+
+/**
  * spi_gsi_tx_xfer() - SPI GSI Tx transfer
  * @xfer: pointer to spi transfer
  * @mas: pointer to spi_geni_master
@@ -1402,18 +1621,35 @@ static int spi_gsi_tx_xfer(struct spi_transfer *xfer, struct spi_geni_master *ma
 			   struct scatterlist *xfer_tx_sg)
 {
 	struct msm_gpi_tre *tx_tre = NULL;
+	int ret = 0;
+	struct msm_tre_flags tre_flags;
 
-	tx_tre = &mas->gsi[mas->num_xfers].tx_dma_tre;
-	tx_tre = setup_dma_tre(tx_tre, xfer, xfer->tx_dma, mas, 1);
-	if (IS_ERR_OR_NULL(tx_tre)) {
-		dev_err(mas->dev, "Err setting up tx tre\n");
-		return PTR_ERR(tx_tre);
+	tre_flags.link_rx = false;
+	tre_flags.bei = false;
+	tre_flags.ieot = true;
+	tre_flags.ieob = false;
+	tre_flags.chain = false;
+
+	if (mas->split_tx_dma_tre.split_tx && (xfer->len % SPI_SPLIT_DMA_TRE_SIZE)) {
+		ret = spi_geni_gsi_split_tx_xfer(xfer, mas, xfer_tx_sg);
+		if (ret)
+			return ret;
+	} else {
+		mas->split_tx_dma_tre.last_tx_dma_len = 0;
+		tx_tre = &mas->gsi[mas->num_xfers].tx_dma_tre[0];
+		tx_tre = setup_dma_tre(tx_tre, xfer, xfer->tx_dma, xfer->tx_buf,
+				       xfer->len, mas, true, tre_flags);
+		if (IS_ERR_OR_NULL(tx_tre)) {
+			dev_err(mas->dev, "Err setting up tx tre\n");
+			return PTR_ERR(tx_tre);
+		}
+		sg_set_buf(xfer_tx_sg++, tx_tre, sizeof(*tx_tre));
 	}
-	sg_set_buf(xfer_tx_sg++, tx_tre, sizeof(*tx_tre));
 	mas->num_tx_eot++;
 
 	return 0;
 }
+
 static int setup_gsi_xfer(struct spi_transfer *xfer, struct spi_geni_master *mas,
 			  struct spi_device *spi_slv, struct spi_controller *spi)
 {
@@ -2729,6 +2965,11 @@ static int spi_get_dt_property(struct platform_device *pdev, struct spi_geni_mas
 		return -ENXIO;
 	}
 
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,split-tx-dma-tre")) {
+		geni_mas->split_tx_dma_tre.split_tx = true;
+		dev_dbg(&pdev->dev, "SPI multiple Tx DMA TRE support is enabled\n");
+	}
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "se_phys");
 	if (!res) {
 		dev_err(&pdev->dev, "Err getting IO region\n");
@@ -3040,6 +3281,9 @@ static void spi_geni_remove(struct platform_device *pdev)
 	spi_unregister_controller(master);
 	pm_runtime_put_noidle(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+
+	if (geni_mas->split_tx_dma_tre.split_tx)
+		spi_geni_free_aligned_dma_buffers(geni_mas);
 
 	if (geni_mas->ipc)
 		ipc_log_context_destroy(geni_mas->ipc);

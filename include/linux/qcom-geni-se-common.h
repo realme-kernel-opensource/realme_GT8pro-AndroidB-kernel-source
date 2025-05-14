@@ -153,6 +153,24 @@ struct kpi_time {
 	unsigned long long time_stamp;
 };
 
+/**
+ * struct split_dma_tre - holds tre flags information
+ * @link_rx: set when a transfer expects Rx DMA TREs
+ * @bei: set for Block Event Interrupt, Interrupt moderation
+ * @ioet: used to Generate TCE after a transfer is completed
+ * @ioet: used to Generate TCE with EOB code
+ * @chain: TRE will have chain bit set to 1 in large transfers, except for last TRE
+ *
+ */
+struct msm_tre_flags {
+	u32 link_rx:1;
+	u32 bei:1;
+	u32 ieot:1;
+	u32 ieob:1;
+	u32 chain:1;
+	u32 reserved:27;
+};
+
 static inline int geni_se_common_resources_init(struct geni_se *se, u32 geni_to_core,
 			 u32 cpu_to_geni, u32 geni_to_ddr)
 {
