@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/list.h>
+#include <linux/of_irq.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -17,6 +18,7 @@
 #include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
+#include <linux/mailbox_client.h>
 #include <linux/rpmsg/qcom_glink.h>
 #include <linux/ipc_logging.h>
 
@@ -73,6 +75,12 @@ struct glink_cma_pipe {
  * @rx_pipe: RX CMA GLINK fifo specific info.
  * @tx_pipe: TX CMA GLINK fifo specific info.
  * @glink_cma_ilc: IPC logging context reference.
+ * @name: Name of the label.
+ * @irq: IRQ for signaling incoming events.
+ * @irqname: Name associated with irq.
+ * @mbox_client: mailbox client.
+ * @mbox_chan: mailbox channel.
+ * @glink: glink struct associated with this glink cma dev.
  */
 struct glink_cma_dev {
 	struct device dev;
@@ -80,7 +88,14 @@ struct glink_cma_dev {
 	struct glink_cma_pipe rx_pipe;
 	struct glink_cma_pipe tx_pipe;
 	void *glink_cma_ilc;
+	const char *name;
+	int irq;
+	char irqname[32];
+	struct mbox_client mbox_client;
+	struct mbox_chan *mbox_chan;
+	struct qcom_glink *glink;
 };
+
 #define to_glink_cma_pipe(p) container_of(p, struct glink_cma_pipe, native)
 
 static size_t glink_cma_rx_avail(struct qcom_glink_pipe *np)
@@ -211,6 +226,14 @@ static void glink_cma_tx_write(struct qcom_glink_pipe *glink_pipe,
 	*pipe->head = cpu_to_le32(head);
 }
 
+static void glink_cma_tx_kick(struct qcom_glink_pipe *glink_pipe)
+{
+	struct glink_cma_pipe *pipe = to_glink_cma_pipe(glink_pipe);
+	struct glink_cma_dev *cma = container_of(pipe, struct glink_cma_dev, tx_pipe);
+
+	mbox_send_message(cma->mbox_chan, NULL);
+	mbox_client_txdone(cma->mbox_chan, 0);
+}
 static void glink_cma_native_init(struct glink_cma_dev *gdev)
 {
 	struct qcom_glink_pipe *tx_native = &gdev->tx_pipe.native;
@@ -219,6 +242,7 @@ static void glink_cma_native_init(struct glink_cma_dev *gdev)
 	tx_native->length = FIFO_SIZE;
 	tx_native->avail = glink_cma_tx_avail;
 	tx_native->write = glink_cma_tx_write;
+	tx_native->kick = glink_cma_tx_kick;
 
 	rx_native->length = FIFO_SIZE;
 	rx_native->avail = glink_cma_rx_avail;
@@ -269,13 +293,21 @@ static void qcom_glink_cma_release(struct device *dev)
 	kfree(gdev);
 }
 
+static irqreturn_t qcom_glink_cma_intr(int irq, void *data)
+{
+	struct glink_cma_dev *gdev = data;
+
+	qcom_glink_native_rx(gdev->glink);
+
+	return IRQ_HANDLED;
+}
 struct qcom_glink *qcom_glink_cma_register(struct device *parent, struct device_node *node,
 					struct glink_cma_config *config)
 {
 	struct glink_cma_dev *gdev;
 	struct qcom_glink *glink;
 	struct device *dev;
-	int rc;
+	int rc, ret;
 
 	if (!parent || !node || !config)
 		return ERR_PTR(-EINVAL);
@@ -307,21 +339,44 @@ struct qcom_glink *qcom_glink_cma_register(struct device *parent, struct device_
 		return ERR_PTR(rc);
 	}
 
+	ret = of_property_read_string(dev->of_node, "label", &gdev->name);
+
+	scnprintf(gdev->irqname, 32, "glink-native-%s", gdev->name);
+
+	gdev->irq = of_irq_get(gdev->dev.of_node, 0);
+	ret = devm_request_irq(&gdev->dev, gdev->irq, qcom_glink_cma_intr,
+							IRQF_NO_SUSPEND,
+							gdev->irqname, gdev);
+	if (ret) {
+		pr_err("%s: failed to request irq\n", __func__);
+		goto err_put_dev;
+	}
+
+	gdev->mbox_client.dev = &gdev->dev;
+	gdev->mbox_client.knows_txdone = true;
+	gdev->mbox_chan = mbox_request_channel(&gdev->mbox_client, 0);
+	if (IS_ERR(gdev->mbox_chan)) {
+		pr_err("%s: failed to get mbox channel\n", __func__);
+		goto err_put_dev;
+	}
+
 	glink_cma_native_init(gdev);
 
 	glink = qcom_glink_native_probe(dev, GLINK_FEATURE_INTENT_REUSE,
 					&gdev->rx_pipe.native, &gdev->tx_pipe.native, false);
 	if (IS_ERR(glink)) {
 		rc = PTR_ERR(glink);
-		goto err_put_dev;
+		goto err_free_mbox;
 	}
 
-	rc = qcom_glink_native_start(glink);
-	if (rc)
-		goto err_put_dev;
+	gdev->glink = glink;
 
 	GLINK_CMA_DEBUG_LOG(gdev->glink_cma_ilc, "success");
 	return glink;
+
+err_free_mbox:
+	mbox_free_channel(gdev->mbox_chan);
+
 err_put_dev:
 	GLINK_CMA_DEBUG_LOG(gdev->glink_cma_ilc, "Exit error %d", rc);
 	device_unregister(dev);
@@ -339,9 +394,17 @@ EXPORT_SYMBOL_GPL(qcom_glink_cma_start);
 
 void qcom_glink_cma_unregister(struct qcom_glink *glink)
 {
+	struct glink_cma_dev *gdev;
+
 	if (!glink)
 		return;
 
+	gdev = container_of(&glink, struct glink_cma_dev, glink);
+	disable_irq(gdev->irq);
+
 	qcom_glink_native_remove(glink);
+
+	mbox_free_channel(gdev->mbox_chan);
+	device_unregister(&gdev->dev);
 }
 EXPORT_SYMBOL_GPL(qcom_glink_cma_unregister);
