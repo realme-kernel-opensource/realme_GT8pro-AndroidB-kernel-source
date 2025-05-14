@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/usb/typec.h>
@@ -35,6 +35,14 @@ enum {
 enum {
 	WCD_USBSS_1_X,
 	WCD_USBSS_2_0,
+};
+
+enum {
+	INVALID_MODE,
+	MBHC_MODE1 = 1,
+	ULP_MODE2 = 2,
+	STD_MODE3 = 3,
+	HIFI_MODE4 = 4,
 };
 
 enum {
@@ -1061,6 +1069,7 @@ int wcd_usbss_audio_config(bool enable, enum wcd_usbss_config_type config_type,
 
 	int rc = 0;
 	unsigned int current_power_mode;
+	unsigned int force_power_mode = HIFI_MODE4;
 
 	/* check if driver is probed and private context is init'ed */
 	if (wcd_usbss_ctxt_ == NULL)
@@ -1099,6 +1108,7 @@ int wcd_usbss_audio_config(bool enable, enum wcd_usbss_config_type config_type,
 					WCD_USBSS_USB_SS_CNTL, 0x07, power_mode);
 			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_CLK, 0x10);
 		} else { /* switching to ULP/HiFi/Std */
+			power_mode = force_power_mode;
 			if (power_mode == 0x2) /* ULP */
 				regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_CLK, 0x1C);
 			else
