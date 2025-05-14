@@ -28,6 +28,7 @@ autogvm_perf_config = {
     "CONFIG_PINCTRL_DIREWOLF": "m",
     "CONFIG_PINCTRL_LEMANS": "m",
     "CONFIG_PINCTRL_MONACO_AUTO": "m",
+    "CONFIG_PINCTRL_SA8797P": "m",
     "CONFIG_POWER_RESET_QCOM_VM": "m",
     "CONFIG_VIRTIO_BLK": "m",
     "CONFIG_VIRTIO_BLK_QTI_CRYPTO": "m",
