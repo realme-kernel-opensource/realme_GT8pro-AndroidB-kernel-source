@@ -12,3 +12,14 @@ def register_modules(registry):
             "drivers/net/pcs/pcs-xpcs.h",
         ],
     )
+
+    registry.register(
+        name = "drivers/net/pcs/pcs-xpcs-qcom",
+        out = "pcs-xpcs-qcom.ko",
+        config = "CONFIG_PCS_QCOM",
+        srcs = [
+            # do not sort
+            "drivers/net/pcs/pcs-xpcs-qcom.c",
+            "drivers/net/pcs/pcs-xpcs-qcom.h",
+        ],
+    )
