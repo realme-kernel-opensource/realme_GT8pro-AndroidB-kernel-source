@@ -43,6 +43,7 @@ canoe_tuivm_config = {
     "CONFIG_QCOM_MEM_BUF_IPA_RESERVE": "y",
     "CONFIG_QCOM_MEM_BUF_MSGQ": "m",
     "CONFIG_QCOM_MINIDUMP": "m",
+    "CONFIG_QCOM_PANEL_EVENT_NOTIFIER": "y",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_SI_CORE": "m",
     "CONFIG_QCOM_SI_CORE_MEM_OBJECT": "m",
