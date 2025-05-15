@@ -65,6 +65,7 @@ canoe_perf_config = {
     "CONFIG_GUNYAH_IRQFD": "m",
     "CONFIG_GUNYAH_PLATFORM_HOOKS": "m",
     "CONFIG_GUNYAH_QCOM_PLATFORM": "n",
+    "CONFIG_GUNYAH_TRACE": "m",
     "CONFIG_HVC_GUNYAH": "m",
     "CONFIG_HVC_GUNYAH_CONSOLE": "n",
     "CONFIG_HWMON": "m",
