@@ -2,7 +2,7 @@
 /*
  * Synopsys DesignWare XPCS platform device driver
  *
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -44,12 +44,47 @@ static const int xpcs_usxgmii_features[] = {
 	__ETHTOOL_LINK_MODE_MASK_NBITS,
 };
 
+static const int xpcs_10gbaser_features[] = {
+	ETHTOOL_LINK_MODE_Pause_BIT,
+	ETHTOOL_LINK_MODE_Asym_Pause_BIT,
+	ETHTOOL_LINK_MODE_10000baseSR_Full_BIT,
+	ETHTOOL_LINK_MODE_10000baseLR_Full_BIT,
+	ETHTOOL_LINK_MODE_10000baseLRM_Full_BIT,
+	ETHTOOL_LINK_MODE_10000baseER_Full_BIT,
+	__ETHTOOL_LINK_MODE_MASK_NBITS,
+};
+
+static const int xpcs_usx5g_features[] = {
+	ETHTOOL_LINK_MODE_Pause_BIT,
+	ETHTOOL_LINK_MODE_Asym_Pause_BIT,
+	ETHTOOL_LINK_MODE_Autoneg_BIT,
+	ETHTOOL_LINK_MODE_10baseT_Half_BIT,
+	ETHTOOL_LINK_MODE_10baseT_Full_BIT,
+	ETHTOOL_LINK_MODE_100baseT_Half_BIT,
+	ETHTOOL_LINK_MODE_100baseT_Full_BIT,
+	ETHTOOL_LINK_MODE_1000baseT_Half_BIT,
+	ETHTOOL_LINK_MODE_1000baseT_Full_BIT,
+	ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
+	ETHTOOL_LINK_MODE_5000baseT_Full_BIT,
+	__ETHTOOL_LINK_MODE_MASK_NBITS,
+};
+
 static const phy_interface_t xpcs_usxgmii_interfaces[] = {
 	PHY_INTERFACE_MODE_USXGMII,
 };
 
+static const phy_interface_t xpcs_10gbaser_interfaces[] = {
+	PHY_INTERFACE_MODE_10GBASER,
+};
+
+static const phy_interface_t xpcs_usx5g_interfaces[] = {
+	PHY_INTERFACE_MODE_5GBASER,
+};
+
 enum {
 	DW_XPCS_USXGMII,
+	DW_XPCS_10GBASER,
+	DW_XPCS_USX5G,
 	DW_XPCS_INTERFACE_MAX,
 };
 
@@ -193,7 +228,7 @@ static int qcom_xpcs_reset_usxgmii(struct dw_xpcs_qcom *qxpcs)
 	qcom_xpcs_write(qxpcs, DW_VR_MII_PCS_DIG_CTRL1, ret | DW_USXGMII_RST);
 
 	if (!qxpcs->intr_en)
-		return qcom_xpcs_poll_reset(qxpcs, DW_VR_MII_DIG_CTRL1, SW_RST_BIT_STATUS);
+		return qcom_xpcs_poll_reset(qxpcs, DW_VR_MII_PCS_DIG_CTRL1, USXG_RST_BIT_STATUS);
 
 	return qcom_xpcs_poll_reset_usxgmii(qxpcs, DW_VR_MII_PCS_DIG_CTRL1, USXG_RST_BIT_STATUS);
 }
@@ -340,6 +375,8 @@ static int qcom_xpcs_do_config(struct dw_xpcs_qcom *qxpcs, phy_interface_t inter
 		if (ret < 0)
 			return ret;
 		break;
+	case DW_10GBASER:
+		break;
 	default:
 		XPCSERR("Incompatible Autonegotiation mode\n");
 		return -EINVAL;
@@ -453,7 +490,9 @@ static int qcom_xpcs_select_mode(struct dw_xpcs_qcom *qxpcs, phy_interface_t int
 
 	g_interface = interface;
 
-	if (interface == PHY_INTERFACE_MODE_USXGMII) {
+	if (interface == PHY_INTERFACE_MODE_USXGMII ||
+	    interface == PHY_INTERFACE_MODE_10GBASER ||
+	    interface == PHY_INTERFACE_MODE_5GBASER) {
 		ret = qcom_xpcs_read(qxpcs, DW_SR_MII_PCS_CTRL2);
 		if (ret < 0)
 			goto out;
@@ -480,7 +519,18 @@ static int qcom_xpcs_select_mode(struct dw_xpcs_qcom *qxpcs, phy_interface_t int
 		if (ret < 0)
 			goto out;
 
-		qcom_xpcs_write(qxpcs, DW_VR_MII_PCS_DIG_CTRL1, ret | DW_USXGMII_EN);
+		if (interface == PHY_INTERFACE_MODE_USXGMII)
+			qcom_xpcs_write(qxpcs, DW_VR_MII_PCS_DIG_CTRL1, ret | DW_USXGMII_EN);
+
+		ret = qcom_xpcs_read(qxpcs, DW_VR_MII_PCS_KR_CTRL);
+		if (ret < 0)
+			goto out;
+
+		ret &= ~USXG_MODE_SEL;
+		if (interface == PHY_INTERFACE_MODE_5GBASER)
+			ret |= USXGMII_5G;
+
+		qcom_xpcs_write(qxpcs, DW_VR_MII_PCS_KR_CTRL, ret);
 
 		return 0;
 	}
@@ -509,6 +559,8 @@ void qcom_xpcs_link_up(struct phylink_pcs *pcs, unsigned int mode,
 
 	switch (interface) {
 	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10GBASER:
+	case PHY_INTERFACE_MODE_5GBASER:
 		qcom_xpcs_link_up_usxgmii(qxpcs, speed);
 		break;
 	default:
@@ -547,6 +599,18 @@ static const struct xpcs_compat synopsys_xpcs_compat[DW_XPCS_INTERFACE_MAX] = {
 		.interface = xpcs_usxgmii_interfaces,
 		.num_interfaces = ARRAY_SIZE(xpcs_usxgmii_interfaces),
 		.an_mode = DW_AN_C37_USXGMII,
+	},
+	[DW_XPCS_10GBASER] = {
+		.supported = xpcs_10gbaser_features,
+		.interface = xpcs_10gbaser_interfaces,
+		.num_interfaces = ARRAY_SIZE(xpcs_10gbaser_interfaces),
+		.an_mode = DW_10GBASER,
+	},
+	[DW_XPCS_USX5G] = {
+		.supported = xpcs_usx5g_features,
+		.interface = xpcs_usx5g_interfaces,
+		.num_interfaces = ARRAY_SIZE(xpcs_usx5g_interfaces),
+		.an_mode = DW_10GBASER,
 	},
 };
 
