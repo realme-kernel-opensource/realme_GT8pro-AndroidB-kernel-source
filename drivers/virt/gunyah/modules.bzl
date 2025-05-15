@@ -61,6 +61,24 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/virt/gunyah/gh_rm_heap_manager",
+        out = "gh_rm_heap_manager.ko",
+        config = "CONFIG_GH_RM_HEAP_MANAGER",
+        srcs = [
+            # do not sort
+            "drivers/virt/gunyah/gh_rm_heap_manager.c",
+            "include/linux/gunyah/gh_rm_heap_manager.h",
+            "drivers/virt/gunyah/gh_rm_drv_private.h",
+            "include/linux/mem-prot.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/mem-prot",
+            "drivers/virt/gunyah/gh_rm_drv",
+        ],
+    )
+
+    registry.register(
         name = "drivers/virt/gunyah/gh_msgq",
         out = "gh_msgq.ko",
         config = "CONFIG_GH_MSGQ",
