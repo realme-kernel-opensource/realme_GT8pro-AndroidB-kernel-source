@@ -419,7 +419,6 @@ static int update_mon_stats(struct device *dev, struct msc_query *query,
 static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partconfig)
 {
 	struct qcom_mpam_msc *qcom_msc;
-	struct qcom_slc_capability *slc_capability;
 	struct msc_query *query;
 	struct slc_mon_config_val *mon_cfg_val;
 	struct slc_partid_capability_v1 partid_cap = { 0 };
@@ -443,7 +442,6 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 			return ret;
 		}
 
-		slc_capability =  (struct qcom_slc_capability *)qcom_msc->msc_capability;
 		switch (mon_cfg_val->slc_mon_function) {
 		default:
 			break;
@@ -637,7 +635,7 @@ static int slc_client_info_read(struct device *dev, struct device_node *node)
 					continue;
 				}
 
-				pr_info("Client Name:%s\tIdx:%d, PartID:%d Monitor support %x\n",
+				pr_info("Client Name:%-12s Idx:%d, PartID:%d Monitor support %x\n",
 					client_details->client_name,
 					client_cap->client_info.client_id,
 					query.part_id,

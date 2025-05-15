@@ -117,7 +117,7 @@ static ssize_t slc_mpam_enable_cap_monitor_show(struct config_item *item,
 	if (firmware_ver != SLC_MPAM_VERSION_0) {
 		msc_system_get_device_capability(SLC, &query, &partid_cap);
 		if ((partid_cap.v1_cap.mon_support & (1 << cap_mon_support)) == 0)
-			return scnprintf(page, PAGE_SIZE, "Monitor supported\n");
+			return scnprintf(page, PAGE_SIZE, "Monitor Not supported!\n");
 	}
 
 	return scnprintf(page, PAGE_SIZE, "%s\n",
@@ -195,7 +195,7 @@ static ssize_t slc_mpam_enable_miss_monitor_show(struct config_item *item,
 	if (firmware_ver != SLC_MPAM_VERSION_0) {
 		msc_system_get_device_capability(SLC, &query, &partid_cap);
 		if ((partid_cap.v1_cap.mon_support & (1 << read_miss_mon_support)) == 0)
-			return scnprintf(page, PAGE_SIZE, "Monitor supported\n");
+			return scnprintf(page, PAGE_SIZE, "Monitor Not supported!\n");
 	}
 
 	return scnprintf(page, PAGE_SIZE, "%s\n",
