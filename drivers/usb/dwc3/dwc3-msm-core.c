@@ -364,12 +364,6 @@ static const char *const usb_dr_modes[] = {
 	[USB_DR_MODE_OTG]		= "otg",
 };
 
-enum dp_lane {
-	DP_NONE = 0,
-	DP_2_LANE = 2,
-	DP_4_LANE = 4,
-};
-
 static const char *dwc3_drd_state_string(enum dwc3_drd_state state)
 {
 	if (state < 0 || state >= ARRAY_SIZE(state_names))
@@ -570,6 +564,7 @@ struct dwc3_msm {
 	bool			use_pwr_event_for_wakeup;
 	bool			host_poweroff_in_pm_suspend;
 	bool			disable_host_ssphy_powerdown;
+	bool			is_ssphy_powerdown;
 	bool			enable_host_slow_suspend;
 	unsigned long		lpm_flags;
 	unsigned int		vbus_draw;
@@ -5759,6 +5754,7 @@ static void dwc3_msm_clear_dp_only_params(struct dwc3_msm *mdwc)
 	dbg_log_string("resetting params for USB ss\n");
 	mdwc->ss_release_called = false;
 	dwc3_msm_clear_usbphy_flags(mdwc->ss_phy, PHY_DP_MODE);
+	phy_set_mode_ext(mdwc->usb3_phy, PHY_MODE_INVALID, DP_NONE);
 	dwc3_msm_set_max_speed(mdwc, USB_SPEED_UNKNOWN);
 
 	usb_redriver_notify_disconnect(mdwc->redriver);
@@ -5774,6 +5770,7 @@ static void dwc3_msm_set_dp_only_params(struct dwc3_msm *mdwc)
 	mdwc->ss_release_called = true;
 	dwc3_msm_set_max_speed(mdwc, USB_SPEED_HIGH);
 	dwc3_msm_set_usbphy_flags(mdwc->ss_phy, PHY_DP_MODE);
+	phy_set_mode_ext(mdwc->usb3_phy, PHY_MODE_INVALID, DP_4_LANE);
 }
 
 int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes)
@@ -5819,6 +5816,7 @@ int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes)
 		}
 
 		dwc3_msm_clear_usbphy_flags(mdwc->ss_phy, PHY_USB_DP_CONCURRENT_MODE);
+		phy_set_mode_ext(mdwc->usb3_phy, PHY_MODE_USB_HOST, DP_NONE);
 		mutex_unlock(&mdwc->role_switch_mutex);
 		return 0;
 	}
@@ -5835,6 +5833,7 @@ int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes)
 				ORIENTATION_CC1 : ORIENTATION_CC2, 2);
 		pm_runtime_get_sync(&mdwc->dwc3->dev);
 		dwc3_msm_set_usbphy_flags(mdwc->ss_phy, PHY_USB_DP_CONCURRENT_MODE);
+		phy_set_mode_ext(mdwc->usb3_phy, PHY_MODE_USB_HOST, DP_2_LANE);
 		pm_runtime_put_sync(&mdwc->dwc3->dev);
 		dbg_log_string("Set DP 2 lanes: success, refcnt:%d\n", mdwc->refcnt_dp_usb);
 		return 0;
@@ -6697,6 +6696,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	if (dwc3_msm_check_extcon_prop(pdev))
 		goto put_dwc3;
 
+	mdwc->dp_state = DP_NONE;
+
 	return 0;
 
 put_dwc3:
@@ -6813,7 +6814,7 @@ static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
 {
 	u32 reg;
 
-	if (mdwc->disable_host_ssphy_powerdown ||
+	if (mdwc->is_ssphy_powerdown || mdwc->disable_host_ssphy_powerdown ||
 		dwc3_msm_get_max_speed(mdwc) < USB_SPEED_SUPER)
 		return 0;
 
@@ -6825,6 +6826,9 @@ static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
 	usb_phy_notify_disconnect(mdwc->ss_phy,
 					USB_SPEED_SUPER);
 	usb_phy_set_suspend(mdwc->ss_phy, 1);
+	phy_power_off(mdwc->usb3_phy);
+	phy_exit(mdwc->usb3_phy);
+	mdwc->is_ssphy_powerdown = true;
 
 	return 0;
 }
@@ -6834,7 +6838,7 @@ static int dwc3_msm_host_ss_powerup(struct dwc3_msm *mdwc)
 	u32 reg;
 
 	dbg_log_string("start: speed:%d\n", dwc3_msm_get_max_speed(mdwc));
-	if (!mdwc->in_host_mode ||
+	if (!mdwc->is_ssphy_powerdown || !mdwc->in_host_mode ||
 		mdwc->disable_host_ssphy_powerdown ||
 		dwc3_msm_get_max_speed(mdwc) < USB_SPEED_SUPER)
 		return 0;
@@ -6842,11 +6846,14 @@ static int dwc3_msm_host_ss_powerup(struct dwc3_msm *mdwc)
 	usb_phy_set_suspend(mdwc->ss_phy, 0);
 	usb_phy_notify_connect(mdwc->ss_phy,
 					USB_SPEED_SUPER);
+	phy_init(mdwc->usb3_phy);
+	phy_power_on(mdwc->usb3_phy);
 
 	dwc3_msm_switch_utmi(mdwc, 0);
 	reg = dwc3_msm_read_reg(mdwc->base, EXTRA_INP_REG);
 	reg &= ~EXTRA_INP_SS_DISABLE;
 	dwc3_msm_write_reg(mdwc->base, EXTRA_INP_REG, reg);
+	mdwc->is_ssphy_powerdown = false;
 
 	return 0;
 }
