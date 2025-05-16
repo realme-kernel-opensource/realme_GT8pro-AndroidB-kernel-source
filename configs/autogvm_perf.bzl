@@ -128,4 +128,9 @@ autogvm_perf_config = {
     "CONFIG_SERIAL_QCOM_GENI_MSM": "m",
     "CONFIG_SPI_QCOM_GENI_MSM": "m",
     "CONFIG_I2C_QCOM_GENI_MSM": "m",
+    "CONFIG_PCS_XPCS": "m",
+    "CONFIG_PCS_QCOM": "m",
+    "CONFIG_STMMAC_ETH": "m",
+    "CONFIG_STMMAC_PLATFORM": "m",
+    "CONFIG_DWMAC_QCOM_ETHQOS": "m",
 }
