@@ -100,5 +100,6 @@ def register_modules(registry):
             # do not sort
             "drivers/net/ethernet/stmicro/stmmac/stmmac_platform",
             "drivers/net/ethernet/stmicro/stmmac",
+            "drivers/net/pcs/pcs-xpcs-qcom",
         ],
     )
