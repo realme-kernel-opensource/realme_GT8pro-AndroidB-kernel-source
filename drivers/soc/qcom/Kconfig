@@ -632,6 +632,16 @@ config QCOM_RAMDUMP
 	  userspace. Say 'Y' here to enable this driver. It's safe to say
 	  'N' here if you don't plan on collecting ramdumps.
 
+config QCOM_MICRODUMP
+	tristate "Qualcomm Technologies, Inc. Microdump Support"
+	depends on QCOM_RAMDUMP
+	depends on QCOM_SMEM
+	help
+	 This enables microdump feature. It collects
+	 crash data from SMEM whenever modem subsytem
+	 crashes and stores it under /devcd to expose
+	 to user space.
+
 config QCOM_MINIDUMP
 	tristate "QCOM Minidump Support"
 	depends on QCOM_SMEM || GUNYAH_DRIVERS
