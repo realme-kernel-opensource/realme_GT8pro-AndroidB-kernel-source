@@ -1,14 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015, 2017-2018, 2022, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_GDSC_H__
 #define __QCOM_GDSC_H__
 
 #include <linux/err.h>
-#include <linux/interconnect.h>
 #include <linux/pm_domain.h>
 
 struct regmap;
@@ -77,9 +76,6 @@ struct gdsc {
 
 	const char 			*supply;
 	struct regulator		*rsupply;
-
-	const char			*path_name;
-	struct icc_path			*path;
 };
 
 struct gdsc_desc {

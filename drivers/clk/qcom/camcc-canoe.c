@@ -2925,7 +2925,6 @@ static struct gdsc cam_cc_titan_top_gdsc = {
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
 	.supply = "vdd_mm_mxc_voter",
-	.path_name = "cam-to-ddr",
 };
 
 static struct gdsc cam_cc_ipe_0_gdsc = {
