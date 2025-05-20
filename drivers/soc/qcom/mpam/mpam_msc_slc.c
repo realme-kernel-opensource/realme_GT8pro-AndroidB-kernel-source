@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "qcom_mpam_slc: " fmt
@@ -484,7 +484,7 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 	struct qcom_slc_mon_data *data_mem;
 	int mon_idx;
 	uint32_t match_seq, retry_cnt, match_seq_cnt = 0;
-	uint32_t *match_seq_ptr;
+	volatile uint32_t *match_seq_ptr;
 	uint64_t *last_capture_time;
 
 	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
@@ -515,8 +515,10 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 				(retry_cnt++ < MAX_SHARED_MEM_RETRY_CNT))
 			;
 
-		if (retry_cnt >= MAX_SHARED_MEM_RETRY_CNT)
+		if (retry_cnt >= MAX_SHARED_MEM_RETRY_CNT) {
+			pr_err("SLC MPAM Monitor failed. FW agent updating the same memory\n");
 			return -EINVAL;
+		}
 
 		/* Read as zero if monitor not enabled */
 		mon_data->ref.mon_data = 0;
