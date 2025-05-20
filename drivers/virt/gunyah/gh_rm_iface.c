@@ -2969,8 +2969,6 @@ static bool is_gh_vm_or_hlos(int vmid)
 		fallthrough;
 	case QCOM_SCM_VMID_TVM:
 		fallthrough;
-	case QCOM_SCM_VMID_GH_RM:
-		fallthrough;
 	case QCOM_SCM_VMID_HLOS:
 		return true;
 	}

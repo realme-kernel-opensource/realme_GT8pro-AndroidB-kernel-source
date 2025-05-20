@@ -884,6 +884,12 @@ static void video_cc_canoe_fixup_alor(struct regmap *regmap)
 	video_cc_canoe_clocks[VIDEO_CC_MVS0A_FREERUN_CLK] = NULL;
 
 	video_cc_canoe_gdscs[VIDEO_CC_MVS0A_GDSC] = NULL;
+
+	/*
+	 * Update VIDEO_CC_SPARE1 to have same clk_on for video_cc_mvs0_clk, video_cc_mvs0_vpp0_clk,
+	 * video_cc_mvs0_vpp1_clk during core reset by default.
+	 */
+	regmap_update_bits(regmap, 0x9f24, BIT(0), BIT(0));
 }
 
 static int video_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regmap)
@@ -905,12 +911,6 @@ static int video_cc_canoe_fixup(struct platform_device *pdev, struct regmap *reg
 		 */
 		regmap_update_bits(regmap, 0x8088, ACCU_CFG_MASK, ACCU_CFG_MASK);
 	}
-
-	/*
-	 * Update VIDEO_CC_SPARE1 to have same clk_on for video_cc_mvs0_clk,
-	 * video_cc_mvs0_vpp0_clk, video_cc_mvs0_vpp1_clk during core reset by default.
-	 */
-	regmap_update_bits(regmap, 0x9f24, BIT(0), BIT(0));
 
 	return 0;
 }

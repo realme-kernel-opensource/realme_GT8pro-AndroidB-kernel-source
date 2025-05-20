@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2013, 2016-2018, 2020 The Linux Foundation. All rights reserved. */
-/* Copyright (c) 2022, 2025 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #ifndef __QCOM_CLK_RCG_H__
 #define __QCOM_CLK_RCG_H__
@@ -166,7 +166,6 @@ extern const struct clk_ops clk_dyn_rcg_ops;
  * @parked_cfg: cached value of the CFG register for parked RCGs
  * @flags: additional flag parameters for the RCG
  * @hw_clk_ctrl: whether to enable hardware clock control
- * @is_enabled: true if clk framework has enabled the clock
  */
 struct clk_rcg2 {
 	u32			cmd_rcgr;
@@ -190,7 +189,6 @@ struct clk_rcg2 {
 #define DFS_SUPPORT		BIT(2)
 	bool			freq_populated;
 	bool			hw_clk_ctrl;
-	bool			is_enabled;
 };
 
 #define to_clk_rcg2(_hw) container_of(to_clk_regmap(_hw), struct clk_rcg2, clkr)
