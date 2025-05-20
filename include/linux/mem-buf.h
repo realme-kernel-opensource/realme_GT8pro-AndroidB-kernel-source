@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  *  Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- *  Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ *  Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MEM_BUF_H
@@ -120,6 +120,7 @@ int mem_buf_reclaim(struct dma_buf *dmabuf);
  */
 int mem_buf_share(struct dma_buf *dmabuf,
 		struct mem_buf_lend_kernel_arg *arg);
+
 
 /* Used to obtain the underlying vmperm struct of a DMA-BUF */
 struct mem_buf_vmperm *to_mem_buf_vmperm(struct dma_buf *dmabuf);

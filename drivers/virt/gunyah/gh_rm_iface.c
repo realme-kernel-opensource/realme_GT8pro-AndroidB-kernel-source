@@ -2442,58 +2442,6 @@ int gh_rm_mem_donate(u8 mem_type, u8 flags, gh_label_t label,
 }
 EXPORT_SYMBOL_GPL(gh_rm_mem_donate);
 
-int gh_rm_heap_query(u32 heap_handle, u8 type, void **response, size_t *resp_size)
-{
-	int ret;
-	struct gh_mem_heap_query_req_payload_hdr req_payload_hdr = {0};
-	size_t req_payload_size;
-
-	req_payload_size = sizeof(req_payload_hdr);
-
-	req_payload_hdr.heap_handle = heap_handle;
-	req_payload_hdr.type = type;
-
-	ret = gh_rm_call(rm, GH_RM_RPC_MSG_ID_CALL_VM_QUERY_HEAP_MEMORY,
-			&req_payload_hdr, req_payload_size, response, resp_size);
-
-	if (ret)
-		pr_err("%s: failed with err: %d\n", __func__, ret);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(gh_rm_heap_query);
-
-static int __gh_rm_heap_memory(u32 op, u32 heap_handle, gh_memparcel_handle_t memparcel_handle)
-{
-	int ret;
-	size_t req_payload_size;
-	struct gh_mem_heap_memory_req_payload_hdr req_payload_hdr = {0};
-
-	req_payload_size = sizeof(req_payload_hdr);
-	req_payload_hdr.heap_handle = heap_handle;
-	req_payload_hdr.memparcel_handle = memparcel_handle;
-
-	ret = gh_rm_call(rm, op, &req_payload_hdr, req_payload_size, NULL, NULL);
-	if (ret)
-		pr_err("%s: failed with err: %d\n", __func__, ret);
-
-	return ret;
-}
-
-int gh_rm_add_heap_memory(u32 heap_handle, gh_memparcel_handle_t memparcel_handle)
-{
-	return __gh_rm_heap_memory(GH_RM_RPC_MSG_ID_CALL_VM_ADD_HEAP_MEMORY,
-			heap_handle, memparcel_handle);
-}
-EXPORT_SYMBOL_GPL(gh_rm_add_heap_memory);
-
-int gh_rm_remove_heap_memory(u32 heap_handle, gh_memparcel_handle_t memparcel_handle)
-{
-	return __gh_rm_heap_memory(GH_RM_RPC_MSG_ID_CALL_VM_REMOVE_HEAP_MEMORY,
-			heap_handle, memparcel_handle);
-}
-EXPORT_SYMBOL_GPL(gh_rm_remove_heap_memory);
-
 /**
  * gh_rm_mem_notify: Notify VMs about a change in state with respect to a
  *                   memparcel
