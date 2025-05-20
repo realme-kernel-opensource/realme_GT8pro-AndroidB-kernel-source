@@ -1029,7 +1029,7 @@ static void md_dump_runqueues(void)
 		seq_buf_printf(md_runq_seq_buf, "%16lld", t->sched_info.last_queued);
 		seq_buf_printf(md_runq_seq_buf, "%16lld", t->sched_info.run_delay);
 		seq_buf_printf(md_runq_seq_buf, "%12ld", t->sched_info.pcount);
-		seq_buf_printf(md_runq_seq_buf, "%4d", t->on_cpu);
+		seq_buf_printf(md_runq_seq_buf, "%4d", t->thread_info.cpu);
 		seq_buf_printf(md_runq_seq_buf, "%5d", t->prio);
 		seq_buf_printf(md_runq_seq_buf, "%*s", 6, md_get_task_state(t));
 #if IS_ENABLED(CONFIG_SCHED_WALT)

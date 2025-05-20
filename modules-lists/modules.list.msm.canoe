@@ -9,6 +9,7 @@ camcc-canoe.ko
 clk-dummy.ko
 clk-qcom.ko
 clk-rpmh.ko
+midpoint.ko
 clk-scmi.ko
 sched-walt.ko
 sched-walt-debug.ko
@@ -76,6 +77,7 @@ qcom_ipc_logging.ko
 iommu-logger.ko
 qcom_iommu_util.ko
 secure_buffer.ko
+mem-prot.ko
 mem_buf.ko
 mem_buf_dev.ko
 mem_buf_msgq.ko

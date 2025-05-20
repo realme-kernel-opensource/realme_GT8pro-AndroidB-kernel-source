@@ -272,10 +272,6 @@ int qpace_urgent_decompress(phys_addr_t input_addr,
 
 	urg_reg_num = get_cpu();
 
-	QPACE_WRITE_URG_CMD_CTX_REG(QPACE_URG_CMD_0_CFG_CNTXT_SIZE_n_OFFSET,
-				    urg_reg_num, URG_DECOMP_CNTXT,
-				    input_size);
-
 	stat_reg = qpace_urgent_command_trigger(input_addr, output_addr, urg_reg_num,
 						URG_DECOMP_CNTXT);
 	put_cpu();
@@ -1095,7 +1091,8 @@ static int qpace_init(void)
 
 	/* Select CPU SCID for our system cache slice */
 	reg_val = QPACE_READ_GEN_REG(QPACE_CORE_QNS4_CFG_OFFSET);
-	reg_val |= FIELD_PREP(CORE_QNS4_CFG_TRTYPE, 0x1);
+	reg_val &= ~CORE_QNS4_CFG_CACHEINDEX;
+	reg_val |= FIELD_PREP(CORE_QNS4_CFG_CACHEINDEX, 0x1);
 	QPACE_WRITE_GEN_REG(QPACE_CORE_QNS4_CFG_OFFSET, reg_val);
 
 	/*

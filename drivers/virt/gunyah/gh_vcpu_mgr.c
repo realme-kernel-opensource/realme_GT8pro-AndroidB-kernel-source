@@ -5,21 +5,31 @@
 
 #define pr_fmt(fmt)	"gh_vcpu_mgr: " fmt
 
+#include <linux/freezer.h>
+#include <linux/kthread.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/mutex.h>
 
+#include <linux/gunyah.h>
 #include <linux/gunyah/gh_errno.h>
 #include <linux/gunyah/gh_rm_drv.h>
 #include <linux/gunyah/gh_vm.h>
 #include <trace/hooks/gunyah.h>
 #include "gh_vcpu_mgr.h"
 
+#define CREATE_TRACE_POINTS
+#include "gh_vcpu_mgr_trace.h"
+
 struct gh_proxy_vcpu {
 	struct gh_proxy_vm *vm;
 	gh_capid_t cap_id;
 	gh_label_t idx;
 	bool wdog_frozen;
+	char ws_name[32];
+	struct wakeup_source *ws;
+	struct task_struct *vcpu_thread;
+	struct gunyah_vcpu *gunyah_vcpu;
 };
 
 struct gh_proxy_vm {
@@ -30,6 +40,9 @@ struct gh_proxy_vm {
 	bool is_active;
 	gh_capid_t wdog_cap_id;
 };
+
+static bool trustvm_keep_running = true;
+static bool oemvm_keep_running = true;
 
 static struct gh_proxy_vm *gh_vms;
 static bool init_done;
@@ -44,6 +57,20 @@ static inline bool is_vm_supports_proxy(gh_vmid_t gh_vmid)
 		return true;
 
 	return false;
+}
+
+static inline bool is_keep_running_enable(gh_vmid_t gh_vmid)
+{
+	gh_vmid_t vmid;
+
+	if ((!ghd_rm_get_vmid(GH_TRUSTED_VM, &vmid) && vmid == gh_vmid) &&
+	    trustvm_keep_running)
+		return true;
+	else if ((!ghd_rm_get_vmid(GH_OEM_VM, &vmid) && vmid == gh_vmid) &&
+		 oemvm_keep_running)
+		return true;
+	else
+		return false;
 }
 
 static inline struct gh_proxy_vm *gh_get_vm(gh_vmid_t vmid)
@@ -81,6 +108,14 @@ static void gh_init_vms(void)
 		gh_reset_vm(vm);
 		xa_init(&vm->vcpus);
 	}
+}
+
+static inline void gh_get_vcpu_prop_name(int vmid, int vcpu_num, char *name)
+{
+	char extrastr[12];
+
+	scnprintf(extrastr, 12, "_%d_%d", vmid, vcpu_num);
+	strlcat(name, extrastr, 32);
 }
 
 static int gh_wdog_manage(gh_vmid_t vmid, gh_capid_t cap_id, bool populate)
@@ -145,12 +180,25 @@ static int gh_populate_vm_vcpu_info(gh_vmid_t vmid, gh_label_t cpu_idx,
 			ret = -ENOMEM;
 			goto unlock;
 		}
+
+		strscpy(vcpu->ws_name, "gh_vcpu_ws", sizeof(vcpu->ws_name));
+		gh_get_vcpu_prop_name(vmid, vm->vcpu_count,
+				vcpu->ws_name);
+		vcpu->ws = wakeup_source_register(NULL,
+					vcpu->ws_name);
+		if (!vcpu->ws) {
+			pr_err("%s: Wakeup source creation failed\n", __func__);
+			kfree(vcpu);
+			goto unlock;
+		}
+
 		vcpu->cap_id = cap_id;
 		vcpu->idx = cpu_idx;
 		vm->id = vmid;
 		vcpu->vm = vm;
 		ret = xa_err(xa_store(&vm->vcpus, cpu_idx, vcpu, GFP_KERNEL));
 		if (ret) {
+			wakeup_source_unregister(vcpu->ws);
 			kfree(vcpu);
 			goto unlock;
 		}
@@ -182,6 +230,11 @@ static int gh_unpopulate_vm_vcpu_info(gh_vmid_t vmid, gh_label_t cpu_idx,
 	vm = gh_get_vm(vmid);
 	if (vm && vm->is_vcpu_info_populated) {
 		vcpu = xa_load(&vm->vcpus, cpu_idx);
+		wakeup_source_unregister(vcpu->ws);
+		if (vcpu->vcpu_thread) {
+			vcpu->gunyah_vcpu->vcpu_run->immediate_exit = true;
+			complete_all(&vcpu->gunyah_vcpu->ready);
+		}
 		kfree(vcpu);
 		xa_erase(&vm->vcpus, cpu_idx);
 		vm->vcpu_count--;
@@ -221,6 +274,67 @@ unlock:
 	mutex_unlock(&gh_vm_mutex);
 }
 
+static int gh_get_nr_vcpus(gh_vmid_t vmid)
+{
+	struct gh_proxy_vm *vm;
+
+	vm = gh_get_vm(vmid);
+	if (vm && vm->is_vcpu_info_populated)
+		return vm->vcpu_count;
+
+	return 0;
+}
+
+int gh_poll_vcpu_run(gh_vmid_t vmid)
+{
+	struct gh_hcall_vcpu_run_resp resp;
+	struct gh_proxy_vcpu *vcpu;
+	struct gh_proxy_vm *vm;
+	unsigned int vcpu_id;
+	int poll_nr_vcpus;
+	ktime_t start_ts, yield_ts;
+	int ret = -EPERM;
+
+	vm = gh_get_vm(vmid);
+	if (!vm || !vm->is_active)
+		return ret;
+
+	poll_nr_vcpus = gh_get_nr_vcpus(vmid);
+	if (poll_nr_vcpus < 0) {
+		printk_deferred("Failed to get vcpu count for VM %d ret %d\n",
+						vmid, poll_nr_vcpus);
+		ret = poll_nr_vcpus;
+		return ret;
+	}
+
+	for (vcpu_id = 0; vcpu_id < poll_nr_vcpus; vcpu_id++) {
+		vcpu = xa_load(&vm->vcpus, vcpu_id);
+		if (!vcpu)
+			return -EPERM;
+
+		if (vcpu->cap_id == GH_CAPID_INVAL)
+			return -EPERM;
+
+		do {
+			start_ts = ktime_get();
+			ret = gh_hcall_vcpu_run(vcpu->cap_id, 0, 0, 0, &resp);
+			yield_ts = ktime_get() - start_ts;
+			trace_gh_hcall_vcpu_run(ret, vcpu->vm->id, vcpu_id, yield_ts,
+						resp.vcpu_state, resp.vcpu_suspend_state);
+			if (ret == GH_ERROR_OK) {
+				if (resp.vcpu_state != GUNYAH_VCPU_STATE_READY &&
+					resp.vcpu_state != GUNYAH_VCPU_STATE_EXPECTS_WAKEUP)
+					printk_deferred("VCPU STATE: state=%llu VCPU=%u of VM=%d\n",
+							resp.vcpu_state, vcpu_id, vmid);
+				break;
+			}
+		} while (ret == GH_ERROR_RETRY);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(gh_poll_vcpu_run);
+
 static void android_rvh_gh_before_vcpu_run(void *unused, u16 vmid, u32 vcpu_id)
 {
 	struct gh_proxy_vcpu *vcpu;
@@ -238,6 +352,7 @@ static void android_rvh_gh_before_vcpu_run(void *unused, u16 vmid, u32 vcpu_id)
 		return;
 
 	/* Call into Gunyah to run vcpu. */
+	__pm_stay_awake(vcpu->ws);
 	preempt_disable();
 	if (vcpu->wdog_frozen) {
 		gh_hcall_wdog_manage(vm->wdog_cap_id, WATCHDOG_MANAGE_OP_UNFREEZE);
@@ -270,6 +385,21 @@ static void android_rvh_gh_after_vcpu_run(void *unused, u16 vmid, u32 vcpu_id, i
 		}
 	}
 	preempt_enable();
+
+	if (hcall_ret == GH_ERROR_OK) {
+		switch (resp->state) {
+		case GUNYAH_VCPU_STATE_EXPECTS_WAKEUP:
+			if (resp->state_data[1] == GH_VCPU_SYSTEM_SUSPEND)
+				__pm_relax(vcpu->ws);
+			break;
+		case GUNYAH_VCPU_STATE_POWERED_OFF:
+			__pm_relax(vcpu->ws);
+			break;
+		default:
+			break;
+		}
+	}
+
 	if (signal_pending(current)) {
 		if (!vcpu->wdog_frozen) {
 			gh_hcall_wdog_manage(vm->wdog_cap_id,
@@ -310,10 +440,142 @@ static int gh_vcpu_mgr_reg_rm_cbs(void)
 	return 0;
 }
 
+static int __maybe_unused gh_vcpu_kthread(void *data)
+{
+	struct gh_proxy_vcpu *proxy_vcpu = (struct gh_proxy_vcpu *)data;
+	struct gunyah_vcpu *vcpu = proxy_vcpu->gunyah_vcpu;
+	unsigned long resume_data[3] = { 0 };
+	struct gunyah_hypercall_vcpu_run_resp vcpu_run_resp;
+	enum gunyah_error gunyah_error = GUNYAH_ERROR_OK;
+	int ret = 0;
+
+	set_freezable();
+
+	while (!kthread_should_stop() && !ret) {
+		mutex_lock(&vcpu->run_lock);
+		if (vcpu->vcpu_run->immediate_exit) {
+			ret = -EINTR;
+			mutex_unlock(&vcpu->run_lock);
+			break;
+		}
+		android_rvh_gh_before_vcpu_run(NULL, proxy_vcpu->vm->id,
+					       vcpu->ticket.label);
+		gunyah_error = gunyah_hypercall_vcpu_run(
+			vcpu->rsc->capid, resume_data, &vcpu_run_resp);
+		android_rvh_gh_after_vcpu_run(
+			NULL, proxy_vcpu->vm->id, vcpu->ticket.label,
+			gunyah_error,
+			(const struct gunyah_hypercall_vcpu_run_resp
+				 *)&vcpu_run_resp);
+		if (gunyah_error == GUNYAH_ERROR_OK) {
+			memset(resume_data, 0, sizeof(resume_data));
+			switch (vcpu_run_resp.state) {
+			case GUNYAH_VCPU_STATE_READY:
+				if (need_resched())
+					schedule();
+				break;
+			case GUNYAH_VCPU_STATE_POWERED_OFF:
+				fallthrough;
+			case GUNYAH_VCPU_STATE_SYSTEM_OFF:
+				if (vcpu->vcpu_run->immediate_exit) {
+					ret = -EINTR;
+					break;
+				}
+				fallthrough;
+			case GUNYAH_VCPU_STATE_EXPECTS_WAKEUP:
+				ret = wait_for_completion_interruptible(
+					&vcpu->ready);
+				reinit_completion(&vcpu->ready);
+				break;
+			case GUNYAH_VCPU_STATE_BLOCKED:
+				schedule();
+				break;
+			case GUNYAH_VCPU_ADDRSPACE_VMMIO_READ:
+			case GUNYAH_VCPU_ADDRSPACE_VMMIO_WRITE:
+			case GUNYAH_VCPU_ADDRSPACE_PAGE_FAULT:
+				/* These VCPU state cannot be handled without
+				 * origin vcpu thread, just skip it and run
+				 * vcpu again
+				 */
+				break;
+			default:
+				pr_warn_ratelimited(
+					"Unknown vCPU state: %llx\n",
+					vcpu_run_resp.sized_state);
+				schedule();
+				break;
+			}
+		} else if (gunyah_error == GUNYAH_ERROR_RETRY) {
+			schedule();
+		} else {
+			ret = gunyah_error_remap(gunyah_error);
+		}
+		mutex_unlock(&vcpu->run_lock);
+
+		try_to_freeze();
+	}
+
+	gunyah_vm_put(vcpu->ghvm);
+
+	return ret;
+}
+
+static void android_rvh_gh_before_vcpu_release(void *unused, u16 vmid,
+					       struct gunyah_vcpu *vcpu)
+{
+	int vcpu_id = vcpu->ticket.label;
+	struct gh_proxy_vcpu *proxy_vcpu;
+	struct gh_proxy_vm *vm;
+
+	if (!is_vm_supports_proxy(vmid)) {
+		pr_info("Proxy Scheduling isn't supported for VM=%d\n", vmid);
+		return;
+	}
+
+	if (!is_keep_running_enable(vmid))
+		return;
+
+	vm = gh_get_vm(vmid);
+	if (!vm || !vm->is_active)
+		return;
+
+	proxy_vcpu = xa_load(&vm->vcpus, vcpu_id);
+	/* VM instance already get a vcpu kref, only need to get VM kref here */
+	if (vcpu->vcpu_run->immediate_exit || !gunyah_vm_get(vcpu->ghvm))
+		return;
+	proxy_vcpu->gunyah_vcpu = vcpu;
+
+	proxy_vcpu->vcpu_thread = kthread_run(gh_vcpu_kthread, proxy_vcpu,
+					      "vm%d_vcpu%d_kthread", vmid,
+					      vcpu_id);
+}
+
+static void android_rvh_gh_before_vm_release(void *unused, u16 vmid,
+					     struct gunyah_vm *ghvm)
+{
+	struct gh_proxy_vm *vm;
+
+	if (!is_vm_supports_proxy(vmid)) {
+		pr_info("Proxy Scheduling isn't supported for VM=%d\n", vmid);
+		return;
+	}
+
+	if (!is_keep_running_enable(vmid))
+		return;
+
+	vm = gh_get_vm(vmid);
+	if (!vm || !vm->is_active)
+		return;
+
+	ghd_rm_vm_stop(vmid, GH_VM_STOP_SHUTDOWN, 0);
+}
+
 static void gh_register_hooks(void)
 {
 	register_trace_android_rvh_gh_before_vcpu_run(android_rvh_gh_before_vcpu_run, NULL);
 	register_trace_android_rvh_gh_after_vcpu_run(android_rvh_gh_after_vcpu_run, NULL);
+	register_trace_android_rvh_gh_vcpu_release(android_rvh_gh_before_vcpu_release, NULL);
+	register_trace_android_rvh_gh_vm_release(android_rvh_gh_before_vm_release, NULL);
 }
 
 int gh_vcpu_mgr_init(void)

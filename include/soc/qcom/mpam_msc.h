@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _QCOM_MPAM_MSC_H
@@ -62,10 +62,12 @@ struct mpam_msc_ops {
 	int (*reset_cache_partition)(struct device *dev, void *msc_partid, void *msc_partconfig);
 	int (*mon_config)(struct device *dev, void *msc_partid, void *msc_partconfig);
 	int (*mon_stats_read)(struct device *dev, void *msc_partid, void *mon_val);
+	int (*get_firmware_version)(struct device *dev, void *val);
 };
 
 #if IS_ENABLED(CONFIG_QTI_MPAM_MSC)
 struct qcom_mpam_msc *qcom_msc_lookup(uint32_t msc_id);
+int msc_system_get_mpam_version(uint32_t msc_id, void *arg1);
 int msc_system_get_device_capability(uint32_t msc_id, void *arg1, void *arg2);
 int msc_system_get_partition(uint32_t msc_id, void *arg1, void *arg2);
 int msc_system_set_partition(uint32_t msc_id, void *arg1, void *arg2);
@@ -82,43 +84,48 @@ static inline struct qcom_mpam_msc *qcom_msc_lookup(uint32_t msc_id)
 	return NULL;
 }
 
+static int msc_system_get_mpam_version(uint32_t msc_id, void *arg1)
+{
+	return -EINVAL;
+}
+
 static inline int msc_system_get_device_capability(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
-static inline int msc_system_get_partition(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_get_partition(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
-static inline int msc_system_set_partition(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_set_partition(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
-static inline int msc_system_reset_partition(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_reset_partition(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
-static inline int msc_system_mon_read_miss_info(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_mon_read_miss_info(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
-static inline int msc_system_mon_alloc_info(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_mon_alloc_info(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
-static inline int msc_system_mon_config(uint32_t msc_id, void *arg1, void *arg2);
+static inline int msc_system_mon_config(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }
 
 static inline int attach_mpam_msc(struct device *dev, struct qcom_mpam_msc *qcom_msc,
-		uint32_t msc_type);
+		uint32_t msc_type)
 {
 	return -EINVAL;
 }

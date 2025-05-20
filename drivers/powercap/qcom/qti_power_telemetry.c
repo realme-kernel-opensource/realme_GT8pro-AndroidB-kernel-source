@@ -32,7 +32,8 @@
 #define QPT_CH_ENABLE_MASK_1		BIT(3)
 #define QPT_SID_MASK			GENMASK(4, 0)
 #define QPT_DATA_BYTE_SIZE		5
-#define QPT_ADC_SF_MULTIPLIER		GENMASK(2, 0)
+#define QPT_ADC_SF_MASK			GENMASK(2, 0)
+#define QPT_DEFAULT_SF			6400L
 #define QPT_DATA_SF_BASE		400L
 
 #define QPT_GET_CMLTV_POWER_UW_FROM_ADC(qpt, adc)	(adc * qpt->adc_scaling_factor)
@@ -78,7 +79,7 @@ static void qti_qpt_clear_all_channel_data(struct qpt_priv *qpt)
 		mutex_lock(&qpt_dev->lock);
 		qpt_dev->last_data = 0;
 		qpt_dev->last_data_uw = 0;
-		qpt_dev->total_energey_uj = 0;
+		qpt_dev->total_energy_uj = 0;
 		qpt_dev->pavg = 0;
 		qpt_dev->prev_buffer_energy = 0;
 		qpt_dev->prev_buffer_data_uw = 0;
@@ -101,9 +102,12 @@ static u32 get_data_update_rate_from_config(uint8_t timer_lb, uint8_t timer_ub,
 	return (timer * max_count  * 1000 / hz);
 }
 
-static u32 get_scaling_factor_from_config(uint8_t config)
+static u32 get_scaling_factor_from_config(uint8_t config, uint8_t config2)
 {
-	u32 mltplr = config & QPT_ADC_SF_MULTIPLIER;
+	u32 mltplr = config & QPT_ADC_SF_MASK;
+
+	if (config2)
+		return QPT_DEFAULT_SF;
 
 	return (QPT_DATA_SF_BASE * (1 << mltplr));
 }
@@ -160,7 +164,8 @@ static int qti_qpt_sync_common_telemetry_config(struct qpt_priv *qpt)
 				config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG1]);
 	qpt->bob_tperiod = qpt->data_update_sampling / qpt->bob_max_count;
 	qpt->adc_scaling_factor = get_scaling_factor_from_config(
-					config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG0]);
+					config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG0],
+					config_sdam[CONFIG_SDAM_SPARE]);
 	qpt->config_sdam_data = config_sdam;
 	QPT_DBG_EVENT(qpt, "ready_cnt:%d bob count:%d b_tperiod:%d tperiod:%d",
 			qpt->ready_max_count, qpt->bob_max_count, qpt->bob_tperiod,
@@ -247,7 +252,7 @@ static int qti_qpt_cache_data_to_overflow_buffer(struct qpt_priv *qpt)
 	list_for_each_entry(qpt_dev, &qpt->qpt_dev_head, qpt_node) {
 		if (!qpt_dev->enabled)
 			continue;
-		qpt_dev->prev_buffer_energy += qpt_dev->total_energey_uj;
+		qpt_dev->prev_buffer_energy += qpt_dev->total_energy_uj;
 		qpt_dev->prev_buffer_data_uw += qpt_dev->last_data_uw;
 		qpt_dev->prev_buffer_data_adc += qpt_dev->last_data;
 
@@ -296,7 +301,7 @@ static void qpt_channel_avg_data_update(struct qpt_device *qpt_dev,
 		tot_np = rtcdiff / qpt->tperiod;
 	}
 
-	qpt_dev->total_energey_uj = curr_total_energy + qpt_dev->prev_buffer_energy;
+	qpt_dev->total_energy_uj = curr_total_energy + qpt_dev->prev_buffer_energy;
 	qpt_dev->pavg = (cur_last_data_uw - qpt_dev->last_data_uw) / tot_np;
 
 	qpt_dev->last_data = cur_last_data;
@@ -305,11 +310,11 @@ static void qpt_channel_avg_data_update(struct qpt_device *qpt_dev,
 	mutex_unlock(&qpt_dev->lock);
 
 	trace_qpt_data_update(qpt_dev->ch_id, qpt_dev->last_data,
-				qpt_dev->total_energey_uj, qpt_dev->pavg);
+				qpt_dev->total_energy_uj, qpt_dev->pavg);
 	QPT_DBG_DATA(qpt_dev->priv,
 		"qpt[0x%x]: tot_power:%lluuw ADC:0x%llx tot_energy:%lluuj powavg %lluuw",
 			qpt_dev->ch_id, qpt_dev->last_data_uw, qpt_dev->last_data,
-			qpt_dev->total_energey_uj, qpt_dev->pavg);
+			qpt_dev->total_energy_uj, qpt_dev->pavg);
 }
 
 static int qti_qpt_read_seq_count(struct qpt_priv *qpt, int *seq_count,
@@ -381,7 +386,7 @@ static u64 qti_qpt_get_energy(struct powerzone *pz)
 	struct qpt_device *qpt_dev = (struct qpt_device *)pz->devdata;
 
 	mutex_lock(&qpt_dev->lock);
-	energy = qpt_dev->total_energey_uj;
+	energy = qpt_dev->total_energy_uj;
 	mutex_unlock(&qpt_dev->lock);
 
 	return energy;
@@ -469,6 +474,9 @@ static irqreturn_t qpt_sdam_irq_handler(int irq, void *data)
 
 	qti_qpt_read_data_update(qpt);
 
+	/* notify qptf about data update */
+	qptm_power_data_update();
+
 	return IRQ_HANDLED;
 }
 
@@ -554,6 +562,10 @@ static int qti_qpt_config_sdam_initialize(struct qpt_priv *qpt)
 		list_add(&qpt_dev->qpt_node, &qpt->qpt_dev_head);
 		qpt_dev->pz = qptm_channel_register(qpt->dev, qpt_dev->ch_id,
 					&qpt_ops, qpt_dev);
+		if (IS_ERR_OR_NULL(qpt_dev->pz)) {
+			dev_dbg(qpt->dev, "channel id:0x%x failed to register\n", qpt_dev->ch_id);
+			qpt_dev->pz = NULL;
+		}
 	}
 
 	return 0;

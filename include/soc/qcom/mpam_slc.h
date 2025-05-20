@@ -31,7 +31,9 @@ static char gear_index[][25] = {
 
 #define QCOM_SLC_MPAM_SCMI_STR	0x534c434d50414d /* SLCMPAM */
 #define SLC_INVALID_PARTID      ((1 << 16) - 1)
-#define SLC_NUM_PARTIDS		5
+
+#define SLC_MPAM_VERSION_0	0x00000000	/* Base firmware */
+#define SLC_MPAM_VERSION_1	0x00000002	/* SLC MPAM More gear support */
 
 enum mpam_slc_get_param_ids {
 	PARAM_GET_CLIENT_INFO_MSC = 1,
@@ -55,10 +57,38 @@ struct slc_client_info {
 } __packed;
 
 /* PARAM_GET_CACHE_CAPABILITY_MSC */
+struct slc_partid_gear_config {
+	uint8_t part_id_gears[MAX_NUM_GEARS];
+} __packed;
+
 struct slc_partid_capability {
 	uint8_t part_id;
 	uint8_t num_gears;
-	uint8_t part_id_gears[MAX_NUM_GEARS];
+	struct slc_partid_gear_config gear_cfg;
+	uint32_t part_id_gears[MAX_NUM_GEARS];
+} __packed;
+
+struct slc_partid_capacity_config {
+	uint32_t gear_flds_bitmap;
+	uint16_t dflt_bitmap;
+	uint32_t slc_bitfield_capacity;
+} __packed;
+
+enum slc_mintor_support {
+	cap_mon_support,
+	read_miss_mon_support,
+};
+
+struct slc_partid_capability_v1 {
+	uint8_t part_id;
+	uint8_t num_gears;
+	struct slc_partid_capacity_config cap_cfg;
+	uint32_t mon_support;
+} __packed;
+
+union slc_partid_capability_def {
+	struct slc_partid_capability v0_cap;
+	struct slc_partid_capability_v1 v1_cap;
 } __packed;
 
 /* PARAM_GET_CACHE_PARTITION_MSC */
@@ -153,13 +183,28 @@ struct qcom_slc_mon_data {
 	struct slc_read_miss_cntr rd_miss_stats;
 } __packed;
 
-struct qcom_slc_mon_mem {
+#define SLC_NUM_PARTIDS		5
+struct qcom_slc_mon_mem_v0 {
 	uint32_t match_seq;
 	uint16_t msc_id;
 	uint16_t num_active_mon;
 	struct qcom_slc_mon_data data[SLC_NUM_PARTIDS];
 	uint64_t last_capture_time;
 } __packed;
+
+struct qcom_slc_mon_mem_v1 {
+	uint32_t match_seq;
+	uint16_t msc_id;
+	uint16_t num_active_mon;
+	uint64_t last_capture_time;
+	uint64_t slc_mpam_monitor_size;
+	struct qcom_slc_mon_data data[];
+} __packed;
+
+union qcom_slc_monitor_memory {
+	struct qcom_slc_mon_mem_v0 mem_v0;
+	struct qcom_slc_mon_mem_v1 mem_v1;
+};
 
 /* slc Monitor capability */
 struct slc_mon_capability {
@@ -175,7 +220,7 @@ struct slc_mon_configured {
 /* msc slc capability */
 struct slc_client_capability {
 	struct slc_client_info client_info;
-	struct slc_partid_capability *slc_partid_cap;
+	union slc_partid_capability_def *slc_partid_cap;
 	uint8_t enabled;
 	char *client_name;
 } __packed;
@@ -186,6 +231,7 @@ struct qcom_slc_capability {
 	struct slc_mon_capability slc_mon_list;
 	struct slc_mon_configured slc_mon_configured;
 	struct qcom_slc_firmware_version firmware_ver;
+	uint32_t num_partids;
 } __packed;
 
 /* slc mon API parameters */

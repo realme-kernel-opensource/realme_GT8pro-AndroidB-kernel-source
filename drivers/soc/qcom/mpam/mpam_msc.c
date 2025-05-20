@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "mpam_msc: " fmt
@@ -54,6 +54,32 @@ static struct qcom_mpam_msc *msc_param_verification(uint32_t msc_id, struct msc_
 
 	return qcom_msc;
 }
+
+int msc_system_get_mpam_version(uint32_t msc_id, void *arg1)
+{
+	struct qcom_mpam_msc *qcom_msc;
+
+	if (arg1 == NULL)
+		return -EINVAL;
+
+	qcom_msc = qcom_msc_lookup(msc_id);
+	if (qcom_msc == NULL) {
+		pr_err("msc_id is not correct %d\n", msc_id);
+		return -EINVAL;
+	}
+
+	switch (qcom_msc->qcom_msc_id.qcom_msc_type) {
+	case SLC:
+		if (qcom_msc->ops->get_firmware_version)
+			return qcom_msc->ops->get_firmware_version(qcom_msc->dev, arg1);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(msc_system_get_mpam_version);
 
 int msc_system_get_partition(uint32_t msc_id, void *arg1, void *arg2)
 {

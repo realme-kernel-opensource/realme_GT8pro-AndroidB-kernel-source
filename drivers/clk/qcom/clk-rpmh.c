@@ -411,6 +411,8 @@ DEFINE_CLK_RPMH_VRM(rf_clk2, _d, "rfclkd2", 1);
 DEFINE_CLK_RPMH_VRM(rf_clk3, _d, "rfclkd3", 1);
 DEFINE_CLK_RPMH_VRM(rf_clk4, _d, "rfclkd4", 1);
 
+DEFINE_CLK_RPMH_VRM(slp_clk2, _a, "slpclka2", 1);
+
 DEFINE_CLK_RPMH_VRM(clk1, _a1, "clka1", 1);
 DEFINE_CLK_RPMH_VRM(clk2, _a1, "clka2", 1);
 DEFINE_CLK_RPMH_VRM(clk3, _a1, "clka3", 1);
@@ -937,6 +939,8 @@ static struct clk_hw *vienna_rpmh_clocks[] = {
 	[RPMH_RF_CLK3_A]	= &clk_rpmh_rf_clk3_a_ao.hw,
 	[RPMH_IPA_CLK]		= &clk_rpmh_ipa.hw,
 	[RPMH_CE_CLK]		= &clk_rpmh_ce.hw,
+	[RPMH_SLP_CLK2]		= &clk_rpmh_slp_clk2_a.hw,
+	[RPMH_SLP_CLK2_A]	= &clk_rpmh_slp_clk2_a_ao.hw,
 };
 
 static const struct clk_rpmh_desc clk_rpmh_vienna = {

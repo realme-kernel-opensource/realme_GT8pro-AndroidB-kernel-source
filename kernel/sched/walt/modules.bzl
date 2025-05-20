@@ -63,3 +63,13 @@ def register_modules(registry):
             "drivers/soc/qcom/smem",
         ],
     )
+
+    registry.register(
+        name = "kernel/sched/walt/midpoint",
+        out = "midpoint.ko",
+        config = "m",
+        srcs = [
+            # do not sort
+            "kernel/sched/walt/midpoint.c",
+        ],
+    )

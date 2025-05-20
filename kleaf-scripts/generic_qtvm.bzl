@@ -61,6 +61,8 @@ def _gen_qc_core_build_config(name):
             "DTB_OFFSET={}".format(vm_opts.dtb_offset),
             "RAMDISK_OFFSET={}".format(vm_opts.ramdisk_offset),
             "CMDLINE_CPIO_OFFSET={}".format(vm_opts.cmdline_cpio_offset),
+            "METADATA_OFFSET={}".format(vm_opts.metadata_offset),
+            "METADATA_SIZE={}".format(vm_opts.metadata_size),
             "VM_SIZE_EXT4={}".format(vm_opts.vm_size_ext4),
             "DUMMY_IMG_SIZE={}".format(vm_opts.dummy_img_size),
             "",
@@ -127,5 +129,8 @@ def define_qtvm():
     define_qc_core_kernel(
         "kernel_aarch64_qtvm_debug",
         "arch/arm64/configs/generic_vm_defconfig",
-        defconfig_fragments = ["arch/arm64/configs/generic_vm_debug.fragment"],
+        defconfig_fragments = [
+            "arch/arm64/configs/generic_vm_cmdline.fragment",
+            "arch/arm64/configs/generic_vm_debug.fragment",
+        ],
     )

@@ -60,6 +60,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/misc/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/mmc/host/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/net/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/pci/controller/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/perf/Kconfig"
@@ -123,6 +125,8 @@ source "$(KCONFIG_EXT_PREFIX)kernel/trace/Kconfig"
 source "$(KCONFIG_EXT_PREFIX)net/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)sound/usb/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/block/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)Kconfig.qtvm"
 

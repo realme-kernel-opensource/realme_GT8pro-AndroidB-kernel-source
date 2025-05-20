@@ -16,6 +16,21 @@ def register_modules(registry):
     register_hab(registry)
 
     registry.register(
+        name = "drivers/soc/qcom/mem-prot",
+        out = "mem-prot.ko",
+        config = "CONFIG_MEM_PROT",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/mem-prot.c",
+            "include/linux/mem-prot.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/adsp_sleepmon",
         out = "adsp_sleepmon.ko",
         config = "CONFIG_QCOM_ADSP_SLEEPMON",
@@ -1170,6 +1185,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/soc/qcom/dcvs/qcom_scmi_client",
+            "drivers/soc/qcom/cpu_phys_log_map",
         ],
     )
 
@@ -1433,5 +1449,33 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/soc/qcom/rq_stats.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom-geni-se-msm",
+        out = "qcom-geni-se-msm.ko",
+        config = "CONFIG_QCOM_GENI_SE_MSM",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom-geni-se-msm.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/crypto-qti-virt",
+        out = "crypto-qti-virt.ko",
+        config = "CONFIG_QTI_CRYPTO_VIRTUALIZATION",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/crypto-qti-virt.c",
+        ],
+        hdrs = [
+            "include/linux/habmm.h",
+        ],
+        includes = ["include/linux"],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/hab/msm_hab",
         ],
     )

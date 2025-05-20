@@ -568,7 +568,7 @@ enum pattern_src {
 	PATTERN2,
 	SWR,
 	PATTERN_MEM,
-	SRC_RESERVED,
+	SRC_INVALID,
 };
 
 enum s_period {
@@ -3543,7 +3543,6 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 		if (rc < 0) {
 			dev_err(chip->dev, "stop FIFO playing failed, rc=%d\n",
 					rc);
-			mutex_unlock(&play->lock);
 			goto restore;
 		}
 	} else {
@@ -3559,11 +3558,9 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 		rc = haptics_enable_play(chip, false);
 		if (rc < 0) {
 			dev_err(chip->dev, "stop play failed, rc=%d\n", rc);
-			mutex_unlock(&play->lock);
 			goto restore;
 		}
 	}
-	mutex_unlock(&play->lock);
 
 	rc = haptics_enable_hpwr_vreg(chip, false);
 	if (rc < 0)
@@ -3576,6 +3573,8 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 	}
 
 restore:
+	play->pattern_src = SRC_INVALID;
+	mutex_unlock(&play->lock);
 	/* Restore Vmax headroom to 1.5V after SPMI play is done */
 	if (chip->wa_flags & RESTORE_VMAX_HDRM_1P5V) {
 		rc = haptics_set_vmax_headroom_mv(chip, VMAX_HDRM_MV_DEFAULT);
@@ -3610,8 +3609,13 @@ static void haptics_set_gain_work(struct work_struct *work)
 
 	mutex_lock(&play->lock);
 	gain = atomic_read(&play->gain);
-	/* scale amplitude when playing in DIRECT_PLAY mode */
-	if (chip->play.pattern_src == DIRECT_PLAY) {
+	/*
+	 * Scale amplitude when playing in DIRECT_PLAY mode, or if set_gain()
+	 * is received before starting a play, only handle it for DIRECT_PLAY
+	 * play mode.
+	 */
+	if (chip->play.pattern_src == DIRECT_PLAY ||
+			chip->play.pattern_src == SRC_INVALID) {
 		amplitude = get_direct_play_max_amplitude(chip);
 		amplitude *= gain;
 		amplitude /= 0x7fff;
@@ -6267,6 +6271,7 @@ unlock:
 
 	haptics_clear_fault(chip);
 	chip->play.in_calibration = false;
+	chip->play.pattern_src = SRC_INVALID;
 	mutex_unlock(&chip->play.lock);
 	haptics_runtime_autosuspend_put(chip);
 	return rc;
@@ -6655,6 +6660,7 @@ static int haptics_probe(struct platform_device *pdev)
 	atomic_set(&chip->play.fifo_status.is_busy, 0);
 	atomic_set(&chip->play.fifo_status.written_done, 0);
 	atomic_set(&chip->play.fifo_status.cancelled, 0);
+	chip->play.pattern_src = SRC_INVALID;
 	input_dev->name = "qcom-hv-haptics";
 	input_set_drvdata(input_dev, chip);
 	chip->input_dev = input_dev;

@@ -304,15 +304,12 @@ void walt_rq_dump(int cpu)
 				wrq->load_subs[i].new_subs);
 	}
 	walt_task_dump(tsk);
-	for (i = 0; i < ANDROID_CGROUPS; i++) {
-		SCHED_PRINT(sched_capacity_margin_up[i][cpu_cluster(cpu)->id]);
-		SCHED_PRINT(sched_capacity_margin_down[i][cpu_cluster(cpu)->id]);
-	}
 }
 
 void walt_dump(void)
 {
-	int cpu;
+	int cpu, i;
+	struct walt_sched_cluster *cluster;
 
 	printk_deferred("============ WALT RQ DUMP START ==============\n");
 	printk_deferred("Sched clock: %llu\n", walt_sched_clock());
@@ -328,6 +325,14 @@ void walt_dump(void)
 	for_each_online_cpu(cpu)
 		walt_rq_dump(cpu);
 	SCHED_PRINT(max_possible_cluster_id);
+
+	for_each_sched_cluster(cluster) {
+		for (i = 0; i < ANDROID_CGROUPS; i++)
+			printk_deferred("up=%u down=%u cluster=%d cgroup=%s\n",
+					sched_capacity_margin_up[i][cluster->id],
+					sched_capacity_margin_down[i][cluster->id],
+					cluster->id, cgroup_names[i]);
+	}
 	printk_deferred("============ WALT RQ DUMP END ==============\n");
 }
 
@@ -1225,15 +1230,16 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 	wallclock = walt_sched_clock();
 	walt_update_task_ravg(p, task_rq(p), TASK_MIGRATE, wallclock, 0);
 
+	/*
+	 * Update task's cycles wrt to the new cpu.
+	 */
+	wts->cpu_cycles = walt_get_cycle_counts_cb(new_cpu, wallclock);
+
 	if (wts->window_start != src_wrq->window_start)
 		WALT_BUG(WALT_BUG_WALT, p,
 				"CPU%d: %s task %s(%d)'s ws=%llu not equal to src_rq %d's ws=%llu",
 				raw_smp_processor_id(), __func__, p->comm, p->pid,
 				wts->window_start, src_rq->cpu, src_wrq->window_start);
-
-
-	/* safe to update the task cyc cntr for new_cpu without the new_cpu rq_lock */
-	update_task_cpu_cycles(p, new_cpu, wallclock);
 
 	new_task = is_new_task(p);
 	/* Protected by rq_lock */
@@ -3317,7 +3323,7 @@ static void walt_init_cycle_counter(void)
 
 static void transfer_busy_time(struct rq *rq,
 				struct walt_related_thread_group *grp,
-					struct task_struct *p, int event);
+					struct task_struct *p, int event, u64 wallclock);
 
 /*
  * Enable colocation and frequency aggregation for all threads in a process.
@@ -3366,12 +3372,11 @@ void update_best_cluster(struct walt_related_thread_group *grp,
 		grp->downmigrate_ts = 0;
 }
 
-static void _set_preferred_cluster(struct walt_related_thread_group *grp)
+static void _set_preferred_cluster(struct walt_related_thread_group *grp, u64 wallclock)
 {
 	struct task_struct *p;
 	u64 combined_demand = 0;
 	bool group_boost = false;
-	u64 wallclock;
 	bool prev_skip_min = grp->skip_min;
 	struct walt_task_struct *wts;
 
@@ -3389,8 +3394,6 @@ static void _set_preferred_cluster(struct walt_related_thread_group *grp)
 		grp->skip_min = false;
 		goto out;
 	}
-
-	wallclock = walt_sched_clock();
 
 	/*
 	 * wakeup of two or more related tasks could race with each other and
@@ -3435,10 +3438,10 @@ out:
 	}
 }
 
-static void set_preferred_cluster(struct walt_related_thread_group *grp)
+static void set_preferred_cluster(struct walt_related_thread_group *grp, u64 wallclock)
 {
 	raw_spin_lock(&grp->lock);
-	_set_preferred_cluster(grp);
+	_set_preferred_cluster(grp, wallclock);
 	raw_spin_unlock(&grp->lock);
 }
 
@@ -3504,18 +3507,20 @@ static void remove_task_from_group(struct task_struct *p)
 	struct rq *rq;
 	int empty_group = 1;
 	struct rq_flags rf;
+	u64 wallclock;
 
 	raw_spin_lock(&grp->lock);
 
 	rq = __task_rq_lock(p, &rf);
-	transfer_busy_time(rq, wts->grp, p, REM_TASK);
+	wallclock = walt_sched_clock();
+	transfer_busy_time(rq, wts->grp, p, REM_TASK, wallclock);
 	list_del_init(&wts->grp_list);
 	rcu_assign_pointer(wts->grp, NULL);
 	__task_rq_unlock(rq, &rf);
 
 	if (!list_empty(&grp->tasks)) {
 		empty_group = 0;
-		_set_preferred_cluster(grp);
+		_set_preferred_cluster(grp, wallclock);
 	}
 
 	raw_spin_unlock(&grp->lock);
@@ -3535,6 +3540,7 @@ add_task_to_group(struct task_struct *p, struct walt_related_thread_group *grp)
 	struct rq *rq;
 	struct rq_flags rf;
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
+	u64 wallclock;
 
 	raw_spin_lock(&grp->lock);
 
@@ -3543,12 +3549,13 @@ add_task_to_group(struct task_struct *p, struct walt_related_thread_group *grp)
 	 * reference of wts->grp in various hot-paths
 	 */
 	rq = __task_rq_lock(p, &rf);
-	transfer_busy_time(rq, grp, p, ADD_TASK);
+	wallclock = walt_sched_clock();
+	transfer_busy_time(rq, grp, p, ADD_TASK, wallclock);
 	list_add(&wts->grp_list, &grp->tasks);
 	rcu_assign_pointer(wts->grp, grp);
 	__task_rq_unlock(rq, &rf);
 
-	_set_preferred_cluster(grp);
+	_set_preferred_cluster(grp, wallclock);
 
 	raw_spin_unlock(&grp->lock);
 
@@ -3806,9 +3813,8 @@ static void note_task_waking(struct task_struct *p, u64 wallclock)
  */
 static void transfer_busy_time(struct rq *rq,
 				struct walt_related_thread_group *grp,
-					struct task_struct *p, int event)
+					struct task_struct *p, int event, u64 wallclock)
 {
-	u64 wallclock;
 	struct group_cpu_time *cpu_time;
 	u64 *src_curr_runnable_sum, *dst_curr_runnable_sum;
 	u64 *src_prev_runnable_sum, *dst_prev_runnable_sum;
@@ -3821,7 +3827,6 @@ static void transfer_busy_time(struct rq *rq,
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
-	wallclock = walt_sched_clock();
 
 	walt_update_task_ravg(p, rq, TASK_UPDATE, wallclock, 0);
 
@@ -4062,6 +4067,7 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 				bool is_pipeline_sync_migration, struct cpumask *lock_cpus)
 {
 	struct walt_sched_cluster *cluster;
+	bool force_fmax;
 	struct rq *rq;
 	int cpu;
 	u64 wc;
@@ -4127,6 +4133,7 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 		cpumask_and(&cluster_online_cpus, &cluster->cpus,
 						cpu_online_mask);
 		num_cpus = cpumask_weight(&cluster_online_cpus);
+		force_fmax = false;
 		for_each_cpu(cpu, &cluster_online_cpus) {
 			int wflag = 0;
 
@@ -4146,15 +4153,28 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 				wflag |= WALT_CPUFREQ_ROLLOVER_BIT;
 			}
 
-			if (i == num_cpus)
+			if (walt_rotation_enabled ||
+				(should_apply_suh_freq_boost(cluster) && is_suh_max()) ||
+				(walt_trailblazer_tasks(cpu)
+					&& walt_feat(WALT_FEAT_TRAILBLAZER_BIT))) {
+				force_fmax = true;
+			}
+
+			if (i == num_cpus || force_fmax)
 				waltgov_run_callback(cpu_rq(cpu), wflag);
 			else
 				waltgov_run_callback(cpu_rq(cpu), wflag |
 							WALT_CPUFREQ_CONTINUE_BIT);
 			i++;
 
-			if (!is_migration)
-				walt_update_irqload(rq);
+			if (force_fmax)
+				break;
+		}
+
+		if (!is_migration) {
+			for_each_cpu(cpu, &cluster_online_cpus) {
+				walt_update_irqload(cpu_rq(cpu));
+			}
 		}
 	}
 
@@ -5011,7 +5031,7 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 	rcu_read_lock();
 	grp = task_related_thread_group(p);
 	if (should_update_preferred_cluster(grp, p, old_load, false, wallclock))
-		set_preferred_cluster(grp);
+		set_preferred_cluster(grp, wallclock);
 	rcu_read_unlock();
 }
 
@@ -5154,7 +5174,7 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 	rcu_read_lock();
 	grp = task_related_thread_group(rq->curr);
 	if (should_update_preferred_cluster(grp, rq->curr, old_load, true, rq->clock))
-		set_preferred_cluster(grp);
+		set_preferred_cluster(grp, rq->clock);
 	rcu_read_unlock();
 
 	walt_lb_tick(rq);

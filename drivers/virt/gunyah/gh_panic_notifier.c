@@ -37,6 +37,7 @@ struct gh_panic_notifier_dev {
 	void *rx_dbl;
 	struct wakeup_source *ws;
 	struct notifier_block vm_nb;
+	struct notifier_block rm_nb;
 	struct notifier_block gh_panic_blk;
 };
 
@@ -354,11 +355,57 @@ static int gh_panic_notifier_notify(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+static int gh_panic_notifier_rm_cb(struct notifier_block *nb, unsigned long cmd,
+			     void *data)
+{
+	struct gh_rm_notif_vm_exited_payload *vm_exited = data;
+	struct gh_panic_notifier_dev *gpnd;
+	struct recovery_vm *vm;
+	gh_vmid_t notify_vmid;
+	gh_vmid_t peer_vmid;
+	gh_vmid_t self_vmid;
+
+	if (cmd != GH_RM_NOTIF_VM_EXITED)
+		return NOTIFY_DONE;
+
+	gpnd = container_of(nb, struct gh_panic_notifier_dev, rm_nb);
+
+	if (ghd_rm_get_vmid(gpnd->peer_name, &peer_vmid))
+		return NOTIFY_DONE;
+
+	if (ghd_rm_get_vmid(GH_PRIMARY_VM, &self_vmid))
+		return NOTIFY_DONE;
+
+	notify_vmid = vm_exited->vmid;
+	switch (vm_exited->exit_type) {
+	case GH_RM_VM_EXIT_TYPE_WDT_BITE:
+	case GH_RM_VM_EXIT_TYPE_HYP_ERROR:
+	case GH_RM_VM_EXIT_TYPE_ASYNC_EXT_ABORT:
+		dev_err(gpnd->dev, "VM: %d Crashed!\n", notify_vmid);
+		vm = get_recovery_vm_from_vmid(notify_vmid);
+		if (!vm) {
+			dev_err(gpnd->dev,
+				"Failed to get recovery vm for VM:%d!\n", notify_vmid);
+			return NOTIFY_DONE;
+		}
+
+		if (!vm->recovery) {
+			if (peer_vmid == notify_vmid)
+				atomic_notifier_chain_unregister(&panic_notifier_list,
+					&gpnd->gh_panic_blk);
+
+			panic("Resetting the SoC");
+		}
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
 static int gh_panic_notifier_vm_cb(struct notifier_block *nb, unsigned long cmd,
 			     void *data)
 {
 	struct gh_panic_notifier_dev *gpnd;
-	struct recovery_vm *vm;
 	dma_addr_t dma_handle;
 	gh_vmid_t *notify_vmid;
 	gh_vmid_t peer_vmid;
@@ -401,22 +448,6 @@ static int gh_panic_notifier_vm_cb(struct notifier_block *nb, unsigned long cmd,
 		if (peer_vmid == *notify_vmid && gpnd->base) {
 			atomic_notifier_chain_unregister(&panic_notifier_list, &gpnd->gh_panic_blk);
 			gh_panic_notifier_unshare_mem(gpnd, self_vmid, peer_vmid);
-		}
-		break;
-	case GH_VM_CRASH:
-		dev_err(gpnd->dev, "VM: %d Crashed!\n", *notify_vmid);
-		vm = get_recovery_vm_from_vmid(*notify_vmid);
-		if (!vm) {
-			dev_err(gpnd->dev, "Failed to get recovery vm for VM:%d!\n", *notify_vmid);
-			return NOTIFY_DONE;
-		}
-
-		if (!vm->recovery) {
-			if (peer_vmid == *notify_vmid)
-				atomic_notifier_chain_unregister(&panic_notifier_list,
-									&gpnd->gh_panic_blk);
-
-			panic("Resetting the SoC");
 		}
 		break;
 	}
@@ -619,6 +650,13 @@ static int gh_panic_notifier_probe(struct platform_device *pdev)
 		gpnd->vm_nb.notifier_call = gh_panic_notifier_vm_cb;
 		gpnd->vm_nb.priority = INT_MAX;
 		gh_register_vm_notifier(&gpnd->vm_nb);
+		gpnd->rm_nb.notifier_call = gh_panic_notifier_rm_cb;
+		ret = gh_rm_register_notifier(&gpnd->rm_nb);
+		if (ret) {
+			gh_dbl_tx_unregister(gpnd->tx_dbl);
+			gh_unregister_vm_notifier(&gpnd->vm_nb);
+			return ret;
+		}
 	} else {
 		ret = gh_panic_notifier_svm_mem_map(gpnd);
 		if (ret)
@@ -651,6 +689,7 @@ static void gh_panic_notifier_remove(struct platform_device *pdev)
 	if (gpnd->primary_vm) {
 		gh_dbl_tx_unregister(gpnd->tx_dbl);
 		gh_unregister_vm_notifier(&gpnd->vm_nb);
+		gh_rm_unregister_notifier(&gpnd->rm_nb);
 		kfree(recovery_vms);
 	} else {
 		gh_dbl_rx_unregister(gpnd->rx_dbl);

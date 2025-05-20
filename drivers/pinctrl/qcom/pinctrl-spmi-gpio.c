@@ -14,6 +14,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/spmi.h>
+#include <linux/suspend.h>
 #include <linux/types.h>
 
 #include <linux/pinctrl/pinconf-generic.h>
@@ -814,7 +815,7 @@ static const struct gpio_chip pmic_gpio_gpio_template = {
 	.dbg_show		= pmic_gpio_dbg_show,
 };
 
-static int __maybe_unused pmic_gpio_restore(struct device *dev)
+static int pmic_gpio_restore(struct device *dev)
 {
 	struct pmic_gpio_state *state = dev_get_drvdata(dev);
 	struct pinctrl_dev *ctrl = state->ctrl;
@@ -837,8 +838,19 @@ static int __maybe_unused pmic_gpio_restore(struct device *dev)
 	return ret;
 }
 
-static const struct dev_pm_ops __maybe_unused pmic_gpio_pm_ops = {
-	.restore = pm_ptr(pmic_gpio_restore),
+static int pmic_gpio_resume(struct device *dev)
+{
+	#ifdef CONFIG_DEEPSLEEP
+		if (pm_suspend_via_firmware())
+			return pmic_gpio_restore(dev);
+	#endif
+
+	return 0;
+}
+
+static const struct dev_pm_ops pmic_gpio_pm_ops = {
+	.restore = pmic_gpio_restore,
+	.resume = pmic_gpio_resume,
 };
 
 static int pmic_gpio_populate(struct pmic_gpio_state *state,

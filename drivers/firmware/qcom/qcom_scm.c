@@ -40,10 +40,15 @@
 #include <linux/sizes.h>
 #include <linux/types.h>
 #include <linux/gunyah/gh_rm_drv.h>
+#include <linux/qti-lcp-ppddr.h>
+#include <include/linux/arm-smccc.h>
+#include <linux/qtee_shmbridge.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
 
 #include "qcom_scm.h"
 #include "qcom_tzmem.h"
 #include "qtee_shmbridge_internal.h"
+#include "lcp-ppddr-internal.h"
 
 static bool download_mode = IS_ENABLED(CONFIG_QCOM_SCM_DOWNLOAD_MODE_DEFAULT);
 module_param(download_mode, bool, 0);
@@ -164,6 +169,11 @@ static const char * const qcom_scm_convention_names[] = {
 	[SMC_CONVENTION_ARM_64] = "smc arm 64",
 	[SMC_CONVENTION_LEGACY] = "smc legacy",
 };
+
+#define GIC_SPI_BASE        32
+#define GIC_MAX_SPI       1019  // SPIs in GICv3 spec range from 32..1019
+#define GIC_ESPI_BASE     4096
+#define GIC_MAX_ESPI      5119 // ESPIs in GICv3 spec range from 4096..5119
 
 static struct qcom_scm *__scm;
 
@@ -1466,6 +1476,225 @@ int qcom_scm_mem_protect_sd_ctrl(u32 devid, phys_addr_t mem_addr, u64 mem_size,
 	return ret ? : res.result[0];
 }
 EXPORT_SYMBOL(qcom_scm_mem_protect_sd_ctrl);
+
+#define CFG_PHYS_DDR_PROTECTIONS_FOR_REGIONS_API_VERSION	1
+
+static int __qcom_scm_cfg_phys_ddr_protections_for_region(
+			struct device *dev,
+			phys_addr_t ppddr_set_phys,
+			uint32_t ppddr_set_sz,
+			uint32_t *resp,
+			phys_addr_t resp_phys,
+			uint32_t resp_sz,
+			enum cfg_phys_ddr_protection_cmd cmd)
+{
+	struct qcom_scm_res res;
+	int ret;
+
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_DDR,
+		.cmd = QCOM_SCM_SVC_DDR_CFG_PHYS_DDR_PROTECTION_FOR_REGIONS,
+		.arginfo = QCOM_SCM_ARGS(6,
+					 QCOM_SCM_VAL,
+					 QCOM_SCM_RW,
+					 QCOM_SCM_VAL,
+					 QCOM_SCM_RW,
+					 QCOM_SCM_VAL,
+					 QCOM_SCM_VAL),
+		.args[0] = CFG_PHYS_DDR_PROTECTIONS_FOR_REGIONS_API_VERSION,
+		.args[1] = ppddr_set_phys,
+		.args[2] = ppddr_set_sz,
+		.args[3] = resp_phys,
+		.args[4] = resp_sz,
+		.args[5] = cmd,
+		.owner = QSEECOM_TZ_OWNER_SIP,
+	};
+
+	while (1) {
+		ret = qcom_scm_call(__scm->dev, &desc, &res);
+		if (ret)
+			goto out;
+
+		if (*resp != CFG_PHYS_DDR_PROTECTION_RSP_CMD_PROCESSING)
+			break;
+
+		/* after submitting the request, we just need to poll */
+		desc.args[5] = CFG_PHYS_DDR_PROTECTION_CMD_GET_CMD_RESULT_FOR_REGIONS;
+	}
+	ret = res.result[0];
+
+out:
+	if (ret)
+		pr_err("cfg_pddr_protected_region SCM call ret %d\n", ret);
+
+	return ret;
+}
+
+static int map_to_linux_error(uint32_t resp)
+{
+	switch (resp) {
+	case CFG_PHYS_DDR_PROTECTION_RSP_CMD_COMPLETE:
+		return 0;
+	case CFG_PHYS_DDR_PROTECTION_RSP_ERR_HW_IS_BUSY:
+		return -EBUSY;
+	case CFG_PHYS_DDR_PROTECTION_RSP_ERR_REGION_NOT_PROTECTABLE:
+	case CFG_PHYS_DDR_PROTECTION_RSP_ERR_NO_CFG_ALLOWED:
+		return -EINVAL;
+	case CFG_PHYS_DDR_PROTECTION_RSP_ERR_REGION_ALREADY_IN_USE:
+		/*
+		 * Region is in use by another VM, so we shouldn't be
+		 * reconfiguring it
+		 */
+		return -EINVAL;
+	case CFG_PHYS_DDR_PROTECTION_RSP_ERR_PARTIAL_ENABLE_NOT_SUPPORTED:
+		return -EOPNOTSUPP;
+	case CFG_PHYS_DDR_PROTECTION_RSP_ERR_CMD_FAILED:
+	case CFG_PHYS_DDR_PROTECTION_RSP_ERR_MAX:
+	default:
+		return -EIO;
+	}
+}
+
+/*
+ * Allocate memory from the shmbridge shared region and zero the region.
+ * Return 0 on success or error otherwise.
+ */
+static int alloc_from_shmbridge_pool(struct device *dev, size_t len,
+				     struct qtee_shm *shm)
+{
+	int ret;
+
+	/* LCP-DARE TZ calls require shmbridge */
+	if (!qtee_shmbridge_is_enabled())
+		return -EOPNOTSUPP;
+
+	ret = qtee_shmbridge_allocate_shm(len, shm);
+	if (ret)
+		return ret;
+
+	memset(shm->vaddr, 0, len);
+
+	pr_debug("%s() paddr %llu, size %lu, ret %d\n", __func__, shm->paddr,
+				shm->size, ret);
+	return 0;
+}
+
+/**
+ * qcom_scm_cfg_pddr_protected_regions() - Make a secure call to configure
+ *		 DDR protections for the region @cfg_region.
+ *
+ * It is not an error to try to reconfigure a region/sub-region as the
+ * same type again. It just be might be inefficient if HW ends up
+ * reinitializing the region, but TZ will check this and avoid going
+ * to the hardware. There is no other entity changing the settings on
+ * th regiones so we could cache the settings and avoid calling TZ, but
+ * for now lets leave it to TZ.
+ *
+ * Return 0 on success or negative errno on failure.
+ */
+int qcom_scm_cfg_pddr_protected_region(struct ppddr_region *cfg_region)
+{
+	struct phys_protected_ddr_region *ppddr;
+	enum cfg_phys_ddr_protection_cmd cmd;
+	struct qtee_shm ppddr_shm = { 0 };
+	struct qtee_shm resp_shm = { 0 };
+	phys_addr_t ppddr_phys;
+	phys_addr_t resp_phys;
+	uint32_t ppddr_sz;
+	uint32_t resp_sz;
+	uint32_t *resp;
+	uint32_t ret;
+
+	if (cfg_region == NULL)
+		return 0;
+
+	cmd = cfg_region->lcp_mem_type;
+
+	switch (cmd) {
+	case CFG_PHYS_DDR_PROTECTION_CMD_GET_CMD_RESULT_FOR_REGIONS:
+		/*
+		 * This type is only to communicate with TZ. No reason
+		 * for caller to use it at this time.
+		 */
+		return -EINVAL;
+
+	case CFG_PHYS_DDR_PROTECTION_CMD_DISABLE_REGIONS:
+	case CFG_PHYS_DDR_PROTECTION_CMD_ENABLE_DE:
+	case CFG_PHYS_DDR_PROTECTION_CMD_ENABLE_AND_INIT_DAE:
+	case CFG_PHYS_DDR_PROTECTION_CMD_ENABLE_AND_INIT_DARE:
+	case CFG_PHYS_DDR_PROTECTION_CMD_ENABLE_MTE:
+	case CFG_PHYS_DDR_PROTECTION_CMD_ENABLE_DE_AND_MTE:
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	/*
+	 * Allocate memory for responses buffer and the scm arg buffer, ppddr
+	 * These must be allocated in the region shared with shmbridge.
+	 */
+	resp_sz = sizeof(uint32_t);
+	ret = alloc_from_shmbridge_pool(__scm->dev, resp_sz, &resp_shm);
+	if (ret)
+		return ret;
+
+	ppddr_sz = sizeof(*ppddr);
+	ret = alloc_from_shmbridge_pool(__scm->dev, ppddr_sz, &ppddr_shm);
+	if (ret)
+		goto out_free_resp;
+
+	ppddr = ppddr_shm.vaddr;
+	ppddr_phys = ppddr_shm.paddr;
+
+	resp = resp_shm.vaddr;
+	resp_phys = resp_shm.paddr;
+
+	memset(resp, 0, resp_sz);
+
+	if (!ppddr)
+		goto out_free_resp;
+
+	ppddr->ppddr_data_region.start_addr =
+				cfg_region->data_region.start_addr;
+	ppddr->ppddr_data_region.end_addr =
+				cfg_region->data_region.end_addr;
+	ppddr->ppddr_init_data_region.start_addr =
+				cfg_region->data_region.start_addr;
+	ppddr->ppddr_init_data_region.end_addr =
+				cfg_region->data_region.end_addr;
+
+	/* NOTE: TZ manages the tag regions, so ignore them for now */
+	ppddr->ppddr_tag_regions_ptr = NULL;
+	ppddr->ppddr_tag_regions_size = 0;
+	ppddr->ppddr_ret_tag_regions_ptr = NULL;
+	ppddr->ppddr_ret_tag_regions_len_ptr = 0;
+	ppddr->ppddr_ret_tag_regions_len_ptr_size = 0;
+
+	ret = __qcom_scm_cfg_phys_ddr_protections_for_region(__scm->dev,
+					ppddr_phys, ppddr_sz, resp, resp_phys,
+					resp_sz, cmd);
+	if (ret)
+		goto out;
+
+	ret = map_to_linux_error(*resp);
+out:
+	qtee_shmbridge_free_shm(&ppddr_shm);
+
+out_free_resp:
+	if (ret)
+		pr_err("%s(): resp %u ret %d\n", __func__, *resp, ret);
+
+	qtee_shmbridge_free_shm(&resp_shm);
+
+	pr_debug("%s() region [0x%llx, 0x%llx] type %d, ret %d\n", __func__,
+		cfg_region->data_region.start_addr,
+		cfg_region->data_region.end_addr, cfg_region->lcp_mem_type,
+		ret);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_cfg_pddr_protected_region);
 
 int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
 {
@@ -2951,15 +3180,36 @@ static int qcom_scm_do_restart(struct notifier_block *this, unsigned long event,
 	return NOTIFY_OK;
 }
 
+static int qcom_scm_fill_irq_fwspec_params(struct irq_fwspec *fwspec, u32 virq)
+{
+	if (virq >= GIC_SPI_BASE && virq <= GIC_MAX_SPI) {
+		fwspec->param[0] = GIC_SPI;
+		fwspec->param[1] = virq - GIC_SPI_BASE;
+	} else if (virq >= GIC_ESPI_BASE && virq <= GIC_MAX_ESPI) {
+		fwspec->param[0] = GIC_ESPI;
+		fwspec->param[1] = virq - GIC_ESPI_BASE;
+	} else {
+		WARN(1, "Unexpected virq: %d\n", virq);
+		return -ENXIO;
+	}
+	fwspec->param[2] = IRQ_TYPE_EDGE_RISING;
+	fwspec->param_count = 3;
+
+	return 0;
+}
+
 static int qcom_scm_query_wq_queue_info(struct qcom_scm *scm)
 {
 	int ret;
+	u32 hwirq;
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_WAITQ,
 		.cmd = QCOM_SCM_GET_WQ_QUEUE_INFO,
 		.owner = ARM_SMCCC_OWNER_SIP
 	};
 	struct qcom_scm_res res;
+	struct irq_fwspec fwspec;
+	struct device_node *parent_irq_node;
 
 	scm->waitq.wq_feature = QCOM_SCM_SINGLE_SMC_ALLOW;
 	ret = qcom_scm_call_atomic(__scm->dev, &desc, &res);
@@ -2969,8 +3219,17 @@ static int qcom_scm_query_wq_queue_info(struct qcom_scm *scm)
 	}
 
 	scm->waitq.call_ctx_cnt = res.result[0] & 0xFF;
-	scm->waitq.irq = res.result[1] & 0xFFFF;
+	hwirq = res.result[1] & 0xFFFF;
 	scm->waitq.wq_feature = QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW;
+
+	ret = qcom_scm_fill_irq_fwspec_params(&fwspec, hwirq);
+	if (ret)
+		return ret;
+	parent_irq_node = of_irq_find_parent(__scm->dev->of_node);
+
+	fwspec.fwnode = of_node_to_fwnode(parent_irq_node);
+
+	scm->waitq.irq = irq_create_fwspec_mapping(&fwspec);
 
 	pr_info("WQ Info, feature: %d call_ctx_cnt: %llu irq: %llu\n",
 		scm->waitq.wq_feature, scm->waitq.call_ctx_cnt, scm->waitq.irq);
@@ -3105,12 +3364,19 @@ static int __qcom_multi_smc_init(struct qcom_scm *__scm,
 	if (of_device_is_compatible(__scm->dev->of_node, "qcom,scm-v1.1")) {
 		INIT_WORK(&__scm->waitq.scm_irq_work, scm_irq_work);
 
-		irq = platform_get_irq(pdev, 0);
-		if (irq < 0) {
-			dev_err(__scm->dev, "WQ IRQ is not specified: %d\n", irq);
-			return irq;
+		/* Detect Multi SMC support present or not */
+		ret = qcom_scm_query_wq_queue_info(__scm);
+		if (!ret) {
+			irq = __scm->waitq.irq;
+			sema_init(&qcom_scm_sem_lock,
+					(int)__scm->waitq.call_ctx_cnt);
+		} else {
+			irq = platform_get_irq(pdev, 0);
+			if (irq < 0) {
+				dev_err(__scm->dev, "WQ IRQ is not specified: %d\n", irq);
+				return irq;
+			}
 		}
-
 		ret = devm_request_irq(__scm->dev, irq,
 				qcom_scm_irq_handler,
 				IRQF_ONESHOT, "qcom-scm", __scm);
@@ -3119,11 +3385,6 @@ static int __qcom_multi_smc_init(struct qcom_scm *__scm,
 			return ret;
 		}
 
-		/* Detect Multi SMC support present or not */
-		ret = qcom_scm_query_wq_queue_info(__scm);
-		if (!ret)
-			sema_init(&qcom_scm_sem_lock,
-					(int)__scm->waitq.call_ctx_cnt);
 	}
 
 	return ret;

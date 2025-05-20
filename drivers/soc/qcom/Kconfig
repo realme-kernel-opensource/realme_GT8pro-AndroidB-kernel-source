@@ -111,6 +111,15 @@ config QCOM_GENI_SE
 	  driver is also used to manage the common aspects of multiple Serial
 	  Engines present in the QUP.
 
+config QCOM_GENI_SE_MSM
+	tristate "MSM GENI Serial Engine Driver"
+	depends on ARCH_QCOM || COMPILE_TEST
+	help
+	  This driver is used to manage Generic Interface (GENI) firmware based
+	  Qualcomm Technologies, Inc. Universal Peripheral (QUP) Wrapper. This
+	  driver is also used to manage the SCMI of multiple Serial
+	  Engines present in the QUP.
+
 config QCOM_CPUCP
         tristate "Qualcomm Technologies, Inc. CPUCP driver"
         depends on MAILBOX
@@ -757,6 +766,15 @@ config QCOM_INLINE_CRYPTO_ENGINE
 	tristate
 	select QCOM_SCM
 
+config QTI_CRYPTO_VIRTUALIZATION
+	tristate "Enable hypervysor to be used for FBE"
+	depends on MSM_HAB
+	help
+	 Say 'Y or M' to enable routing of crypto requests to different operating
+	 system in virtualized environment. Driver uses a hardware abstraction(hab)
+	 layer where the APIs exposed by that operationg systems are used to send
+	 requests to perform the hardware crypto operation.
+
 config QTI_PAGE_COMPRESSION_ENGINE
 	tristate "QTI Page Compression Engine Driver"
 	depends on ARCH_QCOM
@@ -1058,4 +1076,15 @@ config QCOM_FDCVS
 
 	  Users could dynamically select different fdcvs configs according to different
 	  use cases.
+
+config MEM_PROT
+	tristate "DDR Memory protection support"
+	depends on ARCH_QCOM
+	default n
+	help
+	  This is a mem-prot kernel driver. The driver helps facilitate dynamic
+	  enable/disable of memory protection for DDR regions. This feature is also needed
+	  to enable support for dynamic hypervisor heap memory management.
+	  Say N if unsure.
+
 endmenu

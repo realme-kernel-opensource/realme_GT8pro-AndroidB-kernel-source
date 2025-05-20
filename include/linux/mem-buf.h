@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  *  Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- *  Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ *  Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MEM_BUF_H
@@ -125,6 +125,9 @@ int mem_buf_share(struct dma_buf *dmabuf,
 /* Used to obtain the underlying vmperm struct of a DMA-BUF */
 struct mem_buf_vmperm *to_mem_buf_vmperm(struct dma_buf *dmabuf);
 
+/* Returns true if the dmabuf has mem-buf extension */
+bool is_mem_buf_dma_buf(struct dma_buf *dmabuf);
+
 /* Returns true if the local VM has exclusive access and is the owner */
 bool mem_buf_dma_buf_exclusive_owner(struct dma_buf *dmabuf);
 
@@ -176,6 +179,11 @@ static inline int mem_buf_share(struct dma_buf *dmabuf, struct mem_buf_lend_kern
 static inline struct mem_buf_vmperm *to_mem_buf_vmperm(struct dma_buf *dmabuf)
 {
 	return ERR_PTR(-EINVAL);
+}
+
+static inline bool is_mem_buf_dma_buf(struct dma_buf *dmabuf)
+{
+	return false;
 }
 
 static inline bool mem_buf_dma_buf_exclusive_owner(struct dma_buf *dmabuf)
