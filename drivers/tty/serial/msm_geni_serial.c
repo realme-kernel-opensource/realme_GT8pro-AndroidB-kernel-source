@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. All rights reserved.
  */
 
 #include <linux/bitmap.h>
@@ -156,6 +156,15 @@ static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENAB
 #define IPC_LOG_TX_RX_PAGES	(30)
 #define DATA_BYTES_PER_LINE	(32)
 #define MAX_LEN			(20)
+
+#define GENI_SE_DMA_DONE_EN		BIT(0)
+#define GENI_SE_DMA_EOT_EN		BIT(1)
+#define GENI_SE_DMA_IMMEDIATE_MODE	BIT(1)
+#define SERIAL_DMA_ADDR_ALIGN_BYTE	(QUP_DMA_ADDR_ALIGN_BYTE)
+#define SPLIT_DMA_TX_SIZE		(QUP_SPLIT_DMA_TRE_SIZE)
+#define SERIAL_TX_DMA_BUF_SIZE_MAX	PAGE_SIZE
+#define SERIAL_PREALLOC_BUF_SIZE	(SERIAL_TX_DMA_BUF_SIZE_MAX + SERIAL_DMA_ADDR_ALIGN_BYTE)
+
 
 #define M_IRQ_BITS		(M_RX_FIFO_WATERMARK_EN | M_RX_FIFO_LAST_EN |\
 				M_CMD_CANCEL_EN | M_CMD_ABORT_EN |\
@@ -371,6 +380,25 @@ struct uart_gsi {
 	struct msm_gpi_dma_async_tx_cb_param rx_cb;
 };
 
+/**
+ * struct uart_split_dma_tre - Structure to manage split DMA transfers for UART TX operations
+ * @split_tx: boolean to indicate if the tx tre should be split
+ * @immediate_dma_in_progress: boolean to indicate immediate transfer in progress
+ * @aligned_tx_buf: pointer to aligned address of tx buf
+ * @aligned_tx_buf_orig: pointer to allocated address of tx buf
+ * @aligned_tx_dma_buf: pointer to dma address of aligned_tx_buf
+ * @aligned_tx_dma_buf_orig: pointer to dma address of aligned_tx_buf_orig
+ *
+ */
+struct uart_split_dma_tre {
+	bool split_tx;
+	bool immediate_dma_in_progress;
+	void *aligned_tx_buf;
+	void *aligned_tx_buf_orig;
+	dma_addr_t aligned_tx_dma_buf;
+	dma_addr_t aligned_tx_dma_buf_orig;
+};
+
 struct msm_geni_serial_port {
 	struct uart_port uport;
 	const char *name;
@@ -455,6 +483,7 @@ struct msm_geni_serial_port {
 	enum uart_port_state port_state;
 	struct uart_kpi_capture uart_kpi_tx[UART_KPI_TX_RX_INSTANCES];
 	struct uart_kpi_capture uart_kpi_rx[UART_KPI_TX_RX_INSTANCES];
+	struct uart_split_dma_tre split_dma_tre;
 };
 
 static const struct uart_ops msm_geni_serial_pops;
@@ -2129,6 +2158,84 @@ out:
 	return ret;
 }
 
+/**
+ * msm_geni_serial_free_aligned_dma_buffers() - deallocates the dma buffers
+ * @msm_port: pointer to msm_port.
+ *
+ * Return: none
+ */
+static void msm_geni_serial_free_aligned_dma_buffers(struct msm_geni_serial_port *msm_port)
+{
+	struct device *tx_dev = msm_port->wrapper_dev;
+
+	if (msm_port->split_dma_tre.aligned_tx_buf_orig) {
+		geni_se_common_iommu_free_buf(tx_dev,
+					      &msm_port->split_dma_tre.aligned_tx_dma_buf_orig,
+					      msm_port->split_dma_tre.aligned_tx_buf_orig,
+					      SERIAL_PREALLOC_BUF_SIZE);
+		msm_port->split_dma_tre.aligned_tx_buf = NULL;
+		msm_port->split_dma_tre.aligned_tx_buf_orig = NULL;
+	}
+}
+
+/**
+ * msm_geni_serial_obtain_aligned_dma_buffers() - Obtains aligned dma buffers
+ * @msm_port: pointer to msm_port.
+ *
+ * Return: none
+ */
+static void msm_geni_serial_obtain_aligned_dma_buffers(struct msm_geni_serial_port *msm_port)
+{
+	if (msm_port->split_dma_tre.aligned_tx_buf_orig)
+		return;
+
+	msm_port->split_dma_tre.aligned_tx_buf_orig = msm_port->split_dma_tre.aligned_tx_buf;
+	msm_port->split_dma_tre.aligned_tx_dma_buf_orig =
+				msm_port->split_dma_tre.aligned_tx_dma_buf;
+
+	/* Ensure DMA buffer address is aligned to SERIAL_DMA_ADDR_ALIGN_BYTE bytes */
+	if (!IS_ALIGNED(msm_port->split_dma_tre.aligned_tx_dma_buf, SERIAL_DMA_ADDR_ALIGN_BYTE)) {
+		msm_port->split_dma_tre.aligned_tx_dma_buf =
+			(dma_addr_t)ALIGN((uintptr_t)msm_port->split_dma_tre.aligned_tx_dma_buf,
+			SERIAL_DMA_ADDR_ALIGN_BYTE);
+		msm_port->split_dma_tre.aligned_tx_buf =
+			(void *)ALIGN((uintptr_t)msm_port->split_dma_tre.aligned_tx_buf,
+			SERIAL_DMA_ADDR_ALIGN_BYTE);
+	}
+
+	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+		     "SERIAL aligned tx_buf addr:0x%p, dma addr:0x%p\n",
+		     msm_port->split_dma_tre.aligned_tx_buf,
+		     (void *)msm_port->split_dma_tre.aligned_tx_dma_buf);
+}
+
+/**
+ * msm_geni_serial_align_tx_buf() - align the buffer to 16 bytes.
+ * msm_port: pointer to msm_port.
+ * buf: buffer.
+ * xmit_size: transmit length.
+ *
+ * Return: 0 on success and error on failure.
+ */
+static int msm_geni_serial_align_tx_buf(struct msm_geni_serial_port *msm_port,
+					void *buf, unsigned int xmit_size)
+{
+	if (xmit_size > SERIAL_TX_DMA_BUF_SIZE_MAX) {
+		UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+			     "Warning: xmit size greater than max buffer size, using size %lu\n",
+			     SERIAL_TX_DMA_BUF_SIZE_MAX);
+		xmit_size = SERIAL_TX_DMA_BUF_SIZE_MAX;
+	}
+
+	msm_geni_serial_obtain_aligned_dma_buffers(msm_port);
+	if (!msm_port->split_dma_tre.aligned_tx_buf_orig)
+		return -ENOMEM;
+
+	memcpy(msm_port->split_dma_tre.aligned_tx_buf, buf, xmit_size);
+
+	return 0;
+}
+
 static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 {
 	struct msm_geni_serial_port *msm_port = container_of(work,
@@ -2354,6 +2461,96 @@ exit_gsi_xfer_rx:
 	return -EIO;
 }
 
+/**
+ * msm_geni_serial_tx_immediate_dma() - Initiate TX DMA immediate transfer on the serial engine
+ * @se: Pointer to the concerned serial engine.
+ * @len: Length of the TX buffer.
+ *
+ * This function is used to initiate immediate DMA TX transfer.
+ */
+void msm_geni_serial_tx_immediate_dma(struct geni_se *se, void *buf, size_t len)
+{
+	u32 val;
+	u8 *ptr = (u8 *)buf;
+	u64 data = 0;
+
+	for (int i = 0; i < len; i++)
+		data |= ((u64)ptr[i]) << (i * 8);
+
+	val = (GENI_SE_DMA_DONE_EN | GENI_SE_DMA_EOT_EN);
+	writel_relaxed(val, se->base  + SE_DMA_TX_IRQ_EN_SET);
+	writel_relaxed(data & 0xffffffff, se->base + SE_DMA_TX_PTR_L);
+	writel_relaxed(data >> 32, se->base + SE_DMA_TX_PTR_H);
+	writel_relaxed(GENI_SE_DMA_IMMEDIATE_MODE | GENI_SE_DMA_EOT_BUF, se->base + SE_DMA_TX_ATTR);
+	writel(len, se->base + SE_DMA_TX_LEN);
+}
+
+/**
+ * msm_geni_handle_split_tx_transfer() - splits tx transfer into multiple transfer
+ * @uport: pointer to the uart port.
+ * @buf: data buffer to be transferred.
+ * @xmit_size: data length.
+ *
+ * Return: 0 on success, or a negative error code upon failure.
+ */
+static int msm_geni_handle_split_tx_transfer(struct uart_port *uport, void *buf, size_t xmit_size)
+{
+	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
+	int ret = 0;
+
+	if (xmit_size >= SPLIT_DMA_TX_SIZE) {
+		/* Align transmit size to 16 byte boundary */
+		xmit_size = xmit_size & ~(SPLIT_DMA_TX_SIZE - 1);
+		ret = geni_se_common_iommu_map_buf(msm_port->wrapper_dev, &msm_port->tx_dma,
+						   buf, xmit_size, DMA_TO_DEVICE);
+		if (ret) {
+			UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+				     "Error %d Failed to map tx buffer\n", ret);
+			return ret;
+		}
+
+		if (!IS_ALIGNED(msm_port->tx_dma, SERIAL_DMA_ADDR_ALIGN_BYTE)) {
+			ret = geni_se_common_iommu_unmap_buf(msm_port->wrapper_dev,
+							     &msm_port->tx_dma, xmit_size,
+							     DMA_TO_DEVICE);
+			if (ret) {
+				UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+				     "Error %d Failed to unmap tx buffer\n", ret);
+				return ret;
+			}
+
+			ret = msm_geni_serial_align_tx_buf(msm_port, buf, xmit_size);
+			if (ret) {
+				UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+					     "Error Failed to obtain aligned tx buffers\n");
+				return ret;
+			}
+
+			msm_geni_serial_setup_tx(uport, xmit_size);
+			geni_se_tx_init_dma(&msm_port->se,
+					    msm_port->split_dma_tre.aligned_tx_dma_buf,
+					    xmit_size);
+
+		} else {
+			msm_geni_serial_setup_tx(uport, xmit_size);
+			ret = geni_se_tx_dma_prep(&msm_port->se, buf, xmit_size, &msm_port->tx_dma);
+		}
+
+		if (!ret)
+			msm_port->xmit_size = xmit_size;
+	} else {
+		if (xmit_size >= IMMEDIATE_DMA_LEN)
+			msm_port->xmit_size = IMMEDIATE_DMA_LEN;
+		else
+			msm_port->xmit_size = xmit_size;
+
+		msm_port->split_dma_tre.immediate_dma_in_progress = true;
+		msm_geni_serial_setup_tx(uport, msm_port->xmit_size);
+		msm_geni_serial_tx_immediate_dma(&msm_port->se, buf, msm_port->xmit_size);
+	}
+
+	return ret;
+}
 static int msm_geni_serial_prep_dma_tx(struct uart_port *uport)
 {
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
@@ -2391,12 +2588,16 @@ static int msm_geni_serial_prep_dma_tx(struct uart_port *uport)
 			msm_port->kpi_idx = 0;
 	}
 
-	msm_geni_serial_setup_tx(uport, xmit_size);
-	ret = geni_se_tx_dma_prep(&msm_port->se, tail_ptr, xmit_size, &msm_port->tx_dma);
-
-	if (!ret) {
-		msm_port->xmit_size = xmit_size;
+	if (msm_port->split_dma_tre.split_tx) {
+		ret = msm_geni_handle_split_tx_transfer(uport, tail_ptr, xmit_size);
 	} else {
+		msm_geni_serial_setup_tx(uport, xmit_size);
+		ret = geni_se_tx_dma_prep(&msm_port->se, tail_ptr, xmit_size, &msm_port->tx_dma);
+		if (!ret)
+			msm_port->xmit_size = xmit_size;
+	}
+
+	if (ret) {
 		UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
 		    "%s: TX DMA map Fail %d\n", __func__, ret);
 
@@ -2553,7 +2754,7 @@ static void msm_geni_serial_start_tx(struct uart_port *uport)
 		/* Geni command setup should complete before returning.*/
 		mb();
 	} else if (msm_port->xfer_mode == GENI_SE_DMA) {
-		if (msm_port->tx_dma)
+		if (msm_port->tx_dma || msm_port->split_dma_tre.immediate_dma_in_progress)
 			goto check_flow_ctrl;
 
 		if (msm_port->uart_kpi) {
@@ -3401,9 +3602,8 @@ static int msm_geni_serial_handle_dma_tx(struct uart_port *uport)
 	unsigned long long exec_time = 0, sw_time, comp_time;
 
 	uart_xmit_advance(uport, msm_port->xmit_size);
-	if (msm_port->tx_dma)
-		geni_se_tx_dma_unprep(&msm_port->se, msm_port->tx_dma,
-					msm_port->xmit_size);
+	if (msm_port->tx_dma && !msm_port->split_dma_tre.immediate_dma_in_progress)
+		geni_se_tx_dma_unprep(&msm_port->se, msm_port->tx_dma, msm_port->xmit_size);
 
 	if (msm_port->uart_kpi) {
 		msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_comp.len =
@@ -3431,6 +3631,10 @@ static int msm_geni_serial_handle_dma_tx(struct uart_port *uport)
 
 	uport->icount.tx += msm_port->xmit_size;
 	msm_port->tx_dma = (dma_addr_t)NULL;
+
+	if (msm_port->split_dma_tre.immediate_dma_in_progress)
+		msm_port->split_dma_tre.immediate_dma_in_progress = false;
+
 	msm_port->xmit_size = 0;
 
 	if (!kfifo_is_empty(&tport->xmit_fifo))
@@ -4101,6 +4305,19 @@ static int msm_geni_serial_port_setup(struct uart_port *uport)
 
 	geni_se_select_mode(&msm_port->se, msm_port->xfer_mode);
 
+	if (msm_port->split_dma_tre.split_tx) {
+		msm_port->split_dma_tre.aligned_tx_buf =
+			geni_se_common_iommu_alloc_buf(msm_port->wrapper_dev,
+						       &msm_port->split_dma_tre.aligned_tx_dma_buf,
+						       SERIAL_PREALLOC_BUF_SIZE);
+
+		if (IS_ERR_OR_NULL(msm_port->split_dma_tre.aligned_tx_buf)) {
+			ret = -ENOMEM;
+			UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+				     "Error failed to allocate memory\n");
+			goto exit_portsetup;
+		}
+	}
 	msm_port->port_setup = true;
 	/*
 	 * Ensure Port setup related IO completes before returning to
@@ -5199,6 +5416,11 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 		}
 	}
 
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,split-tx-dma-tre")) {
+		dev_port->split_dma_tre.split_tx = true;
+		dev_dbg(&pdev->dev, "UART split Tx support is enabled\n");
+	}
+
 	return ret;
 }
 
@@ -5524,6 +5746,9 @@ static void msm_geni_serial_remove(struct platform_device *pdev)
 					port->rx_buf, DMA_RX_BUF_SIZE);
 		port->rx_dma = (dma_addr_t)NULL;
 	}
+	if (port->split_dma_tre.split_tx)
+		msm_geni_serial_free_aligned_dma_buffers(port);
+
 	device_remove_file(port->uport.dev, &dev_attr_hs_uart_version);
 	device_remove_file(port->uport.dev, &dev_attr_hs_uart_operation);
 	device_remove_file(port->uport.dev, &dev_attr_loopback);
