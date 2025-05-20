@@ -7,6 +7,7 @@ def register_modules(registry):
             # do not sort
             "drivers/mmc/host/cqhci-core.c",
             "drivers/mmc/host/cqhci-crypto.h",
+            "drivers/mmc/host/cqhci-crypto-qti.h",
             "drivers/mmc/host/cqhci.h",
         ],
         conditional_srcs = {
@@ -16,7 +17,17 @@ def register_modules(registry):
                     "drivers/mmc/host/cqhci-crypto.c",
                 ],
             },
+            "CONFIG_MMC_CRYPTO_QTI": {
+                True: [
+                    # do not sort
+                    "drivers/mmc/host/cqhci-crypto-qti.c",
+                ],
+            },
         },
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_ice",
+        ],
     )
 
     registry.register(
