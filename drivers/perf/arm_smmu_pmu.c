@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /*
@@ -85,7 +85,7 @@
 #define SMMU_DEFAULT_FILTER_STREAM_ID   GENMASK(31, 0)
 
 #define SMMU_MAX_COUNTERS               256
-#define SMMU_MAX_EVENT_ID               256
+#define SMMU_MAX_EVENT_ID               32
 #define SMMU_MAX_CEIDS			2
 
 #define SMMU_PA_SHIFT                   12
@@ -101,7 +101,6 @@
 #define SMMU_PMU_ACCESS			0x10
 #define SMMU_PMU_READ_ACCESS		0x11
 #define SMMU_PMU_WRITE_ACCESS		0x12
-#define SMMU_MAX_PMU_EVENTS		0x20
 
 #define SMMU_REG_BASE_OFFSET		0x1000
 #define SMMU_STATS_START		0x80
@@ -415,12 +414,6 @@ static int smmu_pmu_event_init(struct perf_event *event)
 
 	/* Verify specified event is supported on this PMU */
 	event_id = get_event(event);
-	if ((event_id <= SMMU_MAX_EVENT_ID &&
-	    (!test_bit(event_id, smmu_pmu->supported_events))) || (event_id > SMMU_MAX_EVENT_ID)) {
-		dev_err(&smmu_pmu->pdev->dev,
-				"Invalid event %d for this PMU\n", event_id);
-		return -EINVAL;
-	}
 
 	/* Don't allow groups with mixed PMUs, except for s/w events */
 	if (event->group_leader->pmu != event->pmu &&
@@ -568,11 +561,8 @@ static int smmu_pmu_event_add(struct perf_event *event, int flags)
 		idx = smmu_pmu_get_event_idx(smmu_pmu, tbu);
 		if (idx < 0)
 			return idx;
-	} else {
+	} else
 		idx = event_id;
-		if (test_and_set_bit(idx, smmu_pmu->used_counters))
-			return -EAGAIN;
-	}
 
 	hwc->idx = idx;
 	hwc->state = PERF_HES_STOPPED | PERF_HES_UPTODATE;
@@ -688,11 +678,8 @@ static umode_t smmu_pmu_event_is_visible(struct kobject *kobj,
 
 	pmu_attr = container_of(attr, struct perf_pmu_events_attr, attr.attr);
 
-	/* Add TCU events to list of supported events */
-	if (pmu_attr->id >= SMMU_STATS_START) {
-		test_and_set_bit(pmu_attr->id, smmu_pmu->supported_events);
+	if (pmu_attr->id >= SMMU_STATS_START)
 		return attr->mode;
-	}
 
 	if (test_bit(pmu_attr->id, smmu_pmu->supported_events))
 		return attr->mode;
@@ -838,7 +825,7 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 
 	ceid_32 = readl_relaxed(smmu_pmu->reg_base + SMMU_PMCG_CEID0);
 	ceid[0] = ceid_32;
-	bitmap_from_arr32(smmu_pmu->supported_events, ceid, SMMU_MAX_PMU_EVENTS);
+	bitmap_from_arr32(smmu_pmu->supported_events, ceid, SMMU_MAX_EVENT_ID);
 
 	smmu_pmu->num_irqs = platform_irq_count(pdev);
 	smmu_pmu->irqs = devm_kzalloc(&pdev->dev,
