@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
  #define pr_fmt(fmt) "mpam_slc: " fmt
 
@@ -358,7 +358,7 @@ static int create_config_node(const char *name,
 	return 0;
 }
 
-static int slc_config_fs_register(struct  device *dev, bool firmware_based)
+static int slc_config_fs_register(struct  device *dev)
 {
 	int clientid, partid;
 	char buf[CONFIGFS_ITEM_NAME_LEN];
@@ -436,7 +436,7 @@ static int slc_mpam_probe(struct platform_device *pdev)
 
 	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
 	if (slc_capability->firmware_ver.firmware_version != SLC_MPAM_VERSION_0)
-		return slc_config_fs_register(&pdev->dev, false);
+		return slc_config_fs_register(&pdev->dev);
 
 	client_cnt = of_get_child_count(np);
 	if (!client_cnt) {
@@ -460,7 +460,7 @@ static int slc_mpam_probe(struct platform_device *pdev)
 		clientid++;
 	}
 
-	slc_config_fs_register(&pdev->dev, false);
+	slc_config_fs_register(&pdev->dev);
 	return 0;
 }
 
