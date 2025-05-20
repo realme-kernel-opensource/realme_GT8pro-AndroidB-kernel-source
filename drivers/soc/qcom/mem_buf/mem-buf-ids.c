@@ -45,12 +45,6 @@ PERIPHERAL_VM(CP_SPSS_HLOS_SHARED, cp_spss_hlos_shared);
 PERIPHERAL_VM(CP_CDSP, cp_cdsp);
 PERIPHERAL_VM(CP_APP, cp_app);
 
-static struct mem_buf_vm vm_gh_rm = {
-	.name = "qcom,gh_rm",
-	.vmid = VMID_GH_RM,
-	.allowed_api = MEM_BUF_API_GUNYAH,
-};
-
 static struct mem_buf_vm vm_trusted_vm = {
 	.name = "qcom,trusted_vm",
 	.vmid = VMID_TVM,
@@ -70,7 +64,6 @@ static struct mem_buf_vm vm_hlos = {
 };
 
 struct mem_buf_vm *pdata_array[] = {
-	&vm_gh_rm,
 	&vm_trusted_vm,
 	&vm_oemvm,
 	&vm_hlos,
