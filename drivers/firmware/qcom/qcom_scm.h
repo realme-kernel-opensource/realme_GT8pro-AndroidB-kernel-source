@@ -233,10 +233,6 @@ struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
 #define QCOM_SCM_WAITQ_RESUME			0x02
 #define QCOM_SCM_WAITQ_GET_WQ_CTX		0x03
 
-/* DDR Protection Service IDs */
-#define QCOM_SCM_SVC_DDR					0x27U
-#define QCOM_SCM_SVC_DDR_CFG_PHYS_DDR_PROTECTION_FOR_REGIONS	0x02U
-
 /* GPU Service IDs */
 #define QCOM_SCM_SVC_GPU			0x28
 #define QCOM_SCM_SVC_GPU_INIT_REGS		0x01
