@@ -55,6 +55,12 @@
 #define USB_PHY_XCFGI_7_0		(0x15c)
 #define PLL_LOCK_TIME			GENMASK(1, 0)
 
+/* EUD CSR field */
+#define EUD_EN2				BIT(0)
+
+/* VIOCTL_EUD_DETECT register based EUD_DETECT field */
+#define EUD_DETECT			BIT(0)
+
 #define M31_EUSB_PHY_INIT_CFG(o, b, v)	\
 {				\
 	.off = o,		\
@@ -115,6 +121,8 @@ static const struct regulator_bulk_data m31_eusb_phy_vregs[] = {
 struct m31eusb2_phy {
 	struct phy			 *phy;
 	void __iomem			 *base;
+	void __iomem			 *eud_enable_reg;
+	void __iomem			 *eud_detect_reg;
 	const struct m31_eusb2_priv_data *data;
 	enum phy_mode			 mode;
 
@@ -125,7 +133,28 @@ struct m31eusb2_phy {
 	struct clk			 *ref_clk;
 
 	struct phy			 *repeater;
+	bool				 clocks_enabled;
+	bool				 power_enabled;
+	bool				 repeater_enabled;
 };
+
+static inline bool is_eud_debug_mode_active(struct m31eusb2_phy *phy)
+{
+	if (phy->eud_enable_reg &&
+	    (readl_relaxed(phy->eud_enable_reg) & EUD_EN2))
+		return true;
+
+	return false;
+}
+
+static void m31eusb2_phy_update_eud_detect(struct m31eusb2_phy *phy, bool set)
+{
+	if (set)
+		writel_relaxed(EUD_DETECT, phy->eud_detect_reg);
+	else
+		writel_relaxed(readl_relaxed(phy->eud_detect_reg) & ~EUD_DETECT,
+			       phy->eud_detect_reg);
+}
 
 static int m31eusb2_phy_write_readback(void __iomem *base, u32 offset,
 					const u32 mask, u32 val)
@@ -182,7 +211,10 @@ static int m31eusb2_phy_set_mode(struct phy *uphy, enum phy_mode mode, int submo
 
 static int m31eusb2_phy_clocks(struct m31eusb2_phy *phy, bool on)
 {
-	int ret = 0;
+	int ret;
+
+	if (phy->clocks_enabled == on)
+		return 0;
 
 	if (on) {
 		ret = clk_prepare_enable(phy->ref_clk_src);
@@ -197,8 +229,59 @@ static int m31eusb2_phy_clocks(struct m31eusb2_phy *phy, bool on)
 
 		clk_disable_unprepare(phy->ref_clk_src);
 	}
+	phy->clocks_enabled = on;
 
-	return ret;
+	return 0;
+}
+
+static int m31eusb2_phy_power(struct m31eusb2_phy *phy, bool on)
+{
+	int ret;
+
+	if (phy->power_enabled == on)
+		return 0;
+
+	if (on) {
+		ret = regulator_bulk_enable(M31_EUSB_NUM_VREGS, phy->vregs);
+		if (ret)
+			return ret;
+
+		/*
+		 * Set eud_detect_reg after powering on eUSB PHY rails to bring
+		 * EUD out of reset
+		 */
+		m31eusb2_phy_update_eud_detect(phy, true);
+	} else {
+		/* Clear eud_detect_reg to put EUD in reset */
+		m31eusb2_phy_update_eud_detect(phy, false);
+
+		/* Ensure the register write is completed */
+		mb();
+
+		regulator_bulk_disable(M31_EUSB_NUM_VREGS, phy->vregs);
+	}
+	phy->power_enabled = on;
+
+	return 0;
+}
+
+static int m31eusb2_phy_repeater_init(struct m31eusb2_phy *phy, bool init)
+{
+	int ret;
+
+	if (phy->repeater_enabled == init)
+		return 0;
+
+	if (init) {
+		ret = phy_init(phy->repeater);
+		if (ret)
+			return ret;
+	} else {
+		phy_exit(phy->repeater);
+	}
+	phy->repeater_enabled = init;
+
+	return 0;
 }
 
 static int m31eusb2_phy_init(struct phy *uphy)
@@ -207,13 +290,13 @@ static int m31eusb2_phy_init(struct phy *uphy)
 	const struct m31_eusb2_priv_data *data = phy->data;
 	int ret;
 
-	ret = regulator_bulk_enable(M31_EUSB_NUM_VREGS, phy->vregs);
+	ret = m31eusb2_phy_power(phy, true);
 	if (ret) {
 		dev_err(&uphy->dev, "failed to enable regulator, %d\n", ret);
 		return ret;
 	}
 
-	ret = phy_init(phy->repeater);
+	ret = m31eusb2_phy_repeater_init(phy, true);
 	if (ret) {
 		dev_err(&uphy->dev, "repeater init failed. %d\n", ret);
 		goto disable_vreg;
@@ -224,6 +307,10 @@ static int m31eusb2_phy_init(struct phy *uphy)
 		dev_err(&uphy->dev, "failed to enable phy clock, %d\n", ret);
 		goto disable_repeater;
 	}
+
+	/* Dont reset the PHY if EUD is active */
+	if (is_eud_debug_mode_active(phy))
+		return 0;
 
 	/* Perform phy reset */
 	reset_control_assert(phy->reset);
@@ -240,9 +327,9 @@ static int m31eusb2_phy_init(struct phy *uphy)
 	return 0;
 
 disable_repeater:
-	phy_exit(phy->repeater);
+	m31eusb2_phy_repeater_init(phy, false);
 disable_vreg:
-	regulator_bulk_disable(M31_EUSB_NUM_VREGS, phy->vregs);
+	m31eusb2_phy_power(phy, false);
 
 	return 0;
 }
@@ -252,8 +339,8 @@ static int m31eusb2_phy_exit(struct phy *uphy)
 	struct m31eusb2_phy *phy = phy_get_drvdata(uphy);
 
 	m31eusb2_phy_clocks(phy, false);
-	regulator_bulk_disable(M31_EUSB_NUM_VREGS, phy->vregs);
-	phy_exit(phy->repeater);
+	m31eusb2_phy_repeater_init(phy, false);
+	m31eusb2_phy_power(phy, false);
 
 	return 0;
 }
@@ -263,6 +350,33 @@ static const struct phy_ops m31eusb2_phy_gen_ops = {
 	.exit		= m31eusb2_phy_exit,
 	.set_mode	= m31eusb2_phy_set_mode,
 	.owner		= THIS_MODULE,
+};
+
+static int m31eusb2_phy_runtime_suspend(struct device *dev)
+{
+	struct m31eusb2_phy *phy = dev_get_drvdata(dev);
+
+	dev_dbg(dev, "Suspending M31 eUSB2 Phy\n");
+
+	m31eusb2_phy_clocks(phy, false);
+
+	return 0;
+}
+
+static int m31eusb2_phy_runtime_resume(struct device *dev)
+{
+	struct m31eusb2_phy *phy = dev_get_drvdata(dev);
+
+	dev_dbg(dev, "Resuming M31 eUSB2 Phy\n");
+
+	m31eusb2_phy_clocks(phy, true);
+
+	return 0;
+}
+
+static const struct dev_pm_ops m31eusb2_phy_pm_ops = {
+	SET_RUNTIME_PM_OPS(m31eusb2_phy_runtime_suspend,
+			   m31eusb2_phy_runtime_resume, NULL)
 };
 
 static int m31eusb2_phy_probe(struct platform_device *pdev)
@@ -286,6 +400,16 @@ static int m31eusb2_phy_probe(struct platform_device *pdev)
 	if (IS_ERR(phy->base))
 		return PTR_ERR(phy->base);
 
+	phy->eud_enable_reg = devm_platform_ioremap_resource_byname(pdev,
+						"eud_enable_reg");
+	if (IS_ERR(phy->eud_enable_reg))
+		dev_info(dev, "missing eud_enable register address\n");
+
+	phy->eud_detect_reg = devm_platform_ioremap_resource_byname(pdev,
+						"eud_detect_reg");
+	if (IS_ERR(phy->eud_detect_reg))
+		dev_info(dev, "missing eud_detect register address\n");
+
 	phy->reset = devm_reset_control_get_exclusive(dev, NULL);
 	if (IS_ERR(phy->reset))
 		return PTR_ERR(phy->reset);
@@ -299,6 +423,10 @@ static int m31eusb2_phy_probe(struct platform_device *pdev)
 	if (IS_ERR(phy->ref_clk))
 		return dev_err_probe(dev, PTR_ERR(phy->ref_clk),
 				     "failed to get ref clk\n");
+
+	dev_set_drvdata(dev, phy);
+	pm_runtime_set_active(dev);
+	pm_runtime_enable(dev);
 
 	phy->phy = devm_phy_create(dev, NULL, &m31eusb2_phy_gen_ops);
 	if (IS_ERR(phy->phy))
@@ -321,6 +449,16 @@ static int m31eusb2_phy_probe(struct platform_device *pdev)
 	phy_provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
 	if (!IS_ERR(phy_provider))
 		dev_info(dev, "Registered M31 USB phy\n");
+
+	/*
+	 * EUD may be enabled in boot loader and to keep EUD session alive across
+	 * kernel boot, initialise HS PHY.
+	 */
+	if (is_eud_debug_mode_active(phy)) {
+		m31eusb2_phy_power(phy, true);
+		m31eusb2_phy_repeater_init(phy, true);
+		m31eusb2_phy_clocks(phy, true);
+	}
 
 	return PTR_ERR_OR_ZERO(phy_provider);
 }
@@ -345,6 +483,7 @@ static struct platform_driver m31eusb2_phy_driver = {
 	.probe = m31eusb2_phy_probe,
 	.driver = {
 		.name = "qcom-m31eusb2-phy",
+		.pm = &m31eusb2_phy_pm_ops,
 		.of_match_table = m31eusb2_phy_id_table,
 	},
 };
