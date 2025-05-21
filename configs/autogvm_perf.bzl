@@ -133,4 +133,5 @@ autogvm_perf_config = {
     "CONFIG_STMMAC_ETH": "m",
     "CONFIG_STMMAC_PLATFORM": "m",
     "CONFIG_DWMAC_QCOM_ETHQOS": "m",
+    "CONFIG_QCOM_RUN_QUEUE_STATS": "m",
 }
