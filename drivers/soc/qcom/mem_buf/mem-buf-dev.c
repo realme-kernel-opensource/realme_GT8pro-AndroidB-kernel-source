@@ -17,6 +17,7 @@
 #include <linux/memory.h>
 #include <linux/genalloc.h>
 #include <linux/mem-buf-altmap.h>
+#include <linux/gunyah/gh_rm_heap_manager.h>
 
 #include <linux/mem-buf.h>
 #include "mem-buf-dev.h"
@@ -33,6 +34,8 @@ EXPORT_SYMBOL_GPL(dmabuf_mem_pool);
 
 struct dentry *mem_buf_debugfs_root;
 EXPORT_SYMBOL_GPL(mem_buf_debugfs_root);
+
+static DEFINE_MUTEX(mem_buf_heap_lock);
 
 #define POOL_MIN_ALLOC_ORDER SECTION_SIZE_BITS
 
@@ -62,17 +65,28 @@ int mem_buf_assign_mem(u32 op, struct sg_table *sgt,
 {
 	int src_vmid[] = {current_vmid};
 	int src_perms[] = {PERM_READ | PERM_WRITE | PERM_EXEC};
-	int ret, ret2;
+	int ret, ret2, i;
+	struct scatterlist *sg;
+	size_t dmabuf_size = 0;
 
 	if (!sgt || !arg->nr_acl_entries || !arg->vmids || !arg->perms)
 		return -EINVAL;
 
 	arg->memparcel_hdl = MEM_BUF_MEMPARCEL_INVALID;
 
+	mutex_lock(&mem_buf_heap_lock);
+
+	for_each_sgtable_sg(sgt, sg, i)
+		dmabuf_size += sg->length;
+
+	/* check if we need to increase hypervisor heap memory for Gunyah VM usecase */
+	if (mem_buf_vm_uses_gunyah(arg->vmids, arg->nr_acl_entries) > 0)
+		gh_rm_heap_memlend_prealloc(dmabuf_size);
+
 	ret = mem_buf_hyp_assign_table(sgt, src_vmid, ARRAY_SIZE(src_vmid), arg->vmids, arg->perms,
 					arg->nr_acl_entries);
 	if (ret)
-		return ret;
+		goto out_err;
 
 	ret = mem_buf_assign_mem_gunyah(op, sgt, arg);
 	if (ret) {
@@ -81,9 +95,13 @@ int mem_buf_assign_mem(u32 op, struct sg_table *sgt,
 		if (ret2 < 0) {
 			pr_err("hyp_assign failed while recovering from another error: %d\n",
 			       ret2);
-			return -EADDRNOTAVAIL;
+			ret = -EADDRNOTAVAIL;
+			goto out_err;
 		}
 	}
+
+out_err:
+	mutex_unlock(&mem_buf_heap_lock);
 
 	return ret;
 }
@@ -100,14 +118,23 @@ int mem_buf_unassign_mem(struct sg_table *sgt, int *src_vmids,
 	if (!sgt || !src_vmids || !nr_acl_entries)
 		return -EINVAL;
 
+	mutex_lock(&mem_buf_heap_lock);
+
 	if (memparcel_hdl != MEM_BUF_MEMPARCEL_INVALID) {
 		ret = mem_buf_unassign_mem_gunyah(memparcel_hdl);
 		if (ret)
-			return ret;
+			goto out_err;
 	}
+
+	/* reclaim any free hyp heap memory */
+	gh_rm_heap_shrink();
 
 	ret = mem_buf_hyp_assign_table(sgt, src_vmids, nr_acl_entries,
 			       dst_vmid, dst_perm, ARRAY_SIZE(dst_vmid));
+
+out_err:
+	mutex_unlock(&mem_buf_heap_lock);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(mem_buf_unassign_mem);
