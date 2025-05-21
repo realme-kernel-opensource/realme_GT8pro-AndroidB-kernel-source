@@ -840,10 +840,8 @@ static int pmic_gpio_restore(struct device *dev)
 
 static int pmic_gpio_resume(struct device *dev)
 {
-	#ifdef CONFIG_DEEPSLEEP
-		if (pm_suspend_via_firmware())
-			return pmic_gpio_restore(dev);
-	#endif
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		return pmic_gpio_restore(dev);
 
 	return 0;
 }

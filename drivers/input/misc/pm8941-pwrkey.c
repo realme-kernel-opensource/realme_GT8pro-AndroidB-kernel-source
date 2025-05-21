@@ -309,10 +309,8 @@ static int pm8941_pwrkey_suspend(struct device *dev)
 {
 	struct pm8941_pwrkey *pwrkey = dev_get_drvdata(dev);
 
-	#ifdef CONFIG_DEEPSLEEP
-		if (pm_suspend_via_firmware())
-			return pm8941_pwrkey_freeze(dev);
-	#endif
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		return pm8941_pwrkey_freeze(dev);
 
 	if (device_may_wakeup(dev))
 		enable_irq_wake(pwrkey->irq);
@@ -324,10 +322,8 @@ static int pm8941_pwrkey_resume(struct device *dev)
 {
 	struct pm8941_pwrkey *pwrkey = dev_get_drvdata(dev);
 
-	#ifdef CONFIG_DEEPSLEEP
-		if (pm_suspend_via_firmware())
-			return pm8941_pwrkey_restore(dev);
-	#endif
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		return pm8941_pwrkey_restore(dev);
 
 	if (device_may_wakeup(dev))
 		disable_irq_wake(pwrkey->irq);

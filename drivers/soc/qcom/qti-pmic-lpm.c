@@ -383,14 +383,13 @@ static void qti_pmic_lpm_syscore_shutdown(void)
 	}
 }
 
-#ifdef CONFIG_DEEPSLEEP
 static int qti_pmic_lpm_suspend_late(struct device *dev)
 {
 	int rc = 0;
 	struct qti_pmic_lpm *chip = dev_get_drvdata(dev);
 
 	/* mem_sleep_current = PM_SUSPEND_MEM in DeepSleep */
-	if (pm_suspend_via_firmware()) {
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
 		rc = qti_pmic_handle_lpm(chip, true);
 		if (rc < 0)
 			dev_err(dev, "Failed to handle suspend_late(), rc:%d\n",
@@ -406,7 +405,7 @@ static int qti_pmic_lpm_resume_early(struct device *dev)
 	struct qti_pmic_lpm *chip = dev_get_drvdata(dev);
 
 	/* mem_sleep_current = PM_SUSPEND_MEM in DeepSleep */
-	if (pm_suspend_via_firmware()) {
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
 		rc = qti_pmic_handle_lpm(chip, false);
 		if (rc < 0) {
 			dev_err(dev, "Failed to handle resume_early(), rc:%d\n",
@@ -420,13 +419,10 @@ static int qti_pmic_lpm_resume_early(struct device *dev)
 
 	return rc;
 }
-#endif
 
 static const struct dev_pm_ops qti_pmic_lpm_pm_ops = {
-#ifdef CONFIG_DEEPSLEEP
 	.suspend_late = qti_pmic_lpm_suspend_late,
 	.resume_early = qti_pmic_lpm_resume_early,
-#endif
 };
 
 static const struct of_device_id qti_pmic_lpm_match_table[] = {
