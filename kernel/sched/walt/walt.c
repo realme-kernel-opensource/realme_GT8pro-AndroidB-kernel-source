@@ -654,7 +654,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
 		goto out_max;
 	}
 
-	if (walt_trailblazer_tasks(cpu_of(rq)) && walt_feat(WALT_FEAT_TRAILBLAZER_BIT)) {
+	if (walt_trailblazer_tasks(cpu_of(rq)) && sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT)) {
 		load = sched_ravg_window;
 		*reason = CPUFREQ_REASON_TRAILBLAZER_CPU_BIT;
 		goto out_max;
@@ -2183,7 +2183,7 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 	bool is_prev_trailblazer = walt_flag_test(p, WALT_TRAILBLAZER_BIT);
 	u64 trailblazer_capacity;
 
-	if (walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
+	if (sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
 			(((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
 			wts->high_util_history >= TRAILBLAZER_BYPASS)) {
 		*trailblazer_demand = 1 << SCHED_CAPACITY_SHIFT;
@@ -4157,7 +4157,7 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 			if (walt_rotation_enabled ||
 				(should_apply_suh_freq_boost(cluster) && is_suh_max()) ||
 				(walt_trailblazer_tasks(cpu)
-					&& walt_feat(WALT_FEAT_TRAILBLAZER_BIT))) {
+					&& sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT))) {
 				force_fmax = true;
 			}
 

@@ -147,7 +147,7 @@ unsigned int sysctl_pipeline_pin_thres_low_pct;
 unsigned int sysctl_pipeline_pin_thres_high_pct;
 unsigned int sysctl_pipeline_rearrange_delay_ms[2] = {100, 4};
 unsigned int sysctl_single_thread_pipeline;
-
+unsigned int sysctl_walt_features;
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
 
@@ -306,6 +306,34 @@ static int walt_proc_pipeline_cpus_handler(const struct ctl_table *table,
 	cpumask_copy(&cpus_for_pipeline, to_cpumask(sysctl_bitmap));
 
 	written_once = true;
+unlock:
+	mutex_unlock(&mutex);
+	return ret;
+}
+
+static int walt_features_handler(const struct ctl_table *table,
+		int write, void __user *buffer, size_t *lenp,
+		loff_t *ppos)
+
+{
+	int ret = 0;
+	unsigned int val;
+	struct ctl_table tmp = {
+		.data	= &val,
+		.maxlen	= sizeof(val),
+		.mode	= table->mode,
+	};
+	static DEFINE_MUTEX(mutex);
+
+	mutex_lock(&mutex);
+
+	val = sysctl_walt_features;
+	ret = proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
+	if (ret || !write || val == sysctl_walt_features)
+		goto unlock;
+
+	sysctl_walt_features = val;
+
 unlock:
 	mutex_unlock(&mutex);
 	return ret;
@@ -2250,6 +2278,15 @@ static struct ctl_table walt_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname       = "sched_walt_features",
+		.data           = &sysctl_walt_features,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = walt_features_handler,
+		.extra1         = SYSCTL_ZERO,
+		.extra2         = SYSCTL_INT_MAX,
 	},
 };
 

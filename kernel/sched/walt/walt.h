@@ -491,7 +491,11 @@ extern unsigned int sysctl_freq_cap[MAX_CLUSTERS];
 extern unsigned int high_perf_cluster_freq_cap[MAX_CLUSTERS];
 extern unsigned int freq_cap[MAX_FREQ_CAP][MAX_CLUSTERS];
 extern unsigned int debugfs_walt_features;
+extern unsigned int sysctl_walt_features;
+
 #define walt_feat(feat)		(debugfs_walt_features & feat)
+#define sysctl_walt_feat(feat)	(sysctl_walt_features & feat)
+
 extern int sched_dynamic_tp_handler(const struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos);
 
