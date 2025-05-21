@@ -1754,8 +1754,11 @@ TRACE_EVENT(sched_update_updown_migrate_values,
 	),
 
 	TP_fast_assign(
+		unsigned int __len = strlen(cgroup_names[cgroup_id]);
+
+		__len = min_t(unsigned int, __len, TASK_COMM_LEN);
 		__entry->cluster	= cluster;
-		memcpy(__entry->cgroup_name, cgroup_names[cgroup_id], TASK_COMM_LEN);
+		memcpy(__entry->cgroup_name, cgroup_names[cgroup_id], __len);
 		__entry->cluster_up	= sched_capacity_margin_up[cgroup_id][cluster];
 		__entry->cluster_down	= sched_capacity_margin_down[cgroup_id][cluster];
 	),
