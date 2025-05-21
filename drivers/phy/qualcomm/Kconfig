@@ -70,3 +70,15 @@ config PHY_QCOM_UFS_V4_YUPIK
 	  This is good debug.
 
 endif
+
+config PHY_QCOM_EUSB2_REPEATER
+	tristate "Qualcomm eUSB2 Repeater Driver"
+	depends on OF && (ARCH_QCOM || COMPILE_TEST)
+	select GENERIC_PHY
+	help
+	  Enable support for the USB high-speed eUSB2 repeater on Qualcomm
+	  PMICs. The repeater is paired with an eUSB2 Phy on Qualcomm SOCs.
+	  This is required for voltage inter-operability between the eUSB2
+	  phy and the DP/DM lines connecting the USB host.
+	  PMICs. The repeater is paired with a eUSB2 Phy
+	  on Qualcomm SOCs.
