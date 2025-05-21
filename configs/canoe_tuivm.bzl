@@ -65,4 +65,5 @@ canoe_tuivm_config = {
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_INTERCONNECT_CLK": "m",
     "CONFIG_PSI": "y",
+    "CONFIG_QCOM_WATCHDOG_WAKEUP_ENABLE": "n",
 }
