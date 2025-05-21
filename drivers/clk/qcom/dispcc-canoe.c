@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/of.h>
+#include <linux/of_platform.h>
 #include <linux/regmap.h>
 #include <linux/pm_runtime.h>
 
@@ -2129,10 +2130,13 @@ static struct clk_regmap *disp_cc_canoe_clocks[] = {
 	[DISP_CC_MDSS_VSYNC1_CLK] = &disp_cc_mdss_vsync1_clk.clkr,
 	[DISP_CC_MDSS_VSYNC_CLK] = &disp_cc_mdss_vsync_clk.clkr,
 	[DISP_CC_MDSS_VSYNC_CLK_SRC] = &disp_cc_mdss_vsync_clk_src.clkr,
-	[DISP_CC_OSC_CLK] = &disp_cc_osc_clk.clkr,
-	[DISP_CC_OSC_CLK_SRC] = &disp_cc_osc_clk_src.clkr,
 	[DISP_CC_PLL0] = &disp_cc_pll0.clkr,
 	[DISP_CC_PLL1] = &disp_cc_pll1.clkr,
+};
+
+static struct clk_regmap *disp_cc_mx_canoe_clocks[] = {
+	[DISP_CC_OSC_CLK] = &disp_cc_osc_clk.clkr,
+	[DISP_CC_OSC_CLK_SRC] = &disp_cc_osc_clk_src.clkr,
 	[DISP_CC_PLL2] = &disp_cc_pll2.clkr,
 };
 
@@ -2193,6 +2197,11 @@ static struct qcom_cc_desc disp_cc_canoe_desc = {
 	.num_gdscs = ARRAY_SIZE(disp_cc_canoe_gdscs),
 };
 
+static struct qcom_cc_desc disp_cc_mx_canoe_desc = {
+	.clks = disp_cc_mx_canoe_clocks,
+	.num_clks = ARRAY_SIZE(disp_cc_mx_canoe_clocks),
+};
+
 static const struct of_device_id disp_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-dispcc" },
 	{ .compatible = "qcom,alor-dispcc" },
@@ -2244,7 +2253,6 @@ static int disp_cc_canoe_probe(struct platform_device *pdev)
 
 	clk_taycan_eko_t_pll_configure(&disp_cc_pll0, regmap, &disp_cc_pll0_config);
 	clk_taycan_eko_t_pll_configure(&disp_cc_pll1, regmap, &disp_cc_pll1_config);
-	clk_pongo_eko_t_pll_configure(&disp_cc_pll2, regmap, &disp_cc_pll2_config);
 
 	/* Enable clock gating for MDP clocks */
 	regmap_update_bits(regmap, DISP_CC_MISC_CMD, 0x10, 0x10);
@@ -2270,6 +2278,7 @@ static int disp_cc_canoe_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "Registered DISP CC clocks\n");
 
 err:
+	ret = devm_of_platform_populate(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);
 
 	return ret;
@@ -2296,7 +2305,61 @@ static struct platform_driver disp_cc_canoe_driver = {
 	},
 };
 
-module_platform_driver(disp_cc_canoe_driver);
+static const struct of_device_id disp_cc_mx_canoe_match_table[] = {
+	{ .compatible = "qcom,canoe-dispcc_mx" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, disp_cc_mx_canoe_match_table);
+
+static int disp_cc_mx_canoe_probe(struct platform_device *pdev)
+{
+	struct regmap *regmap = dev_get_regmap(pdev->dev.parent, NULL);
+	int ret;
+
+	clk_pongo_eko_t_pll_configure(&disp_cc_pll2, regmap, &disp_cc_pll2_config);
+
+	ret = qcom_cc_really_probe(&pdev->dev, &disp_cc_mx_canoe_desc, regmap);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to register DISP CC MX clocks\n");
+		return ret;
+	}
+
+	dev_info(&pdev->dev, "Registered DISP CC MX clocks\n");
+	return ret;
+}
+
+static void disp_cc_mx_canoe_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &disp_cc_mx_canoe_desc);
+}
+
+static struct platform_driver disp_cc_mx_canoe_driver = {
+	.probe = disp_cc_mx_canoe_probe,
+	.driver = {
+		.name = "disp_cc_mx-canoe",
+		.of_match_table = disp_cc_mx_canoe_match_table,
+		.sync_state = disp_cc_mx_canoe_sync_state,
+	},
+};
+
+static int __init disp_cc_canoe_init(void)
+{
+	int ret;
+
+	ret = platform_driver_register(&disp_cc_canoe_driver);
+	if (ret)
+		return ret;
+
+	return platform_driver_register(&disp_cc_mx_canoe_driver);
+}
+module_init(disp_cc_canoe_init);
+
+static void __exit disp_cc_canoe_exit(void)
+{
+	platform_driver_unregister(&disp_cc_mx_canoe_driver);
+	platform_driver_unregister(&disp_cc_canoe_driver);
+}
+module_exit(disp_cc_canoe_exit);
 
 MODULE_DESCRIPTION("QTI DISP_CC CANOE Driver");
 MODULE_LICENSE("GPL");
