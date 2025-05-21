@@ -320,13 +320,13 @@ static const struct ethqos_emac_por emac_v4_0_0_por[] = {
 };
 
 static const struct ethqos_emac_por emac_v6_6_0_por[] = {
-	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0x40c04c03 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0xd642c },
-	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x80040868 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0xa001 },
-	{ .offset = SDCC_USR_CTL,		.value = 0x90106c0 },
-	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x2200a0 },
-	{ .offset = SDCC_TEST_CTL, .value = 0x90106c0 },
+	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0xC04D03 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x2004642C },
+	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x80040800 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x00200000 },
+	{ .offset = SDCC_USR_CTL,		.value = 0x00010800 },
+	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x222060},
+	{ .offset = RGMII_IO_MACRO_SCRATCH_2, .value = 0x4c },
 };
 
 static const struct ethqos_emac_driver_data emac_v4_0_0_data = {
@@ -360,7 +360,7 @@ static const struct ethqos_emac_driver_data emac_v6_6_0_data = {
 	.por = emac_v6_6_0_por,
 	.num_por = ARRAY_SIZE(emac_v6_6_0_por),
 	.rgmii_config_loopback_en = false,
-	.dma_addr_width = 32,
+	.dma_addr_width = 40,
 	.link_clk_name = "phyaux",
 	.has_hdma = true,
 	.dwxgmac_addrs = {
@@ -792,6 +792,13 @@ static int  ethqos_configure_5gbaser(struct qcom_ethqos *ethqos)
 
 static int ethqos_configure_usxgmii(struct qcom_ethqos *ethqos)
 {
+	unsigned int i;
+
+	/* Reset to POR values */
+	for (i = 0; i < ethqos->num_por; i++)
+		rgmii_writel(ethqos, ethqos->por[i].value,
+			     ethqos->por[i].offset);
+
 	ethqos_set_func_clk_en(ethqos);
 
 	rgmii_updatel(ethqos, RGMII_BYPASS_EN, RGMII_BYPASS_EN, RGMII_IO_MACRO_BYPASS);
@@ -849,7 +856,7 @@ static int ethqos_configure_usxgmii(struct qcom_ethqos *ethqos)
 			      RGMII_IO_MACRO_CONFIG);
 		rgmii_updatel(ethqos, RGMII_CONFIG2_MAX_SPD_PRG_3, BIT(20),
 			      RGMII_IO_MACRO_CONFIG2);
-		rgmii_updatel(ethqos, RGMII_SCRATCH2_MAX_SPD_PRG_6, BIT(1),
+		rgmii_updatel(ethqos, RGMII_SCRATCH2_MAX_SPD_PRG_6, BIT(10),
 			      RGMII_IO_MACRO_SCRATCH_2);
 		break;
 
@@ -882,8 +889,8 @@ static void ethqos_fix_mac_speed(void *priv_n, unsigned int speed, unsigned int 
 	ethqos->speed = speed;
 	ethqos_update_link_clk(ethqos, speed);
 	ethqos_configure(ethqos);
-	if (priv->plat->qcom_pcs)
-		qcom_xpcs_link_up(priv->plat->qcom_pcs, mode,
+	if (priv->hw->qcom_pcs)
+		qcom_xpcs_link_up(priv->hw->qcom_pcs, mode,
 				  priv->plat->phy_interface, speed,
 				  DUPLEX_FULL);
 }
@@ -997,10 +1004,27 @@ static void qcom_ethqos_hdma_cfg(struct plat_stmmacenet_data *plat)
 	plat->dma_cfg->rx_pdma_map[11] = 7;
 }
 
+static int ethqos_xpcs_init(struct stmmac_priv *priv)
+{
+	struct device_node *xpcs_node;
+
+	xpcs_node = of_parse_phandle(priv->device->of_node, "qcom-xpcs-handle", 0);
+
+	priv->hw->qcom_pcs = qcom_xpcs_create(xpcs_node, priv->plat->phy_interface);
+	if (IS_ERR_OR_NULL(priv->hw->qcom_pcs))
+		return -ENODEV;
+
+	return 0;
+}
+
+static void ethqos_xpcs_exit(struct stmmac_priv *priv)
+{
+	qcom_xpcs_destroy(priv->hw->qcom_pcs);
+}
+
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
-	struct device_node *pcs_node;
 	const struct ethqos_emac_driver_data *data;
 	struct plat_stmmacenet_data *plat_dat;
 	struct stmmac_resources stmmac_res;
@@ -1045,6 +1069,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ethqos->configure_func = ethqos_configure_5gbaser;
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10GBASER:
 		ethqos->configure_func = ethqos_configure_usxgmii;
 		break;
 	default:
@@ -1103,8 +1128,13 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->has_gmac4 = 0;
 		plat_dat->dwxgmac_addrs = &data->dwxgmac_addrs;
 		plat_dat->has_hdma = data->has_hdma;
+		plat_dat->insert_ts_pktid = true;
 		if (plat_dat->has_hdma)
 			qcom_ethqos_hdma_cfg(plat_dat);
+	}
+	if (of_property_present(dev->of_node, "qcom-xpcs-handle")) {
+		plat_dat->pcs_init = ethqos_xpcs_init;
+		plat_dat->pcs_exit = ethqos_xpcs_exit;
 	}
 	if (of_property_read_bool(np, "snps,tso"))
 		plat_dat->flags |= STMMAC_FLAG_TSO_EN;
@@ -1118,15 +1148,6 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	if (ethqos->serdes_phy) {
 		plat_dat->serdes_powerup = qcom_ethqos_serdes_powerup;
 		plat_dat->serdes_powerdown  = qcom_ethqos_serdes_powerdown;
-	}
-
-	if (of_property_present(dev->of_node, "qcom-xpcs-handle")) {
-		pcs_node = of_parse_phandle(dev->of_node, "qcom-xpcs-handle", 0);
-		plat_dat->qcom_pcs = qcom_xpcs_create(pcs_node, plat_dat->phy_interface);
-		if (IS_ERR_OR_NULL(plat_dat->qcom_pcs)) {
-			dev_warn(dev, "Qcom Xpcs not found\n");
-			return -ENODEV;
-		}
 	}
 
 	/* Enable TSO on queue0 and enable TBS on rest of the queues */

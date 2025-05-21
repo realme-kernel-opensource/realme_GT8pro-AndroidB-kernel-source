@@ -529,8 +529,11 @@ bool stmmac_eee_init(struct stmmac_priv *priv)
 static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
 				   struct dma_desc *p, struct sk_buff *skb)
 {
+	const struct dwxgmac_addrs *dwxgmac_addrs = priv->plat->dwxgmac_addrs;
 	struct skb_shared_hwtstamps shhwtstamp;
+	void __iomem *ioaddr = priv->hw->pcsr;
 	bool found = false;
+	u32 pktid;
 	u64 ns = 0;
 
 	if (!priv->hwts_tx_en)
@@ -539,6 +542,9 @@ static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
 	/* exit if skb doesn't support hw tstamp */
 	if (likely(!skb || !(skb_shinfo(skb)->tx_flags & SKBTX_IN_PROGRESS)))
 		return;
+
+	if (priv->plat->insert_ts_pktid)
+		pktid = readl(ioaddr + XGMAC_TXTIMESTAMP_STATUS_PKTID(dwxgmac_addrs));
 
 	/* check tx tstamp status */
 	if (stmmac_get_tx_timestamp_status(priv, p)) {
@@ -957,8 +963,8 @@ static struct phylink_pcs *stmmac_mac_select_pcs(struct phylink_config *config,
 			return pcs;
 	}
 
-	if (priv->plat->qcom_pcs)
-		return priv->plat->qcom_pcs;
+	if (priv->hw->qcom_pcs)
+		return priv->hw->qcom_pcs;
 
 	return NULL;
 }
@@ -1074,6 +1080,14 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 			break;
 		case SPEED_1000:
 			ctrl |= priv->hw->link.speed1000;
+			break;
+		default:
+			return;
+		}
+	} else if (interface == PHY_INTERFACE_MODE_10GBASER) {
+		switch (speed) {
+		case SPEED_10000:
+			ctrl |= priv->hw->link.xgmii.speed10000;
 			break;
 		default:
 			return;
@@ -3114,9 +3128,9 @@ static int stmmac_init_dma_engine(struct stmmac_priv *priv)
 		/* DMA TX Mapping Configuration for offline channels */
 		for (chan = tx_channels_enabled; chan < tx_channels_supported; chan++)
 			stmmac_map_tx_offline_chan(priv, priv->ioaddr, priv->plat->dma_cfg, chan);
-	}
 
-	stmmac_desc_cache_compute(priv, priv->ioaddr);
+		stmmac_desc_cache_compute(priv, priv->ioaddr);
+	}
 
 	return ret;
 }
@@ -4528,6 +4542,28 @@ static bool stmmac_has_ip_ethertype(struct sk_buff *skb)
 		(proto == htons(ETH_P_IP) || proto == htons(ETH_P_IPV6));
 }
 
+#define STMMAC_MAX_PID 1023
+
+static void stmmac_hw_ts_insert(struct stmmac_priv *priv, struct stmmac_tx_queue *tx_q)
+{
+	struct dma_desc *p;
+
+	if (!priv->plat->insert_ts_pktid)
+		return;
+
+	p = &tx_q->dma_entx[tx_q->cur_tx].basic;
+	tx_q->pid = (tx_q->pid + 1) % STMMAC_MAX_PID;
+
+	/*this condition will be hit when 1023%1023 is 0*/
+	if (tx_q->pid == 0)
+		tx_q->pid = 1;
+
+	stmmac_set_desc_hw_ts(priv, p, tx_q->pid);
+	stmmac_set_tx_owner(priv, p);
+
+	tx_q->cur_tx = STMMAC_GET_ENTRY(tx_q->cur_tx, priv->dma_conf.dma_tx_size);
+}
+
 /**
  *  stmmac_xmit - Tx entry point of the driver
  *  @skb : the socket buffer
@@ -4586,6 +4622,11 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 		return NETDEV_TX_BUSY;
 	}
+
+	/* Check if HW TS can be inserted by HW */
+	if (unlikely((skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) &&
+		     priv->hwts_tx_en))
+		stmmac_hw_ts_insert(priv, tx_q);
 
 	/* Check if VLAN can be inserted by HW */
 	has_vlan = stmmac_vlan_insert(priv, skb, tx_q);
