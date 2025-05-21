@@ -83,3 +83,13 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-eusb2-repeater.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/phy/qualcomm/phy-qcom-m31-eusb2",
+        out = "phy-qcom-m31-eusb2.ko",
+        config = "CONFIG_PHY_QCOM_M31_EUSB2",
+        srcs = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-m31-eusb2.c",
+        ],
+    )
