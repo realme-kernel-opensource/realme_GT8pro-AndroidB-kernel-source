@@ -2813,45 +2813,39 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 	if (running)
 		wts->period_contrib_run = wallclock % NSEC_PER_MSEC;
 
-	/* task had already set a boost since wakeup, boost just once since wakeup */
-	if (walt_flag_test(p, WALT_LRB_PIPELINE_BIT)) {
-		no_boost_reason = 1;
-		goto out;
-	}
-
 	/*
 	 * task is not on_rq - if it is in the process of waking up, boost will be applied on the
 	 * right cpu at PICK event
 	 */
 	if (!task_is_runnable(p)) {
-		no_boost_reason = 2;
+		no_boost_reason = 1;
 		goto out;
 	}
 
 	if (sched_ravg_window <= SCHED_RAVG_8MS_WINDOW &&
 			((hweight16(wts->busy_bitmap & 0x00FF) < sysctl_sched_lrpb_active_ms[0]) ||
 			!sysctl_sched_lrpb_active_ms[0])) {
-		no_boost_reason = 3;
+		no_boost_reason = 2;
 		goto out;
 	}
 
 	if (sched_ravg_window == SCHED_RAVG_12MS_WINDOW &&
 			((hweight16(wts->busy_bitmap & 0x0FFF) < sysctl_sched_lrpb_active_ms[1]) ||
 			 !sysctl_sched_lrpb_active_ms[1])) {
-		no_boost_reason = 4;
+		no_boost_reason = 3;
 		goto out;
 	}
 
 	if (sched_ravg_window >= SCHED_RAVG_16MS_WINDOW &&
 			((hweight16(wts->busy_bitmap) < sysctl_sched_lrpb_active_ms[2]) ||
 			 !sysctl_sched_lrpb_active_ms[2])) {
-		no_boost_reason = 5;
+		no_boost_reason = 4;
 		goto out;
 	}
 
 	/* cpu already boosted, so don't extend */
 	if (wrq->lrb_pipeline_start_time != 0) {
-		no_boost_reason = 6;
+		no_boost_reason = 5;
 		goto out;
 	}
 
