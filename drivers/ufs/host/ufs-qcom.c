@@ -2964,9 +2964,8 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 	struct device_node *group_node;
 	struct ufs_qcom_qos_req *qr;
 	struct qos_cpu_group *qcg;
-	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int i, err;
-	u32 mask = 0;
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	host->cpufreq_dis = true;
 	/*
@@ -3012,15 +3011,6 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 			qcg->mask.bits[0] = host->qos_non_perf_mask.bits[0];
 			if (host->enforce_high_irq_cpus)
 				qcg->perf_core = true;
-		}
-
-		/* Override cpu mask of qcg if it is provided by DT */
-		if (!of_property_read_u32(group_node, "mask", &mask)) {
-			qcg->mask.bits[0] = mask;
-			if (!cpumask_subset(&qcg->mask, cpu_possible_mask)) {
-				dev_err(dev, "Invalid qos group mask 0x%x\n", mask);
-				qcg->mask.bits[0] = mask & cpu_possible_mask->bits[0];
-			}
 		}
 
 		err = of_property_count_u32_elems(group_node, "vote");
