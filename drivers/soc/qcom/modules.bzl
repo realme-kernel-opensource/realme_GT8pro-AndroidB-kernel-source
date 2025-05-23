@@ -1284,6 +1284,10 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/smp2p_sleepstate.c",
         ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/smem",
+        ],
     )
 
     registry.register(
