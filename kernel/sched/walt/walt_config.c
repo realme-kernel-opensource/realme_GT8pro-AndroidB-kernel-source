@@ -51,6 +51,7 @@ void walt_config(void)
 	sysctl_em_inflate_pct = 100;
 	sysctl_em_inflate_thres = 1024;
 	sysctl_max_freq_partial_halt = FREQ_QOS_MAX_DEFAULT_VALUE;
+	sysctl_topapp_weight_pct = 100;
 	asym_cap_sibling_cpus = CPU_MASK_NONE;
 	pipeline_sync_cpus = CPU_MASK_NONE;
 	storage_boost_cpus = CPU_MASK_NONE;
