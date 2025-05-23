@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2022, Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/acpi.h>
@@ -285,6 +285,23 @@ static int ufs_qcom_ber_duration_set(const char *val, const struct kernel_param 
 static inline bool ufs_qcom_partial_cpu_found(struct ufs_qcom_host *host)
 {
 	return cpumask_weight(cpu_possible_mask) != host->max_cpus;
+}
+
+
+/**
+ * ufs_qcom_is_genpd_supported - Check if Generic Power Domain (genpd) is supported
+ * @hba: Pointer to the UFS host bus adapter structure
+ *
+ * Return: true if genpd is supported, false otherwise.
+ */
+static inline bool ufs_qcom_is_genpd_supported(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct phy *phy = host->generic_phy;
+
+	return !(IS_ERR_OR_NULL(hba->dev->pm_domain) ||
+		 IS_ERR_OR_NULL(phy->dev.parent) ||
+		 IS_ERR_OR_NULL(phy->dev.parent->pm_domain));
 }
 
 /**
@@ -1882,8 +1899,7 @@ static void ufs_qcom_genpd_setup(struct ufs_hba *hba, bool always_on)
 	struct generic_pm_domain *core_genpd;
 	struct generic_pm_domain *phy_genpd;
 
-	if (IS_ERR_OR_NULL(hba->dev->pm_domain) ||
-		IS_ERR_OR_NULL(phy->dev.parent->pm_domain))
+	if (!ufs_qcom_is_genpd_supported(hba))
 		return;
 
 	core_genpd = pd_to_genpd(hba->dev->pm_domain);
@@ -2495,10 +2511,15 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 			UFSHCD_CAP_CLK_SCALING |
 			UFSHCD_CAP_AUTO_BKOPS_SUSPEND |
 			UFSHCD_CAP_AGGR_POWER_COLLAPSE |
-			UFSHCD_CAP_RPM_AUTOSUSPEND |
 			UFSHCD_CAP_WB_WITH_CLK_SCALING;
 		if (!host->disable_wb_support)
 			hba->caps |= UFSHCD_CAP_WB_EN;
+
+		if (ufs_qcom_is_genpd_supported(hba)) {
+			hba->caps |= UFSHCD_CAP_RPM_AUTOSUSPEND;
+			hba->caps &= ~(UFSHCD_CAP_CLK_GATING |
+					UFSHCD_CAP_HIBERN8_WITH_CLK_GATING);
+		}
 	}
 
 	if (host->hw_ver.major >= 0x5)
@@ -3907,6 +3928,11 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	err = ufs_qcom_init_lane_clks(host);
 	if (err)
 		goto out_disable_vccq_parent;
+
+	if (ufs_qcom_is_genpd_supported(hba)) {
+		hba->host->rpm_autosuspend_delay = UFS_QCOM_AUTO_SUSPEND_DELAY;
+		hba->rpm_lvl = 1;
+	}
 
 	ufs_qcom_get_device_id(host);
 	ufs_qcom_parse_pm_levels(hba);
