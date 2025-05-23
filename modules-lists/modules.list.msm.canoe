@@ -96,6 +96,7 @@ gh_mem_notifier.ko
 gh_msgq.ko
 gh_vcpu_mgr.ko
 gh_rm_drv.ko
+gh_rm_heap_manager.ko
 gunyah_loader.ko
 mdt_loader.ko
 qcom_wdt_core.ko
