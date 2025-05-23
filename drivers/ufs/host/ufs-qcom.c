@@ -591,8 +591,18 @@ static int ufs_qcom_get_connected_rx_lanes(struct ufs_hba *hba, u32 *rx_lanes)
 
 static inline void ufs_qcom_ice_enable(struct ufs_qcom_host *host)
 {
+	int err = 0;
+
 	if (host->hba->caps & UFSHCD_CAP_CRYPTO)
-		qcom_ice_enable(host->ice);
+		err = qcom_ice_enable(host->ice);
+
+	if (err) {
+		dev_warn(
+			host->hba->dev,
+			"ICE could not be enabled err=%d. Disabling inline encryption support.\n",
+			err);
+		host->hba->caps &= ~UFSHCD_CAP_CRYPTO;
+	}
 }
 
 static int ufs_qcom_ice_init(struct ufs_qcom_host *host)
@@ -618,10 +628,20 @@ static int ufs_qcom_ice_init(struct ufs_qcom_host *host)
 
 static inline int ufs_qcom_ice_resume(struct ufs_qcom_host *host)
 {
-	if (host->hba->caps & UFSHCD_CAP_CRYPTO)
-		return qcom_ice_resume(host->ice);
+	int err = 0;
 
-	return 0;
+	if (host->hba->caps & UFSHCD_CAP_CRYPTO)
+		err = qcom_ice_resume(host->ice);
+
+	if (err) {
+		dev_warn(
+			host->hba->dev,
+			"ICE could not be resumed err=%d. Disabling inline encryption support.\n",
+			err);
+		host->hba->caps &= ~UFSHCD_CAP_CRYPTO;
+	}
+
+	return err;
 }
 
 static inline int ufs_qcom_ice_suspend(struct ufs_qcom_host *host)
