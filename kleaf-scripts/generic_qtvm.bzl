@@ -59,6 +59,7 @@ def _gen_qc_core_build_config(name):
             "VM_DTB_IMG_CREATE={}".format(vm_opts.vm_dtb_img_create),
             "KERNEL_OFFSET={}".format(vm_opts.kernel_offset),
             "DTB_OFFSET={}".format(vm_opts.dtb_offset),
+            "BASE_DTB_OFFSET={}".format(vm_opts.base_dtb_offset),
             "RAMDISK_OFFSET={}".format(vm_opts.ramdisk_offset),
             "CMDLINE_CPIO_OFFSET={}".format(vm_opts.cmdline_cpio_offset),
             "METADATA_OFFSET={}".format(vm_opts.metadata_offset),
