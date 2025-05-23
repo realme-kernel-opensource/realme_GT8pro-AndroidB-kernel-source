@@ -59,6 +59,10 @@ struct gh_vm_property {
 #define GH_RM_RPC_TYPE_RPLY		0x2
 #define GH_RM_RPC_TYPE_NOTIF		0x3
 
+/* RM Heap Query Types */
+#define GH_RM_HEAP_QUERY_TYPE_MP	0x1
+#define GH_RM_HEAP_QUERY_TYPE_MEM	0x2
+
 /* RPC Message IDs */
 /* Call type Message IDs that has a request/reply pattern */
 /* Message IDs: Informative */
@@ -77,6 +81,15 @@ struct gh_vm_property {
 
 /* Message IDs: extensions for hyp-assign */
 #define GH_RM_RPC_MSG_ID_CALL_MEM_QCOM_LOOKUP_SGL	0x5100001A
+
+/* Message IDs: HEAP_ADD_MEMORY */
+#define GH_RM_RPC_MSG_ID_CALL_VM_ADD_HEAP_MEMORY		0x51000032
+
+/* Message IDs: HEAP_REMOVE_MEMORY */
+#define GH_RM_RPC_MSG_ID_CALL_VM_REMOVE_HEAP_MEMORY		0x51000033
+
+/* Message IDs: HEAP_QUERY_MEMORY */
+#define GH_RM_RPC_MSG_ID_CALL_VM_QUERY_HEAP_MEMORY		0x51000034
 
 /* Message IDs: VM Management */
 #define GH_RM_RPC_MSG_ID_CALL_VM_ALLOCATE		0x56000001
@@ -289,6 +302,7 @@ struct gh_vm_lookup_resp_payload {
 #define GH_RM_RES_TYPE_VPMGRP		5
 #define GH_RM_RES_TYPE_VIRTIO_MMIO	6
 #define GH_RM_RES_TYPE_WATCHDOG		8
+#define GH_RM_RES_TYPE_RM_HEAP_OBJECT	11
 
 struct gh_vm_get_hyp_res_req_payload {
 	gh_vmid_t vmid;
@@ -476,6 +490,40 @@ struct gh_mem_share_req_payload_hdr {
 
 struct gh_mem_share_resp_payload {
 	gh_memparcel_handle_t memparcel_handle;
+} __packed;
+
+/*
+ * Call: HEAP_ADD_MEMORY/HEAP_REMOVE_MEMORY
+ */
+struct gh_mem_heap_memory_req_payload_hdr {
+	u32 heap_handle;
+	u32 reserved;
+	gh_memparcel_handle_t memparcel_handle;
+} __packed;
+
+/*
+ * Call: HEAP_QUERY
+ */
+struct gh_mem_heap_query_req_payload_hdr {
+	u32 heap_handle;
+	u8 type;
+	u8 reserved[3];
+} __packed;
+
+/* Response for GH_RM_HEAP_QUERY_TYPE_MEM */
+
+/* Type 1 (mem parcels) heap query response */
+struct gh_mem_heap_query_resp_mem_parcels_payload {
+	u32 n_mp_handles;
+	gh_memparcel_handle_t memparcel_handles[];
+} __packed;
+
+/* Type 2 (stats) heap query response */
+struct gh_mem_heap_query_resp_stats_payload {
+	u64 total_size;
+	u64 allocated_size;
+	u64 reserved_size;
+	u64 largest_free_size;
 } __packed;
 
 /*
