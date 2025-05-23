@@ -287,6 +287,23 @@ static inline bool ufs_qcom_partial_cpu_found(struct ufs_qcom_host *host)
 	return cpumask_weight(cpu_possible_mask) != host->max_cpus;
 }
 
+
+/**
+ * ufs_qcom_is_genpd_supported - Check if Generic Power Domain (genpd) is supported
+ * @hba: Pointer to the UFS host bus adapter structure
+ *
+ * Return: true if genpd is supported, false otherwise.
+ */
+static bool ufs_qcom_is_genpd_supported(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct phy *phy = host->generic_phy;
+
+	return !IS_ERR_OR_NULL(hba->dev->pm_domain) ||
+		(!IS_ERR_OR_NULL(phy->dev.parent) &&
+		 !IS_ERR_OR_NULL(phy->dev.parent->pm_domain));
+}
+
 /**
  * ufs_qcom_save_regs - read register value and save to memory for specified domain.
  * If it is a new domain which never been saved, allocate memory for it and add to list.
@@ -1882,8 +1899,7 @@ static void ufs_qcom_genpd_setup(struct ufs_hba *hba, bool always_on)
 	struct generic_pm_domain *core_genpd;
 	struct generic_pm_domain *phy_genpd;
 
-	if (IS_ERR_OR_NULL(hba->dev->pm_domain) ||
-		IS_ERR_OR_NULL(phy->dev.parent->pm_domain))
+	if (!ufs_qcom_is_genpd_supported(hba))
 		return;
 
 	core_genpd = pd_to_genpd(hba->dev->pm_domain);
@@ -2512,7 +2528,6 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 			UFSHCD_CAP_CLK_SCALING |
 			UFSHCD_CAP_AUTO_BKOPS_SUSPEND |
 			UFSHCD_CAP_AGGR_POWER_COLLAPSE |
-			UFSHCD_CAP_RPM_AUTOSUSPEND |
 			UFSHCD_CAP_WB_WITH_CLK_SCALING;
 		if (!host->disable_wb_support)
 			hba->caps |= UFSHCD_CAP_WB_EN;
@@ -2520,6 +2535,12 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 
 	if (host->hw_ver.major >= 0x5)
 		host->caps |= UFS_QCOM_CAP_SHARED_ICE;
+
+	if (ufs_qcom_is_genpd_supported(hba)) {
+		hba->caps |= UFSHCD_CAP_RPM_AUTOSUSPEND;
+		hba->caps &= ~(UFSHCD_CAP_CLK_GATING |
+			       UFSHCD_CAP_HIBERN8_WITH_CLK_GATING);
+	}
 }
 
 static int ufs_qcom_unvote_qos_all(struct ufs_hba *hba)
@@ -3990,6 +4011,9 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	ufs_qcom_parse_irq_affinity(hba);
 	ufs_qcom_ber_mon_init(hba);
 	ufs_qcom_storage_boost_param_init(hba);
+	if (ufs_qcom_is_genpd_supported(hba))
+		hba->host->rpm_autosuspend_delay = 50;
+
 	host->ufs_ipc_log_ctx = ipc_log_context_create(UFS_QCOM_MAX_LOG_SZ,
 							"ufs-qcom", 0);
 	if (!host->ufs_ipc_log_ctx)
