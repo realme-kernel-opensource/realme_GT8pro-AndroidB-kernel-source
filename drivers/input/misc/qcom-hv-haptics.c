@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/atomic.h>
@@ -4212,9 +4212,13 @@ static int haptics_config_wa(struct haptics_chip *chip)
 
 static int haptics_visense_enable(struct haptics_chip *chip, bool enable)
 {
-	u8 val = enable ? HAP_PTN_VISENSE_ADC_CTL_MASK : 0;
+	u8 val;
 	int rc;
 
+	if (chip->hw_type < HAP530_HV)
+		return 0;
+
+	val = enable ? HAP_PTN_VISENSE_ADC_CTL_MASK : 0;
 	rc = haptics_write(chip, chip->ptn_addr_base, HAP_PTN_VSENSE_ADC_CTL_REG, &val, 1);
 	if (rc < 0)
 		return rc;
@@ -6961,6 +6965,10 @@ static int __maybe_unused haptics_suspend(struct device *dev)
 	if (MAJOR_REV(chip->cfg_revision) == HAP_CFG_V1)
 		return 0;
 
+	rc = haptics_visense_enable(chip, false);
+	if (rc < 0)
+		return rc;
+
 	rc = haptics_suspend_config(dev);
 	if (rc < 0)
 		return rc;
@@ -6976,11 +6984,10 @@ static int __maybe_unused haptics_suspend(struct device *dev)
 static int __maybe_unused haptics_resume(struct device *dev)
 {
 	struct haptics_chip *chip = dev_get_drvdata(dev);
+	int rc;
 
 #ifdef CONFIG_DEEPSLEEP
 	if (mem_sleep_current == PM_SUSPEND_MEM) {
-		int rc = 0;
-
 		rc = haptics_ds_resume_config(dev);
 		if (rc < 0)
 			return rc;
@@ -6990,7 +6997,11 @@ static int __maybe_unused haptics_resume(struct device *dev)
 	if (is_haptics_runtime_pm_enabled(chip))
 		return 0;
 
-	return haptics_module_enable(chip, true);
+	rc = haptics_module_enable(chip, true);
+	if (rc < 0)
+		return rc;
+
+	return haptics_visense_enable(chip, true);
 }
 
 static int __maybe_unused haptics_freeze(struct device *dev)
