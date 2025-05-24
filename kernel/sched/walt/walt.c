@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/syscore_ops.h>
@@ -1200,6 +1200,7 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 	long pstate;
 	struct walt_rq *src_wrq = &per_cpu(walt_rq, cpu_of(src_rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
+	bool double_migrate = false;
 
 	if (!p->on_rq && READ_ONCE(p->__state) != TASK_WAKING) {
 		WALT_BUG(WALT_BUG_WALT, p,
@@ -1221,6 +1222,14 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 		WALT_BUG(WALT_BUG_UPSTREAM, p, "on CPU %d task %s(%d) not on src_rq %d",
 				raw_smp_processor_id(), p->comm, p->pid, src_rq->cpu);
 
+	/* For sched_delayed tasks, enqueue_after_migration hasn't been
+	 * consumed yet at enqueue time.
+	 * A second migration can occur before any actual scheduling switch
+	 * happens.
+	 */
+	if (wts->enqueue_after_migration)
+		double_migrate = true;
+
 	wts->new_cpu = new_cpu;
 
 	if (!same_freq_domain(task_cpu(p), new_cpu))
@@ -1235,6 +1244,9 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 	 * Update task's cycles wrt to the new cpu.
 	 */
 	wts->cpu_cycles = walt_get_cycle_counts_cb(new_cpu, wallclock);
+
+	if (double_migrate)
+		goto skip_src_rq_sub;
 
 	if (wts->window_start != src_wrq->window_start)
 		WALT_BUG(WALT_BUG_WALT, p,
@@ -1284,6 +1296,7 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 
 	migrate_top_tasks_subtraction(p, src_rq);
 
+skip_src_rq_sub:
 	if (is_ed_enabled() && (p == src_wrq->ed_task))
 		src_wrq->ed_task = NULL;
 
