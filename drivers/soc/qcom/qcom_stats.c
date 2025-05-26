@@ -433,22 +433,22 @@ static long qcom_stats_device_ioctl(struct file *file, unsigned int cmd,
 		subsystem = &subsystems[3];
 		break;
 	case SLPI_IOCTL:
-		subsystem = &subsystems[4];
-		break;
-	case GPU_IOCTL:
-		subsystem = &subsystems[5];
-		break;
-	case DISPLAY_IOCTL:
-		subsystem = &subsystems[6];
-		break;
-	case ADSP_ISLAND_IOCTL:
 		subsystem = &subsystems[7];
 		break;
-	case SLPI_ISLAND_IOCTL:
+	case GPU_IOCTL:
 		subsystem = &subsystems[8];
 		break;
-	case APSS_IOCTL:
+	case DISPLAY_IOCTL:
 		subsystem = &subsystems[9];
+		break;
+	case ADSP_ISLAND_IOCTL:
+		subsystem = &subsystems[10];
+		break;
+	case SLPI_ISLAND_IOCTL:
+		subsystem = &subsystems[11];
+		break;
+	case APSS_IOCTL:
+		subsystem = &subsystems[12];
 		break;
 	case AOSD_IOCTL:
 		stats_id = 0;
