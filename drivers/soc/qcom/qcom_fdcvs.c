@@ -145,6 +145,14 @@ static ssize_t profile_interval_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(profile_interval);
 
+static ssize_t start_tuning_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct fdcvs_platform_data *pd = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", pd->start_tuning);
+}
+
 static ssize_t start_tuning_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -174,13 +182,6 @@ static ssize_t start_tuning_store(struct device *dev,
 			return -EBUSY;
 		}
 
-		if ((pd->pre_profile_enable) &&
-			(pd->profile_index != pd->pre_profile_index)) {
-			pr_err("Error disable previous profile then enable another one\n");
-			mutex_unlock(&pd->lock);
-			return -EBUSY;
-		}
-
 		scnprintf(qmp_buf, sizeof(qmp_buf),
 			"{class: fdcvs, profile_index: %d, aggressive_level: %d, profile_enable: %d}",
 				pd->profile_index, pd->aggressive_level, pd->profile_enable);
@@ -199,7 +200,7 @@ static ssize_t start_tuning_store(struct device *dev,
 
 	return count;
 }
-static DEVICE_ATTR_WO(start_tuning);
+static DEVICE_ATTR_RW(start_tuning);
 
 static int fdcvs_probe(struct platform_device *pdev)
 {
