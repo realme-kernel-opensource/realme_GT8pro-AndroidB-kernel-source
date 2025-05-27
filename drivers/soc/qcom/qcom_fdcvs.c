@@ -32,6 +32,7 @@ struct fdcvs_platform_data {
 	u32 profile_index;
 	u32 pre_profile_index;
 	u32 profile_interval;
+	ktime_t last_enable_time;
 	ktime_t last_disable_time;
 };
 
@@ -168,11 +169,22 @@ static ssize_t start_tuning_store(struct device *dev,
 	mutex_lock(&pd->lock);
 	pd->start_tuning = val;
 	if (pd->start_tuning) {
-		if (ktime_us_delta(now, pd->last_disable_time) <
-			(pd->profile_interval * USEC_PER_MSEC)) {
-			pr_err("Retry after profile interval passed\n");
-			mutex_unlock(&pd->lock);
-			return -EBUSY;
+		if (pd->pre_profile_enable && pd->profile_enable) {
+			if (ktime_us_delta(now, pd->last_enable_time) <
+				(pd->profile_interval * USEC_PER_MSEC)) {
+				pr_err("Retry after profile interval passed\n");
+				mutex_unlock(&pd->lock);
+				return -EBUSY;
+			}
+		}
+
+		if ((!pd->pre_profile_enable) && pd->profile_enable) {
+			if (ktime_us_delta(now, pd->last_disable_time) <
+				(pd->profile_interval * USEC_PER_MSEC)) {
+				pr_err("Retry after profile interval passed\n");
+				mutex_unlock(&pd->lock);
+				return -EBUSY;
+			}
 		}
 
 		if ((pd->profile_index == pd->pre_profile_index) &&
@@ -193,6 +205,8 @@ static ssize_t start_tuning_store(struct device *dev,
 			pd->pre_profile_index = pd->profile_index;
 			if (!pd->profile_enable)
 				pd->last_disable_time = ktime_get();
+			else
+				pd->last_enable_time = ktime_get();
 		}
 	}
 	pd->start_tuning = false;
@@ -256,6 +270,7 @@ static int fdcvs_probe(struct platform_device *pdev)
 	pd->pre_profile_index = 0;
 	pd->start_tuning = false;
 	pd->profile_interval = DEFAULT_INTERVAL;
+	pd->last_enable_time = 0;
 	pd->last_disable_time = 0;
 
 	platform_set_drvdata(pdev, pd);
