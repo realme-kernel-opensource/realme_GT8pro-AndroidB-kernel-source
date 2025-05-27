@@ -374,8 +374,9 @@ out:
 }
 
 
-static void walt_rt_find_lowest_rq(void *unused, struct task_struct *task,
-				   struct cpumask *lowest_mask, int ret, int *best_cpu)
+static void walt_rt_find_lowest_rq(void *unused, struct task_struct *sched_ctx,
+				   struct task_struct *exec_ctx, struct cpumask *lowest_mask,
+				   int ret, int *best_cpu)
 
 {
 	int packing_cpu = -1;
@@ -386,13 +387,13 @@ static void walt_rt_find_lowest_rq(void *unused, struct task_struct *task,
 	if (unlikely(walt_disabled))
 		return;
 
-	wts = (struct walt_task_struct *)android_task_vendor_data(task);
+	wts = (struct walt_task_struct *)android_task_vendor_data(sched_ctx);
 
-	packing_cpu = walt_find_and_choose_cluster_packing_cpu(0, task);
+	packing_cpu = walt_find_and_choose_cluster_packing_cpu(0, sched_ctx);
 	if (packing_cpu >= 0) {
 		while (packing_cpu < WALT_NR_CPUS) {
 			if (cpumask_test_cpu(packing_cpu, &wts->reduce_mask) &&
-				cpumask_test_cpu(packing_cpu, task->cpus_ptr) &&
+				cpumask_test_cpu(packing_cpu, sched_ctx->cpus_ptr) &&
 				cpu_active(packing_cpu) &&
 				!cpu_halted(packing_cpu) &&
 				(cpu_rq(packing_cpu)->rt.rt_nr_running <= 2))
@@ -409,9 +410,9 @@ static void walt_rt_find_lowest_rq(void *unused, struct task_struct *task,
 
 	cpumask_and(&lowest_mask_reduced, lowest_mask, &wts->reduce_mask);
 	if (!cpumask_empty(&lowest_mask_reduced))
-		walt_rt_energy_aware_wake_cpu(task, &lowest_mask_reduced, ret, best_cpu);
+		walt_rt_energy_aware_wake_cpu(sched_ctx, &lowest_mask_reduced, ret, best_cpu);
 	if (*best_cpu == -1)
-		walt_rt_energy_aware_wake_cpu(task, lowest_mask, ret, best_cpu);
+		walt_rt_energy_aware_wake_cpu(sched_ctx, lowest_mask, ret, best_cpu);
 
 	/*
 	 * Walt was not able to find a non-halted best cpu. Ensure that
@@ -421,7 +422,7 @@ static void walt_rt_find_lowest_rq(void *unused, struct task_struct *task,
 	if (*best_cpu == -1)
 		cpumask_andnot(lowest_mask, lowest_mask, cpu_halt_mask);
 out:
-	trace_sched_rt_find_lowest_rq(task, fastpath, *best_cpu, lowest_mask);
+	trace_sched_rt_find_lowest_rq(sched_ctx, fastpath, *best_cpu, lowest_mask);
 }
 
 void walt_rt_init(void)
