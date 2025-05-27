@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -236,7 +236,7 @@ enum geni_i3c_od_mode {
 
 #define LOW_STATIC_ADDR_MASK	GENMASK(7, 0)
 #define HIGH_DYN_ADDR_MASK	GENMASK(15, 8)
-#define MANAGER_EE_SET	BIT(16)
+#define NON_MANAGER_EE_SET	BIT(16)
 
 enum geni_i3c_err_code {
 	RD_TERM,
@@ -365,6 +365,7 @@ struct geni_i3c_dev {
 	bool hj_in_progress; /* hotjoin in progress flag */
 	bool is_i2c_xfer; /* i2c transfer flag */
 	bool start_xfer_with_7e; /* flag used to skip broadcast address */
+	bool is_manager; /* flag to speciy as non manager */
 };
 
 struct geni_i3c_i2c_dev_data {
@@ -2772,8 +2773,8 @@ static int geni_i3c_master_send_ccc_cmd(struct i3c_master_controller *m, struct 
 	unsigned long long start_time;
 	int i, ret;
 
-	/* For manager EE, skip Broadcast RSTDAA for multi_ee case */
-	if ((gi3c->skip_entdaa_mask & MANAGER_EE_SET) && cmd->id == I3C_CCC_RSTDAA(true)) {
+	/* For non manager EE, skip Broadcast RSTDAA for multi_ee case */
+	if (!gi3c->is_manager && cmd->id == I3C_CCC_RSTDAA(true)) {
 		I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
 			    "%s: skip RSTDAA for multi_ee manager\n", __func__);
 		return 0;
@@ -3244,15 +3245,15 @@ static void qcom_geni_i3c_ibi_conf(struct geni_i3c_dev *gi3c)
 	gi3c->ibi.err = 0;
 	reinit_completion(&gi3c->ibi.done);
 
-	/* set the configuration for 100Khz OD speed */
-	geni_write_reg(0x5FD74322, gi3c->ibi.ibi_base, IBI_SCL_PP_TIMING_CONFIG);
-
+	/* set the configuration for 100Khz OD speed for manager */
+	if (gi3c->is_manager)
+		geni_write_reg(0x5FD74322, gi3c->ibi.ibi_base, IBI_SCL_PP_TIMING_CONFIG);
 
 	/* Balance NAON Clock enable/disable between ibi_conf & ibi_unconf */
 	if (gi3c->ibi.ibic_naon && !gi3c->ibi.naon_clk_en) {
 		if (geni_i3c_enable_naon_ibi_clks(gi3c, true)) {
 			I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev,
-				"%s:  NAON clock failure\n", __func__);
+				    "%s:  NAON clock failure\n", __func__);
 			return;
 		}
 	}
@@ -3413,10 +3414,12 @@ static void geni_i3c_enable_ibi_irq(struct geni_i3c_dev *gi3c, bool enable)
 	u32 val;
 
 	if (enable) {
-		/* enable manager interrupts : HPG sec 4.1 */
-		val = geni_read_reg(gi3c->ibi.ibi_base, IBI_GEN_IRQ_EN);
-		val |= (val & 0x1B);
-		geni_write_reg(val, gi3c->ibi.ibi_base, IBI_GEN_IRQ_EN);
+		if (gi3c->is_manager) {
+			/* enable manager interrupts : HPG sec 4.1 */
+			val = geni_read_reg(gi3c->ibi.ibi_base, IBI_GEN_IRQ_EN);
+			val |= (val & 0x1B);
+			geni_write_reg(val, gi3c->ibi.ibi_base, IBI_GEN_IRQ_EN);
+		}
 
 		/* Enable GPII0 interrupts */
 		geni_write_reg(GPIIn_IBI_EN(0), gi3c->ibi.ibi_base,
@@ -3425,13 +3428,17 @@ static void geni_i3c_enable_ibi_irq(struct geni_i3c_dev *gi3c, bool enable)
 	} else {
 		geni_write_reg(0, gi3c->ibi.ibi_base, IBI_GPII_IBI_EN);
 		geni_write_reg(0, gi3c->ibi.ibi_base, IBI_IRQ_EN(0));
-		geni_write_reg(0, gi3c->ibi.ibi_base, IBI_GEN_IRQ_EN);
+		if (gi3c->is_manager)
+			geni_write_reg(0, gi3c->ibi.ibi_base, IBI_GEN_IRQ_EN);
 	}
 }
 
 static void geni_i3c_enable_ibi_ctrl(struct geni_i3c_dev *gi3c, bool enable)
 {
 	u32 val, timeout;
+
+	if (!gi3c->is_manager)
+		return;
 
 	if (enable) {
 		reinit_completion(&gi3c->ibi.done);
@@ -3807,6 +3814,71 @@ static int i3c_geni_rsrcs_init(struct geni_i3c_dev *gi3c,
 	return 0;
 }
 
+/*
+ * geni_i3c_ibi_register_irq: geni i3c ibi irq registration
+ * @gi3c: Device handle for i3c master
+ * @pdev: platform device structure handle
+ *
+ * return: returns 0 for success and nonzero for failure.
+ */
+static int geni_i3c_ibi_register_irq(struct geni_i3c_dev *gi3c, struct platform_device *pdev)
+{
+	int ret;
+
+	/* for non manager-EE, do not configure  manager irq*/
+	if (gi3c->is_manager) {
+		ret = devm_request_irq(&pdev->dev, gi3c->ibi.mngr_irq, geni_i3c_ibi_irq,
+				       IRQF_TRIGGER_HIGH, dev_name(&pdev->dev), gi3c);
+		if (ret) {
+			I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
+				    "Request_irq:%d: err:%d\n", gi3c->ibi.mngr_irq, ret);
+			return ret;
+		}
+
+		/* set mngr irq as wake-up irq */
+		if (!gi3c->ibi.ibic_naon) {
+			ret = irq_set_irq_wake(gi3c->ibi.mngr_irq, 1);
+			if (ret) {
+				I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
+					    "Failed to set mngr IRQ(%d) wake: err:%d\n",
+					    gi3c->ibi.mngr_irq, ret);
+				return ret;
+			}
+		}
+	}
+
+	/* Register GPII interrupt */
+	gi3c->ibi.gpii_irq[0] = platform_get_irq(pdev, 2);
+	if (gi3c->ibi.gpii_irq[0] < 0) {
+		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
+			    "IRQ error for ibi_c gpii\n");
+		return gi3c->ibi.gpii_irq[0];
+	}
+
+	ret = devm_request_irq(&pdev->dev, gi3c->ibi.gpii_irq[0],
+			       geni_i3c_ibi_irq, IRQF_TRIGGER_HIGH,
+			       dev_name(&pdev->dev), gi3c);
+	if (ret) {
+		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
+			    "Request_irq failed:%d: err:%d\n",
+			    gi3c->ibi.gpii_irq[0], ret);
+		return ret;
+	}
+
+	/* set gpii irq as wake-up irq */
+	if (!gi3c->ibi.ibic_naon) {
+		ret = irq_set_irq_wake(gi3c->ibi.gpii_irq[0], 1);
+		if (ret) {
+			I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
+				    "Failed to set gpii IRQ(%d) wake: err:%d\n",
+				gi3c->ibi.gpii_irq[0], ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int i3c_ibi_rsrcs_init(struct geni_i3c_dev *gi3c,
 		struct platform_device *pdev)
 {
@@ -3883,52 +3955,9 @@ static int i3c_ibi_rsrcs_init(struct geni_i3c_dev *gi3c,
 		return gi3c->ibi.mngr_irq;
 	}
 
-	ret = devm_request_irq(&pdev->dev, gi3c->ibi.mngr_irq, geni_i3c_ibi_irq,
-			IRQF_TRIGGER_HIGH, dev_name(&pdev->dev), gi3c);
-	if (ret) {
-		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
-			"Request_irq:%d: err:%d\n", gi3c->ibi.mngr_irq, ret);
+	ret = geni_i3c_ibi_register_irq(gi3c, pdev);
+	if (ret < 0)
 		return ret;
-	}
-
-	/* set mngr irq as wake-up irq */
-	if (!gi3c->ibi.ibic_naon) {
-		ret = irq_set_irq_wake(gi3c->ibi.mngr_irq, 1);
-		if (ret) {
-			I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
-				"Failed to set mngr IRQ(%d) wake: err:%d\n",
-				gi3c->ibi.mngr_irq, ret);
-			return ret;
-		}
-	}
-
-	/* Register GPII interrupt */
-	gi3c->ibi.gpii_irq[0] = platform_get_irq(pdev, 2);
-	if (gi3c->ibi.gpii_irq[0] < 0) {
-		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
-			"IRQ error for ibi_c gpii\n");
-		return gi3c->ibi.gpii_irq[0];
-	}
-
-	ret = devm_request_irq(&pdev->dev, gi3c->ibi.gpii_irq[0],
-				geni_i3c_ibi_irq, IRQF_TRIGGER_HIGH,
-				dev_name(&pdev->dev), gi3c);
-	if (ret) {
-		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
-		"Request_irq failed:%d: err:%d\n", gi3c->ibi.gpii_irq[0], ret);
-		return ret;
-	}
-
-	/* set gpii irq as wake-up irq */
-	if (!gi3c->ibi.ibic_naon) {
-		ret = irq_set_irq_wake(gi3c->ibi.gpii_irq[0], 1);
-		if (ret) {
-			I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
-				"Failed to set gpii IRQ(%d) wake: err:%d\n",
-				gi3c->ibi.gpii_irq[0], ret);
-			return ret;
-		}
-	}
 
 	qcom_geni_i3c_ibi_conf(gi3c);
 	return 0;
@@ -4064,6 +4093,36 @@ static int geni_i3c_enable_regulator(struct geni_i3c_dev *gi3c,
 	return ret;
 }
 
+/*
+ * geni_i3c_register_hotjoin_wq() - register hotjoin workqueue
+ *
+ * @gi3c: i3c master device handle
+ *
+ * Return: 0 on success, error code on failure
+ */
+static int geni_i3c_register_hotjoin_wq(struct geni_i3c_dev *gi3c)
+{
+	/* Register hotjoin and workqueue only for manager */
+	if (!gi3c->is_manager)
+		return 0;
+
+	gi3c->hj_wl = wakeup_source_register(gi3c->se.dev,
+					     dev_name(gi3c->se.dev));
+	if (!gi3c->hj_wl) {
+		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
+			    "wakeup source registration failed\n");
+		geni_se_resources_off(&gi3c->se);
+		return -ENOMEM;
+	}
+
+	INIT_WORK(&gi3c->hj_wd, geni_i3c_hotjoin);
+	gi3c->hj_wq = alloc_workqueue("%s", WQ_UNBOUND | WQ_HIGHPRI, 1,
+				      dev_name(gi3c->se.dev));
+	geni_i3c_enable_hotjoin_irq(gi3c, true);
+
+	return 0;
+}
+
 static int geni_i3c_probe(struct platform_device *pdev)
 {
 	struct geni_i3c_dev *gi3c;
@@ -4157,12 +4216,16 @@ static int geni_i3c_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "SE being used by two EEs.\n");
 	}
 
+	gi3c->is_manager = true;
 	if (!of_property_read_u32(pdev->dev.of_node, "qcom,use_setdasa",
 				  &gi3c->skip_entdaa_mask)) {
 		I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
 			    "use set dasa for static addr:0x%lx dyn addr:0x%lx\n",
 			    gi3c->skip_entdaa_mask & LOW_STATIC_ADDR_MASK,
 			    (gi3c->skip_entdaa_mask & HIGH_DYN_ADDR_MASK) >> 8);
+
+		if (gi3c->skip_entdaa_mask & NON_MANAGER_EE_SET)
+			gi3c->is_manager = false;
 	}
 
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,pm-ctrl-client")) {
@@ -4265,21 +4328,11 @@ static int geni_i3c_probe(struct platform_device *pdev)
 		}
 	}
 
-	// hot-join
-	gi3c->hj_wl = wakeup_source_register(gi3c->se.dev,
-					     dev_name(gi3c->se.dev));
-	if (!gi3c->hj_wl) {
-		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
-					"wakeup source registration failed\n");
-		geni_se_resources_off(&gi3c->se);
-		return -ENOMEM;
-	}
+	ret = geni_i3c_register_hotjoin_wq(gi3c);
+	if (ret)
+		return ret;
 
-	INIT_WORK(&gi3c->hj_wd, geni_i3c_hotjoin);
-	gi3c->hj_wq = alloc_workqueue("%s", WQ_UNBOUND | WQ_HIGHPRI, 1, dev_name(gi3c->se.dev));
-	geni_i3c_enable_hotjoin_irq(gi3c, true);
 	device_create_file(gi3c->se.dev, &dev_attr_capture_kpi);
-
 	gi3c->is_probe_done = true;
 	I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev, "I3C probed:%d\n", ret);
 	return ret;
