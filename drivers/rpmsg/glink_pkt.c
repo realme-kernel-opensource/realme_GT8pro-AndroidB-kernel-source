@@ -208,6 +208,11 @@ static int glink_pkt_rpdev_no_copy_cb(struct rpmsg_device *rpdev, void *buf,
 	unsigned long flags;
 	struct sk_buff *skb;
 
+	if (!gpdev) {
+		GLINK_PKT_ERR("channel is in reset\n");
+		return -ENETRESET;
+	}
+
 	GLINK_PKT_INFO("Data received on:%s len:%d\n", gpdev->ch_name, len);
 
 	skb = alloc_skb(0, GFP_ATOMIC);
