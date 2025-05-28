@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
  #define pr_fmt(fmt) "qcom_mpam: " fmt
 
@@ -177,7 +177,26 @@ static struct platform_driver qcom_mpam_driver = {
 	.remove = qcom_mpam_remove,
 };
 
-module_platform_driver(qcom_mpam_driver);
+static int __init qcom_mpam_init(void)
+{
+	int rc;
+
+	rc = platform_driver_register(&qcom_mpam_driver);
+	if (rc) {
+		pr_err("Failed to register qcom_mpam platform driver %d\n", rc);
+		return rc;
+	}
+
+	return qcom_mpam_rpmsg_init();
+}
+module_init(qcom_mpam_init);
+
+static void __exit qcom_mpam_exit(void)
+{
+	platform_driver_unregister(&qcom_mpam_driver);
+	qcom_mpam_rpmsg_exit();
+}
+module_exit(qcom_mpam_exit);
 
 MODULE_SOFTDEP("pre: qcom_scmi_client");
 MODULE_DESCRIPTION("QCOM MPAM driver");

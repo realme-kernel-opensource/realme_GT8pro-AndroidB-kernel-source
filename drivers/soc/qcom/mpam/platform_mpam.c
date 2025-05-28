@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
  #define pr_fmt(fmt) "platform_mpam: " fmt
 
@@ -21,6 +21,7 @@ struct platform_mpam_item {
 	int monitor_index;
 	bool monitor_enabled;
 	struct platform_mpam_bw_ctrl_config *cfg;
+	struct platform_mpam_bw_limit_cfg *bw_cfg;
 };
 
 struct platform_mpam_gear {
@@ -44,8 +45,22 @@ static inline struct platform_mpam_item *get_pm_item(
 static ssize_t platform_mpam_schemata_show(struct config_item *item,
 		char *page)
 {
-	return scnprintf(page, PAGE_SIZE, "gear=%d\n",
-		get_pm_item(item)->cfg->platform_mpam_gear);
+	size_t len = 0;
+	struct platform_mpam_item *pm_item = get_pm_item(item);
+
+	len = scnprintf(page, PAGE_SIZE, "gear=%d\n",
+		pm_item->cfg->platform_mpam_gear);
+
+	if (pm_item->bw_cfg) {
+		qcom_mpam_get_bw_limit_rpmsg();
+		len -= 1;
+		len += scnprintf(page + len, PAGE_SIZE - len,
+			",limit_ratio=%d,limit_mbps=%d\n",
+			pm_item->bw_cfg->limit_ratio,
+			pm_item->bw_cfg->limit_mbps);
+	}
+
+	return len;
 }
 
 static ssize_t platform_mpam_schemata_store(struct config_item *item,
@@ -53,6 +68,7 @@ static ssize_t platform_mpam_schemata_store(struct config_item *item,
 {
 	int ret, input;
 	char *token, *param_name;
+	int bw_set_ratio;
 	struct platform_mpam_bw_ctrl_cfg cfg;
 	struct platform_mpam_item *pm_item = get_pm_item(item);
 
@@ -61,23 +77,32 @@ static ssize_t platform_mpam_schemata_store(struct config_item *item,
 	cfg.config_ctrl = 0;
 
 	while ((token = strsep((char **)&page, ",")) != NULL) {
+		bw_set_ratio = 0;
+
 		param_name = strsep(&token, "=");
 		if (param_name == NULL || token == NULL)
 			continue;
-		if (kstrtouint(token, 0, &input) < 0) {
+		if (kstrtoint(token, 0, &input) < 0) {
 			pr_err("invalid argument for %s\n", param_name);
 			continue;
 		}
 
-		if (!strcmp("gear", param_name))
+		if (!strcmp("gear", param_name)) {
 			cfg.platform_mpam_gear = input;
-	}
+			ret = qcom_mpam_set_platform_bw_ctrl(&cfg);
+			if (!ret)
+				pm_item->cfg->platform_mpam_gear = cfg.platform_mpam_gear;
+			else
+				pr_err("set platform bw ctrl failed, ret=%d\n", ret);
+		} else if (!strcmp("limit_ratio", param_name))
+			bw_set_ratio = input;
+		else if (!strcmp("limit_mbps", param_name) &&
+				pm_item->bw_cfg->max_bw != 0)
+			bw_set_ratio = (long)(input) * 100 / pm_item->bw_cfg->max_bw;
 
-	ret = qcom_mpam_set_platform_bw_ctrl(&cfg);
-	if (!ret)
-		pm_item->cfg->platform_mpam_gear = cfg.platform_mpam_gear;
-	else
-		pr_err("set platform bw ctrl failed, ret=%d\n", ret);
+		if (bw_set_ratio)
+			qcom_mpam_set_bw_limit_rpmsg(bw_set_ratio);
+	}
 
 	return count;
 }
@@ -199,6 +224,7 @@ static struct platform_mpam_item *platform_mpam_make_group(
 	if (!item)
 		return ERR_PTR(-ENOMEM);
 
+	item->bw_cfg = NULL;
 	item->cfg = devm_kzalloc(dev,
 		sizeof(struct platform_mpam_bw_ctrl_config), GFP_KERNEL);
 	if (!item->cfg)
@@ -227,6 +253,7 @@ static int platform_mpam_probe(struct platform_device *pdev)
 {
 	int i, ret, mscid, clientid;
 	int client_cnt;
+	bool support_bw_limit;
 	const char *msc_name_dt;
 	struct resource *res;
 	struct device_node *node;
@@ -299,6 +326,7 @@ static int platform_mpam_probe(struct platform_device *pdev)
 	for_each_child_of_node(np, node) {
 		ret = of_property_read_u32(node, "qcom,client-id", &clientid);
 		of_property_read_string(node, "qcom,client-name", &msc_name_dt);
+		support_bw_limit = of_property_read_bool(node, "qcom,support-bw-limit");
 		if (ret || IS_ERR_OR_NULL(msc_name_dt))
 			continue;
 
@@ -318,6 +346,9 @@ static int platform_mpam_probe(struct platform_device *pdev)
 			pr_err("Error get bw_ctrl\n");
 			continue;
 		}
+
+		if (support_bw_limit)
+			new_item->bw_cfg = qcom_mpam_get_bw_limit();
 
 		ret = configfs_register_group(p_group, &new_item->group);
 		if (ret) {
