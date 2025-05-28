@@ -110,6 +110,7 @@
 #define RX_IO_POS_FF_EN_SEL_SHFT	4
 #define RX_IO_EN2CORE_EN_DELAY_SHFT	8
 #define RX_SI_EN2IO_DELAY_SHFT 12
+#define SW_CTRL_RX_SI_EN2IO_DELAY	31
 
 #define PINCTRL_DEFAULT "default"
 #define PINCTRL_ACTIVE  "active"
@@ -144,6 +145,8 @@
 #define	QSPI_QUAD_DDR		BIT(8)
 
 #define QSPI_DUMMY_CLK_CNT	0x8
+
+#define SPI_PIPELINING_SUPPORT_FW_VER	0x0A
 
 #define SPI_LOG_DBG(log_ctx, print, dev, x...) do { \
 GENI_SE_DBG(log_ctx, print, dev, x); \
@@ -224,6 +227,7 @@ struct spi_split_dma_tre {
 
 struct spi_geni_master {
 	struct geni_se spi_rsc;
+	struct geni_se_ver_info ver_info;
 	struct clk *m_ahb_clk;
 	struct clk *s_ahb_clk;
 	struct pinctrl *geni_pinctrl;
@@ -285,6 +289,7 @@ struct spi_geni_master {
 	unsigned int proto;
 	bool qspi_ddr_support;
 	struct spi_split_dma_tre split_tx_dma_tre;
+	u32 geni_init_cfg_revision;
 };
 
 /**
@@ -434,6 +439,21 @@ static void __spi_dump_ipc(struct spi_geni_master *mas, char *prefix,
 		  offset + len, total, buf);
 
 	SPI_LOG_DBG(mas->ipc_log_tx_rx, false, mas->dev, "%s : %s\n", __func__, data);
+}
+
+/**
+ * spi_geni_enable_loopback: enable spi loopback mode
+ * @mas: Pointer to main spi_geni_master structure
+ *
+ * Return: none
+ */
+static void spi_geni_enable_loopback(struct spi_geni_master *mas)
+{
+	u32 cfg_reg108;
+
+	cfg_reg108 = geni_read_reg(mas->base, SE_GENI_CFG_REG108);
+	cfg_reg108 |= 1 << SW_CTRL_RX_SI_EN2IO_DELAY;
+	geni_write_reg(cfg_reg108, mas->base, SE_GENI_CFG_REG108);
 }
 
 /**
@@ -772,8 +792,20 @@ static int setup_fifo_params(struct spi_device *spi_slv, struct spi_controller *
 	cpol &= ~CPOL;
 	cpha &= ~CPHA;
 
-	if (mode & SPI_LOOP)
+	if (mode & SPI_LOOP) {
 		loopback_cfg |= LOOPBACK_ENABLE;
+		/*
+		 * For QUP HW 4.3.0 version [major = 4, minor = 3],
+		 * internal loopback will not work for spi protocol.
+		 * It's due to pipeline changes happened in HW.
+		 * So the data will not pass through the pipeline stages
+		 * between the CORE and IO Macro.
+		 * To make it working for loopback tests write enable to
+		 * GENI_CFG_REG108[SW_CTRL_RX_SI_EN2IO_DELAY]=1
+		 */
+		if (mas->geni_init_cfg_revision == SPI_PIPELINING_SUPPORT_FW_VER)
+			spi_geni_enable_loopback(mas);
+	}
 
 	if (mode & SPI_CPOL)
 		cpol |= CPOL;
@@ -2077,8 +2109,7 @@ static int spi_verify_proto(struct spi_geni_master *mas)
 static int spi_geni_mas_setup(struct spi_controller *spi)
 {
 	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
-	unsigned int major;
-	unsigned int minor;
+	unsigned int major, minor, step;
 	int hw_ver;
 	int ret = 0;
 
@@ -2175,6 +2206,8 @@ static int spi_geni_mas_setup(struct spi_controller *spi)
 		/* Transmit an entire FIFO worth of data per IRQ */
 		mas->tx_wm = 1;
 	}
+
+	mas->geni_init_cfg_revision = geni_read_reg(mas->base, GENI_INIT_CFG_REVISION);
 setup_ipc:
 	dev_info(mas->dev, "tx_fifo %d rx_fifo %d tx_width %d\n",
 		mas->tx_fifo_depth, mas->rx_fifo_depth,
@@ -2198,14 +2231,19 @@ setup_ipc:
 		return -ENXIO;
 	}
 
-	major = GENI_SE_VERSION_MAJOR(hw_ver);
-	minor = GENI_SE_VERSION_MINOR(hw_ver);
+	geni_se_common_get_major_minor_num(hw_ver, &major, &minor, &step);
+
+	mas->ver_info.hw_major_ver = major;
+	mas->ver_info.hw_minor_ver = minor;
+	mas->ver_info.hw_step_ver = step;
+	mas->ver_info.m_fw_ver = geni_se_common_get_m_fw(mas->base);
+	mas->ver_info.s_fw_ver = geni_se_common_get_s_fw(mas->base);
 
 	if (major == 1 && minor == 0)
 		mas->oversampling = 2;
 
-	SPI_LOG_DBG(mas->ipc, false, mas->dev, "%s:Major:%d Minor:%d os%d\n",
-		    __func__, major, minor, mas->oversampling);
+	SPI_LOG_DBG(mas->ipc, false, mas->dev, "%s:Major:%d Minor:%d os%d FW Ver: %d\n",
+		    __func__, major, minor, mas->oversampling, mas->ver_info.s_fw_ver);
 	if (mas->set_miso_sampling)
 		spi_geni_set_sampling_rate(mas, major, minor);
 
