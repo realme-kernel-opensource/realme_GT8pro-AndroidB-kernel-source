@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/bitfield.h>
@@ -635,7 +635,7 @@ static const struct llcc_slice_config canoe_data[] = {
 	{LLCC_MDMHPFX,        24, 1024, 5, 1, 0xFFFFFFFF, 0, 0, 0, 0,
 							  0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
 							  0, 0},
-	{LLCC_MDMPNG,         27,  256, 5, 0, 0xFFFFFFFF, 0, 0, 0, 0,
+	{LLCC_MDMPNG,         27,  256, 5, 0,    0xFFFFF, 0, 0, 0, 0,
 							  0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
 							  0, 0},
 	{LLCC_CVP,             8,  800, 5, 1, 0xFFFFFFFF, 0, 0, 0, 0,
