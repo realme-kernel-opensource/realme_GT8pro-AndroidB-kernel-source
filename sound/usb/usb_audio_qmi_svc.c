@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -1040,9 +1040,9 @@ done:
 	if (dev->sb)
 		xhci_sideband_unregister(dev->sb);
 
-	mutex_unlock(&chip->mutex);
 	uadev[card_num].chip = NULL;
 	uadev[card_num].sb = NULL;
+	mutex_unlock(&chip->mutex);
 }
 
 static void uaudio_dev_release(struct uaudio_dev *dev)
