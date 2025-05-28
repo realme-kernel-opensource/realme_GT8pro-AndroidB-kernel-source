@@ -7,6 +7,8 @@
 #include <linux/cpufreq.h>
 #include <linux/devfreq.h>
 #include <linux/jiffies.h>
+#include <linux/of_device.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/workqueue.h>
 #include <linux/units.h>
@@ -168,14 +170,14 @@ static void cpu_gpu_freq_update(struct cache_allocation *pdev)
 
 #if IS_ENABLED(CONFIG_QTI_GPU_RESOURCE_ENABLED)
 	struct devfreq *devfreq = pdev->df;
-	struct devfreq_dev_status status;
+	unsigned long cur_freq = 0;
 	pdev->gpu_freq_prev = pdev->gpu_freq_curr;
 
 	mutex_lock(&devfreq->lock);
-	status = devfreq->last_status;
+	devfreq->profile->get_cur_freq(devfreq->dev.parent, &cur_freq);
 	mutex_unlock(&devfreq->lock);
 
-	pdev->gpu_freq_curr = DIV_ROUND_UP(status.current_frequency, HZ_PER_MHZ);
+	pdev->gpu_freq_curr = DIV_ROUND_UP(cur_freq, HZ_PER_MHZ);
 	trace_cache_alloc_gpu_update(pdev->gpu_freq_prev, pdev->gpu_freq_curr);
 #endif
 }
@@ -720,10 +722,39 @@ static int cache_allocation_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 #if IS_ENABLED(CONFIG_QTI_GPU_RESOURCE_ENABLED)
+	struct platform_device *gpu_pdev;
+	struct device_link *link;
+
 	pd->gpu_np = of_parse_phandle(pdev->dev.of_node, "qcom,devfreq", 0);
 	if (IS_ERR(pd->gpu_np))
 		return PTR_ERR(pd->gpu_np);
 
+	gpu_pdev = of_find_device_by_node(pd->gpu_np);
+	if (!gpu_pdev) {
+		pr_err("Cannot find device node %s\n",
+			pd->gpu_np->name);
+		of_node_put(pd->gpu_np);
+		return -ENODEV;
+	}
+
+	link = device_link_add(&pdev->dev, &gpu_pdev->dev,
+		DL_FLAG_AUTOPROBE_CONSUMER);
+
+	put_device(&gpu_pdev->dev);
+	of_node_put(devfreq_cdev->gpu_np);
+
+	if (!link) {
+		pr_err("add gpu device_link fail\n");
+		return -ENODEV;
+	}
+
+	if (link->status == DL_STATE_DORMANT) {
+		pr_warn("kgsl not probed yet\n");
+		device_link_del(link);
+		return -EPROBE_DEFER;
+	}
+
+	device_link_del(link);
 	pd->df = devfreq_get_devfreq_by_node(pd->gpu_np);
 	if (IS_ERR(pd->df)) {
 		of_node_put(pd->gpu_np);
