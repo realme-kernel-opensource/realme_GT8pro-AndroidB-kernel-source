@@ -393,6 +393,8 @@ static void android_rvh_gh_after_vcpu_run(void *unused, u16 vmid, u32 vcpu_id, i
 				__pm_relax(vcpu->ws);
 			break;
 		case GUNYAH_VCPU_STATE_POWERED_OFF:
+			fallthrough;
+		case GUNYAH_VCPU_STATE_SYSTEM_OFF:
 			__pm_relax(vcpu->ws);
 			break;
 		default:
