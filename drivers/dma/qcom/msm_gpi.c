@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/atomic.h>
@@ -1529,7 +1529,11 @@ int gsi_common_fill_tre_buf(struct gsi_common *gsi, bool tx_chan)
 	if (xfer->tre.flags & GO_TRE_SET)
 		sg_set_buf(&xfer->sg[index++], &xfer->tre.go_t, sizeof(xfer->tre.go_t));
 	if (xfer->tre.flags & DMA_TRE_SET)
-		sg_set_buf(&xfer->sg[index++], &xfer->tre.dma_t, sizeof(xfer->tre.dma_t));
+		sg_set_buf(&xfer->sg[index++], &xfer->tre.dma_t[0], sizeof(xfer->tre.dma_t[0]));
+	if (xfer->tre.flags & DMA1_TRE_SET)
+		sg_set_buf(&xfer->sg[index++], &xfer->tre.dma_t[1], sizeof(xfer->tre.dma_t[1]));
+	if (xfer->tre.flags & DMA2_TRE_SET)
+		sg_set_buf(&xfer->sg[index++], &xfer->tre.dma_t[2], sizeof(xfer->tre.dma_t[2]));
 	if (xfer->tre.flags & UNLOCK_TRE_SET)
 		sg_set_buf(&xfer->sg[index++], &xfer->tre.unlock_t, sizeof(xfer->tre.unlock_t));
 	GSI_SE_DBG(gsi->ipc, false, gsi->dev, "%s: tre_cnt:%d chan:%d flags:0x%x\n",
