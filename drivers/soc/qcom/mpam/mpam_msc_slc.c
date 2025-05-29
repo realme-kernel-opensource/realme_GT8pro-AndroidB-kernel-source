@@ -272,6 +272,7 @@ static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
 	struct slc_partid_info *part_info;
 	struct qcom_slc_mon_data *data;
 	struct slc_client_capability *slc_client_cap;
+	union slc_partid_capability_def *slc_partid_cap;
 	int client_idx, part_idx;
 
 	data = &(mon_mem->mem_v1.data[0]);
@@ -281,7 +282,15 @@ static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
 	mon_idx = 0;
 	slc_client_cap = slc_capability->slc_client_cap;
 	for (client_idx = 0; client_idx < slc_capability->num_clients; client_idx++) {
+		slc_partid_cap = slc_client_cap->slc_partid_cap;
 		for (part_idx = 0; part_idx < slc_client_cap->client_info.num_part_id; part_idx++) {
+			if ((slc_capability->firmware_ver.firmware_version !=
+					SLC_MPAM_VERSION_0) &&
+					(slc_partid_cap->v1_cap.mon_support == 0)) {
+				slc_partid_cap++;
+				continue;
+			}
+
 			part_info = &(data->part_info);
 			if ((client_id == part_info->client_id) &&
 					(part_id == part_info->part_id))
@@ -289,6 +298,7 @@ static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
 
 			data++;
 			mon_idx++;
+			slc_partid_cap++;
 		}
 
 		slc_client_cap++;
