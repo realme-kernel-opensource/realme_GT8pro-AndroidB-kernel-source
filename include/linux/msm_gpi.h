@@ -267,6 +267,7 @@ if (print) { \
 
 #define QUP_DMA_ADDR_ALIGN_BYTE		(16)
 #define QUP_SPLIT_DMA_TRE_SIZE		(16)
+#define QUP_MAX_SPLIT_TRE_MSGS		(3)
 
 /* cmds to perform by using dmaengine_slave_config() */
 enum msm_gpi_ctrl_cmd {
