@@ -329,7 +329,28 @@ static struct slc_mpam_item *slc_mpam_make_group(
 	return item;
 }
 
-static const struct config_item_type slc_mpam_base_type = {
+static ssize_t slc_mpam_monitors_data_show(struct config_item *item,
+		char *page)
+{
+	struct msc_query query;
+
+	set_msc_query(&query, get_pm_item(item));
+
+	return msc_system_mon_read_all(SLC, &query, page);
+}
+CONFIGFS_ATTR_RO(slc_mpam_, monitors_data);
+
+static struct configfs_attribute *slc_mpam_attrs_monitors[] = {
+	&slc_mpam_attr_monitors_data,
+	NULL,
+};
+
+static const struct config_item_type slc_mpam_root_type = {
+	.ct_attrs	= slc_mpam_attrs_monitors,
+	.ct_owner	= THIS_MODULE,
+};
+
+static const struct config_item_type slc_mpam_client_type = {
 	.ct_owner	= THIS_MODULE,
 };
 
@@ -375,7 +396,7 @@ static int slc_config_fs_register(struct  device *dev)
 
 	of_property_read_string(np, "qcom,msc-name", &msc_name_dt);
 
-	root_group = configfs_register_default_group(p_group, msc_name_dt, &slc_mpam_base_type);
+	root_group = configfs_register_default_group(p_group, msc_name_dt, &slc_mpam_root_type);
 	if (IS_ERR(root_group)) {
 		dev_err(dev, "Error register group %s\n", msc_name_dt);
 		return PTR_ERR(root_group);
@@ -394,7 +415,7 @@ static int slc_config_fs_register(struct  device *dev)
 
 		if (slc_client_cap->client_info.num_part_id > 1) {
 			sub_group = configfs_register_default_group(root_group,
-				slc_client_cap->client_name, &slc_mpam_base_type);
+				slc_client_cap->client_name, &slc_mpam_client_type);
 			for (partid = 0; partid < slc_client_cap->client_info.num_part_id;
 					partid++) {
 				snprintf(buf, sizeof(buf), "partid%d", partid);
