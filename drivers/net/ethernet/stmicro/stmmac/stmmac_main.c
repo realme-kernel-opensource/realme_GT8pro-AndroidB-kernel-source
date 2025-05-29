@@ -963,9 +963,6 @@ static struct phylink_pcs *stmmac_mac_select_pcs(struct phylink_config *config,
 			return pcs;
 	}
 
-	if (priv->hw->qcom_pcs)
-		return priv->hw->qcom_pcs;
-
 	return NULL;
 }
 
@@ -1008,6 +1005,9 @@ static void stmmac_mac_link_down(struct phylink_config *config,
 				 unsigned int mode, phy_interface_t interface)
 {
 	struct stmmac_priv *priv = netdev_priv(to_net_dev(config->dev));
+
+	if (priv->plat->safety_irq)
+		priv->plat->safety_irq(priv, false);
 
 	stmmac_mac_set(priv, priv->ioaddr, false);
 	priv->eee_active = false;
@@ -1171,6 +1171,10 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 
 	if (priv->plat->flags & STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY)
 		stmmac_hwtstamp_correct_latency(priv, priv);
+
+	/*enable safety feature after physical link is up*/
+	if (priv->plat->safety_irq)
+		priv->plat->safety_irq(priv, true);
 }
 
 static const struct phylink_mac_ops stmmac_phylink_mac_ops = {
@@ -3454,10 +3458,6 @@ static int stmmac_hw_setup(struct net_device *dev, bool ptp_register)
 	u32 chan;
 	int ret;
 
-	/* Make sure RX clock is enabled */
-	if (priv->hw->phylink_pcs)
-		phylink_pcs_pre_init(priv->phylink, priv->hw->phylink_pcs);
-
 	/* DMA initialization and SW reset */
 	ret = stmmac_init_dma_engine(priv);
 	if (ret < 0) {
@@ -3888,6 +3888,8 @@ static int stmmac_request_irq_single(struct net_device *dev)
 			irq_err = REQ_IRQ_ERR_SFTY;
 			goto irq_error;
 		}
+		if (priv->plat->safety_irq)
+			priv->plat->safety_irq(priv, false);
 	}
 
 	return 0;
@@ -4026,6 +4028,10 @@ static int __stmmac_open(struct net_device *dev,
 	memcpy(&priv->dma_conf, dma_conf, sizeof(*dma_conf));
 
 	stmmac_reset_queues_param(priv);
+
+	/* Make sure RX clock is enabled */
+	if (priv->hw->phylink_pcs)
+		phylink_pcs_pre_init(priv->phylink, priv->hw->phylink_pcs);
 
 	if (!(priv->plat->flags & STMMAC_FLAG_SERDES_UP_AFTER_PHY_LINKUP) &&
 	    priv->plat->serdes_powerup) {
@@ -4552,7 +4558,13 @@ static void stmmac_hw_ts_insert(struct stmmac_priv *priv, struct stmmac_tx_queue
 	if (!priv->plat->insert_ts_pktid)
 		return;
 
-	p = &tx_q->dma_entx[tx_q->cur_tx].basic;
+	if (priv->extend_desc)
+		p = &tx_q->dma_etx[tx_q->cur_tx].basic;
+	else if (tx_q->tbs & STMMAC_TBS_AVAIL)
+		p = &tx_q->dma_entx[tx_q->cur_tx].basic;
+	else
+		p = &tx_q->dma_tx[tx_q->cur_tx];
+
 	tx_q->pid = (tx_q->pid + 1) % STMMAC_MAX_PID;
 
 	/*this condition will be hit when 1023%1023 is 0*/
@@ -7221,6 +7233,7 @@ static void stmmac_reset_subtask(struct stmmac_priv *priv)
 	while (test_and_set_bit(STMMAC_RESETING, &priv->state))
 		usleep_range(1000, 2000);
 
+	disable_irq(priv->dev->irq);
 	set_bit(STMMAC_DOWN, &priv->state);
 	dev_close(priv->dev);
 	dev_open(priv->dev, NULL);
@@ -8051,6 +8064,10 @@ int stmmac_resume(struct device *dev)
 		if (priv->mii)
 			stmmac_mdio_reset(priv->mii);
 	}
+
+	/* Make sure RX clock is enabled */
+	if (priv->hw->phylink_pcs)
+		phylink_pcs_pre_init(priv->phylink, priv->hw->phylink_pcs);
 
 	if (!(priv->plat->flags & STMMAC_FLAG_SERDES_UP_AFTER_PHY_LINKUP) &&
 	    priv->plat->serdes_powerup) {
