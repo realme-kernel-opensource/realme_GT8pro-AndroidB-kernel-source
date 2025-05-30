@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "%s:%s " fmt, KBUILD_MODNAME, __func__
@@ -61,8 +61,6 @@
 #define BCL_VBAT_NO_READING   127
 #define BCL_VBAT_BASE_MV      2000
 #define BCL_VBAT_INC_MV       25
-#define BCL_VBAT_MAX_MV       3600
-#define BCL_VBAT_THRESH_BASE  0x8CA
 
 #define BCL_IBAT_CCM_OFFSET   800
 #define BCL_IBAT_CCM_LSB      100
@@ -122,6 +120,8 @@ struct bcl_desc {
 	bool vadc_type;
 	u32 vbat_regs[REG_MAX];
 	bool vbat_zone_enabled;
+	u32 vcmp_thresh_base;
+	u32 vcmp_thresh_max;
 };
 
 static char bcl_int_names[BCL_TYPE_MAX][25] = {
@@ -157,6 +157,7 @@ struct bcl_peripheral_data {
 	int                     status_bit_idx;
 	long			trip_thresh;
 	int                     last_val;
+	int                     def_vbat_min_thresh;
 	struct mutex            state_trans_lock;
 	bool			irq_enabled;
 	enum bcl_dev_type	type;
@@ -290,13 +291,20 @@ static void convert_adc_to_vbat_val(int *val)
 {
 	*val = (*val * BCL_VBAT_SCALING_UV) / 1000;
 }
-static void convert_vbat_to_vcmp_val(int vbat, int *val)
+
+static void convert_vbat_to_vcmp_val(const struct bcl_desc *desc, int vbat, int *val)
 {
-	if (vbat > BCL_VBAT_MAX_MV)
-		vbat = BCL_VBAT_MAX_MV;
-	else if (vbat < BCL_VBAT_THRESH_BASE)
-		vbat = BCL_VBAT_THRESH_BASE;
-	*val = (vbat - BCL_VBAT_THRESH_BASE) / BCL_VBAT_INC_MV;
+	if (vbat > desc->vcmp_thresh_max)
+		vbat = desc->vcmp_thresh_max;
+	else if (vbat < desc->vcmp_thresh_base)
+		vbat = desc->vcmp_thresh_base;
+
+	*val = (vbat - desc->vcmp_thresh_base) / BCL_VBAT_INC_MV;
+}
+
+static void convert_vcmp_idx_to_vbat_val(const struct bcl_desc *desc, int vcmp_idx, int *val)
+{
+	*val = desc->vcmp_thresh_base + (BCL_VBAT_INC_MV * vcmp_idx);
 }
 
 static void convert_ibat_to_adc_val(struct bcl_device *bcl_perph, int *val, int scaling_factor)
@@ -533,10 +541,10 @@ static int bcl_set_adc_value(struct bcl_device *bcl_perph,
 	if (temp <= 0) {
 		pr_debug("Invalid input temp\n");
 		return -EINVAL;
-	} else if (temp < BCL_VBAT_THRESH_BASE) {
+	} else if (temp < bcl_perph->desc->vcmp_thresh_base) {
 		pr_debug("input temp is %d, lower than MIN\n", temp);
 		return -EINVAL;
-	} else if (temp > BCL_VBAT_MAX_MV) {
+	} else if (temp > bcl_perph->desc->vcmp_thresh_max) {
 		pr_debug("input temp is %d, higher than MAX\n", temp);
 		return -EINVAL;
 	}
@@ -547,7 +555,7 @@ static int bcl_set_adc_value(struct bcl_device *bcl_perph,
 		convert_vbat_thresh_val_to_adc(bcl_perph, &thresh);
 		*val = thresh;
 	} else {
-		convert_vbat_to_vcmp_val(temp, val);
+		convert_vbat_to_vcmp_val(bcl_perph->desc, temp, val);
 	}
 
 	ret = bcl_write_register(bcl_perph, addr, *val);
@@ -579,6 +587,13 @@ static int bcl_write_vbat_tz(struct thermal_zone_device *tzd,
 	int ret = 0, val = 0, trip_id = 0;
 	struct bcl_peripheral_data *bat_data =
 		(struct bcl_peripheral_data *)tzd->devdata;
+
+	if (bat_data->def_vbat_min_thresh &&
+		temp < bat_data->def_vbat_min_thresh) {
+		pr_err("User vbat thresh is %d,lower than target MIN:%d\n",
+				temp, bat_data->def_vbat_min_thresh);
+		return -EINVAL;
+	}
 
 	trip_id = trip_to_trip_desc(trip) - tzd->trips;
 
@@ -848,6 +863,23 @@ static void bcl_fetch_trip(struct platform_device *pdev, enum bcl_dev_type type,
 	mutex_unlock(&data->state_trans_lock);
 }
 
+static int vbat_get_default_min_threshold_limit(struct bcl_device *bcl_perph,
+				struct bcl_peripheral_data *vbat)
+{
+	int ret = 0;
+	unsigned int val = 0;
+	const struct bcl_desc *desc = bcl_perph->desc;
+
+	ret = bcl_read_register(bcl_perph,
+			desc->vbat_regs[BCLBIG_COMP_VCMP_L2_THR], &val);
+	if (ret < 0 || !val)
+		return ret;
+
+	convert_vcmp_idx_to_vbat_val(desc, val, &vbat->def_vbat_min_thresh);
+
+	return 0;
+}
+
 static void bcl_vbat_init(struct platform_device *pdev,
 		enum bcl_dev_type type, struct bcl_device *bcl_perph)
 {
@@ -871,6 +903,8 @@ static void bcl_vbat_init(struct platform_device *pdev,
 			return;
 	}
 	vbat->ops = vbat_tzd_ops;
+	vbat_get_default_min_threshold_limit(bcl_perph, vbat);
+
 	vbat->tz_dev = devm_thermal_of_zone_register(&pdev->dev,
 				type, vbat, &vbat->ops);
 	if (IS_ERR(vbat->tz_dev)) {
@@ -1140,8 +1174,8 @@ static int bcl_probe(struct platform_device *pdev)
 	bcl_configure_bcl_peripheral(bcl_perph);
 
 	if (!bcl_perph->desc->vbat_zone_enabled) {
-		bcl_pmic5_notifier_register(&bcl_perph->nb);
 		bcl_perph->nb.notifier_call = bcl_config_vph_cb;
+		bcl_pmic5_notifier_register(&bcl_perph->nb);
 	}
 
 	dev_set_drvdata(&pdev->dev, bcl_perph);
@@ -1167,6 +1201,8 @@ static const struct bcl_desc pmih010x_data = {
 		[BCLBIG_COMP_VCMP_L2_THR]		= 0x4A,
 	},
 	.vbat_zone_enabled = true,
+	.vcmp_thresh_base = 2250,
+	.vcmp_thresh_max = 3600,
 };
 
 static const struct bcl_desc pm8550_data = {
@@ -1177,6 +1213,8 @@ static const struct bcl_desc pm8550_data = {
 		[BCLBIG_COMP_VCMP_L2_THR]		= 0x4A,
 	},
 	.vbat_zone_enabled = false,
+	.vcmp_thresh_base = 2250,
+	.vcmp_thresh_max = 3600,
 };
 
 static const struct bcl_desc pmh0101_data = {
@@ -1187,6 +1225,8 @@ static const struct bcl_desc pmh0101_data = {
 		[BCLBIG_COMP_VCMP_L2_THR]		= 0x4A,
 	},
 	.vbat_zone_enabled = false,
+	.vcmp_thresh_base = 1500,
+	.vcmp_thresh_max = 4000,
 };
 
 static const struct of_device_id bcl_match[] = {
