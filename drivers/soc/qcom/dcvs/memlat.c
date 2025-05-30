@@ -236,6 +236,7 @@ struct memlat_dev_data {
 	spinlock_t			fp_agg_lock;
 	spinlock_t			fp_commit_lock;
 	bool				fp_enabled;
+	bool				sampling_inited;
 	bool				sampling_enabled;
 	bool				inited;
 /* CPUCP related struct fields */
@@ -1085,6 +1086,9 @@ static void memlat_update_work(struct work_struct *work)
 	struct dcvs_freq new_freq;
 	u32 max_freqs[MAX_MEMLAT_GRPS] = { 0 };
 
+	if (!memlat_data->sampling_enabled)
+		return;
+
 	/* aggregate mons to calculate max freq per memlat_group */
 	for (grp = 0; grp < MAX_MEMLAT_GRPS; grp++) {
 		memlat_grp = memlat_data->groups[grp];
@@ -1126,7 +1130,8 @@ static void memlat_update_work(struct work_struct *work)
 
 static enum hrtimer_restart memlat_hrtimer_handler(struct hrtimer *timer)
 {
-	calculate_sampling_stats();
+	if (memlat_data->sampling_enabled)
+		calculate_sampling_stats();
 	queue_work(memlat_data->memlat_wq, &memlat_data->work);
 
 	return HRTIMER_NORESTART;
@@ -1330,6 +1335,25 @@ static bool memlat_grps_and_mons_inited(void)
 
 static int memlat_sampling_init(void)
 {
+	struct device *dev = memlat_data->dev;
+
+	memlat_data->memlat_wq = create_freezable_workqueue("memlat_wq");
+	if (!memlat_data->memlat_wq) {
+		dev_err(dev, "Couldn't create memlat workqueue.\n");
+		return -ENOMEM;
+	}
+	INIT_WORK(&memlat_data->work, &memlat_update_work);
+
+	hrtimer_init(&memlat_data->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	memlat_data->timer.function = memlat_hrtimer_handler;
+
+	register_trace_android_vh_jiffies_update(memlat_jiffies_update_cb, NULL);
+
+	return 0;
+}
+
+static int memlat_sampling_enable(void)
+{
 	int cpu;
 	struct device *dev = memlat_data->dev;
 	struct cpu_stats *stats;
@@ -1342,18 +1366,7 @@ static int memlat_sampling_init(void)
 		spin_lock_init(&stats->ctrs_lock);
 	}
 
-	memlat_data->memlat_wq = create_freezable_workqueue("memlat_wq");
-	if (!memlat_data->memlat_wq) {
-		dev_err(dev, "Couldn't create memlat workqueue.\n");
-		return -ENOMEM;
-	}
-	INIT_WORK(&memlat_data->work, &memlat_update_work);
-
-	hrtimer_init(&memlat_data->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	memlat_data->timer.function = memlat_hrtimer_handler;
-
 	register_trace_android_vh_scheduler_tick(memlat_sched_tick_cb, NULL);
-	register_trace_android_vh_jiffies_update(memlat_jiffies_update_cb, NULL);
 	qcom_pmu_idle_register(&memlat_idle_notif);
 
 	return 0;
@@ -1960,15 +1973,27 @@ static int memlat_mon_probe(struct platform_device *pdev)
 
 	num_cpus = cpumask_weight(&mon->cpus);
 
+	mutex_lock(&memlat_lock);
+	if (!memlat_data->sampling_inited) {
+		ret = memlat_sampling_init();
+		if (ret < 0) {
+			mutex_unlock(&memlat_lock);
+			goto unlock_out;
+		}
+		memlat_data->sampling_inited = true;
+	}
 	if (of_property_read_bool(dev->of_node, "qcom,sampling-enabled")) {
-		mutex_lock(&memlat_lock);
 		if (!memlat_data->sampling_enabled) {
-			ret = memlat_sampling_init();
+			ret = memlat_sampling_enable();
+			if (ret < 0) {
+				mutex_unlock(&memlat_lock);
+				goto unlock_out;
+			}
 			memlat_data->sampling_enabled = true;
 		}
-		mutex_unlock(&memlat_lock);
 		mon->type |= SAMPLING_MON;
 	}
+	mutex_unlock(&memlat_lock);
 
 	if (of_property_read_bool(dev->of_node, "qcom,threadlat-enabled"))
 		mon->type |= THREADLAT_MON;
