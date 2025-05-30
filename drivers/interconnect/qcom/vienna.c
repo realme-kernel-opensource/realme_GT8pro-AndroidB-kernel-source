@@ -13,6 +13,8 @@
 #include <linux/of_device.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
+#include <linux/suspend.h>
 
 #include "icc-rpmh.h"
 #include "qnoc-qos.h"
@@ -1821,6 +1823,30 @@ static int qnoc_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static int qnoc_vienna_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct qcom_icc_provider *qp = platform_get_drvdata(pdev);
+
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		return qcom_icc_rpmh_configure_qos(qp);
+
+	return 0;
+}
+
+static int qnoc_vienna_restore(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct qcom_icc_provider *qp = platform_get_drvdata(pdev);
+
+	return qcom_icc_rpmh_configure_qos(qp);
+}
+
+static const struct dev_pm_ops qnoc_vienna_pm_ops = {
+	.restore = qnoc_vienna_restore,
+	.resume = qnoc_vienna_resume,
+};
+
 static const struct of_device_id qnoc_of_match[] = {
 	{ .compatible = "qcom,vienna-aggre_noc",
 	  .data = &vienna_aggre_noc},
@@ -1858,6 +1884,7 @@ static struct platform_driver qnoc_driver = {
 	.driver = {
 		.name = "qnoc-vienna",
 		.of_match_table = qnoc_of_match,
+		.pm = &qnoc_vienna_pm_ops,
 		.sync_state = icc_sync_state,
 	},
 };
