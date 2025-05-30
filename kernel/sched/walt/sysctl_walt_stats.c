@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <linux/cpufreq.h>
 #include <linux/kmemleak.h>
@@ -24,9 +25,8 @@ struct cpu_freq_time {
 
 /* calculate min/max frequency */
 struct cal_freq {
-	u64	min_freq_ns;
-	u64	max_freq_ns;
-	u64	min_max_freq_update_time;
+	u64	min_freq_total;
+	u64	max_freq_total;
 };
 
 static bool register_hook_enable;
@@ -53,6 +53,11 @@ static DEFINE_PER_CPU(struct cpufreq_time_info, cpufreq_time_info);
 #define CUR_CPUFREQ(cpu) (per_cpu(cpufreq_time_info, cpu).cur_cpufreq)
 #define CPUFREQ_LOCK(cpu) \
 	((spinlock_t *)&per_cpu(cpufreq_time_info, cpu).freq_time_lock)
+
+enum min_max_freq {
+	MIN_FREQ,
+	MAX_FREQ,
+};
 
 static inline u32 cpufreq_hash(unsigned int val)
 {
@@ -243,7 +248,7 @@ static int cpufreq_time_table_init(struct cpufreq_policy *policy, int cpu)
 	return 0;
 }
 
-static int walt_stats_init(void)
+static int walt_freqtime_init(void)
 {
 	int cpu, ret;
 	struct cpufreq_policy *policy;
@@ -309,7 +314,7 @@ static int cpufreq_time_statistic_dump_handler(const struct ctl_table *table,
 		char *value = buffer;
 
 		if ('1' == value[0] && !enable_stat_freq) {
-			if (walt_stats_init())
+			if (walt_freqtime_init())
 				return -EINVAL;
 		} else if ('0' == value[0] && enable_stat_freq)
 			walt_stats_exit();
@@ -613,42 +618,82 @@ static int debug_counter_dump_handler(const struct ctl_table *table, int write,
 }
 
 /*******************************calculate min/max frequency ***********************************/
+bool freq_ns_hook;
 static int enable_cal_freq;
 struct cal_freq freq_ns_stats;
 static char calfreq_buffer[PAGE_SIZE];
 
-void update_min_max_freq_ns(struct waltgov_policy *wg_policy, u64 time)
+static void update_freq_ns(void *unused, struct cpufreq_policy *policy)
 {
-	struct cpufreq_policy *policy = wg_policy->policy;
-	u64 delta_ns;
+	update_min_max_freq_ns(policy);
+}
+
+static void freq_ns_hook_register(void)
+{
+	register_trace_android_rvh_cpufreq_transition(update_freq_ns,
+								NULL);
+	freq_ns_hook = true;
+}
+
+void update_min_max_freq_ns(struct cpufreq_policy *policy)
+{
+
+	struct walt_sched_cluster *cluster;
+
+	cluster = cpu_cluster(cpumask_first(policy->related_cpus));
+
+	if (!cluster)
+		return;
 
 	if (policy->cur == policy->min) {
-		if (!freq_ns_stats.min_max_freq_update_time)
-			delta_ns = time - wg_policy->last_freq_update_time;
-		else
-			delta_ns = time - freq_ns_stats.min_max_freq_update_time;
+		cluster->cal_freq_begin[MIN_FREQ] = ktime_get();
 
-		freq_ns_stats.min_freq_ns += delta_ns;
-		freq_ns_stats.min_max_freq_update_time = time;
-	} else if (policy->cur == policy->max) {
-		if (!freq_ns_stats.min_max_freq_update_time)
-			delta_ns = time - wg_policy->last_freq_update_time;
-		else
-			delta_ns = time - freq_ns_stats.min_max_freq_update_time;
+		cluster->cal_freq_flag[MIN_FREQ] = true;
+	} else if (cluster->cal_freq_flag[MIN_FREQ]) {
+		freq_ns_stats.min_freq_total +=
+				ktime_get() - cluster->cal_freq_begin[MIN_FREQ];
 
-		freq_ns_stats.max_freq_ns += delta_ns;
-		freq_ns_stats.min_max_freq_update_time = time;
+		cluster->cal_freq_flag[MIN_FREQ] = false;
+	}
+
+	if (policy->cur == policy->max) {
+		cluster->cal_freq_begin[MAX_FREQ] = ktime_get();
+
+		cluster->cal_freq_flag[MAX_FREQ] = true;
+	} else if (cluster->cal_freq_flag[MAX_FREQ]) {
+		freq_ns_stats.max_freq_total +=
+				ktime_get() - cluster->cal_freq_begin[MAX_FREQ];
+
+		cluster->cal_freq_flag[MAX_FREQ] = false;
 	}
 }
 
-void rollover_freq_ns_stats(u64 value)
+static void walt_freq_ns_init(void)
 {
-	freq_ns_stats.min_max_freq_update_time = 0;
+	struct walt_sched_cluster *cluster;
+	struct cpufreq_policy *policy;
+
+	if (unlikely(!freq_ns_hook))
+		freq_ns_hook_register();
+
+	for_each_sched_cluster(cluster) {
+		memset(cluster->cal_freq_begin, 0, sizeof(cluster->cal_freq_begin));
+		memset(cluster->cal_freq_flag, 0, sizeof(cluster->cal_freq_flag));
+		freq_ns_stats.min_freq_total = 0;
+		freq_ns_stats.max_freq_total = 0;
+
+		policy = cpufreq_cpu_get_raw(cluster_first_cpu(cluster));
+
+		update_min_max_freq_ns(policy);
+	}
 }
 
 static int cal_freq_dump_handler(const struct ctl_table *table, int write,
 				 void *buffer, size_t *lenp, loff_t *ppos)
 {
+	struct walt_sched_cluster *cluster;
+	struct cpufreq_policy *policy;
+
 	struct ctl_table tmp = {
 		.data = &enable_cal_freq,
 		.maxlen = sizeof(int),
@@ -657,8 +702,32 @@ static int cal_freq_dump_handler(const struct ctl_table *table, int write,
 		.extra2	= SYSCTL_ONE,
 	};
 
-	if (write || !enable_cal_freq)
+	if (write) {
+		char *value = buffer;
+
+		if ('1' == value[0] && !enable_stat_freq)
+			walt_freq_ns_init();
+
 		return proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
+	}
+
+	if (!enable_cal_freq)
+		return proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
+
+	for_each_sched_cluster(cluster) {
+		policy = cpufreq_cpu_get_raw(cluster_first_cpu(cluster));
+		if (policy->cur == policy->min) {
+			freq_ns_stats.min_freq_total +=
+					ktime_get() - cluster->cal_freq_begin[MIN_FREQ];
+			cluster->cal_freq_begin[MIN_FREQ] = ktime_get();
+		}
+
+		if (policy->cur == policy->max) {
+			freq_ns_stats.max_freq_total +=
+					ktime_get() - cluster->cal_freq_begin[MAX_FREQ];
+			cluster->cal_freq_begin[MAX_FREQ] = ktime_get();
+		}
+	}
 
 	tmp.data = &calfreq_buffer;
 	tmp.maxlen = sizeof(calfreq_buffer);
@@ -666,7 +735,7 @@ static int cal_freq_dump_handler(const struct ctl_table *table, int write,
 
 	scnprintf(calfreq_buffer, PAGE_SIZE,
 		  "min_freq_ns: %llu\nmax_freq_ns: %llu\n",
-		  freq_ns_stats.min_freq_ns, freq_ns_stats.max_freq_ns);
+		  freq_ns_stats.min_freq_total, freq_ns_stats.max_freq_total);
 
 	return proc_dostring(&tmp, write, buffer, lenp, ppos);
 }
