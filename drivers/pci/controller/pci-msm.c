@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
 #include <dt-bindings/interconnect/qcom,icc.h>
@@ -112,6 +112,7 @@
 
 #define PCIE20_PARF_DEBUG_INT_EN (0x190)
 #define PCIE20_PARF_DEBUG_INT_EN_L1SUB_TIMEOUT_BIT (BIT(0))
+#define PCIE20_PARF_AXI_MSTR_WR_NS_BDF_HALT (0x4A0)
 #define PCIE20_PARF_INT_ALL_2_STATUS (0x500)
 #define PCIE20_PARF_INT_ALL_2_CLEAR (0x504)
 #define PCIE20_PARF_INT_ALL_2_MASK (0X508)
@@ -1187,6 +1188,7 @@ struct msm_pcie_dev_t {
 	bool lpi_enable;
 	bool linkdown_recovery_enable;
 	bool gdsc_clk_drv_ss_nonvotable;
+	bool bdf_change_halt_en;
 
 	uint32_t pcie_parf_cesta_config;
 
@@ -6089,6 +6091,18 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 	msm_pcie_write_reg(dev->parf, PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT,
 				BIT(31) | val);
 
+	/**
+	 * By default explicitly mark BDF_CHANGE_HALT_EN to zero unless
+	 * bdf_change_halt_en is set from DT. there is HW errata in few devices
+	 * which is set to 1 by default.
+	 */
+	if (dev->bdf_change_halt_en)
+		msm_pcie_write_mask(dev->parf + PCIE20_PARF_AXI_MSTR_WR_NS_BDF_HALT,
+				   0, 1);
+	else
+		msm_pcie_write_mask(dev->parf + PCIE20_PARF_AXI_MSTR_WR_NS_BDF_HALT,
+				   0, 0);
+
 	/*
 	 * Clear PCIE_BW_MGT_INT_STATUS and PCIE_LINK_AUTO_BW_INT_STATUS to get
 	 * bandwidth change interrupt functionality. Those bits are by default set
@@ -8329,6 +8343,10 @@ static void msm_pcie_read_dt(struct msm_pcie_dev_t *pcie_dev, int rc_idx,
 	PCIE_DBG(pcie_dev, "L1ss is %s supported.\n", pcie_dev->l1ss_supported ?
 		"" : "not");
 
+	pcie_dev->bdf_change_halt_en = of_property_read_bool(of_node,
+				"qcom,bdf-change-halt-en");
+	PCIE_DBG(pcie_dev, "bdf_change_halt_en is %s supported.\n", pcie_dev->bdf_change_halt_en ?
+		"" : "not");
 	pcie_dev->l1_1_aspm_supported = pcie_dev->l1ss_supported;
 	pcie_dev->l1_2_aspm_supported = pcie_dev->l1ss_supported;
 	pcie_dev->l1_1_pcipm_supported = pcie_dev->l1ss_supported;
