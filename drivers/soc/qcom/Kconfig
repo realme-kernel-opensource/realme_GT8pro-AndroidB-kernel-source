@@ -976,6 +976,15 @@ config QCOM_DEBUG_SYMBOL
 	  driver allows other modules to get symbol addresses by traversing
 	  kallsyms table for debug usage.
 
+config QCOM_SDEI
+	tristate "Enable QCOM SDEI Support"
+	depends on ARM_SDE_INTERFACE
+	help
+	  This enables QCOM SDEI Support. This driver is based on ARM SDEI
+	  (Software Delegated Exception Interface) feature, allowing to register
+	  and enable vendor specific events such as watchdog bite, so that critical
+	  operations can be done in these scenarios.
+
 config MSM_PERFORMANCE
         tristate "msm performance driver to support userspace fmin/fmax request"
         help

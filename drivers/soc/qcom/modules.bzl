@@ -564,6 +564,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qcom_sdei",
+        out = "qcom_sdei.ko",
+        config = "CONFIG_QCOM_SDEI",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_sdei.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/minidump",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/msm_performance",
         out = "msm_performance.ko",
         config = "CONFIG_MSM_PERFORMANCE",
