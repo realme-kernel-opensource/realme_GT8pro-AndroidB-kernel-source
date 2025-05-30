@@ -5,7 +5,7 @@
  *
  * Copyright (C) 2016, Intel Corporation
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -427,12 +427,12 @@ out:
 				wg_policy->ipc_smart_freq,
 				final_freq);
 
+	assign_reasons_counter(wg_policy);
+
 	if (reset_need_freq_update)
 		wg_policy->need_freq_update = false;
 
 	post_update_cleanups(wg_policy);
-
-	assign_reasons_counter(wg_policy);
 
 	return final_freq;
 }

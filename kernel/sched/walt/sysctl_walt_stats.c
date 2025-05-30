@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
- * Copyright (c) Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <linux/cpufreq.h>
 #include <linux/kmemleak.h>
@@ -377,7 +376,8 @@ void assign_reasons_counter(struct waltgov_policy *wg_policy)
 		return;
 	}
 
-	for (int i = 0; i < CPUFREQ_REASONS; i++) {
+	/* start from index 1, as index 0 is reserved for CPUFREQ_REASON_LOAD. */
+	for (int i = 1; i < CPUFREQ_REASONS + 1; i++) {
 		if (BIT(i) & reasons)
 			cpufreq_reasons_counters[i][id]++;
 	}
