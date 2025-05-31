@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -368,12 +368,17 @@ static u8 virtio_clk_get_parent(struct clk_hw *hw)
 
 static int virtio_clk_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
 {
-	unsigned long parent_rate = virtio_clk_get_parent(hw);
+	long rate;
 
 	if (!req)
 		return 0;
 
-	return virtio_clk_round_rate(hw, req->rate, &parent_rate);
+	rate =  virtio_clk_round_rate(hw, req->rate, &req->best_parent_rate);
+	if (rate < 0)
+		return rate;
+
+	req->rate = rate;
+	return 0;
 }
 
 static const struct clk_ops clk_virtio_ops = {
