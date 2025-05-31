@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/syscore_ops.h>
@@ -92,6 +92,8 @@ static struct walt_related_thread_group
 			*related_thread_groups[MAX_NUM_CGROUP_COLOC_ID];
 static LIST_HEAD(active_related_thread_groups);
 static DEFINE_RWLOCK(related_thread_group_lock);
+
+#define sub_clamp(a, b) (((a) < (b)) ? 0 : (a) - (b))
 
 bool walt_is_idle_task(struct task_struct *p)
 {
@@ -894,38 +896,47 @@ static inline void account_load_subtractions(struct rq *rq)
 	struct load_subtractions *ls = wrq->load_subs;
 	int i;
 
+	/* busy time checks start */
 	for (i = 0; i < NUM_TRACKED_WINDOWS; i++) {
 		if (ls[i].window_start == ws) {
-			wrq->curr_runnable_sum -= ls[i].subs;
-			wrq->nt_curr_runnable_sum -= ls[i].new_subs;
+			if (wrq->curr_runnable_sum < ls[i].subs) {
+				WALT_BUG(WALT_BUG_WALT, NULL,
+					"for ws=%llu i=%d wrq->curr_runnable_sum=%llu is lesser than ls[i].subs=%llu",
+					ws, i, wrq->curr_runnable_sum, ls[i].subs);
+			}
+			if (wrq->nt_curr_runnable_sum < ls[i].new_subs) {
+				WALT_BUG(WALT_BUG_WALT, NULL,
+					"for ws=%llu i=%d wrq->nt_curr_runnable_sum=%llu is lesser than ls[i].new_subs=%llu",
+					ws, i, wrq->nt_curr_runnable_sum, ls[i].new_subs);
+			}
 		} else if (ls[i].window_start == prev_ws) {
-			wrq->prev_runnable_sum -= ls[i].subs;
-			wrq->nt_prev_runnable_sum -= ls[i].new_subs;
+			if (wrq->prev_runnable_sum < ls[i].subs) {
+				WALT_BUG(WALT_BUG_WALT, NULL,
+					"for prev_ws=%llu i=%d wrq->prev_runnable_sum=%llu is lesser than ls[i].subs=%llu",
+					prev_ws, i, wrq->prev_runnable_sum, ls[i].subs);
+			}
+			if (wrq->nt_prev_runnable_sum < ls[i].new_subs) {
+				WALT_BUG(WALT_BUG_WALT, NULL,
+					"for prev_ws=%llu i=%d wrq->nt_prev_runnable_sum=%llu is lesser than ls[i].new_subs=%llu",
+					prev_ws, i, wrq->nt_prev_runnable_sum, ls[i].new_subs);
+			}
+		}
+	}
+	/* busy time checks ends */
+
+	for (i = 0; i < NUM_TRACKED_WINDOWS; i++) {
+		if (ls[i].window_start == ws) {
+			wrq->curr_runnable_sum = sub_clamp(wrq->curr_runnable_sum, ls[i].subs);
+			wrq->nt_curr_runnable_sum =
+				sub_clamp(wrq->nt_curr_runnable_sum, ls[i].new_subs);
+		} else if (ls[i].window_start == prev_ws) {
+			wrq->prev_runnable_sum = sub_clamp(wrq->prev_runnable_sum, ls[i].subs);
+			wrq->nt_prev_runnable_sum =
+				sub_clamp(wrq->nt_prev_runnable_sum, ls[i].new_subs);
 		}
 
 		ls[i].subs = 0;
 		ls[i].new_subs = 0;
-	}
-
-	if ((s64)wrq->prev_runnable_sum < 0) {
-		WALT_BUG(WALT_BUG_WALT, NULL, "wrq->prev_runnable_sum=%llu < 0",
-				(s64)wrq->prev_runnable_sum);
-		wrq->prev_runnable_sum = 0;
-	}
-	if ((s64)wrq->curr_runnable_sum < 0) {
-		WALT_BUG(WALT_BUG_WALT, NULL, "wrq->curr_runnable_sum=%llu < 0",
-				(s64)wrq->curr_runnable_sum);
-		wrq->curr_runnable_sum = 0;
-	}
-	if ((s64)wrq->nt_prev_runnable_sum < 0) {
-		WALT_BUG(WALT_BUG_WALT, NULL, "wrq->nt_prev_runnable_sum=%llu < 0",
-				(s64)wrq->nt_prev_runnable_sum);
-		wrq->nt_prev_runnable_sum = 0;
-	}
-	if ((s64)wrq->nt_curr_runnable_sum < 0) {
-		WALT_BUG(WALT_BUG_WALT, NULL, "wrq->nt_curr_runnable_sum=%llu < 0",
-				(s64)wrq->nt_curr_runnable_sum);
-		wrq->nt_curr_runnable_sum = 0;
 	}
 }
 
@@ -1023,15 +1034,14 @@ static inline void migrate_inter_cluster_subtraction(struct task_struct *p, int 
 	struct walt_rq *src_wrq = &per_cpu(walt_rq, task_cpu);
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
+	/* busy time checks start */
 	if (src_wrq->curr_runnable_sum < wts->curr_window_cpu[task_cpu]) {
 		WALT_BUG(WALT_BUG_WALT, p,
 			 "pid=%u CPU%d src_crs=%llu is lesser than task_contrib=%u",
 			 p->pid, src_rq->cpu,
 			 src_wrq->curr_runnable_sum,
 			 wts->curr_window_cpu[task_cpu]);
-		src_wrq->curr_runnable_sum = wts->curr_window_cpu[task_cpu];
 	}
-	src_wrq->curr_runnable_sum -= wts->curr_window_cpu[task_cpu];
 
 	if (src_wrq->prev_runnable_sum < wts->prev_window_cpu[task_cpu]) {
 		WALT_BUG(WALT_BUG_WALT, p,
@@ -1039,9 +1049,7 @@ static inline void migrate_inter_cluster_subtraction(struct task_struct *p, int 
 			 p->pid, src_rq->cpu,
 			 src_wrq->prev_runnable_sum,
 			 wts->prev_window_cpu[task_cpu]);
-		 src_wrq->prev_runnable_sum = wts->prev_window_cpu[task_cpu];
 	}
-	src_wrq->prev_runnable_sum -= wts->prev_window_cpu[task_cpu];
 
 	if (new_task) {
 		if (src_wrq->nt_curr_runnable_sum < wts->curr_window_cpu[task_cpu]) {
@@ -1050,10 +1058,7 @@ static inline void migrate_inter_cluster_subtraction(struct task_struct *p, int 
 				 p->pid, src_rq->cpu,
 				 src_wrq->nt_curr_runnable_sum,
 				 wts->curr_window_cpu[task_cpu]);
-			src_wrq->nt_curr_runnable_sum = wts->curr_window_cpu[task_cpu];
 		}
-		src_wrq->nt_curr_runnable_sum -=
-				wts->curr_window_cpu[task_cpu];
 
 		if (src_wrq->nt_prev_runnable_sum < wts->prev_window_cpu[task_cpu]) {
 			WALT_BUG(WALT_BUG_WALT, p,
@@ -1061,10 +1066,19 @@ static inline void migrate_inter_cluster_subtraction(struct task_struct *p, int 
 				 p->pid, src_rq->cpu,
 				 src_wrq->nt_prev_runnable_sum,
 				 wts->prev_window_cpu[task_cpu]);
-			src_wrq->nt_prev_runnable_sum = wts->prev_window_cpu[task_cpu];
 		}
-		src_wrq->nt_prev_runnable_sum -=
-				wts->prev_window_cpu[task_cpu];
+	}
+	/* busy time checks ends */
+
+	src_wrq->curr_runnable_sum =
+		sub_clamp(src_wrq->curr_runnable_sum, wts->curr_window_cpu[task_cpu]);
+	src_wrq->prev_runnable_sum =
+		sub_clamp(src_wrq->prev_runnable_sum, wts->prev_window_cpu[task_cpu]);
+	if (new_task) {
+		src_wrq->nt_curr_runnable_sum =
+			sub_clamp(src_wrq->nt_curr_runnable_sum, wts->curr_window_cpu[task_cpu]);
+		src_wrq->nt_prev_runnable_sum =
+			sub_clamp(src_wrq->nt_prev_runnable_sum, wts->prev_window_cpu[task_cpu]);
 	}
 
 	wts->curr_window_cpu[task_cpu] = 0;
@@ -1200,6 +1214,7 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 	long pstate;
 	struct walt_rq *src_wrq = &per_cpu(walt_rq, cpu_of(src_rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
+	bool double_migrate = false;
 
 	if (!p->on_rq && READ_ONCE(p->__state) != TASK_WAKING) {
 		WALT_BUG(WALT_BUG_WALT, p,
@@ -1221,6 +1236,14 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 		WALT_BUG(WALT_BUG_UPSTREAM, p, "on CPU %d task %s(%d) not on src_rq %d",
 				raw_smp_processor_id(), p->comm, p->pid, src_rq->cpu);
 
+	/* For sched_delayed tasks, enqueue_after_migration hasn't been
+	 * consumed yet at enqueue time.
+	 * A second migration can occur before any actual scheduling switch
+	 * happens.
+	 */
+	if (wts->enqueue_after_migration)
+		double_migrate = true;
+
 	wts->new_cpu = new_cpu;
 
 	if (!same_freq_domain(task_cpu(p), new_cpu))
@@ -1235,6 +1258,9 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 	 * Update task's cycles wrt to the new cpu.
 	 */
 	wts->cpu_cycles = walt_get_cycle_counts_cb(new_cpu, wallclock);
+
+	if (double_migrate)
+		goto skip_src_rq_sub;
 
 	if (wts->window_start != src_wrq->window_start)
 		WALT_BUG(WALT_BUG_WALT, p,
@@ -1266,16 +1292,56 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 		src_nt_curr_runnable_sum = &cpu_time->nt_curr_runnable_sum;
 		src_nt_prev_runnable_sum = &cpu_time->nt_prev_runnable_sum;
 
+		/* busy time checks start */
 		if (wts->curr_window) {
-			*src_curr_runnable_sum -= wts->curr_window;
-			if (new_task)
-				*src_nt_curr_runnable_sum -= wts->curr_window;
+			if (*src_curr_runnable_sum < wts->curr_window) {
+				WALT_BUG(WALT_BUG_WALT, p,
+					 "migration subtraction for grp pid=%d CPU=%d src_crs=%llu is lesser than task_contrib=%u",
+					 p->pid, cpu_of(src_rq), *src_curr_runnable_sum,
+					 wts->curr_window);
+			}
+			if (new_task) {
+				if (*src_nt_curr_runnable_sum < wts->curr_window) {
+					WALT_BUG(WALT_BUG_WALT, p,
+					 "migration subtraction for grp pid=%d CPU=%d src_nt_crs=%llu is lesser than task_contrib=%u",
+					 p->pid, cpu_of(src_rq), *src_nt_curr_runnable_sum,
+					 wts->curr_window);
+				}
+			}
 		}
 
 		if (wts->prev_window) {
-			*src_prev_runnable_sum -= wts->prev_window;
+			if (*src_prev_runnable_sum < wts->prev_window) {
+				WALT_BUG(WALT_BUG_WALT, p,
+				 "migration subtraction for grp pid=%d CPU=%d src_prs=%llu is lesser than task_contrib=%u",
+				 p->pid, cpu_of(src_rq), *src_prev_runnable_sum,
+				 wts->prev_window);
+			}
+			if (new_task) {
+				if (*src_nt_prev_runnable_sum < wts->prev_window) {
+					WALT_BUG(WALT_BUG_WALT, p,
+					 "migration subtraction for grp pid=%d CPU=%d src_nt_prs=%llu is lesser than task_contrib=%u",
+					 p->pid, cpu_of(src_rq), *src_nt_prev_runnable_sum,
+					 wts->prev_window);
+				}
+			}
+		}
+		/* busy time checks ends */
+
+		if (wts->curr_window) {
+			*src_curr_runnable_sum =
+				sub_clamp(*src_curr_runnable_sum, wts->curr_window);
 			if (new_task)
-				*src_nt_prev_runnable_sum -= wts->prev_window;
+				*src_nt_curr_runnable_sum =
+					sub_clamp(*src_nt_curr_runnable_sum, wts->curr_window);
+		}
+
+		if (wts->prev_window) {
+			*src_prev_runnable_sum =
+				sub_clamp(*src_prev_runnable_sum, wts->prev_window);
+			if (new_task)
+				*src_nt_prev_runnable_sum =
+					sub_clamp(*src_nt_prev_runnable_sum, wts->prev_window);
 		}
 	} else {
 		if (wts->enqueue_after_migration == 2)
@@ -1284,6 +1350,7 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 
 	migrate_top_tasks_subtraction(p, src_rq);
 
+skip_src_rq_sub:
 	if (is_ed_enabled() && (p == src_wrq->ed_task))
 		src_wrq->ed_task = NULL;
 
@@ -3859,23 +3926,20 @@ static void transfer_busy_time(struct rq *rq,
 		src_nt_prev_runnable_sum = &wrq->nt_prev_runnable_sum;
 		dst_nt_prev_runnable_sum = &cpu_time->nt_prev_runnable_sum;
 
+		/* busy time checks start */
 		if (*src_curr_runnable_sum < wts->curr_window_cpu[cpu]) {
 			WALT_BUG(WALT_BUG_WALT, p,
 				 "pid=%u CPU=%d event=%d src_crs=%llu is lesser than task_contrib=%u",
 				 p->pid, cpu, event, *src_curr_runnable_sum,
 				 wts->curr_window_cpu[cpu]);
-			*src_curr_runnable_sum = wts->curr_window_cpu[cpu];
 		}
-		*src_curr_runnable_sum -= wts->curr_window_cpu[cpu];
 
 		if (*src_prev_runnable_sum < wts->prev_window_cpu[cpu]) {
 			WALT_BUG(WALT_BUG_WALT, p,
 				 "pid=%u CPU=%d event=%d src_prs=%llu is lesser than task_contrib=%u",
 				 p->pid, cpu, event, *src_prev_runnable_sum,
 				 wts->prev_window_cpu[cpu]);
-			*src_prev_runnable_sum = wts->prev_window_cpu[cpu];
 		}
-		*src_prev_runnable_sum -= wts->prev_window_cpu[cpu];
 
 		if (new_task) {
 			if (*src_nt_curr_runnable_sum < wts->curr_window_cpu[cpu]) {
@@ -3884,10 +3948,7 @@ static void transfer_busy_time(struct rq *rq,
 					 p->pid, cpu, event,
 					 *src_nt_curr_runnable_sum,
 					 wts->curr_window_cpu[cpu]);
-				*src_nt_curr_runnable_sum = wts->curr_window_cpu[cpu];
 			}
-			*src_nt_curr_runnable_sum -=
-					wts->curr_window_cpu[cpu];
 
 			if (*src_nt_prev_runnable_sum < wts->prev_window_cpu[cpu]) {
 				WALT_BUG(WALT_BUG_WALT, p,
@@ -3895,10 +3956,19 @@ static void transfer_busy_time(struct rq *rq,
 					 p->pid, cpu, event,
 					 *src_nt_prev_runnable_sum,
 					 wts->prev_window_cpu[cpu]);
-				*src_nt_prev_runnable_sum = wts->prev_window_cpu[cpu];
 			}
-			*src_nt_prev_runnable_sum -=
-					wts->prev_window_cpu[cpu];
+		}
+		/* busy time checks ends */
+
+		*src_curr_runnable_sum =
+			sub_clamp(*src_curr_runnable_sum, wts->curr_window_cpu[cpu]);
+		*src_prev_runnable_sum =
+			sub_clamp(*src_prev_runnable_sum, wts->prev_window_cpu[cpu]);
+		if (new_task) {
+			*src_nt_curr_runnable_sum =
+				sub_clamp(*src_nt_curr_runnable_sum, wts->curr_window_cpu[cpu]);
+			*src_nt_prev_runnable_sum =
+				sub_clamp(*src_nt_prev_runnable_sum, wts->prev_window_cpu[cpu]);
 		}
 
 		update_cluster_load_subtractions(p, cpu,
@@ -3917,23 +3987,20 @@ static void transfer_busy_time(struct rq *rq,
 		src_nt_prev_runnable_sum = &cpu_time->nt_prev_runnable_sum;
 		dst_nt_prev_runnable_sum = &wrq->nt_prev_runnable_sum;
 
+		/* busy time checks start */
 		if (*src_curr_runnable_sum < wts->curr_window) {
 			WALT_BUG(WALT_BUG_WALT, p,
 				 "WALT-UG pid=%u CPU=%d event=%d src_crs=%llu is lesser than task_contrib=%u",
 				 p->pid, cpu, event, *src_curr_runnable_sum,
 				 wts->curr_window);
-			*src_curr_runnable_sum = wts->curr_window;
 		}
-		*src_curr_runnable_sum -= wts->curr_window;
 
 		if (*src_prev_runnable_sum < wts->prev_window) {
 			WALT_BUG(WALT_BUG_WALT, p,
 				 "pid=%u CPU=%d event=%d src_prs=%llu is lesser than task_contrib=%u",
 				 p->pid, cpu, event, *src_prev_runnable_sum,
 				 wts->prev_window);
-			*src_prev_runnable_sum = wts->prev_window;
 		}
-		*src_prev_runnable_sum -= wts->prev_window;
 
 		if (new_task) {
 			if (*src_nt_curr_runnable_sum < wts->curr_window) {
@@ -3942,9 +4009,7 @@ static void transfer_busy_time(struct rq *rq,
 						p->pid, cpu, event,
 						*src_nt_curr_runnable_sum,
 						wts->curr_window);
-				*src_nt_curr_runnable_sum = wts->curr_window;
 			}
-			*src_nt_curr_runnable_sum -= wts->curr_window;
 
 			if (*src_nt_prev_runnable_sum < wts->prev_window) {
 				WALT_BUG(WALT_BUG_WALT, p,
@@ -3952,11 +4017,18 @@ static void transfer_busy_time(struct rq *rq,
 					 p->pid, cpu, event,
 					 *src_nt_prev_runnable_sum,
 					 wts->prev_window);
-				*src_nt_prev_runnable_sum = wts->prev_window;
 			}
-			*src_nt_prev_runnable_sum -= wts->prev_window;
 		}
+		/* busy time checks ends */
 
+		*src_curr_runnable_sum = sub_clamp(*src_curr_runnable_sum, wts->curr_window);
+		*src_prev_runnable_sum = sub_clamp(*src_prev_runnable_sum, wts->prev_window);
+		if (new_task) {
+			*src_nt_curr_runnable_sum =
+				sub_clamp(*src_nt_curr_runnable_sum, wts->curr_window);
+			*src_nt_prev_runnable_sum =
+				sub_clamp(*src_nt_prev_runnable_sum, wts->prev_window);
+		}
 		/*
 		 * Need to reset curr/prev windows for all CPUs, not just the
 		 * ones in the same cluster. Since inter cluster migrations
