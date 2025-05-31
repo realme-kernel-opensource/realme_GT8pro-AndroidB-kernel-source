@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "mem_buf_vmperm: " fmt
@@ -15,6 +15,7 @@
 #include "mem-buf-ids.h"
 
 /*
+ * @dtor - See mem_buf_dma_buf_set_destructor()
  * @kref - A refcount for @sgt and @sgt's private data, which
  *	is expected to contain a 'struct mem_buf_vmperm'
  * @rcu - Usage based off of mm/shrinker.c
@@ -298,8 +299,6 @@ EXPORT_SYMBOL_GPL(mem_buf_vmperm_free);
  *
  * When called from a gunyah notifier, do nothing unless in 'zombie state'.
  * A memory-region is considered a 'zombie' if the local dma-buf is closed.
- *
- * We won't/can't 'unwind' the destructor if reclaim fails.
  */
 int mem_buf_vmperm_try_reclaim(struct mem_buf_vmperm *vmperm, bool from_notifier)
 {
@@ -313,13 +312,14 @@ int mem_buf_vmperm_try_reclaim(struct mem_buf_vmperm *vmperm, bool from_notifier
 
 	if (vmperm->dtor) {
 		ret = vmperm->dtor(vmperm->dtor_data);
-		if (ret) {
-			pr_err_ratelimited("dma-buf destructor %pS failed with %d\n",
-					vmperm->dtor, ret);
-			goto out;
-		}
-		/* Ensure dtor only called once if it succeeds */
+		/*
+		 * Clear dtor to prevent it from being called later by gh_notifier path.
+		 * Errors are logged, but otherwise ignored (can't unclose a dmabuf's file).
+		 */
 		vmperm->dtor = NULL;
+		if (ret)
+			pr_err_ratelimited("dma-buf destructor %pS hdl: %#x failed with %d\n",
+					vmperm->dtor, vmperm->memparcel_hdl, ret);
 	}
 
 	if (vmperm->flags & MEM_BUF_WRAPPER_FLAG_LENDSHARE)
@@ -327,7 +327,6 @@ int mem_buf_vmperm_try_reclaim(struct mem_buf_vmperm *vmperm, bool from_notifier
 	else if (vmperm->flags & MEM_BUF_WRAPPER_FLAG_ACCEPT)
 		ret = mem_buf_vmperm_relinquish(vmperm);
 
-out:
 	if (ret)
 		vmperm->flags |= MEM_BUF_WRAPPER_FLAG_ZOMBIE;
 	mutex_unlock(&vmperm->lock);
@@ -363,6 +362,12 @@ bool is_mem_buf_dma_buf(struct dma_buf *dmabuf)
 }
 EXPORT_SYMBOL_GPL(is_mem_buf_dma_buf);
 
+/*
+ * No new users of this API should be added.
+ *
+ * @dtor - Called during dma_buf->ops->release(). The return value is ignored;
+ * as the dma-buf file is already closed.
+ */
 int mem_buf_dma_buf_set_destructor(struct dma_buf *buf,
 				   mem_buf_dma_buf_destructor dtor,
 				   void *dtor_data)
