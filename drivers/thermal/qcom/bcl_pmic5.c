@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "%s:%s " fmt, KBUILD_MODNAME, __func__
@@ -38,7 +38,8 @@
 #define BCL_IBAT_READ         0x86
 #define BCL_IBAT_SCALING_UA   78127
 #define BCL_IBAT_CCM_SCALING_UA   15625
-#define BCL_IBAT_CCM_LANDO_SCALING_UA   39062
+#define BCL_IBAT_CCM_LANDO_SCALING_UA   152
+#define BCL_ADC_IBAT_CCM_LANDO_SCALING_UA   39062
 #define BCL_IBAT_SCALING_REV4_UA  93753
 
 #define BCL_VBAT_READ         0x76
@@ -372,7 +373,7 @@ static int bcl_set_ibat(struct thermal_zone_device *tz, int low, int high)
 				bat_data->dev->ibat_ext_range_factor);
 	else if (bat_data->dev->ibat_ccm_lando_enabled)
 		convert_ibat_to_adc_val(bat_data->dev, &thresh_value,
-				BCL_IBAT_CCM_LANDO_SCALING_UA *
+				BCL_ADC_IBAT_CCM_LANDO_SCALING_UA *
 				bat_data->dev->ibat_ext_range_factor);
 	else if (bat_data->dev->dig_major >= BCL_GEN4_MAJOR_REV)
 		convert_ibat_to_adc_val(bat_data->dev, &thresh_value,
