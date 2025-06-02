@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -4013,11 +4013,8 @@ static int gcc_canoe_probe(struct platform_device *pdev)
 			   BIT(14), BIT(14));
 
 	ret = qcom_cc_really_probe(&pdev->dev, &gcc_canoe_desc, regmap);
-	if (ret) {
-		if (ret != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Failed to register GCC clocks ret=%d\n", ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Failed to register GCC clocks\n");
 
 	dev_info(&pdev->dev, "Registered GCC clocks\n");
 
