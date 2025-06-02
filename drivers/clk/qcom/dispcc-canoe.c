@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -2281,8 +2281,7 @@ static int disp_cc_canoe_probe(struct platform_device *pdev)
 
 	ret = qcom_cc_really_probe(&pdev->dev, &disp_cc_canoe_desc, regmap);
 	if (ret) {
-		if (ret != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Failed to register DISP CC clocks ret=%d\n", ret);
+		dev_err_probe(&pdev->dev, ret, "Failed to register DISP CC clocks\n");
 		goto err;
 	}
 
