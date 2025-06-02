@@ -53,6 +53,7 @@ enum {
 	HW_PLATFORM_ATP = 33,
 	HW_PLATFORM_IDP = 34,
 	HW_PLATFORM_WDP = 36,
+	HW_PLATFORM_CRD = 40,
 	HW_PLATFORM_WRD = 45,
 	HW_PLATFORM_INVALID
 };
@@ -79,6 +80,7 @@ static const char * const hw_platform[] = {
 	[HW_PLATFORM_ATP] = "ATP",
 	[HW_PLATFORM_IDP] = "IDP",
 	[HW_PLATFORM_WDP] = "WDP",
+	[HW_PLATFORM_CRD] = "CRD",
 	[HW_PLATFORM_WRD] = "WRD",
 };
 
@@ -463,6 +465,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(MSM8326) },
 	{ qcom_board_id(MSM8916) },
 	{ qcom_board_id(MSM8994) },
+	{ qcom_board_id(X1P42100) },
 	{ qcom_board_id_named(APQ8074PRO_AA, "APQ8074PRO-AA") },
 	{ qcom_board_id_named(APQ8074PRO_AB, "APQ8074PRO-AB") },
 	{ qcom_board_id_named(APQ8074PRO_AC, "APQ8074PRO-AC") },
