@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  */
 
@@ -4200,9 +4200,9 @@ static int qnoc_probe(struct platform_device *pdev)
 
 	ret = qcom_icc_rpmh_probe(pdev);
 	if (ret)
-		dev_err(&pdev->dev, "failed to register ICC provider: %d\n", ret);
-	else
-		dev_info(&pdev->dev, "Registered ICC provider\n");
+		return dev_err_probe(&pdev->dev, ret, "failed to register ICC provider\n");
+
+	dev_info(&pdev->dev, "Registered ICC provider\n");
 
 	return ret;
 }
