@@ -84,13 +84,6 @@
 
 #define MAX_EXIT_REASON_SIZE			4
 
-/* Types of Hyp heap - Root and RM Heap */
-enum gh_hyp_heap_label {
-	GH_HYP_HEAP_ROOT = 0,
-	GH_HYP_HEAP_RM,
-	GH_HYP_HEAP_OBJ_MAX
-};
-
 struct gh_rm_notif_mem_shared_payload {
 	u32 mem_handle;
 	u8 mem_type;
@@ -434,12 +427,6 @@ int gh_rm_mem_donate(u8 mem_type, u8 flags, gh_label_t label,
 		   struct gh_acl_desc *acl_desc, struct gh_sgl_desc *sgl_desc,
 		   struct gh_mem_attr_desc *mem_attr_desc,
 		   gh_memparcel_handle_t *handle);
-int gh_rm_heap_query(u32 heap_handle, u8 type,
-		void **response, size_t *resp_size);
-int gh_rm_add_heap_memory(u32 heap_handle,
-		gh_memparcel_handle_t memparcel_handle);
-int gh_rm_remove_heap_memory(u32 heap_handle,
-		gh_memparcel_handle_t memparcel_handle);
 int gh_rm_mem_notify(gh_memparcel_handle_t handle, u8 flags,
 		     gh_label_t mem_info_tag,
 		     struct gh_notify_vmid_desc *vmid_desc);
@@ -705,24 +692,6 @@ static inline int gh_rm_mem_donate(u8 mem_type, u8 flags, gh_label_t label,
 		   struct gh_acl_desc *acl_desc, struct gh_sgl_desc *sgl_desc,
 		   struct gh_mem_attr_desc *mem_attr_desc,
 		   gh_memparcel_handle_t *handle)
-{
-	return -EINVAL;
-}
-
-static inline int gh_rm_heap_query(u32 heap_handle, u8 type,
-		void **response, size_t *resp_size)
-{
-	return -EINVAL;
-}
-
-static inline int gh_rm_add_heap_memory(u32 heap_handle,
-		gh_memparcel_handle_t memparcel_handle)
-{
-	return -EINVAL;
-}
-
-static inline int gh_rm_remove_heap_memory(u32 heap_handle,
-		gh_memparcel_handle_t memparcel_handle)
 {
 	return -EINVAL;
 }

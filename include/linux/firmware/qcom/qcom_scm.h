@@ -127,7 +127,6 @@ enum qcom_scm_custom_reset_type {
 #define QCOM_SCM_VMID_TVM			0x2D
 #define QCOM_SCM_VMID_OEMVM			0x31
 #define QCOM_SCM_VMID_SOCCP			0x3C
-#define QCOM_SCM_VMID_GH_RM			0xFF
 
 #define QCOM_SCM_PERM_RW (QCOM_SCM_PERM_READ | QCOM_SCM_PERM_WRITE)
 #define QCOM_SCM_PERM_RWX (QCOM_SCM_PERM_RW | QCOM_SCM_PERM_EXEC)
