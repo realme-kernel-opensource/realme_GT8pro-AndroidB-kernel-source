@@ -24,6 +24,7 @@ canoe_tuivm_config = {
     "CONFIG_HVC_GUNYAH_CONSOLE": "y",
     "CONFIG_I2C_MSM_GENI": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
+    "CONFIG_MODULE_SIG_FORCE": "y",
     "CONFIG_MSM_GPI_DMA": "y",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_ALOR": "m",
@@ -65,5 +66,4 @@ canoe_tuivm_config = {
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_INTERCONNECT_CLK": "m",
     "CONFIG_PSI": "y",
-    "CONFIG_QCOM_WATCHDOG_WAKEUP_ENABLE": "n",
 }

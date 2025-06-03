@@ -2385,9 +2385,6 @@ static int ufs_qcom_apply_dev_quirks(struct ufs_hba *hba)
 	if (hba->dev_info.wmanufacturerid == UFS_VENDOR_MICRON)
 		hba->dev_quirks |= UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM;
 
-	if (hba->caps & UFSHCD_CAP_RPM_AUTOSUSPEND)
-		hba->host->rpm_autosuspend_delay = UFS_QCOM_AUTO_SUSPEND_DELAY;
-
 	return err;
 }
 
@@ -2473,7 +2470,9 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	if (!host->disable_lpm) {
-		hba->caps |= UFSHCD_CAP_CLK_SCALING |
+		hba->caps |= UFSHCD_CAP_CLK_GATING |
+			UFSHCD_CAP_HIBERN8_WITH_CLK_GATING |
+			UFSHCD_CAP_CLK_SCALING |
 			UFSHCD_CAP_AUTO_BKOPS_SUSPEND |
 			UFSHCD_CAP_AGGR_POWER_COLLAPSE |
 			UFSHCD_CAP_RPM_AUTOSUSPEND |
@@ -3320,6 +3319,7 @@ static int ufs_qcom_set_cur_therm_state(struct thermal_cooling_device *tcd,
 		/* Set the default auto-hiberate idle timer to 5 ms */
 		ufshcd_auto_hibern8_update(hba, ufs_qcom_us_to_ahit(5000));
 
+		/* Set the default auto suspend delay to 3000 ms */
 		shost_for_each_device(sdev, hba->host)
 			pm_runtime_set_autosuspend_delay(&sdev->sdev_gendev,
 						UFS_QCOM_AUTO_SUSPEND_DELAY);
