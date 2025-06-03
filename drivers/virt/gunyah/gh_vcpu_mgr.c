@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt)	"gh_vcpu_mgr: " fmt
@@ -231,7 +231,7 @@ static int gh_unpopulate_vm_vcpu_info(gh_vmid_t vmid, gh_label_t cpu_idx,
 	if (vm && vm->is_vcpu_info_populated) {
 		vcpu = xa_load(&vm->vcpus, cpu_idx);
 		wakeup_source_unregister(vcpu->ws);
-		if (vcpu->vcpu_thread) {
+		if (vcpu->vcpu_thread && vcpu->gunyah_vcpu) {
 			vcpu->gunyah_vcpu->vcpu_run->immediate_exit = true;
 			complete_all(&vcpu->gunyah_vcpu->ready);
 		}
@@ -445,6 +445,7 @@ static int gh_vcpu_mgr_reg_rm_cbs(void)
 static int __maybe_unused gh_vcpu_kthread(void *data)
 {
 	struct gh_proxy_vcpu *proxy_vcpu = (struct gh_proxy_vcpu *)data;
+	struct gh_proxy_vm *vm = proxy_vcpu->vm;
 	struct gunyah_vcpu *vcpu = proxy_vcpu->gunyah_vcpu;
 	unsigned long resume_data[3] = { 0 };
 	struct gunyah_hypercall_vcpu_run_resp vcpu_run_resp;
@@ -516,6 +517,17 @@ static int __maybe_unused gh_vcpu_kthread(void *data)
 
 		try_to_freeze();
 	}
+
+	/* The cleanup work in vcpu unpopulate is only used to wakeup kthread.
+	 * Once kthread is already in the exit flow, cleanup can be skipped.
+	 */
+	mutex_lock(&gh_vm_mutex);
+	if (vm) {
+		proxy_vcpu = xa_load(&vm->vcpus, vcpu->ticket.label);
+		if (proxy_vcpu)
+			proxy_vcpu->gunyah_vcpu = NULL;
+	}
+	mutex_unlock(&gh_vm_mutex);
 
 	gunyah_vm_put(vcpu->ghvm);
 
