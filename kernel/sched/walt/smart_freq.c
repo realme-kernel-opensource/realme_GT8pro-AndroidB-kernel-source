@@ -88,7 +88,7 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 		void __user *buffer, size_t *lenp,
 		loff_t *ppos)
 {
-	int ret;
+	int ret = 0;
 	int i;
 	int id = -1;
 	unsigned int size = 0;
@@ -110,6 +110,33 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 				write, buffer, lenp, ppos);
 	}
 
+	/*
+	 * if a malformed (odd number of entries) or beyond LEGACY_MART_FREQ reason
+	 * is specified reject all
+	 */
+	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
+	if (ret)
+		goto out;
+
+
+	for (i = 0; i < LEGACY_SMART_FREQ*2; i++) {
+		if (val[i] == -1)
+			break;
+
+		if (i%2 == 0 && (val[i] < 0 || val[i] >= LEGACY_SMART_FREQ)) {
+			ret = -EINVAL;
+			goto out;
+		}
+
+		size++;
+	}
+
+	if (size%2 != 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* correct input - lets update */
 	mutex_lock(&freq_reason_mutex);
 
 	if (data == &sysctl_legacy_freq_levels_cluster0[0])
@@ -121,25 +148,6 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 	else if (data == &sysctl_legacy_freq_levels_cluster3[0])
 		id = 3;
 
-	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
-	if (ret)
-		goto exit;
-
-	ret = -EINVAL;
-
-	for (i = 0; i < LEGACY_SMART_FREQ*2; i++) {
-		if (val[i] == -1)
-			break;
-
-		if (i%2 == 0 && (val[i] < 0 || val[i] >= LEGACY_SMART_FREQ))
-			goto exit;
-
-		size++;
-	}
-
-	if (size%2 != 0)
-		goto exit;
-
 	for (i = 0; i < size; i += 2) {
 		default_freq_config[id].legacy_reason_config[val[i]].freq_allowed =
 			val[i+1];
@@ -147,24 +155,14 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 			BIT(val[i]);
 	}
 
-	ret = 0;
-	goto out;
-
-exit:
-	default_freq_config[id].smart_freq_participation_mask = BIT(NO_REASON_SMART_FREQ);
-
-	for (i = 0; i < LEGACY_SMART_FREQ; i++) {
-		default_freq_config[id].legacy_reason_config[i].freq_allowed =
-			FREQ_QOS_MAX_DEFAULT_VALUE;
-	}
-
-out:
+	/* reset NO_REASON's freq to IPC_A */
 	if (default_freq_config[id].smart_freq_ipc_participation_mask) {
 		default_freq_config[id].legacy_reason_config[NO_REASON_SMART_FREQ].freq_allowed =
 			default_freq_config[id].ipc_reason_config[IPC_A].freq_allowed;
 	}
 
 	mutex_unlock(&freq_reason_mutex);
+out:
 	return ret;
 }
 
