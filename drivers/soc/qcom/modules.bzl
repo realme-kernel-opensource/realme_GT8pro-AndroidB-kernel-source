@@ -1489,6 +1489,21 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/spmi-pmic-err-debug",
+        out = "spmi-pmic-err-debug.ko",
+        config = "CONFIG_SPMI_PMIC_ERR_DBG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/spmi-pmic-err-debug.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/nvmem/qfprom.c",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/rq_stats",
         out = "rq_stats.ko",
         config = "CONFIG_QCOM_RUN_QUEUE_STATS",
