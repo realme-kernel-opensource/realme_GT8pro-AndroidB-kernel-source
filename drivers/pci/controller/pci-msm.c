@@ -6188,16 +6188,18 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 	PCIE_DBG(dev, "RC%d: configure ECAM for bus range:%d\n",
 			dev->rc_idx, num_buses);
 
-	cfg1_ecam_base = cfg0_ecam_base + SZ_1M;
-	cfg1_ecam_limit = cfg1_ecam_base + (SZ_1M * (num_buses - 2)) - 1;
-
 	/* IATU configuration for bus 1 */
 	msm_pcie_iatu_config_shift(dev, 0, PCIE20_CTRL1_TYPE_CFG0,
 				cfg0_ecam_base, cfg0_ecam_limit);
 
-	/* IATU configuration for buses 2-255 */
-	msm_pcie_iatu_config_shift(dev, 1, PCIE20_CTRL1_TYPE_CFG1,
-				cfg1_ecam_base, cfg1_ecam_limit);
+	if (num_buses > 2) {
+		cfg1_ecam_base = cfg0_ecam_base + SZ_1M;
+		cfg1_ecam_limit = cfg1_ecam_base + (SZ_1M * (num_buses - 2)) - 1;
+
+		/* IATU configuration for buses 2-255 */
+		msm_pcie_iatu_config_shift(dev, 1, PCIE20_CTRL1_TYPE_CFG1,
+					cfg1_ecam_base, cfg1_ecam_limit);
+	}
 
 	msm_pcie_iatu_setup_ecam_blocker(dev);
 	return ret;
@@ -6572,18 +6574,26 @@ int msm_pcie_enumerate(u32 rc_idx)
 	int domain_nr;
 	struct msm_pcie_dev_t *dev = msm_pcie_dev[rc_idx];
 	struct pci_dev *pcidev = NULL;
-	struct pci_host_bridge *bridge = dev->bridge;
+	struct pci_host_bridge *bridge;
 	u32 ids, vendor_id, device_id;
 	struct pci_config_window *cfg;
 	const struct pci_ecam_ops *ecam_ops = &msm_pcie_ops;
 	struct resource_entry *bus;
 	LIST_HEAD(res);
 
+	if (!dev) {
+		PCIE_DBG(dev,
+			"PCIe: RC%d: has not been successfully probed yet\n",
+			rc_idx);
+		return -EPROBE_DEFER;
+	}
+
 	mutex_lock(&dev->enumerate_lock);
 
 	PCIE_DBG(dev, "Enumerate RC%d\n", rc_idx);
 
 	dev->fmd_enable = false;
+	bridge = dev->bridge;
 	if (!dev->driver_probed) {
 		PCIE_DBG(dev,
 			"PCIe: RC%d: has not been successfully probed yet\n",
@@ -9118,7 +9128,7 @@ int msm_pcie_set_target_link_speed(u32 rc_idx, u32 target_link_speed,
 
 	pcie_dev = msm_pcie_dev[rc_idx];
 
-	if (!pcie_dev->driver_probed) {
+	if (!pcie_dev || !pcie_dev->driver_probed) {
 		PCIE_DBG(pcie_dev,
 			"PCIe: RC%d: has not been successfully probed yet\n",
 			pcie_dev->rc_idx);

@@ -245,6 +245,11 @@
 #define XGMAC_TIMESTAMP_BASE_ADDR	0x00000d00
 #define XGMAC_PPS_BASE_ADDR		0x00000d80
 
+/* MAC extended config 1 */
+#define XGMAC_EXT_CFG1			0x144
+#define XGMAC_CONFIG1_SAVE_EN		BIT(24)
+#define XGMAC_CONFIG1_SPLM(v)		FIELD_PREP(GENMASK(9, 8), v)
+
 static inline u32 xgmac_timestamp_base_addr(const struct dwxgmac_addrs *addrs)
 {
 	u32 addr;
@@ -275,6 +280,8 @@ static inline u32 xgmac_pps_base_addr(const struct dwxgmac_addrs *addrs,
 #define XGMAC_TXTIMESTAMP_NSEC(addrs)		(xgmac_timestamp_base_addr(addrs) + 0x30)
 #define XGMAC_TXTSSTSLO			GENMASK(30, 0)
 #define XGMAC_TXTIMESTAMP_SEC(addrs)		(xgmac_timestamp_base_addr(addrs) + 0x34)
+#define XGMAC_TXTIMESTAMP_STATUS_PKTID(addrs) (xgmac_timestamp_base_addr(addrs) + 0x38)
+
 #define XGMAC_PPS_CONTROL(addrs)		(xgmac_timestamp_base_addr(addrs) + 0x70)
 #define XGMAC_PPS_MAXIDX(x)		((((x) + 1) * 8) - 1)
 #define XGMAC_PPS_MINIDX(x)		((x) * 8)
@@ -395,6 +402,8 @@ static inline u32 xgmac_mtl_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 #define XGMAC_DMA_CHAN_OFFSET		0x80
 #define XGMAC_DMA_MODE			0x00003000
 #define XGMAC_SWR			BIT(0)
+#define XGMAC_DSCB		BIT(16)
+#define XGMAC_HMIC		BIT(17)
 #define XGMAC_DMA_SYSBUS_MODE		0x00003004
 #define XGMAC_WR_OSR_LMT		GENMASK(29, 24)
 #define XGMAC_WR_OSR_LMT_SHIFT		24
@@ -402,6 +411,7 @@ static inline u32 xgmac_mtl_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 #define XGMAC_RD_OSR_LMT_SHIFT		16
 #define XGMAC_EN_LPI			BIT(15)
 #define XGMAC_LPI_XIT_PKT		BIT(14)
+#define XGMAC_ONEKBBE		BIT(13)
 #define XGMAC_AAL			BIT(12)
 #define XGMAC_EAME			BIT(11)
 #define XGMAC_BLEN			GENMASK(7, 1)
@@ -478,12 +488,13 @@ static inline u32 xgmac_dma_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 #define XGMAC_DMA_CH_INT_EN(addr, x)		(xgmac_dma_chanx_base_addr(addr, x) + 0x38)
 #define XGMAC_NIE			BIT(15)
 #define XGMAC_AIE			BIT(14)
+#define XGMAC_FBEE			BIT(12)
 #define XGMAC_RBUE			BIT(7)
 #define XGMAC_RIE			BIT(6)
 #define XGMAC_TBUE			BIT(2)
 #define XGMAC_TIE			BIT(0)
 #define XGMAC_DMA_INT_DEFAULT_EN	(XGMAC_NIE | XGMAC_AIE | XGMAC_RBUE | \
-					XGMAC_RIE | XGMAC_TIE)
+					XGMAC_RIE | XGMAC_TIE | XGMAC_FBEE)
 #define XGMAC_DMA_INT_DEFAULT_RX	(XGMAC_RBUE | XGMAC_RIE)
 #define XGMAC_DMA_INT_DEFAULT_TX	(XGMAC_TIE)
 #define XGMAC_DMA_CH_Rx_WATCHDOG(addr, x)	(xgmac_dma_chanx_base_addr(addr, x) + 0x3c)
@@ -508,6 +519,7 @@ static inline u32 xgmac_dma_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 /* Descriptors */
 #define XGMAC_TDES0_LTV			BIT(31)
 #define XGMAC_TDES0_LT			GENMASK(7, 0)
+#define XGMAC_TDES0_TTSL		GENMASK(9, 0)
 #define XGMAC_TDES1_LT			GENMASK(31, 8)
 #define XGMAC_TDES2_IVT			GENMASK(31, 16)
 #define XGMAC_TDES2_IVT_SHIFT		16
@@ -522,6 +534,8 @@ static inline u32 xgmac_dma_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 #define XGMAC_TDES3_CTXT		BIT(30)
 #define XGMAC_TDES3_FD			BIT(29)
 #define XGMAC_TDES3_LD			BIT(28)
+#define XGMAC_TDES3_OSTC		BIT(27)
+#define XGMAC_TDES3_PIDV		BIT(25)
 #define XGMAC_TDES3_CPC			GENMASK(27, 26)
 #define XGMAC_TDES3_CPC_SHIFT		26
 #define XGMAC_TDES3_TCMSSV		BIT(26)
@@ -541,6 +555,7 @@ static inline u32 xgmac_dma_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 #define XGMAC_TDES3_VT			GENMASK(15, 0)
 #define XGMAC_TDES3_FL			GENMASK(14, 0)
 #define XGMAC_RDES2_HL			GENMASK(9, 0)
+#define XGMAC_RDES2_NONIPHL		GENMASK(9, 2)
 #define XGMAC_RDES3_OWN			BIT(31)
 #define XGMAC_RDES3_CTXT		BIT(30)
 #define XGMAC_RDES3_IOC			BIT(30)
@@ -548,6 +563,7 @@ static inline u32 xgmac_dma_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 #define XGMAC_RDES3_CDA			BIT(27)
 #define XGMAC_RDES3_RSV			BIT(26)
 #define XGMAC_RDES3_L34T		GENMASK(23, 20)
+#define XGMAC_RDES3_L2T			GENMASK(19, 16)
 #define XGMAC_RDES3_L34T_SHIFT		20
 #define XGMAC_L34T_IP4TCP		0x1
 #define XGMAC_L34T_IP4UDP		0x2

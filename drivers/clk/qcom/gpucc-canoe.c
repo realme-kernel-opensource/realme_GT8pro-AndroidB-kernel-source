@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk-provider.h>
@@ -595,16 +595,10 @@ static int gpu_cc_canoe_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x90cc, BIT(0), BIT(0));
 
 	ret = qcom_cc_really_probe(&pdev->dev, &gpu_cc_canoe_desc, regmap);
-	if (ret) {
-		if (ret != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Failed to register GPU CC clocks ret=%d\n", ret);
-		goto err;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Failed to register GPU CC clocks\n");
 
 	dev_info(&pdev->dev, "Registered GPU CC clocks\n");
-
-err:
-	pm_runtime_put_sync(&pdev->dev);
 
 	return ret;
 }
@@ -649,8 +643,7 @@ static int gx_clkctl_canoe_probe(struct platform_device *pdev)
 
 	ret = qcom_cc_really_probe(&pdev->dev, &gx_clkctl_canoe_desc, regmap);
 	if (ret) {
-		if (ret != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Failed to register GX CLKCTL ret=%d\n", ret);
+		dev_err_probe(&pdev->dev, ret, "Failed to register GX CLKCTL\n");
 		goto err;
 	}
 

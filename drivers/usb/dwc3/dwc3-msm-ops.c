@@ -17,6 +17,10 @@
 #include "debug-ipc.h"
 #include "drivers/usb/dwc3/gadget.h"
 
+/* USB2 phy configuration quirk control bit */
+#define USB2PHYCFG_SUSPHY	BIT(0)
+#define USB2PHYCFG_ENBLSLPM	BIT(1)
+
 union kprobe_data {
 	struct {
 		struct dwc3 *dwc;
@@ -24,6 +28,55 @@ union kprobe_data {
 	};
 	struct work_struct *data;
 };
+
+static int entry_dwc3_suspend_common(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
+{
+	struct dwc3 *dwc = (struct dwc3 *)regs->regs[0];
+	int flag = 0;
+	union kprobe_data *data = (union kprobe_data *)ri->data;
+
+	if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST) {
+		/* Storing the original values. */
+		if (dwc->dis_u2_susphy_quirk)
+			flag |= USB2PHYCFG_SUSPHY;
+		if (dwc->dis_enblslpm_quirk)
+			flag |= USB2PHYCFG_ENBLSLPM;
+
+		dev_dbg(dwc->dev, "saved SUSPHY=%u & ENABLSLPM=%u\n",
+			dwc->dis_u2_susphy_quirk, dwc->dis_enblslpm_quirk);
+		dwc->dis_u2_susphy_quirk = false;
+		dwc->dis_enblslpm_quirk = false;
+	}
+
+	data->dwc = dwc;
+	data->xi0 = flag;
+	dev_dbg(dwc->dev, "dwc3 suspend common entry\n");
+	return 0;
+}
+
+static int exit_dwc3_suspend_common(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
+{
+	union kprobe_data *data = (union kprobe_data *)ri->data;
+	struct dwc3 *dwc = data->dwc;
+	int flag = data->xi0;
+
+	if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST) {
+		/* Re-store the original quic values. */
+		if (flag & USB2PHYCFG_SUSPHY)
+			dwc->dis_u2_susphy_quirk = true;
+		if (flag & USB2PHYCFG_ENBLSLPM)
+			dwc->dis_enblslpm_quirk = true;
+
+		dev_dbg(dwc->dev, "restored SUSPHY=%u & ENABLSLPM=%u\n",
+			dwc->dis_u2_susphy_quirk, dwc->dis_enblslpm_quirk);
+
+	}
+
+	dev_dbg(dwc->dev, "dwc3 suspend common exit\n");
+	return 0;
+}
 
 static int entry_usb_ep_set_maxpacket_limit(struct kretprobe_instance *ri,
 				struct pt_regs *regs)
@@ -269,6 +322,7 @@ static struct kretprobe dwc3_msm_probes[] = {
 	ENTRY_EXIT(dwc3_gadget_pullup),
 	ENTRY_EXIT(android_work),
 	ENTRY_EXIT(usb_ep_set_maxpacket_limit),
+	ENTRY_EXIT(dwc3_suspend_common),
 	ENTRY(trace_event_raw_event_dwc3_log_request),
 	ENTRY(trace_event_raw_event_dwc3_log_gadget_ep_cmd),
 	ENTRY(trace_event_raw_event_dwc3_log_trb),

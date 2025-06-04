@@ -278,7 +278,7 @@ static ssize_t slc_mpam_available_gear_show(struct config_item *item,
 	msc_system_get_mpam_version(SLC, &firmware_ver);
 	if (firmware_ver == SLC_MPAM_VERSION_0) {
 		for (i = 0; i < partid_cap.v0_cap.num_gears; i++) {
-			gear_num = partid_cap.v0_cap.gear_cfg.part_id_gears[i];
+			gear_num = partid_cap.v0_cap.part_id_gears[i];
 			len += scnprintf(page + len, PAGE_SIZE - len,
 				"%d - %s\n", gear_num, gear_index[gear_num]);
 		}

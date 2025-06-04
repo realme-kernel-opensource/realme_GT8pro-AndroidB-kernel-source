@@ -564,6 +564,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qcom_sdei",
+        out = "qcom_sdei.ko",
+        config = "CONFIG_QCOM_SDEI",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_sdei.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/minidump",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/msm_performance",
         out = "msm_performance.ko",
         config = "CONFIG_MSM_PERFORMANCE",
@@ -1284,6 +1298,10 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/smp2p_sleepstate.c",
         ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/smem",
+        ],
     )
 
     registry.register(
@@ -1478,4 +1496,34 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/hab/msm_hab",
         ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom_hib",
+        out = "qcom_hib.ko",
+        config = "CONFIG_QCOM_S2D_VENDOR_HOOK",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_hib.c",
+        ],
+        hdrs = [
+            "include/soc/qcom/qcom_hibernation.h",
+        ],
+        includes = ["include"],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom_secure_hibernation",
+        out = "qcom_secure_hibernation.ko",
+        config = "CONFIG_QCOM_SECURE_HIBERNATION",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_secure_hibernation.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/misc/qseecom_proxy",
+            "drivers/soc/qcom/qcom_hib",
+        ],
+        includes = ["include"],
     )

@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _WALT_H
@@ -236,6 +237,8 @@ struct walt_sched_cluster {
 	u64			found_ts;
 	struct smart_freq_cluster_info *smart_freq_info;
 	int8_t			sibling_cluster;
+	u64			cal_freq_begin[2];
+	bool			cal_freq_flag[2];
 };
 
 struct walt_rq {
@@ -491,7 +494,11 @@ extern unsigned int sysctl_freq_cap[MAX_CLUSTERS];
 extern unsigned int high_perf_cluster_freq_cap[MAX_CLUSTERS];
 extern unsigned int freq_cap[MAX_FREQ_CAP][MAX_CLUSTERS];
 extern unsigned int debugfs_walt_features;
+extern unsigned int sysctl_walt_features;
+
 #define walt_feat(feat)		(debugfs_walt_features & feat)
+#define sysctl_walt_feat(feat)	(sysctl_walt_features & feat)
+
 extern int sched_dynamic_tp_handler(const struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos);
 

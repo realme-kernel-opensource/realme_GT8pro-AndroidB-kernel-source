@@ -208,6 +208,11 @@ static int glink_pkt_rpdev_no_copy_cb(struct rpmsg_device *rpdev, void *buf,
 	unsigned long flags;
 	struct sk_buff *skb;
 
+	if (!gpdev) {
+		GLINK_PKT_ERR("channel is in reset\n");
+		return -ENETRESET;
+	}
+
 	GLINK_PKT_INFO("Data received on:%s len:%d\n", gpdev->ch_name, len);
 
 	skb = alloc_skb(0, GFP_ATOMIC);
@@ -464,8 +469,12 @@ static ssize_t glink_pkt_read(struct file *file,
 		return -EINVAL;
 	}
 
+	if (mutex_lock_interruptible(&gpdev->lock))
+		return -ERESTARTSYS;
+
 	if (!completion_done(&gpdev->ch_open)) {
 		GLINK_PKT_ERR("%s channel in reset\n", gpdev->ch_name);
+		mutex_unlock(&gpdev->lock);
 		return -ENETRESET;
 	}
 
@@ -474,11 +483,14 @@ static ssize_t glink_pkt_read(struct file *file,
 		       task_pid_nr(current), refcount_read(&gpdev->refcount),
 			   gpdev->rdata_len, count);
 
+	mutex_unlock(&gpdev->lock);
+
 	/* Wait for data in the queue */
 	spin_lock_irq(&gpdev->queue_lock);
 	if (skb_queue_empty(&gpdev->queue) && !gpdev->rskb) {
 		if (file->f_flags & O_NONBLOCK) {
 			spin_unlock_irq(&gpdev->queue_lock);
+			mutex_unlock(&gpdev->lock);
 			return -EAGAIN;
 		}
 
@@ -492,8 +504,12 @@ static ssize_t glink_pkt_read(struct file *file,
 
 	if (ret)
 		return -ERESTARTSYS;
+
 	if (!completion_done(&gpdev->ch_open))
 		return -ENETRESET;
+
+	if (mutex_lock_interruptible(&gpdev->lock))
+		return -ERESTARTSYS;
 
 	mutex_lock(&gpdev->rskb_read_lock);
 	spin_lock_irq(&gpdev->queue_lock);
@@ -502,6 +518,7 @@ static ssize_t glink_pkt_read(struct file *file,
 		if (!gpdev->rskb) {
 			spin_unlock_irq(&gpdev->queue_lock);
 			mutex_unlock(&gpdev->rskb_read_lock);
+			mutex_unlock(&gpdev->lock);
 			return 0;
 		}
 		gpdev->rdata = gpdev->rskb->data;
@@ -535,6 +552,7 @@ static ssize_t glink_pkt_read(struct file *file,
 	GLINK_PKT_INFO("end for %s by %s:%d ret[%d], remaining[%lu]\n", gpdev->ch_name,
 		       current->comm, task_pid_nr(current), ret, gpdev->rdata_len);
 
+	mutex_unlock(&gpdev->lock);
 	return ret;
 }
 

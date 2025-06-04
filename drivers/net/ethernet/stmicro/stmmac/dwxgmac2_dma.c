@@ -20,7 +20,7 @@ static int dwxgmac2_dma_reset(void __iomem *ioaddr)
 				  !(value & XGMAC_SWR), 0, 100000);
 }
 
-static void dwxgmac2_dma_init(void __iomem *ioaddr,
+static void dwxgmac2_dma_init(struct stmmac_priv *priv, void __iomem *ioaddr,
 			      struct stmmac_dma_cfg *dma_cfg)
 {
 	u32 value = readl(ioaddr + XGMAC_DMA_SYSBUS_MODE);
@@ -105,6 +105,9 @@ static void dwxgmac2_dma_axi(void __iomem *ioaddr, struct stmmac_axi *axi)
 
 	if (!axi->axi_fb)
 		value |= XGMAC_UNDEF;
+
+	if (axi->axi_kbbe)
+		value |= XGMAC_ONEKBBE;
 
 	value &= ~XGMAC_BLEN;
 	for (i = 0; i < AXI_BLEN; i++) {
@@ -633,6 +636,11 @@ static void dwxgmac2_enable_sph(struct stmmac_priv *priv, void __iomem *ioaddr,
 	value |= XGMAC_CONFIG_HDSMS_256; /* Segment max 256 bytes */
 	writel(value, ioaddr + XGMAC_RX_CONFIG);
 
+	value = readl(ioaddr + XGMAC_EXT_CFG1);
+	value |= XGMAC_CONFIG1_SPLM(1);
+	value |= XGMAC_CONFIG1_SAVE_EN;
+	writel(value, ioaddr + XGMAC_EXT_CFG1);
+
 	value = readl(ioaddr + XGMAC_DMA_CH_CONTROL(dwxgmac_addrs, chan));
 	if (en)
 		value |= XGMAC_SPH;
@@ -701,6 +709,9 @@ const struct stmmac_dma_ops dw25gmac400_dma_ops = {
 	.init_chan = dwxgmac2_dma_init_chan,
 	.init_rx_chan = dw25gmac_dma_init_rx_chan,
 	.init_tx_chan = dw25gmac_dma_init_tx_chan,
+	.map_tx_offline_chan = dw25gmac_dma_map_tx_offline_chan,
+	.map_rx_offline_chan = dw25gmac_dma_map_rx_offline_chan,
+	.desc_cache_compute = dw25gmac_desc_cache_compute,
 	.axi = dwxgmac2_dma_axi,
 	.dump_regs = dwxgmac2_dma_dump_regs,
 	.dma_rx_mode = dwxgmac2_dma_rx_mode,

@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/unaligned.h>
+#include <linux/suspend.h>
 
 /* RTC_CTRL register bit fields */
 #define PM8xxx_RTC_ENABLE		BIT(7)
@@ -577,10 +578,9 @@ static int pm8xxx_rtc_resume(struct device *dev)
 {
 	struct pm8xxx_rtc *rtc_dd = dev_get_drvdata(dev);
 
-#ifdef CONFIG_DEEPSLEEP
-	if (pm_suspend_via_firmware())
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		return pm8xxx_rtc_restore(dev);
-#endif
+
 	if (device_may_wakeup(dev))
 		disable_irq_wake(rtc_dd->alarm_irq);
 
@@ -591,10 +591,9 @@ static int pm8xxx_rtc_suspend(struct device *dev)
 {
 	struct pm8xxx_rtc *rtc_dd = dev_get_drvdata(dev);
 
-#ifdef CONFIG_DEEPSLEEP
-	if (pm_suspend_via_firmware())
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		return pm8xxx_rtc_freeze(dev);
-#endif
+
 	if (device_may_wakeup(dev))
 		enable_irq_wake(rtc_dd->alarm_irq);
 

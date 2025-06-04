@@ -57,15 +57,10 @@ struct slc_client_info {
 } __packed;
 
 /* PARAM_GET_CACHE_CAPABILITY_MSC */
-struct slc_partid_gear_config {
-	uint8_t part_id_gears[MAX_NUM_GEARS];
-} __packed;
-
 struct slc_partid_capability {
 	uint8_t part_id;
 	uint8_t num_gears;
-	struct slc_partid_gear_config gear_cfg;
-	uint32_t part_id_gears[MAX_NUM_GEARS];
+	uint8_t part_id_gears[MAX_NUM_GEARS];
 } __packed;
 
 struct slc_partid_capacity_config {

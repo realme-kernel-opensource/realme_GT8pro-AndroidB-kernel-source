@@ -144,7 +144,7 @@ static int devfreq_cdev_probe(struct platform_device *pdev)
 	}
 	devfreq_cdev->max_state = freq_ct-1;
 	devfreq_cdev->freq_table = freq_table;
-	ret = dev_pm_qos_add_request(devfreq_cdev->dev,
+	ret = dev_pm_qos_add_request(devfreq_cdev->gpu_dev,
 					&devfreq_cdev->qos_max_freq_req,
 					DEV_PM_QOS_MAX_FREQUENCY,
 					PM_QOS_MAX_FREQUENCY_DEFAULT_VALUE);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011-2015, 2017, 2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitfield.h>
@@ -292,6 +292,8 @@ static int qpnp_tm_set_temp_dac_thresh(struct qpnp_tm_chip *chip, int trip,
 	int ret, temp_cfg;
 	u8 reg;
 
+	WARN_ON(!mutex_is_locked(&chip->lock));
+
 	if (trip < 0 || trip >= STAGE_COUNT) {
 		dev_err(chip->dev, "invalid TEMP_DAC trip = %d\n", trip);
 		return -EINVAL;
@@ -321,6 +323,8 @@ static int qpnp_tm_set_temp_lite_thresh(struct qpnp_tm_chip *chip, int trip,
 	const long *temp_map;
 	u16 addr;
 	u8 reg, thresh;
+
+	WARN_ON(!mutex_is_locked(&chip->lock));
 
 	if (trip < 0 || trip >= STAGE_COUNT) {
 		dev_err(chip->dev, "invalid TEMP_LITE trip = %d\n", trip);
@@ -523,9 +527,11 @@ static int qpnp_tm_temp_dac_configure_trip_temp(struct thermal_trip *trip, void 
 	struct qpnp_tm_chip *chip = data;
 	int ret;
 
+	mutex_lock(&chip->lock);
 	trip->priv = THERMAL_INT_TO_TRIP_PRIV(chip->ntrips);
 	ret = qpnp_tm_set_temp_dac_thresh(chip, chip->ntrips, trip->temperature);
 	chip->ntrips++;
+	mutex_unlock(&chip->lock);
 
 	return ret;
 }
@@ -575,9 +581,11 @@ static int qpnp_tm_temp_lite_configure_trip_temp(struct thermal_trip *trip, void
 	struct qpnp_tm_chip *chip = data;
 	int ret;
 
+	mutex_lock(&chip->lock);
 	trip->priv = THERMAL_INT_TO_TRIP_PRIV(chip->ntrips);
 	ret = qpnp_tm_set_temp_lite_thresh(chip, chip->ntrips, trip->temperature);
 	chip->ntrips++;
+	mutex_unlock(&chip->lock);
 
 	return ret;
 }
@@ -666,13 +674,17 @@ static int qpnp_tm_init(struct qpnp_tm_chip *chip)
 		chip->temp = qpnp_tm_decode_temp(chip, stage);
 
 	if (chip->subtype == QPNP_TM_SUBTYPE_LITE) {
+		mutex_unlock(&chip->lock);
 		ret = qpnp_tm_temp_lite_update_trip_temps(chip);
 		if (ret < 0)
-			goto out;
+			return ret;
+		mutex_lock(&chip->lock);
 	} else if (chip->has_temp_dac) {
+		mutex_unlock(&chip->lock);
 		ret = qpnp_tm_temp_dac_update_trip_temps(chip);
 		if (ret < 0)
-			goto out;
+			return ret;
+		mutex_lock(&chip->lock);
 	} else {
 		mutex_unlock(&chip->lock);
 
@@ -860,20 +872,16 @@ static int qpnp_tm_freeze(struct device *dev)
 
 static int qpnp_tm_suspend(struct device *dev)
 {
-#ifdef CONFIG_DEEPSLEEP
-	if (pm_suspend_via_firmware())
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		return qpnp_tm_freeze(dev);
-#endif
 
 	return 0;
 }
 
 static int qpnp_tm_resume(struct device *dev)
 {
-#ifdef CONFIG_DEEPSLEEP
-	if (pm_suspend_via_firmware())
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		return qpnp_tm_restore(dev);
-#endif
 
 	return 0;
 }

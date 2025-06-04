@@ -236,6 +236,7 @@
 #define QCOM_ID_QCS4290			470
 #define QCOM_ID_SM8450_2		480
 #define QCOM_ID_SM8450_3		482
+#define QCOM_ID_MONACO			486
 #define QCOM_ID_SC7280			487
 #define QCOM_ID_SC7180P			495
 #define QCOM_ID_QCM6490			497
@@ -277,6 +278,7 @@
 #define QCOM_ID_SUN				618
 #define QCOM_ID_SUNP			639
 #define QCOM_ID_IPQ5300			624
+#define QCOM_ID_X1P42100		635
 #define QCOM_ID_IPQ5321			650
 #define QCOM_ID_CANOE			660
 #define QCOM_ID_CANOEP			661

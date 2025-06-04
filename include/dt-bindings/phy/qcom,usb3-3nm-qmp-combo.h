@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef _DT_BINDINGS_PHY_QCOM_3NM_QMP_COMBO_USB_H
 #define _DT_BINDINGS_PHY_QCOM_3NM_QMP_COMBO_USB_H
@@ -875,6 +875,9 @@
 #define USB3_DP_PCS_USB3_POWER_STATE_CONFIG2			0x2164
 #define USB3_DP_PCS_USB3_POWER_STATE_CONFIG3			0x2168
 #define USB3_DP_PCS_USB3_POWER_STATE_CONFIG4			0x216C
+
+/* QMP USB4-USB3-DP PHYs */
+#define QMP_USB43DP_USB3_PHY					0
 
 #endif /* _DT_BINDINGS_PHY_QCOM_3NM_QMP_COMBO_USB_H */
 

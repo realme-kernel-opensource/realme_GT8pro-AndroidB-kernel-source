@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/bitfield.h>
@@ -635,7 +635,7 @@ static const struct llcc_slice_config canoe_data[] = {
 	{LLCC_MDMHPFX,        24, 1024, 5, 1, 0xFFFFFFFF, 0, 0, 0, 0,
 							  0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
 							  0, 0},
-	{LLCC_MDMPNG,         27,  256, 5, 0, 0xFFFFFFFF, 0, 0, 0, 0,
+	{LLCC_MDMPNG,         27,  256, 5, 0,    0xFFFFF, 0, 0, 0, 0,
 							  0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
 							  0, 0},
 	{LLCC_CVP,             8,  800, 5, 1, 0xFFFFFFFF, 0, 0, 0, 0,
@@ -710,6 +710,18 @@ static const struct llcc_slice_config canoe_data[] = {
 	{LLCC_MDM_PNG_FIXED,  26,  256, 5, 1, 0xFF000000, 0, 0, 0, 0,
 							  0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1,
 							  0, 0},
+};
+
+static struct llcc_slice_config yupik_data[] =  {
+	{LLCC_CPUSS,    1, 768, 1, 0, 0x3F, 0x0, 0, 0, 0, 1, 1, 0},
+	{LLCC_MDMHPGRW, 7, 512, 2, 1, 0x3F, 0x0, 0, 0, 0, 1, 0, 0},
+	{LLCC_CMPT,     10, 768, 1, 1, 0x3F, 0x0, 0, 0, 0, 1, 0, 0},
+	{LLCC_GPUHTW,   11, 256, 1, 1, 0x3F, 0x0, 0, 0, 0, 1, 0, 0},
+	{LLCC_GPU,      12, 512, 1, 0, 0x3F, 0x0, 0, 0, 0, 1, 0, 0},
+	{LLCC_MMUHWT,   13, 256, 1, 1, 0x3F, 0x0, 0, 0, 0, 0, 1, 0},
+	{LLCC_MDMPNG,   21, 768, 0, 1, 0x3F, 0x0, 0, 0, 0, 1, 0, 0},
+	{LLCC_WLHW,     24, 256, 1, 1, 0x3F, 0x0, 0, 0, 0, 1, 0, 0},
+	{LLCC_MODPE,    29, 64,  1, 1, 0x3F, 0x0, 0, 0, 0, 1, 0, 0},
 };
 
 static const struct llcc_slice_config vienna_data[] = {
@@ -1104,6 +1116,16 @@ static const struct qcom_llcc_config canoe_cfg[] = {
 	},
 };
 
+static const struct qcom_llcc_config yupik_cfg[] = {
+	{
+		.sct_data       = yupik_data,
+		.size           = ARRAY_SIZE(yupik_data),
+		.need_llcc_cfg  = true,
+		.reg_offset = llcc_v1_reg_offset,
+		.edac_reg_offset = &llcc_v1_edac_reg_offset,
+	},
+};
+
 static const struct qcom_llcc_config vienna_cfg[] = {
 	{
 		.sct_data       = vienna_data,
@@ -1217,6 +1239,11 @@ static const struct qcom_sct_config sun_cfgs = {
 static const struct qcom_sct_config canoe_cfgs = {
 	.llcc_config    = canoe_cfg,
 	.num_config = ARRAY_SIZE(canoe_cfg),
+};
+
+static const struct qcom_sct_config yupik_cfgs = {
+	.llcc_config    = yupik_cfg,
+	.num_config = ARRAY_SIZE(yupik_cfg),
 };
 
 static const struct qcom_sct_config vienna_cfgs = {
@@ -2141,6 +2168,7 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,pineapple-llcc", .data = &pineapple_cfgs },
 	{ .compatible = "qcom,sun-llcc", .data = &sun_cfgs },
 	{ .compatible = "qcom,canoe-llcc", .data = &canoe_cfgs },
+	{ .compatible = "qcom,yupik-llcc", .data = &yupik_cfgs},
 	{ .compatible = "qcom,vienna-llcc", .data = &vienna_cfgs },
 	{ .compatible = "qcom,alor-llcc", .data = &alor_cfgs },
 	{ }

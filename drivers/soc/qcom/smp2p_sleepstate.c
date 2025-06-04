@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <linux/module.h>
 #include <linux/suspend.h>
@@ -11,11 +11,43 @@
 #include <linux/of_irq.h>
 #include <linux/of.h>
 #include <linux/pm_wakeup.h>
+#include <asm/arch_timer.h>
+#include <linux/soc/qcom/smem.h>
 
 #define PROC_AWAKE_ID 12 /* 12th bit */
 #define AWAKE_BIT BIT(PROC_AWAKE_ID)
-static struct qcom_smem_state *state;
+
 static struct wakeup_source *notify_ws;
+
+#define QCOM_POWER_STATE_SMEM_ID	512
+#define QCOM_POWER_STATE_SHUTDOWN       0
+#define QCOM_POWER_STATE_RESUME         1
+#define QCOM_POWER_STATE_SUSPEND        2
+
+/**
+ * struct qcom_power_state - Structure to represent the power state of a subsystem
+ * @version: Version of the power state structure
+ * @subsystem: Identifier for the subsystem whose power state is being managed
+ * @state: Current power state of the subsystem
+ * @reserve: Reserved field
+ * @resume_time: Timestamp indicating when the subsystem last resumed
+ * @suspend_time: Timestamp indicating when the subsystem last entered into suspend
+ */
+struct qcom_power_state {
+	__le32 version;
+	__le32 subsystem;
+	__le32 state;
+	__le32 reserve;
+	__le64 resume_time;
+	__le64 suspend_time;
+} __packed;
+
+struct qcom_states {
+	struct qcom_power_state *power_state;
+	struct qcom_smem_state *smem_state;
+};
+
+static struct qcom_states state;
 
 /**
  * sleepstate_pm_notifier() - PM notifier callback function.
@@ -31,11 +63,28 @@ static int sleepstate_pm_notifier(struct notifier_block *nb,
 {
 	switch (event) {
 	case PM_SUSPEND_PREPARE:
-		qcom_smem_state_update_bits(state, AWAKE_BIT, 0);
+		if (state.power_state) {
+			state.power_state->state = QCOM_POWER_STATE_SUSPEND;
+			state.power_state->suspend_time = __arch_counter_get_cntvct();
+
+			/* Update the power states and add a memory barrier to ensure
+			 * consistent read/write between APPS and the remote.
+			 */
+			mb();
+		}
+		qcom_smem_state_update_bits(state.smem_state, AWAKE_BIT, 0);
 		break;
 
 	case PM_POST_SUSPEND:
-		qcom_smem_state_update_bits(state, AWAKE_BIT, AWAKE_BIT);
+		if (state.power_state) {
+			state.power_state->state = QCOM_POWER_STATE_RESUME;
+			state.power_state->resume_time = __arch_counter_get_cntvct();
+			/* Update the power states and add a memory barrier to ensure
+			 * consistent read/write between APPS and the remote.
+			 */
+			mb();
+		}
+		qcom_smem_state_update_bits(state.smem_state, AWAKE_BIT, AWAKE_BIT);
 		break;
 	}
 
@@ -60,10 +109,36 @@ static int smp2p_sleepstate_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *node = dev->of_node;
 
-	state = qcom_smem_state_get(&pdev->dev, 0, &ret);
-	if (IS_ERR(state))
-		return PTR_ERR(state);
-	qcom_smem_state_update_bits(state, AWAKE_BIT, AWAKE_BIT);
+	state.smem_state = qcom_smem_state_get(&pdev->dev, 0, &ret);
+	if (IS_ERR(state.smem_state))
+		return PTR_ERR(state.smem_state);
+	qcom_smem_state_update_bits(state.smem_state, AWAKE_BIT, AWAKE_BIT);
+
+	ret = qcom_smem_alloc(QCOM_SMEM_HOST_ANY,
+			      QCOM_POWER_STATE_SMEM_ID,
+			      sizeof(struct qcom_power_state));
+
+	if (ret < 0 && ret != -EEXIST) {
+		pr_err("Unable to allocate memory for power state notif err %d\n", ret);
+	} else {
+		state.power_state = qcom_smem_get(QCOM_SMEM_HOST_ANY,
+						  QCOM_POWER_STATE_SMEM_ID,
+						  NULL);
+		if (IS_ERR(state.power_state)) {
+			state.power_state = NULL;
+			pr_err("Unable to acquire shared memory power state notif\n");
+		} else {
+			state.power_state->version = 1;
+			state.power_state->subsystem = 0;
+			state.power_state->state = QCOM_POWER_STATE_RESUME;
+			state.power_state->resume_time = __arch_counter_get_cntvct();
+			/* Update the power states and add a memory barrier to ensure
+			 * consistent read/write between APPS and the remote.
+			 */
+			mb();
+		}
+		pr_info("%s: Allocated shared memory for power state notif\n", __func__);
+	}
 
 	ret = register_pm_notifier(&sleepstate_pm_nb);
 	if (ret) {

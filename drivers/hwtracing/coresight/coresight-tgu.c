@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/kernel.h>
@@ -153,7 +154,7 @@ static ssize_t enable_tgu_store(struct device *dev,
 					drvdata->select_data[i].selectaddr);
 
 		/*  Timer and Counter Check */
-		for (i = 0; i <= drvdata->timer_refcnt; i++)
+		for (i = 0; i < drvdata->timer_refcnt; i++)
 			tgu_writel(drvdata, drvdata->timer_data[i].value,
 					drvdata->timer_data[i].timeraddr);
 

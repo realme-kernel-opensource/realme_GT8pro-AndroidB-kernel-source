@@ -5,7 +5,7 @@
  *
  * Copyright (C) 2016, Intel Corporation
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -68,7 +68,6 @@ static void __waltgov_update_next_freq(struct waltgov_policy *wg_policy,
 	wg_policy->cached_raw_freq = raw_freq;
 	wg_policy->next_freq = next_freq;
 	wg_policy->last_freq_update_time = time;
-	rollover_freq_ns_stats(0);
 }
 
 static bool waltgov_update_next_freq(struct waltgov_policy *wg_policy, u64 time,
@@ -373,7 +372,7 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 		skip = true;
 
 	if (wg_cpu->walt_load.trailblazer_state && freq < trailblazer_floor_freq[cluster->id] &&
-		walt_feat(WALT_FEAT_TRAILBLAZER_BIT)) {
+		sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT)) {
 		freq = trailblazer_floor_freq[cluster->id];
 		wg_driv_cpu->reasons |= CPUFREQ_REASON_TRAILBLAZER_STATE_BIT;
 	}
@@ -428,12 +427,12 @@ out:
 				wg_policy->ipc_smart_freq,
 				final_freq);
 
+	assign_reasons_counter(wg_policy);
+
 	if (reset_need_freq_update)
 		wg_policy->need_freq_update = false;
 
 	post_update_cleanups(wg_policy);
-
-	assign_reasons_counter(wg_policy);
 
 	return final_freq;
 }
@@ -642,8 +641,6 @@ static void waltgov_update_freq(struct waltgov_callback *cb, u64 time,
 
 		if (!next_f)
 			goto out;
-
-		update_min_max_freq_ns(wg_policy, time);
 
 		if (wg_policy->policy->fast_switch_enabled)
 			waltgov_fast_switch(wg_policy, time, next_f);
@@ -1549,6 +1546,10 @@ static void waltgov_limits(struct cpufreq_policy *policy)
 	struct waltgov_policy *wg_policy = policy->governor_data;
 	unsigned long flags, now;
 	unsigned int freq, final_freq;
+
+	/* gather frequency statistics before update the min/max frequency */
+
+	update_min_max_freq_ns(policy);
 
 	if (!policy->fast_switch_enabled) {
 		mutex_lock(&wg_policy->work_lock);
