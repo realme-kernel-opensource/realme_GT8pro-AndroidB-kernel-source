@@ -306,6 +306,11 @@ class BazelBuilder:
             logging.error("no targets to build")
             sys.exit(1)
 
+        for user_opt in self.user_opts:
+            if "--lto" in user_opt:
+                logging.error("--lto is not supported now, please remove")
+                sys.exit(1)
+
         if self.skip_list:
             self.user_opts.extend(["--//soc-repo:skip_{}=true".format(s) for s in self.skip_list if s != 'abi'])
 
