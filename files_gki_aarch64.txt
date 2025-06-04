@@ -344,6 +344,8 @@ arch/arm64/kvm/hyp/include/hyp/debug-sr.h
 arch/arm64/kvm/hyp/include/hyp/fault.h
 arch/arm64/kvm/hyp/include/hyp/switch.h
 arch/arm64/kvm/hyp/include/hyp/sysreg-sr.h
+arch/arm64/kvm/hyp/include/module/nvhe/define_events.h
+arch/arm64/kvm/hyp/include/module/nvhe/trace.h
 arch/arm64/kvm/hyp/include/nvhe/alloc.h
 arch/arm64/kvm/hyp/include/nvhe/alloc_mgt.h
 arch/arm64/kvm/hyp/include/nvhe/arm-smccc.h
@@ -363,8 +365,6 @@ arch/arm64/kvm/hyp/include/nvhe/refcount.h
 arch/arm64/kvm/hyp/include/nvhe/rwlock.h
 arch/arm64/kvm/hyp/include/nvhe/serial.h
 arch/arm64/kvm/hyp/include/nvhe/spinlock.h
-arch/arm64/kvm/hyp/include/nvhe/trace/define_events.h
-arch/arm64/kvm/hyp/include/nvhe/trace/trace.h
 arch/arm64/kvm/hyp/include/nvhe/trap_handler.h
 arch/arm64/kvm/hyp/nvhe/alloc.c
 arch/arm64/kvm/hyp/nvhe/alloc_mgt.c
@@ -5446,7 +5446,6 @@ kernel/locking/rwsem.c
 kernel/locking/semaphore.c
 kernel/locking/spinlock.c
 kernel/locking/ww_mutex.h
-kernel/module/gki_module.c
 kernel/module/internal.h
 kernel/module/kallsyms.c
 kernel/module/kmod.c
