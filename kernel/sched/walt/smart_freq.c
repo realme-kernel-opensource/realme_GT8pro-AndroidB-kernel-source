@@ -94,6 +94,7 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 	unsigned int size = 0;
 	unsigned int *data = (unsigned int *)table->data;
 	int val[LEGACY_SMART_FREQ*2] = {[0 ... (LEGACY_SMART_FREQ*2)-1] = -1};
+	unsigned long no_reason_freq = 0;
 	struct ctl_table tmp = {
 		.data	= &val,
 		.maxlen	= sizeof(unsigned int) * (LEGACY_SMART_FREQ*2),
@@ -128,6 +129,9 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 			goto out;
 		}
 
+		if (i%2 == 0 && val[i] == NO_REASON_SMART_FREQ && val[i+1] != -1)
+			no_reason_freq = val[i + 1];
+
 		size++;
 	}
 
@@ -136,7 +140,6 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 		goto out;
 	}
 
-	/* correct input - lets update */
 	mutex_lock(&freq_reason_mutex);
 
 	if (data == &sysctl_legacy_freq_levels_cluster0[0])
@@ -148,6 +151,24 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 	else if (data == &sysctl_legacy_freq_levels_cluster3[0])
 		id = 3;
 
+	/*
+	 * IPC/freq should be in increasing order, and since NO_REASON_SMART_FREQ and IPC_A  need
+	 * to be same ensure the no_reason_freq if set here is lesser than IPC_B and when so
+	 * update both IPC_A as well as NO_REASON_SMART_FREQ
+	 */
+	if (no_reason_freq != 0
+		&& default_freq_config[id].smart_freq_ipc_participation_mask) {
+		if (no_reason_freq >
+			default_freq_config[id].ipc_reason_config[IPC_B].freq_allowed) {
+			ret = -EINVAL;
+			goto unlock;
+		}
+
+		default_freq_config[id].legacy_reason_config[NO_REASON_SMART_FREQ].freq_allowed =
+			no_reason_freq;
+		default_freq_config[id].ipc_reason_config[IPC_A].freq_allowed = no_reason_freq;
+	}
+
 	for (i = 0; i < size; i += 2) {
 		default_freq_config[id].legacy_reason_config[val[i]].freq_allowed =
 			val[i+1];
@@ -155,12 +176,7 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 			BIT(val[i]);
 	}
 
-	/* reset NO_REASON's freq to IPC_A */
-	if (default_freq_config[id].smart_freq_ipc_participation_mask) {
-		default_freq_config[id].legacy_reason_config[NO_REASON_SMART_FREQ].freq_allowed =
-			default_freq_config[id].ipc_reason_config[IPC_A].freq_allowed;
-	}
-
+unlock:
 	mutex_unlock(&freq_reason_mutex);
 out:
 	return ret;
