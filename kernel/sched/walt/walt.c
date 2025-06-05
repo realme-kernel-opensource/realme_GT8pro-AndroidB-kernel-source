@@ -5371,7 +5371,14 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 		if (inform_governor) {
 			per_cpu(ipc_level, cpu) = curr_ipc_level;
 			per_cpu(ipc_deactivate_ns, cpu) = 0;
-			waltgov_run_callback(rq, WALT_CPUFREQ_SMART_FREQ_BIT);
+			/*
+			 * update this and bigger clusters. The bigger clusters will update their
+			 * caps to ensure their capacities are higher than the smaller ones
+			 */
+			for_each_sched_cluster(cluster) {
+				rq = cpu_rq(cpumask_first(&cluster->cpus));
+				waltgov_run_callback(rq, WALT_CPUFREQ_SMART_FREQ_BIT);
+			}
 		}
 	}
 }
