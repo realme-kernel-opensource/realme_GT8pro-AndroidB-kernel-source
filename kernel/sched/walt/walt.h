@@ -100,6 +100,7 @@ extern int soc_sched_lib_name_capacity;
 /* WALT feature */
 #define WALT_FEAT_TRAILBLAZER_BIT	BIT_ULL(0)
 #define WALT_FEAT_UCLAMP_FREQ_BIT	BIT_ULL(1)
+#define WALT_FEAT_SYNC_FREQ_CAP_BIT	BIT_ULL(2)
 
 extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 
