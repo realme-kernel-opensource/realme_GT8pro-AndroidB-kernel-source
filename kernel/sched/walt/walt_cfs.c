@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/seq_file.h>
@@ -13,36 +13,27 @@
 #include "drivers/android/binder_internal.h"
 #include "drivers/android/binder_trace.h"
 
-static void create_util_to_cost_pd(struct em_perf_domain *pd)
+static void create_freq_to_cost_pd(struct em_perf_domain *pd)
 {
-	int util, cpu = cpumask_first(to_cpumask(pd->cpus));
-	unsigned long fmax;
-	unsigned long scale_cpu;
-	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
-	struct walt_sched_cluster *cluster = wrq->cluster;
+	int cpu = cpumask_first(to_cpumask(pd->cpus));
+	struct walt_sched_cluster *cluster = cpu_cluster(cpu);
 	struct em_perf_table *em_table = rcu_dereference(pd->em_table);
 	struct em_perf_state *ps;
+	bool size_mismatch;
 
-	ps = &em_table->state[pd->nr_perf_states - 1];
-	fmax = (u64)ps->frequency;
-	scale_cpu = arch_scale_cpu_capacity(cpu);
+	if (pd->nr_perf_states != soc_cluster_freq_table_size[cluster->id])
+		size_mismatch = true;
 
-	for (util = 0; util < 1024; util++) {
-		int j;
-
-		int f = (fmax * util) / scale_cpu;
-		ps = &em_table->state[0];
-
-		for (j = 0; j < pd->nr_perf_states; j++) {
-			ps = &em_table->state[j];
-			if (ps->frequency >= f)
-				break;
-		}
-		cluster->util_to_cost[util] = ps->cost;
+	for (int i = 0; i < pd->nr_perf_states; i++) {
+		ps = &em_table->state[i];
+		if (size_mismatch)
+			cluster->freq_to_cost[i] = ps->cost;
+		else
+			cluster->freq_to_cost[i] = soc_cluster_freq_table[cluster->id][i];
 	}
 }
 
-void create_util_to_cost(void)
+void create_freq_to_cost(void)
 {
 	struct perf_domain *pd;
 	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
@@ -50,7 +41,7 @@ void create_util_to_cost(void)
 	rcu_read_lock();
 	pd = rcu_dereference(rd->pd);
 	for (; pd; pd = pd->next)
-		create_util_to_cost_pd(pd->em_pd);
+		create_freq_to_cost_pd(pd->em_pd);
 	rcu_read_unlock();
 }
 
@@ -660,12 +651,38 @@ cpu_util_next_walt_prs(int cpu, struct task_struct *p, int dst_cpu, bool prev_ds
 
 static inline unsigned long get_util_to_cost(int cpu, unsigned long util)
 {
-	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
+	struct walt_rq *wrq = NULL;
+	struct walt_sched_cluster *cluster;
+	struct em_perf_domain *pd;
+	struct em_perf_table *em_table;
+	struct em_perf_state *ps;
+	unsigned long cost;
+	unsigned long freq;
 
-	if (cpu == 0 && util > sysctl_em_inflate_thres)
-		return mult_frac(wrq->cluster->util_to_cost[util], sysctl_em_inflate_pct, 100);
+	if (unlikely(walt_disabled))
+		return 0;
+
+	cluster = cpu_cluster(cpu);
+	pd = em_cpu_get(cpu);
+	if (!pd)
+		return 0;
+
+	em_table =  rcu_dereference(pd->em_table);
+	freq = walt_map_util_freq(util, NULL, arch_scale_cpu_capacity(cpu), cpu);
+	wrq = &per_cpu(walt_rq, cpu);
+
+	for (int i = 0; i < pd->nr_perf_states; i++) {
+		ps = &em_table->state[i];
+		cost = cluster->freq_to_cost[i];
+		if (ps->frequency >= freq)
+			break;
+	}
+
+	if (cpumask_test_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) &&
+	    util > sysctl_em_inflate_thres)
+		return mult_frac(cost, sysctl_em_inflate_pct, 100);
 	else
-		return wrq->cluster->util_to_cost[util];
+		return cost;
 }
 
 /**
@@ -682,6 +699,18 @@ static inline unsigned long get_util_to_cost(int cpu, unsigned long util)
  * Return: the sum of the energy consumed by the CPUs of the domain assuming
  * a capacity state satisfying the max utilization of the domain.
  */
+unsigned long walt_cpu_energy(int cpu,
+			      unsigned long max_util, unsigned long sum_util)
+{
+	unsigned long cost;
+
+	if (!sum_util)
+		return 0;
+
+	cost = get_util_to_cost(cpu, max_util);
+	return cost * sum_util;
+}
+
 static inline unsigned long walt_em_cpu_energy(struct em_perf_domain *pd,
 				unsigned long max_util, unsigned long sum_util,
 				struct compute_energy_output *output, unsigned int x)
@@ -700,7 +729,6 @@ static inline unsigned long walt_em_cpu_energy(struct em_perf_domain *pd,
 	cpu = cpumask_first(to_cpumask(pd->cpus));
 	scale_cpu = arch_scale_cpu_capacity(cpu);
 
-	max_util = max_util + (max_util >> 2); /* account  for TARGET_LOAD usually 80 */
 	max_util = max(max_util,
 			(arch_scale_freq_capacity(cpu) * scale_cpu) >>
 			SCHED_CAPACITY_SHIFT);
@@ -915,8 +943,22 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 		(pipeline_cpu != -1) &&
 		cpumask_test_cpu(pipeline_cpu, p->cpus_ptr) &&
 		cpu_active(pipeline_cpu) &&
-		!cpu_halted(pipeline_cpu) &&
-		!walt_pipeline_low_latency_task(cpu_rq(pipeline_cpu)->curr)) {
+		!cpu_halted(pipeline_cpu)) {
+		/*
+		 * A situation of target pipeline cpu already running a pipeline
+		 * task can only happen because of pipeline cpu swapping(i.e 'p'
+		 * is already a pipeline task running on pipeline cpu.
+		 * 'find_heaviest_topapp' where a task is evaluated as pipeline
+		 * (i.e 'p' might not be running on pipeline cpu) always ensures no
+		 * two task gets same pipeline cpu and thus we never enter hit this
+		 * condition.
+		 *
+		 * Thus if we are here that means prev_cpu of 'p' is definitely a
+		 * pipeline cpu.
+		 */
+		if (walt_pipeline_low_latency_task(cpu_rq(pipeline_cpu)->curr))
+			pipeline_cpu = prev_cpu;
+
 		best_energy_cpu = pipeline_cpu;
 		fbt_env.fastpath = PIPELINE_FASTPATH;
 		goto out;
@@ -1132,7 +1174,7 @@ static void binder_set_priority_hook(void *data,
 
 	if (task && ((task_in_related_thread_group(current) &&
 			task->group_leader->prio < MAX_RT_PRIO) ||
-			(walt_get_mvp_task_prio(current) == WALT_LL_PIPE_MVP) ||
+			(walt_get_mvp_task_prio(current) == WALT_LL_MVP) ||
 			(current->group_leader->prio < MAX_RT_PRIO &&
 			task_in_related_thread_group(task))))
 		wts->low_latency |= WALT_LOW_LATENCY_BINDER_BIT;
@@ -1172,10 +1214,11 @@ static void binder_restore_priority_hook(void *data,
  */
 int walt_get_mvp_task_prio(struct task_struct *p)
 {
-	if (walt_procfs_low_latency_task(p) ||
-			(pipeline_in_progress() &&
-			 walt_pipeline_low_latency_task(p)))
-		return WALT_LL_PIPE_MVP;
+	if (walt_pipeline_low_latency_task(p))
+		return WALT_PIPELINE_MVP;
+
+	if (walt_procfs_low_latency_task(p))
+		return WALT_LL_MVP;
 
 	if (per_task_boost(p) == TASK_BOOST_STRICT_MAX)
 		return WALT_TASK_BOOST_MVP;
@@ -1196,6 +1239,9 @@ static inline unsigned int walt_cfs_mvp_task_limit(struct task_struct *p)
 	/* Binder MVP tasks are high prio but have only single slice */
 	if (wts->mvp_prio == WALT_BINDER_MVP)
 		return WALT_MVP_SLICE;
+
+	if (wts->mvp_prio == WALT_PIPELINE_MVP)
+		return 2 * WALT_MVP_LIMIT;
 
 	return WALT_MVP_LIMIT;
 }
@@ -1288,7 +1334,7 @@ static void walt_cfs_account_mvp_runtime(struct rq *rq, struct task_struct *curr
 		slice = 0;
 
 	/* slice is not expired */
-	if (slice < WALT_MVP_SLICE)
+	if (slice < ((wts->mvp_prio == WALT_PIPELINE_MVP) ? WALT_MVP_LIMIT : WALT_MVP_SLICE))
 		return;
 
 	wts->sum_exec_snapshot_for_slice = curr->se.sum_exec_runtime;
@@ -1430,7 +1476,8 @@ static void walt_cfs_check_preempt_wakeup_fair(void *unused, struct rq *rq, stru
 	 */
 	skip_mvp = wrq->skip_mvp;
 	walt_cfs_account_mvp_runtime(rq, c);
-	resched = (skip_mvp != wrq->skip_mvp) || (wrq->mvp_tasks.next != &wts_c->mvp_list);
+	resched = (skip_mvp != wrq->skip_mvp) || (wrq->mvp_tasks.next != &wts_c->mvp_list) ||
+			(wts_p->mvp_prio > wts_c->mvp_prio);
 
 	/*
 	 * current is no longer eligible to run. It must have been
