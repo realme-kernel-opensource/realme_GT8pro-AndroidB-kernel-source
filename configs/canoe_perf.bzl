@@ -91,6 +91,7 @@ canoe_perf_config = {
     "CONFIG_MEM_PROT": "m",
     "CONFIG_LEDS_QCOM_FLASH": "m",
     "CONFIG_LEDS_QCOM_LPG": "m",
+    "CONFIG_LEDS_QPNP_VIBRATOR_LDO": "m",
     "CONFIG_LEDS_TRIGGER_PATTERN": "m",
     "CONFIG_MAC80211": "m",
     "CONFIG_MAC80211_DEBUG_MENU": "n",
