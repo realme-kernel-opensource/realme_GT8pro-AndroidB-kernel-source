@@ -8964,6 +8964,8 @@ int msm_pcie_allow_l1(struct pci_dev *pci_dev)
 		return -ENODEV;
 
 	pcie_dev = msm_pcie_bus_priv_data(root_pci_dev->bus);
+	if (!pcie_dev)
+		return 0;
 
 	mutex_lock(&pcie_dev->setup_lock);
 	mutex_lock(&pcie_dev->aspm_lock);
@@ -9031,6 +9033,8 @@ int msm_pcie_prevent_l1(struct pci_dev *pci_dev)
 		return -ENODEV;
 
 	pcie_dev = msm_pcie_bus_priv_data(root_pci_dev->bus);
+	if (!pcie_dev)
+		return 0;
 
 	/* disable L1 */
 	mutex_lock(&pcie_dev->setup_lock);
@@ -9295,6 +9299,10 @@ static int msm_pci_probe(struct pci_dev *pci_dev,
 	struct msm_pcie_dev_t *pcie_dev = msm_pcie_bus_priv_data(pci_dev->bus);
 	struct msm_root_dev_t *root_dev;
 
+	if (!pcie_dev || !pcie_dev->pdev) {
+		pr_err("PCIe: Skip probe as platform device not registered.\n");
+		return -ENODEV;
+	}
 	PCIE_DBG(pcie_dev, "PCIe: RC%d: PCI Probe\n", pcie_dev->rc_idx);
 
 	if (!pci_dev->dev.of_node)
