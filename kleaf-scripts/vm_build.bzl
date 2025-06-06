@@ -6,7 +6,12 @@ load(
 )
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
-load("//build/kernel/kleaf:kernel.bzl", "ddk_headers", "merged_kernel_uapi_headers")
+load(
+    "//build/kernel/kleaf:kernel.bzl",
+    "ddk_headers",
+    "kernel_unstripped_modules_archive",
+    "merged_kernel_uapi_headers",
+)
 load(":kleaf-scripts/dtbs.bzl", "define_qcom_dtbs")
 load(":kleaf-scripts/image_opts.bzl", "vm_image_opts")
 load(":qcom_modules.bzl", "registry")
@@ -87,6 +92,12 @@ def define_single_vm_build(
         kernel_build = base_kernel,
     )
 
+    kernel_unstripped_modules_archive(
+        name = "{}_unstripped_modules_tar".format(name),
+        kernel_build = base_kernel,
+        kernel_modules = [":{}/{}".format(name, module) for module in modules],
+    )
+
     copy_to_dist_dir(
         name = "{}_host_dist".format(name),
         data = [
@@ -112,6 +123,17 @@ def define_single_vm_build(
         dist_dir = "out/msm-kernel-{}/dist".format(name),
         flat = True,
         allow_duplicate_filenames = True,
+        log = "info",
+    )
+
+    copy_to_dist_dir(
+        name = "{}_um_dist".format(name),
+        archives = [
+            "{}_unstripped_modules_tar".format(name),
+        ],
+        dist_dir = "out/msm-kernel-{}/dist".format(name),
+        flat = True,
+        wipe_dist_dir = False,
         log = "info",
     )
 
