@@ -2128,6 +2128,32 @@ TRACE_EVENT(sched_votable_result,
 		 )
 );
 
+TRACE_EVENT(freq_qos_request,
+
+	TP_PROTO(const char *variation, void *addr, enum freq_qos_req_type type, int val),
+
+	TP_ARGS(variation, addr, type, val),
+
+	TP_STRUCT__entry(
+		__string(variation, variation)
+		__array(char,		variation, TASK_COMM_LEN)
+		__field(void *,		addr)
+		__field(int,		type)
+		__field(int,		val)
+		),
+
+	TP_fast_assign(
+		__assign_str(variation);
+		__entry->addr	= addr;
+		__entry->type	= type;
+		__entry->val	= val;
+		),
+
+	TP_printk("variation=%s client=%pS type=%d val=%d",
+			__get_str(variation), __entry->addr, __entry->type, __entry->val)
+);
+
+
 #endif /* _TRACE_WALT_H */
 
 #undef TRACE_INCLUDE_PATH
