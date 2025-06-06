@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -1105,7 +1105,7 @@ static int qpace_init(void)
 		   COMP_CORE_BULK_MODE_CORE_4;
 	QPACE_WRITE_COMP_CORE_REG(QPACE_COMP_CORE_BULK_MODE_OFFSET, reg_val);
 
-	reg_val = QPACE_READ_GEN_CORE_REG(QPACE_CORE_OPER_CORE_READY_OFFSET);
+	reg_val = QPACE_READ_GEN_CORE_REG(QPACE_CORE_OPER_CFG_OFFSET);
 	reg_val |= CORE_OPER_CFG_COMP_MEM_PWR_DWN_1;
 	QPACE_WRITE_GEN_CORE_REG(QPACE_CORE_OPER_CFG_OFFSET,
 				 reg_val);
