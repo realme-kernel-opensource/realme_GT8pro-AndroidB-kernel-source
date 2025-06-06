@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "qcom_mpam_slc: " fmt
@@ -272,6 +272,7 @@ static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
 	struct slc_partid_info *part_info;
 	struct qcom_slc_mon_data *data;
 	struct slc_client_capability *slc_client_cap;
+	union slc_partid_capability_def *slc_partid_cap;
 	int client_idx, part_idx;
 
 	data = &(mon_mem->mem_v1.data[0]);
@@ -281,7 +282,15 @@ static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
 	mon_idx = 0;
 	slc_client_cap = slc_capability->slc_client_cap;
 	for (client_idx = 0; client_idx < slc_capability->num_clients; client_idx++) {
+		slc_partid_cap = slc_client_cap->slc_partid_cap;
 		for (part_idx = 0; part_idx < slc_client_cap->client_info.num_part_id; part_idx++) {
+			if ((slc_capability->firmware_ver.firmware_version !=
+					SLC_MPAM_VERSION_0) &&
+					(slc_partid_cap->v1_cap.mon_support == 0)) {
+				slc_partid_cap++;
+				continue;
+			}
+
 			part_info = &(data->part_info);
 			if ((client_id == part_info->client_id) &&
 					(part_id == part_info->part_id))
@@ -289,6 +298,7 @@ static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
 
 			data++;
 			mon_idx++;
+			slc_partid_cap++;
 		}
 
 		slc_client_cap++;
@@ -484,7 +494,7 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 	struct qcom_slc_mon_data *data_mem;
 	int mon_idx;
 	uint32_t match_seq, retry_cnt, match_seq_cnt = 0;
-	uint32_t *match_seq_ptr;
+	volatile uint32_t *match_seq_ptr;
 	uint64_t *last_capture_time;
 
 	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
@@ -515,8 +525,10 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 				(retry_cnt++ < MAX_SHARED_MEM_RETRY_CNT))
 			;
 
-		if (retry_cnt >= MAX_SHARED_MEM_RETRY_CNT)
+		if (retry_cnt >= MAX_SHARED_MEM_RETRY_CNT) {
+			pr_err("SLC MPAM Monitor failed. FW agent updating the same memory\n");
 			return -EINVAL;
+		}
 
 		/* Read as zero if monitor not enabled */
 		mon_data->ref.mon_data = 0;
