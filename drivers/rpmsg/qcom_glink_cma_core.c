@@ -301,7 +301,7 @@ static irqreturn_t qcom_glink_cma_intr(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
-struct qcom_glink *qcom_glink_cma_register(struct device *parent, struct device_node *node,
+struct glink_cma_dev *qcom_glink_cma_register(struct device *parent, struct device_node *node,
 					struct glink_cma_config *config)
 {
 	struct glink_cma_dev *gdev;
@@ -372,7 +372,7 @@ struct qcom_glink *qcom_glink_cma_register(struct device *parent, struct device_
 	gdev->glink = glink;
 
 	GLINK_CMA_DEBUG_LOG(gdev->glink_cma_ilc, "success");
-	return glink;
+	return gdev;
 
 err_free_mbox:
 	mbox_free_channel(gdev->mbox_chan);
@@ -392,17 +392,15 @@ int qcom_glink_cma_start(struct qcom_glink *glink)
 }
 EXPORT_SYMBOL_GPL(qcom_glink_cma_start);
 
-void qcom_glink_cma_unregister(struct qcom_glink *glink)
+void qcom_glink_cma_unregister(struct glink_cma_dev *gdev)
 {
-	struct glink_cma_dev *gdev;
 
-	if (!glink)
+	if (!gdev)
 		return;
 
-	gdev = container_of(&glink, struct glink_cma_dev, glink);
 	disable_irq(gdev->irq);
 
-	qcom_glink_native_remove(glink);
+	qcom_glink_native_remove(gdev->glink);
 
 	mbox_free_channel(gdev->mbox_chan);
 	device_unregister(&gdev->dev);

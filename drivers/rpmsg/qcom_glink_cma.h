@@ -16,7 +16,7 @@ struct glink_cma_config {
 	size_t size;
 };
 
-struct qcom_glink *qcom_glink_cma_register(struct device *parent, struct device_node *node,
+struct glink_cma_dev *qcom_glink_cma_register(struct device *parent, struct device_node *node,
 					struct glink_cma_config *config);
-void qcom_glink_cma_unregister(struct qcom_glink *glink);
+void qcom_glink_cma_unregister(struct glink_cma_dev *gdev);
 #endif
