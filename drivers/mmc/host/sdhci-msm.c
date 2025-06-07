@@ -3,7 +3,7 @@
  * drivers/mmc/host/sdhci-msm.c - Qualcomm SDHCI Platform driver
  *
  * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -3092,9 +3092,6 @@ void sdhci_msm_ice_disable(struct sdhci_msm_host *msm_host)
 {
 	if (!(msm_host->mmc->caps2 & MMC_CAP2_CRYPTO))
 		return;
-#if IS_ENABLED(CONFIG_MMC_CRYPTO_QTI)
-	crypto_qti_disable();
-#endif
 }
 #else /* CONFIG_MMC_CRYPTO */
 
@@ -3269,6 +3266,9 @@ static int sdhci_msm_cqe_add_host(struct sdhci_host *host,
 	if (ret)
 		goto cleanup;
 
+#if IS_ENABLED(CONFIG_MMC_CRYPTO_QTI)
+	cq_host->ice = msm_host->ice;
+#endif
 	ret = cqhci_init(cq_host, host->mmc, dma64);
 	if (ret) {
 		dev_err(&pdev->dev, "%s: CQE init: failed (%d)\n",
