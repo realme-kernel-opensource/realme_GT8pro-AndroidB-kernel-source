@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-only
-# Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 #
 qcom-pdc.ko
 pinctrl-msm.ko
@@ -101,3 +101,4 @@ msm_sharedmem.ko
 minidump.ko
 qcom_ice.ko
 panel_event_notifier.ko
+crypto-qti.ko
