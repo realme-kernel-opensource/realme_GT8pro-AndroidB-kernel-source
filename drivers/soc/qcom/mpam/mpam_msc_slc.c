@@ -550,6 +550,107 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 	return 0;
 }
 
+static int slc_mon_stats_print(struct device *dev, void *msc_partid, void *buf)
+{
+	ssize_t len;
+	int client_idx, part_idx;
+	uint32_t match_seq, retry_cnt, match_seq_cnt = 0;
+	struct qcom_mpam_msc *qcom_msc;
+	struct qcom_slc_capability *slc_capability;
+	struct slc_client_capability *slc_client_cap;
+	union qcom_slc_monitor_memory *mon_mem;
+	volatile struct slc_partid_info *part_info;
+	volatile struct qcom_slc_mon_data *data;
+	volatile uint32_t *match_seq_ptr;
+	volatile uint64_t *last_capture_time;
+	union slc_partid_capability_def *slc_partid_cap;
+
+	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
+	if (qcom_mpam_msc_enabled(qcom_msc))
+		return -EINVAL;
+
+	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
+	mon_mem = (union qcom_slc_monitor_memory *)qcom_msc->mon_base;
+
+	if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0) {
+		match_seq_ptr = &(mon_mem->mem_v0.match_seq);
+		last_capture_time = &(mon_mem->mem_v0.last_capture_time);
+	} else {
+		match_seq_ptr = &(mon_mem->mem_v1.match_seq);
+		last_capture_time = &(mon_mem->mem_v1.last_capture_time);
+	}
+
+	do {
+		retry_cnt = 0;
+		slc_client_cap = slc_capability->slc_client_cap;
+
+		if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0)
+			data = &(mon_mem->mem_v0.data[0]);
+		else
+			data = &(mon_mem->mem_v1.data[0]);
+
+		while (unlikely((match_seq = *match_seq_ptr) % 2)
+				&& (retry_cnt++ < MAX_SHARED_MEM_RETRY_CNT))
+			;
+
+		if (unlikely(retry_cnt >= MAX_SHARED_MEM_RETRY_CNT)) {
+			pr_err("SLC MPAM Monitor failed. FW agent updating the same memory\n");
+			return -EIO;
+		}
+
+		len = scnprintf(buf, PAGE_SIZE, "timestamp=%llu\n", *last_capture_time);
+
+		for (client_idx = 0; client_idx < slc_capability->num_clients; client_idx++) {
+			slc_partid_cap = slc_client_cap->slc_partid_cap;
+			for (part_idx = 0; part_idx < slc_client_cap->client_info.num_part_id;
+					part_idx++) {
+				part_info = &(data->part_info);
+
+				if ((slc_capability->firmware_ver.firmware_version !=
+						SLC_MPAM_VERSION_0) &&
+						(slc_partid_cap->v1_cap.mon_support == 0)) {
+					slc_partid_cap++;
+					continue;
+				}
+
+				if (data->cap_stats.cap_enabled ||
+						data->rd_miss_stats.miss_enabled) {
+					if (slc_client_cap->client_info.num_part_id == 1)
+						len += scnprintf(buf + len, PAGE_SIZE - len,
+							"%s:\n", slc_client_cap->client_name);
+					else
+						len += scnprintf(buf + len, PAGE_SIZE - len,
+							"%s part %d:\n",
+							slc_client_cap->client_name,
+							part_info->part_id);
+
+					if (data->cap_stats.cap_enabled)
+						len += scnprintf(buf + len, PAGE_SIZE - len,
+								"cap_cnt=%d,",
+								data->cap_stats.num_cache_lines);
+					if (data->rd_miss_stats.miss_enabled)
+						len += scnprintf(buf + len, PAGE_SIZE - len,
+								"miss_cnt=%llu,",
+								data->rd_miss_stats.rd_misses);
+					len -= 1;
+					len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+				}
+
+				slc_partid_cap++;
+				data++;
+			}
+
+			slc_client_cap++;
+		}
+	} while ((match_seq != *match_seq_ptr) &&
+			(match_seq_cnt++ < MAX_SHARED_MATCH_SEQ_CNT));
+
+	if (match_seq_cnt == MAX_SHARED_MATCH_SEQ_CNT)
+		return -EIO;
+
+	return len;
+}
+
 static struct mpam_msc_ops slc_msc_ops = {
 	.get_firmware_version = slc_mpam_version,
 	.set_cache_partition = slc_set_cache_partition,
@@ -558,6 +659,7 @@ static struct mpam_msc_ops slc_msc_ops = {
 	.reset_cache_partition = slc_reset_cache_partition,
 	.mon_config = slc_mon_config,
 	.mon_stats_read = slc_mon_stats_read,
+	.mon_stats_print = slc_mon_stats_print,
 };
 
 static int slc_client_info_read(struct device *dev, struct device_node *node)
@@ -751,7 +853,7 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 	struct device_node *node;
 	struct qcom_mpam_msc *qcom_msc;
 	struct qcom_slc_capability *qcom_slc_capability;
-	struct qcom_slc_mon_mem_v0 *mon_mem;
+	union qcom_slc_monitor_memory *mon_mem;
 	struct resource *res;
 
 	qcom_msc = devm_kzalloc(&pdev->dev, sizeof(struct qcom_mpam_msc), GFP_KERNEL);
@@ -811,8 +913,8 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(qcom_msc->mon_base),
 				"ioremap slc mpam_mon_base failed!\n");
 
-	mon_mem = (struct qcom_slc_mon_mem_v0 *) qcom_msc->mon_base;
-	if (mon_mem->msc_id != qcom_msc->msc_id)
+	mon_mem = (union qcom_slc_monitor_memory *) qcom_msc->mon_base;
+	if (mon_mem->mem_v1.msc_id != qcom_msc->msc_id)
 		return dev_err_probe(&pdev->dev, -EINVAL, "IMEM Init failure!\n");
 
 	ret = attach_mpam_msc(&pdev->dev, qcom_msc, SLC);
