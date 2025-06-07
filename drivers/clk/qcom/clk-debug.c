@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016, 2019-2021, The Linux Foundation. All rights reserved. */
-/* Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #include <linux/clk.h>
 #include <linux/export.h>
@@ -13,6 +13,7 @@
 #include <linux/bitops.h>
 #include <linux/clk/qcom.h>
 #include <linux/mfd/syscon.h>
+#include <soc/qcom/minidump.h>
 #include <trace/events/power.h>
 
 #define CREATE_TRACE_POINTS
@@ -52,6 +53,8 @@ static LIST_HEAD(clk_hw_debug_mux_list);
 #define XO_DIV4_TERM_CNT_MASK	GENMASK(19, 0)
 #define MEASURE_CNT		GENMASK(24, 0)
 #define CBCR_ENA		BIT(0)
+
+#define CLK_CORE_SIZE		264
 
 static int _clk_runtime_get_debug_mux(struct clk_debug_mux *mux, bool get)
 {
@@ -1053,6 +1056,26 @@ static void clk_debug_unregister(void)
 		clk_hw_debug_remove(dclk);
 	mutex_unlock(&clk_debug_lock);
 }
+
+#ifdef CONFIG_QCOM_MINIDUMP_CLK
+void clk_debug_register_minidump(struct clk_hw *hw)
+{
+	struct md_region md_entry;
+
+	if (!msm_minidump_enabled())
+		return;
+
+	scnprintf(md_entry.name, sizeof(md_entry.name), "%s",
+			qcom_clk_hw_get_name(hw));
+	md_entry.virt_addr = (uintptr_t)hw->core;
+	md_entry.phys_addr = virt_to_phys((void *)(hw->core));
+	md_entry.size = CLK_CORE_SIZE;
+
+	if (msm_minidump_add_region(&md_entry) < 0)
+		pr_warn("Failed to register clk %s in minidump\n", md_entry.name);
+}
+EXPORT_SYMBOL_GPL(clk_debug_register_minidump);
+#endif
 
 /**
  * clk_hw_debug_register - add a clk node to the debugfs clk directory

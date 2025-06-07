@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2014, 2019-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/device.h>
@@ -305,9 +305,14 @@ int devm_clk_register_regmap(struct device *dev, struct clk_regmap *rclk)
 		spin_unlock(&clk_regmap_lock);
 
 		ret = clk_hw_debug_register(dev, &rclk->hw);
+		if (ret)
+			return ret;
 	}
 
-	return ret;
+	if (rclk->flags & QCOM_CLK_MINIDUMP_ENABLE)
+		clk_debug_register_minidump(&rclk->hw);
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(devm_clk_register_regmap);
 
