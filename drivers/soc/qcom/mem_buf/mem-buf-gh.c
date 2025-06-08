@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/anon_inodes.h>
@@ -279,6 +279,7 @@ err_alloc_pages:
 	return ret;
 }
 
+#ifdef CONFIG_DMA_CMA
 static int mem_buf_rmt_alloc_cma(struct sg_table *sgt, unsigned int count)
 {
 	struct cma *cma;
@@ -321,6 +322,7 @@ err_cma_alloc:
 	sg_free_table(sgt);
 	return ret;
 }
+#endif
 
 static int mem_buf_rmt_alloc_buddy_mem(struct mem_buf_xfer_mem *xfer_mem)
 {
@@ -333,9 +335,11 @@ static int mem_buf_rmt_alloc_buddy_mem(struct mem_buf_xfer_mem *xfer_mem)
 	if (!sgt)
 		return -ENOMEM;
 
+#ifdef CONFIG_DMA_CMA
 	if (mem_buf_dev->cma_area)
 		ret = mem_buf_rmt_alloc_cma(sgt, count);
 	else
+#endif
 		ret = mem_buf_rmt_alloc_pages(sgt, count);
 	if (ret)
 		goto err_alloc_pages;
@@ -387,13 +391,16 @@ static void mem_buf_rmt_free_buddy_mem(struct mem_buf_xfer_mem *xfer_mem)
 {
 	struct sg_table *table = xfer_mem->mem_sgt;
 	struct sg_page_iter sgiter;
-	bool is_cma;
+	bool is_cma = false;
 
 	pr_debug("%s: Freeing DMAHEAP-BUDDY memory\n", __func__);
 
 	/* Returns false when called on !cma memory */
+#ifdef CONFIG_DMA_CMA
 	is_cma = cma_release(mem_buf_dev->cma_area, sg_page(table->sgl),
 				table->sgl->length >> PAGE_SHIFT);
+#endif
+
 	if (!is_cma)
 		for_each_sg_page(table->sgl, &sgiter, table->nents, 0)
 			__free_page(sg_page_iter_page(&sgiter));
