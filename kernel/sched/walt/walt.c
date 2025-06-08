@@ -5140,9 +5140,9 @@ static void android_rvh_update_misfit_status(void *unused, struct task_struct *p
 	change = misfit - old_misfit;
 	if (change) {
 		sched_update_nr_prod(rq->cpu, 0);
-		wts->misfit = misfit;
 		wrq->walt_stats.nr_big_tasks += change;
 		BUG_ON(wrq->walt_stats.nr_big_tasks < 0);
+		wts->misfit = misfit;
 	}
 }
 
