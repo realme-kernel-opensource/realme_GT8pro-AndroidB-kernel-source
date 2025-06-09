@@ -161,3 +161,16 @@ def register_modules(registry):
             # do not sort
         ],
     )
+
+    registry.register(
+        name = "drivers/regulator/qcom-pm8008-regulator",
+        out = "qcom-pm8008-regulator.ko",
+        config = "CONFIG_REGULATOR_QCOM_PM8008",
+        srcs = [
+            # do not sort
+            "drivers/regulator/qcom-pm8008-regulator.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )

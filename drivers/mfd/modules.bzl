@@ -26,3 +26,16 @@ def register_modules(registry):
             "drivers/base/regmap/qti-regmap-debugfs",
         ],
     )
+
+    registry.register(
+        name = "drivers/mfd/qcom-pm8008",
+        out = "qcom-pm8008.ko",
+        config = "CONFIG_MFD_QCOM_PM8008",
+        srcs = [
+            # do not sort
+            "drivers/mfd/qcom-pm8008.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )
