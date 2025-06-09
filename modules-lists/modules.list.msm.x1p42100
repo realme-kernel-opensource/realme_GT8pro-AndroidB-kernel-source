@@ -11,3 +11,4 @@ qcom_hwspinlock.ko
 qcom-ipcc.ko
 pinctrl-msm.ko
 pinctrl-x1e80100.ko
+qcom-pdc.ko
