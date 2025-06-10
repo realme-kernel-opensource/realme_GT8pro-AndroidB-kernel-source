@@ -6,6 +6,8 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/soc/qcom/mpam/mpam.c",
+            "drivers/soc/qcom/mpam/mpam_rpmsg.c",
+            "drivers/soc/qcom/mpam/mpam_dsp.h",
         ],
         deps = [
             # do not sort

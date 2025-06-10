@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _QCOM_MPAM_H
@@ -177,6 +177,15 @@ union platform_monitor_value {
 	} V2 __packed;
 };
 
+struct platform_mpam_bw_limit_cfg {
+	int limit_ratio;
+	int limit_mbps;
+	int max_bw;
+};
+
+int __init qcom_mpam_rpmsg_init(void);
+void __exit qcom_mpam_rpmsg_exit(void);
+
 #if IS_ENABLED(CONFIG_QTI_MPAM)
 int qcom_mpam_set_cache_partition(struct mpam_set_cache_partition *param);
 int qcom_mpam_get_version(struct mpam_ver_ret *ver);
@@ -187,6 +196,9 @@ int qcom_mpam_set_platform_bw_ctrl(struct platform_mpam_bw_ctrl_cfg *param);
 int qcom_mpam_get_platform_bw_ctrl(struct platform_mpam_read_bw_ctrl *param,
 						struct platform_mpam_bw_ctrl_config *val);
 int qcom_mpam_set_platform_bw_monitor(struct platform_mpam_bw_monitor_cfg *param);
+struct platform_mpam_bw_limit_cfg *qcom_mpam_get_bw_limit(void);
+int qcom_mpam_get_bw_limit_rpmsg(void);
+int qcom_mpam_set_bw_limit_rpmsg(int ratio);
 #else
 static inline int qcom_mpam_set_cache_partition(struct mpam_set_cache_partition *param)
 {
@@ -221,6 +233,21 @@ static inline int qcom_mpam_get_platform_bw_ctrl(struct platform_mpam_read_bw_ct
 }
 
 static inline int qcom_mpam_set_platform_bw_monitor(struct platform_mpam_bw_monitor_cfg *param)
+{
+	return 0;
+}
+
+static inline struct platform_mpam_bw_limit_cfg *qcom_mpam_get_bw_limit(void)
+{
+	return NULL;
+}
+
+static inline int qcom_mpam_get_bw_limit_rpmsg(void)
+{
+	return 0;
+}
+
+static inline int qcom_mpam_set_bw_limit_rpmsg(int ratio)
 {
 	return 0;
 }
