@@ -17,6 +17,7 @@ int soc_sched_lib_name_capacity;
 #define PIPELINE_BUSY_THRESH_8MS_WINDOW 7
 #define PIPELINE_BUSY_THRESH_12MS_WINDOW 11
 #define PIPELINE_BUSY_THRESH_16MS_WINDOW 15
+unsigned int gold_cluster_id, prime_cluster_id;
 
 void walt_config(void)
 {
@@ -104,15 +105,12 @@ void walt_config(void)
 	soc_feat_set(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
 	soc_feat_set(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	sysctl_pipeline_special_task_util_thres = 100;
-	sysctl_pipeline_non_special_task_util_thres = 200;
-	sysctl_pipeline_pin_thres_low_pct = 50;
-	sysctl_pipeline_pin_thres_high_pct = 60;
 	pipeline_swap_util_th = 0;
+	prime_cluster_id = num_sched_clusters - 1;
+	gold_cluster_id = num_sched_clusters > 2 ? 1 : 0;
 
 	/* Initialize smart freq configurations */
 	smart_freq_init(name);
-
 	/* return if socinfo is not available */
 	if (!name)
 		return;
@@ -203,7 +201,7 @@ void walt_config(void)
 	} else if (!strcmp(name, "TUNA")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
-		soc_feat_set(SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING);
+		soc_feat_set(SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING);
 		soc_sched_lib_name_capacity = 2;
 		/*
 		 * Treat Golds and Primes as candidates for load sync under pipeline usecase.

@@ -93,7 +93,7 @@ enum freq_caps {
 #define SOC_ENABLE_EXPERIMENT3						BIT(9)
 #define SOC_ENABLE_PIPELINE_SWAPPING_BIT		BIT(10)
 #define SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT		BIT(11)
-#define SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING	BIT(12)
+#define SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING	BIT(12)
 
 extern int soc_sched_lib_name_capacity;
 
@@ -1575,8 +1575,8 @@ static inline void walt_lockdep_assert(int cond, int cpu, struct task_struct *p)
 #define walt_lockdep_assert_rq(rq, p)			\
 	walt_lockdep_assert_held(&rq->__lock, cpu_of(rq), p)
 
-extern bool pipeline_check(struct walt_rq *wrq);
-extern void pipeline_rearrange(struct walt_rq *wrq, bool need_assign_heavy);
+extern int pipeline_check(struct walt_rq *wrq);
+extern void pipeline_rearrange(struct walt_rq *wrq, int need_assign_heavy);
 extern void walt_configure_single_thread_pipeline(unsigned int val);
 extern bool enable_load_sync(int cpu);
 extern struct walt_related_thread_group *lookup_related_thread_group(unsigned int group_id);
@@ -1684,4 +1684,10 @@ DECLARE_PER_CPU(unsigned int, walt_yield_to_sleep);
 extern unsigned int walt_sched_yield_counter;
 extern unsigned int sysctl_force_frequent_yielder;
 void account_yields(u64 window_start);
+extern void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_demand,
+		     u64 *scaled_prime_demand);
+extern unsigned int sysctl_pipeline_force_config;
+extern unsigned long walt_cpu_energy(int cpu,
+				     unsigned long max_util, unsigned long sum_util);
+extern unsigned int gold_cluster_id, prime_cluster_id;
 #endif /* _WALT_H */

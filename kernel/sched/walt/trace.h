@@ -1771,9 +1771,9 @@ TRACE_EVENT(sched_update_updown_migrate_values,
 TRACE_EVENT(sched_pipeline_tasks,
 
 	TP_PROTO(int type, int index, struct walt_task_struct *heavy_wts, int nr, u32 total_util,
-		bool pipeline_pinning),
+		bool pipeline_pinning, int config),
 
-	TP_ARGS(type, index, heavy_wts, nr, total_util, pipeline_pinning),
+	TP_ARGS(type, index, heavy_wts, nr, total_util, pipeline_pinning, config),
 
 	TP_STRUCT__entry(
 		__field(int, index)
@@ -1792,6 +1792,9 @@ TRACE_EVENT(sched_pipeline_tasks,
 		__field(int, event_windows)
 		__field(bool, pipeline_pinning)
 		__field(bool, lst)
+		__field(u64, scaled_gold_demand)
+		__field(u64, scaled_prime_demand)
+		__field(int, config)
 	),
 
 	TP_fast_assign(
@@ -1811,15 +1814,20 @@ TRACE_EVENT(sched_pipeline_tasks,
 		__entry->pipeline_activity_cnt = heavy_wts->pipeline_activity_cnt;
 		__entry->lst		= heavy_wts->lst;
 		__entry->event_windows	= atomic_read(&heavy_wts->event_windows);
+		pipeline_demand(heavy_wts, &__entry->scaled_gold_demand,
+			&__entry->scaled_prime_demand);
+		__entry->config		= config;
 	),
 
-	TP_printk("type=%d index=%d pid=%d comm=%s demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d special_pid=%d util_thres=%u total_util=%u pipeline_pin=%d event_windows=%d pipeline_activity_cnt=%u lst=%d",
+	TP_printk("type=%d index=%d pid=%d comm=%s demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d special_pid=%d util_thres=%u total_util=%u pipeline_pin=%d event_windows=%d pipeline_activity_cnt=%u lst=%d gold_demand=%llu prime_demand=%llu config=%d",
 			__entry->type, __entry->index, __entry->pid,
 			__entry->comm, __entry->demand_scaled, __entry->coloc_demand,
 			__entry->pipeline_cpu, __entry->low_latency, __entry->nr,
 			__entry->special_pid, __entry->util_thres, __entry->total_util,
 			__entry->pipeline_pinning, __entry->event_windows,
-			__entry->pipeline_activity_cnt, __entry->lst)
+			__entry->pipeline_activity_cnt, __entry->lst,
+			__entry->scaled_gold_demand, __entry->scaled_prime_demand,
+			__entry->config)
 );
 
 TRACE_EVENT(sched_pipeline_swapped,
