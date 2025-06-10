@@ -2200,31 +2200,8 @@ static const struct of_device_id disp_cc_canoe_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, disp_cc_canoe_match_table);
 
-static struct clk_init_data disp_cc_mdss_mdp_clk_src_init = {
-	.name = "disp_cc_mdss_mdp_clk_src",
-	.parent_data = disp_cc_parent_data_9,
-	.num_parents = ARRAY_SIZE(disp_cc_parent_data_9),
-	.flags = CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT,
-	.ops = &clk_rcg2_ops,
-};
-
-static struct clk_init_data disp_cc_pll0_init = {
-	.name = "disp_cc_pll0",
-	.parent_data = &(const struct clk_parent_data) {
-		.fw_name = "bi_tcxo",
-		.name = "bi_tcxo",
-	},
-	.num_parents = 1,
-	.flags = CLK_GET_RATE_NOCACHE,
-	.ops = &clk_alpha_pll_taycan_eko_t_ops,
-};
-
 static void disp_cc_alor_fixup(struct regmap *regmap)
 {
-	/* Remove cesta ops until crm enablement for alor*/
-	disp_cc_pll0.clkr.hw.init = &disp_cc_pll0_init;
-	disp_cc_mdss_mdp_clk_src.clkr.hw.init = &disp_cc_mdss_mdp_clk_src_init;
-
 	disp_cc_pll0_config.config_ctl_hi_val = 0x0a8060e0;
 	disp_cc_pll1_config.config_ctl_hi_val = 0x0a8060e0;
 }
