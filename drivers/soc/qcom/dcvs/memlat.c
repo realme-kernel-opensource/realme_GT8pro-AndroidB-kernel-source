@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #define pr_fmt(fmt) "qcom-memlat: " fmt
 
@@ -236,6 +236,7 @@ struct memlat_dev_data {
 	spinlock_t			fp_agg_lock;
 	spinlock_t			fp_commit_lock;
 	bool				fp_enabled;
+	bool				sampling_inited;
 	bool				sampling_enabled;
 	bool				inited;
 /* CPUCP related struct fields */
@@ -669,7 +670,7 @@ store_grp_attr(adaptive_level_1, 0U, 8000000U, MEMLAT_ADAPTIVE_LEVEL_1);
 show_attr(min_freq);
 show_attr(max_freq);
 show_attr(ipm_ceil);
-store_attr(ipm_ceil, 1U, 50000U, MEMLAT_IPM_CEIL);
+store_attr(ipm_ceil, 1U, 500000U, MEMLAT_IPM_CEIL);
 show_attr(fe_stall_floor);
 store_attr(fe_stall_floor, 0U, 100U, MEMLAT_FE_STALL_FLOOR);
 show_attr(be_stall_floor);
@@ -1085,6 +1086,9 @@ static void memlat_update_work(struct work_struct *work)
 	struct dcvs_freq new_freq;
 	u32 max_freqs[MAX_MEMLAT_GRPS] = { 0 };
 
+	if (!memlat_data->sampling_enabled)
+		return;
+
 	/* aggregate mons to calculate max freq per memlat_group */
 	for (grp = 0; grp < MAX_MEMLAT_GRPS; grp++) {
 		memlat_grp = memlat_data->groups[grp];
@@ -1126,7 +1130,8 @@ static void memlat_update_work(struct work_struct *work)
 
 static enum hrtimer_restart memlat_hrtimer_handler(struct hrtimer *timer)
 {
-	calculate_sampling_stats();
+	if (memlat_data->sampling_enabled)
+		calculate_sampling_stats();
 	queue_work(memlat_data->memlat_wq, &memlat_data->work);
 
 	return HRTIMER_NORESTART;
@@ -1330,6 +1335,25 @@ static bool memlat_grps_and_mons_inited(void)
 
 static int memlat_sampling_init(void)
 {
+	struct device *dev = memlat_data->dev;
+
+	memlat_data->memlat_wq = create_freezable_workqueue("memlat_wq");
+	if (!memlat_data->memlat_wq) {
+		dev_err(dev, "Couldn't create memlat workqueue.\n");
+		return -ENOMEM;
+	}
+	INIT_WORK(&memlat_data->work, &memlat_update_work);
+
+	hrtimer_init(&memlat_data->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	memlat_data->timer.function = memlat_hrtimer_handler;
+
+	register_trace_android_vh_jiffies_update(memlat_jiffies_update_cb, NULL);
+
+	return 0;
+}
+
+static int memlat_sampling_enable(void)
+{
 	int cpu;
 	struct device *dev = memlat_data->dev;
 	struct cpu_stats *stats;
@@ -1342,18 +1366,7 @@ static int memlat_sampling_init(void)
 		spin_lock_init(&stats->ctrs_lock);
 	}
 
-	memlat_data->memlat_wq = create_freezable_workqueue("memlat_wq");
-	if (!memlat_data->memlat_wq) {
-		dev_err(dev, "Couldn't create memlat workqueue.\n");
-		return -ENOMEM;
-	}
-	INIT_WORK(&memlat_data->work, &memlat_update_work);
-
-	hrtimer_init(&memlat_data->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	memlat_data->timer.function = memlat_hrtimer_handler;
-
 	register_trace_android_vh_scheduler_tick(memlat_sched_tick_cb, NULL);
-	register_trace_android_vh_jiffies_update(memlat_jiffies_update_cb, NULL);
 	qcom_pmu_idle_register(&memlat_idle_notif);
 
 	return 0;
@@ -1590,6 +1603,7 @@ static int cpucp_memlat_init(struct scmi_device *sdev)
 	struct scmi_protocol_handle *ph;
 	const struct qcom_scmi_vendor_ops *ops;
 	struct memlat_group *grp;
+	struct memlat_mon *mon;
 	bool start_cpucp_timer = false;
 
 	if (!sdev || !sdev->handle)
@@ -1625,10 +1639,11 @@ static int cpucp_memlat_init(struct scmi_device *sdev)
 		}
 
 		for (j = 0; j < grp->num_inited_mons; j++) {
-			if (!grp->cpucp_enabled)
+			mon = &grp->mons[j];
+			if (!(mon->type & CPUCP_MON))
 				continue;
 			/* Configure per monitor parameters */
-			ret = configure_cpucp_mon(&grp->mons[j]);
+			ret = configure_cpucp_mon(mon);
 			if (ret < 0) {
 				pr_err("failed to configure mon: %d\n", ret);
 				goto memlat_unlock;
@@ -1958,15 +1973,27 @@ static int memlat_mon_probe(struct platform_device *pdev)
 
 	num_cpus = cpumask_weight(&mon->cpus);
 
+	mutex_lock(&memlat_lock);
+	if (!memlat_data->sampling_inited) {
+		ret = memlat_sampling_init();
+		if (ret < 0) {
+			mutex_unlock(&memlat_lock);
+			goto unlock_out;
+		}
+		memlat_data->sampling_inited = true;
+	}
 	if (of_property_read_bool(dev->of_node, "qcom,sampling-enabled")) {
-		mutex_lock(&memlat_lock);
 		if (!memlat_data->sampling_enabled) {
-			ret = memlat_sampling_init();
+			ret = memlat_sampling_enable();
+			if (ret < 0) {
+				mutex_unlock(&memlat_lock);
+				goto unlock_out;
+			}
 			memlat_data->sampling_enabled = true;
 		}
-		mutex_unlock(&memlat_lock);
 		mon->type |= SAMPLING_MON;
 	}
+	mutex_unlock(&memlat_lock);
 
 	if (of_property_read_bool(dev->of_node, "qcom,threadlat-enabled"))
 		mon->type |= THREADLAT_MON;
