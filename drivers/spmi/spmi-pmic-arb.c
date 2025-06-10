@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved. */
-/* Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #include <linux/bitmap.h>
 #include <linux/debugfs.h>
@@ -2217,6 +2217,7 @@ static int spmi_pmic_arb_bus_init(struct platform_device *pdev,
 	struct spmi_pmic_arb_bus *bus;
 	struct device *dev = &pdev->dev;
 	struct spmi_controller *ctrl;
+	struct resource res;
 	void __iomem *intr;
 	void __iomem *cnfg;
 	int index, ret;
@@ -2254,9 +2255,12 @@ static int spmi_pmic_arb_bus_init(struct platform_device *pdev,
 		return -EINVAL;
 	}
 
-	cnfg = devm_of_iomap(dev, node, index, NULL);
-	if (IS_ERR(cnfg))
-		return PTR_ERR(cnfg);
+	if (of_address_to_resource(node, index, &res))
+		return -EADDRNOTAVAIL;
+
+	cnfg = devm_ioremap(dev, res.start, resource_size(&res));
+	if (!cnfg)
+		return -EADDRNOTAVAIL;
 
 	index = of_property_match_string(node, "reg-names", "intr");
 	if (index < 0) {
