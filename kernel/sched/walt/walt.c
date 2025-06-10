@@ -2242,6 +2242,7 @@ static inline u32 scale_util_to_time(u16 util)
 	return util * walt_scale_demand_divisor;
 }
 
+#define PIPELINE_IDLE_MS 100000000
 static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 		u32 runtime, u16 runtime_scaled, u32 *demand, u16 *trailblazer_demand)
 {
@@ -2249,6 +2250,10 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	bool is_prev_trailblazer = walt_flag_test(p, WALT_TRAILBLAZER_BIT);
 	u64 trailblazer_capacity;
+
+	if (sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
+		((wts->mark_start + PIPELINE_IDLE_MS) <  walt_rq_clock(rq)))
+		wts->high_util_history = 0;
 
 	if (!pipeline_in_progress() && sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
 			(((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
@@ -3447,7 +3452,8 @@ static void walt_update_cluster_topology(void)
 	build_cpu_array();
 	find_cache_siblings();
 
-	create_util_to_cost();
+	early_walt_config();
+	create_freq_to_cost();
 	walt_clusters_parsed = true;
 }
 
@@ -5365,7 +5371,14 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 		if (inform_governor) {
 			per_cpu(ipc_level, cpu) = curr_ipc_level;
 			per_cpu(ipc_deactivate_ns, cpu) = 0;
-			waltgov_run_callback(rq, WALT_CPUFREQ_SMART_FREQ_BIT);
+			/*
+			 * update this and bigger clusters. The bigger clusters will update their
+			 * caps to ensure their capacities are higher than the smaller ones
+			 */
+			for_each_sched_cluster(cluster) {
+				rq = cpu_rq(cpumask_first(&cluster->cpus));
+				waltgov_run_callback(rq, WALT_CPUFREQ_SMART_FREQ_BIT);
+			}
 		}
 	}
 }
@@ -5743,7 +5756,7 @@ static void walt_init(struct work_struct *work)
 	if (!rcu_access_pointer(rd->pd)) {
 		/*
 		 * perf domains not properly configured.  this is a must as
-		 * create_util_to_cost depends on rd->pd being properly
+		 * create_freq_to_cost depends on rd->pd being properly
 		 * initialized.
 		 */
 		schedule_work(&rebuild_sd_work);
@@ -5762,7 +5775,7 @@ static void walt_init(struct work_struct *work)
 	 * to work with an asymmetrical soc. This is necessary
 	 * for load balance and task placement to work properly.
 	 * see walt_find_energy_efficient_cpu(), and
-	 * create_util_to_cost().
+	 * create_freq_to_cost().
 	 */
 	if (!rcu_access_pointer(rd->pd) && num_sched_clusters > 1)
 		WALT_BUG(WALT_BUG_WALT, NULL,

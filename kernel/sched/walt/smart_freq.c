@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/tick.h>
@@ -88,12 +88,13 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 		void __user *buffer, size_t *lenp,
 		loff_t *ppos)
 {
-	int ret;
+	int ret = 0;
 	int i;
 	int id = -1;
 	unsigned int size = 0;
 	unsigned int *data = (unsigned int *)table->data;
 	int val[LEGACY_SMART_FREQ*2] = {[0 ... (LEGACY_SMART_FREQ*2)-1] = -1};
+	unsigned long no_reason_freq = 0;
 	struct ctl_table tmp = {
 		.data	= &val,
 		.maxlen	= sizeof(unsigned int) * (LEGACY_SMART_FREQ*2),
@@ -110,6 +111,35 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 				write, buffer, lenp, ppos);
 	}
 
+	/*
+	 * if a malformed (odd number of entries) or beyond LEGACY_MART_FREQ reason
+	 * is specified reject all
+	 */
+	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
+	if (ret)
+		goto out;
+
+
+	for (i = 0; i < LEGACY_SMART_FREQ*2; i++) {
+		if (val[i] == -1)
+			break;
+
+		if (i%2 == 0 && (val[i] < 0 || val[i] >= LEGACY_SMART_FREQ)) {
+			ret = -EINVAL;
+			goto out;
+		}
+
+		if (i%2 == 0 && val[i] == NO_REASON_SMART_FREQ && val[i+1] != -1)
+			no_reason_freq = val[i + 1];
+
+		size++;
+	}
+
+	if (size%2 != 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	mutex_lock(&freq_reason_mutex);
 
 	if (data == &sysctl_legacy_freq_levels_cluster0[0])
@@ -121,24 +151,23 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 	else if (data == &sysctl_legacy_freq_levels_cluster3[0])
 		id = 3;
 
-	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
-	if (ret)
-		goto exit;
+	/*
+	 * IPC/freq should be in increasing order, and since NO_REASON_SMART_FREQ and IPC_A  need
+	 * to be same ensure the no_reason_freq if set here is lesser than IPC_B and when so
+	 * update both IPC_A as well as NO_REASON_SMART_FREQ
+	 */
+	if (no_reason_freq != 0
+		&& default_freq_config[id].smart_freq_ipc_participation_mask) {
+		if (no_reason_freq >
+			default_freq_config[id].ipc_reason_config[IPC_B].freq_allowed) {
+			ret = -EINVAL;
+			goto unlock;
+		}
 
-	ret = -EINVAL;
-
-	for (i = 0; i < LEGACY_SMART_FREQ*2; i++) {
-		if (val[i] == -1)
-			break;
-
-		if (i%2 == 0 && (val[i] < 0 || val[i] >= LEGACY_SMART_FREQ))
-			goto exit;
-
-		size++;
+		default_freq_config[id].legacy_reason_config[NO_REASON_SMART_FREQ].freq_allowed =
+			no_reason_freq;
+		default_freq_config[id].ipc_reason_config[IPC_A].freq_allowed = no_reason_freq;
 	}
-
-	if (size%2 != 0)
-		goto exit;
 
 	for (i = 0; i < size; i += 2) {
 		default_freq_config[id].legacy_reason_config[val[i]].freq_allowed =
@@ -147,24 +176,9 @@ int sched_smart_freq_legacy_freq_handler(const struct ctl_table *table, int writ
 			BIT(val[i]);
 	}
 
-	ret = 0;
-	goto out;
-
-exit:
-	default_freq_config[id].smart_freq_participation_mask = BIT(NO_REASON_SMART_FREQ);
-
-	for (i = 0; i < LEGACY_SMART_FREQ; i++) {
-		default_freq_config[id].legacy_reason_config[i].freq_allowed =
-			FREQ_QOS_MAX_DEFAULT_VALUE;
-	}
-
-out:
-	if (default_freq_config[id].smart_freq_ipc_participation_mask) {
-		default_freq_config[id].legacy_reason_config[NO_REASON_SMART_FREQ].freq_allowed =
-			default_freq_config[id].ipc_reason_config[IPC_A].freq_allowed;
-	}
-
+unlock:
 	mutex_unlock(&freq_reason_mutex);
+out:
 	return ret;
 }
 
@@ -287,6 +301,9 @@ static inline bool has_internal_freq_limit_changed(struct walt_sched_cluster *cl
 	unsigned int internal_freq, ipc_freq;
 	int i;
 	struct smart_freq_cluster_info *smci = cluster->smart_freq_info;
+	unsigned int prev_id;
+	struct walt_sched_cluster *prev_cluster;
+	unsigned long prev_cluster_limit = 0;
 
 	internal_freq = cluster->walt_internal_freq_limit;
 	cluster->walt_internal_freq_limit = cluster->max_freq;
@@ -301,6 +318,16 @@ static inline bool has_internal_freq_limit_changed(struct walt_sched_cluster *cl
 	cluster->walt_internal_freq_limit = max(ipc_freq,
 			     cluster->walt_internal_freq_limit);
 
+	if (cluster->id > 0) {
+		prev_id = cluster->id - 1;
+		prev_cluster = sched_cluster[prev_id];
+		prev_cluster_limit = prev_cluster->walt_internal_freq_limit;
+		if (prev_cluster_limit == FREQ_QOS_MAX_DEFAULT_VALUE)
+			prev_cluster_limit = prev_cluster->max_possible_freq;
+
+		if (cluster->walt_internal_freq_limit < prev_cluster_limit)
+			cluster->walt_internal_freq_limit = prev_cluster_limit;
+	}
 	return cluster->walt_internal_freq_limit != internal_freq;
 }
 

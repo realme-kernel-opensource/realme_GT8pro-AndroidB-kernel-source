@@ -18,6 +18,7 @@ cpumask_t available_prime_cpus = CPU_MASK_NONE;
 int have_heavy_list;
 u32 total_util;
 u32 least_pipeline_demand;
+static bool top_wts_bias;
 
 #define SCALING_FACTOR 70
 #define IPC_DEGRADATION_FACTOR 115
@@ -258,6 +259,7 @@ static inline bool should_pipeline_pin_special(void)
 	return special_pipeline_thres_valid();
 }
 
+#define PIPELINE_BIAS_WINDOW_SIZE 5
 int find_heaviest_topapp(u64 window_start)
 {
 	struct walt_related_thread_group *grp;
@@ -268,6 +270,9 @@ int find_heaviest_topapp(u64 window_start)
 	int i, j, start, delta = 0;
 	struct walt_task_struct *heavy_wts_to_drop[MAX_NR_PIPELINE];
 	u64 gold_demand_heavy = 0, prime_demand_heavy = 0;
+	static struct walt_task_struct *top_wts;
+	static int top_wts_count;
+	bool top_wts_miss = false;
 
 	if (num_sched_clusters < 2)
 		return FIND_HEAVY_FAIL;
@@ -424,6 +429,26 @@ int find_heaviest_topapp(u64 window_start)
 
 				if (to_be_placed_wts->pipeline_activity_cnt ==
 							heavy_wts[i]->pipeline_activity_cnt) {
+					/*
+					 * When evaluating for T0, if the last T0 task has been T0
+					 * for 5 or more evaluations, set the top_wts_bias. Once
+					 * top_wts_bias has been set, ensure T0 remains at the top
+					 * until top_wts_count has been lowered to 0.
+					 */
+					if (i == 0 && top_wts && top_wts_bias) {
+						if (to_be_placed_wts == top_wts) {
+							if (prime_demand_heavy >
+								prime_demand_to_be)
+								top_wts_miss = true;
+							prime_demand_heavy = 0;
+						} else if (heavy_wts[i] == top_wts) {
+							if (prime_demand_to_be >
+								prime_demand_heavy)
+								top_wts_miss = true;
+							continue;
+						}
+					}
+
 					if (prime_demand_to_be <= prime_demand_heavy)
 						continue;
 				}
@@ -431,6 +456,26 @@ int find_heaviest_topapp(u64 window_start)
 				heavy_wts[i] = to_be_placed_wts;
 				to_be_placed_wts = tmp;
 			}
+		}
+	}
+
+	if (heavy_wts[0]) {
+		if (heavy_wts[0] == top_wts) {
+			if (top_wts_miss) {
+				top_wts_count--;
+				if (top_wts_count == 0 && top_wts_bias)
+					top_wts_bias = false;
+			} else {
+				top_wts_count++;
+				if (top_wts_count >= PIPELINE_BIAS_WINDOW_SIZE) {
+					top_wts_count = PIPELINE_BIAS_WINDOW_SIZE;
+					top_wts_bias = true;
+				}
+			}
+		} else {
+			top_wts = heavy_wts[0];
+			top_wts_count = 1;
+			top_wts_bias = false;
 		}
 	}
 
@@ -953,7 +998,7 @@ out:
 							   have_heavy_list, total_util,
 							  should_pipeline_pin_special(),
 							  (have_heavy_list == MAX_NR_PIPELINE) ?
-							  prev_config : 0);
+							  prev_config : 0, top_wts_bias);
 		}
 	}
 
@@ -1068,7 +1113,7 @@ void rearrange_pipeline_preferred_cpus(u64 window_start)
 		for (i = 0; i < WALT_NR_CPUS; i++) {
 			if (pipeline_wts[i] != NULL)
 				trace_sched_pipeline_tasks(MANUAL_PIPELINE, i, pipeline_wts[i],
-						pipeline_nr, 0, 0, 0);
+						pipeline_nr, 0, 0, 0, 0);
 		}
 	}
 
