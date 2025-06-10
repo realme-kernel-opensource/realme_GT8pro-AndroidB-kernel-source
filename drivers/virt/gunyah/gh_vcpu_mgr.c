@@ -41,8 +41,8 @@ struct gh_proxy_vm {
 	gh_capid_t wdog_cap_id;
 };
 
-static bool trustvm_keep_running = true;
-static bool oemvm_keep_running = true;
+static bool trustvm_keep_running = false;
+static bool oemvm_keep_running = false;
 
 static struct gh_proxy_vm *gh_vms;
 static bool init_done;
@@ -554,6 +554,8 @@ static void android_rvh_gh_before_vcpu_release(void *unused, u16 vmid,
 		return;
 
 	proxy_vcpu = xa_load(&vm->vcpus, vcpu_id);
+	if (!proxy_vcpu)
+		return;
 	/* VM instance already get a vcpu kref, only need to get VM kref here */
 	if (vcpu->vcpu_run->immediate_exit || !gunyah_vm_get(vcpu->ghvm))
 		return;
