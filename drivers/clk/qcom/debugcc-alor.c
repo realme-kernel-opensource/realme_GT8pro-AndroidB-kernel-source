@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "clk: %s: " fmt, __func__
@@ -1126,14 +1126,6 @@ static struct clk_dummy measure_only_gpu_cc_cxo_aon_clk = {
 	},
 };
 
-static struct clk_dummy measure_only_gpu_cc_gx_gfx3d_clk = {
-	.rrate = 1000,
-	.hw.init = &(const struct clk_init_data){
-		.name = "measure_only_gpu_cc_gx_gfx3d_clk",
-		.ops = &clk_dummy_ops,
-	},
-};
-
 static struct clk_dummy measure_only_gpu_cc_rscc_hub_aon_clk = {
 	.rrate = 1000,
 	.hw.init = &(const struct clk_init_data){
@@ -1362,7 +1354,6 @@ static struct clk_hw *debugcc_alor_hws[] = {
 	&measure_only_gcc_video_xo_clk.hw,
 	&measure_only_gpu_cc_cb_clk.hw,
 	&measure_only_gpu_cc_cxo_aon_clk.hw,
-	&measure_only_gpu_cc_gx_gfx3d_clk.hw,
 	&measure_only_gpu_cc_rscc_hub_aon_clk.hw,
 	&measure_only_gpu_cc_rscc_xo_aon_clk.hw,
 	&measure_only_gx_clkctl_acd_ahb_ff_clk.hw,
