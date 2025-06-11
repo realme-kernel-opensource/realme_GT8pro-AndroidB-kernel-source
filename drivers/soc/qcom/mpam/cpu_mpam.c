@@ -504,15 +504,28 @@ static void cpu_mpam_drop_item(struct config_group *group,
 	}
 	cpu_mpam_reset_param(part_id);
 
-	kfree(to_partition(item)->val);
-	kfree(to_partition(item));
+	config_item_put(item);
 }
 
+static void cpu_mpam_attr_release(struct config_item *item)
+{
+	struct cpu_mpam_partition *partition = to_partition(item);
+
+	kfree(partition->val);
+	kfree(partition);
+}
+
+static struct configfs_item_operations cpu_mpam_item_ops = {
+	.release                = cpu_mpam_attr_release,
+};
+
 static const struct config_item_type cpu_mpam_item_type = {
+	.ct_item_ops	= &cpu_mpam_item_ops,
 	.ct_attrs	= cpu_mpam_attrs,
 };
 
 static const struct config_item_type cpu_mpam_item_type_legacy = {
+	.ct_item_ops    = &cpu_mpam_item_ops,
 	.ct_attrs	= cpu_mpam_attrs_legacy,
 };
 
