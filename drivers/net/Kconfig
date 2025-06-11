@@ -38,5 +38,6 @@ if NETDEVICES
 
 source "$(KCONFIG_EXT_PREFIX)drivers/net/pcs/Kconfig"
 source "$(KCONFIG_EXT_PREFIX)drivers/net/ethernet/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/net/phy/Kconfig"
 
 endif # NETDEVICES
