@@ -5376,8 +5376,9 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 			 * caps to ensure their capacities are higher than the smaller ones
 			 */
 			for_each_sched_cluster(cluster) {
-				rq = cpu_rq(cpumask_first(&cluster->cpus));
-				waltgov_run_callback(rq, WALT_CPUFREQ_SMART_FREQ_BIT);
+				struct rq *rq_iter = cpu_rq(cpumask_first(&cluster->cpus));
+
+				waltgov_run_callback(rq_iter, WALT_CPUFREQ_SMART_FREQ_BIT);
 			}
 		}
 	}
