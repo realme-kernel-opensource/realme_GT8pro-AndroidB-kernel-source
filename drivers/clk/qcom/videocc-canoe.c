@@ -290,6 +290,18 @@ static const struct freq_tbl ftbl_video_cc_mvs0_clk_src[] = {
 	{ }
 };
 
+static const struct freq_tbl ftbl_video_cc_mvs0_clk_src_canoe_v2[] = {
+	F(240000000, P_VIDEO_CC_PLL1_OUT_MAIN, 2, 0, 0),
+	F(338000000, P_VIDEO_CC_PLL1_OUT_MAIN, 2, 0, 0),
+	F(420000000, P_VIDEO_CC_PLL1_OUT_MAIN, 2, 0, 0),
+	F(444000000, P_VIDEO_CC_PLL1_OUT_MAIN, 2, 0, 0),
+	F(533000000, P_VIDEO_CC_PLL1_OUT_MAIN, 2, 0, 0),
+	F(630000000, P_VIDEO_CC_PLL1_OUT_MAIN, 2, 0, 0),
+	F(800000000, P_VIDEO_CC_PLL1_OUT_MAIN, 2, 0, 0),
+	F(1000000000, P_VIDEO_CC_PLL1_OUT_MAIN, 2, 0, 0),
+	{ }
+};
+
 static struct clk_rcg2 video_cc_mvs0_clk_src = {
 	.cmd_rcgr = 0x8030,
 	.mnd_width = 0,
@@ -366,6 +378,17 @@ static const struct freq_tbl ftbl_video_cc_mvs0b_clk_src[] = {
 	F(444000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
 	F(533000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
 	F(630000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
+	{ }
+};
+
+static const struct freq_tbl ftbl_video_cc_mvs0b_clk_src_canoe_v2[] = {
+	F(240000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
+	F(338000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
+	F(420000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
+	F(444000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
+	F(533000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
+	F(630000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
+	F(800000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
 	{ }
 };
 
@@ -872,6 +895,7 @@ static struct qcom_cc_desc video_cc_canoe_desc = {
 static const struct of_device_id video_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-videocc" },
 	{ .compatible = "qcom,alor-videocc" },
+	{ .compatible = "qcom,canoe-videocc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, video_cc_canoe_match_table);
@@ -895,22 +919,32 @@ static int video_cc_canoe_fixup(struct platform_device *pdev, struct regmap *reg
 	if (!compat || compatlen <= 0)
 		return -EINVAL;
 
-	if (!strcmp(compat, "qcom,alor-videocc"))
-		video_cc_canoe_fixup_alor(regmap);
-	else {
-		clk_taycan_eko_t_pll_configure(&video_cc_pll3, regmap, &video_cc_pll3_config);
-
-		/*
-		 * Maximize MVS0A CFG3 ctl data download delay and enable memory redundancy.
-		 */
-		regmap_update_bits(regmap, 0x8088, ACCU_CFG_MASK, ACCU_CFG_MASK);
-	}
-
 	/*
 	 * Update VIDEO_CC_SPARE1 to have same clk_on for video_cc_mvs0_clk,
 	 * video_cc_mvs0_vpp0_clk, video_cc_mvs0_vpp1_clk during core reset by default.
 	 */
 	regmap_update_bits(regmap, 0x9f24, BIT(0), BIT(0));
+
+	if (!strcmp(compat, "qcom,alor-videocc")) {
+		video_cc_canoe_fixup_alor(regmap);
+		return 0;
+	}
+
+	if (!strcmp(compat, "qcom,canoe-videocc-v2")) {
+		video_cc_mvs0_clk_src.freq_tbl = ftbl_video_cc_mvs0_clk_src_canoe_v2;
+		video_cc_mvs0b_clk_src.freq_tbl = ftbl_video_cc_mvs0b_clk_src_canoe_v2;
+		video_cc_mvs0_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L0] = 800000000;
+		video_cc_mvs0_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L1] = 1000000000;
+		video_cc_mvs0b_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L1] = 800000000;
+		video_cc_mvs0c_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L0] = 1260000000;
+	}
+
+	clk_taycan_eko_t_pll_configure(&video_cc_pll3, regmap, &video_cc_pll3_config);
+
+	/*
+	 * Maximize MVS0A CFG3 ctl data download delay and enable memory redundancy.
+	 */
+	regmap_update_bits(regmap, 0x8088, ACCU_CFG_MASK, ACCU_CFG_MASK);
 
 	return 0;
 }
