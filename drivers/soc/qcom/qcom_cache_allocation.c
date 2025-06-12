@@ -78,9 +78,20 @@ struct slc_monitor_cfg {
 };
 
 enum {
-	SLC_GEAR_HIGH = 0,
-	SLC_GEAR_LOW,
-	SLC_GEAR_BYPASS,
+	GEAR_BYPASS = 0,
+	GEAR_LVL_1,
+	GEAR_LVL_2,
+	GEAR_LVL_3,
+	GEAR_LVL_4,
+	GEAR_LVL_5,
+	GEAR_LVL_6,
+	GEAR_LVL_7,
+	GEAR_LVL_8,
+	GEAR_LVL_9,
+	GEAR_LVL_10,
+	GEAR_LVL_11,
+	GEAR_LVL_12,
+	GEAR_LVL_13,
 };
 
 enum {
@@ -297,8 +308,8 @@ static void freq_mon_prefer_cpu_gov(struct cache_allocation *pdev)
 			((pdev->cpu_freq_curr[0] >= pdev->cpu_freq_prev[0]) ||
 			(pdev->cpu_freq_curr[1] >= pdev->cpu_freq_prev[1]))) {
 		pdev->freq_mon_status = 2;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_LOW;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_6;
 		ret = cache_allocation_configure(pdev);
 		if (ret < 0) {
 			BUG_ON(1);
@@ -310,8 +321,8 @@ static void freq_mon_prefer_cpu_gov(struct cache_allocation *pdev)
 			(pdev->cpu_freq_curr[1] <=
 					pdev->config[1].cpu_restore_thresh))) {
 		pdev->freq_mon_status = 3;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 		if (ret < 0) {
 			BUG_ON(1);
@@ -332,8 +343,8 @@ static void freq_mon_prefer_gpu_gov(struct cache_allocation *pdev)
 	   (pdev->cpu_freq_curr[0] < pdev->config[0].cpu_instant_thresh[0] ||
 	   pdev->cpu_freq_curr[1] < pdev->config[1].cpu_instant_thresh[0])) {
 		pdev->freq_mon_status = 5;
-		pdev->client_input[APPS] = SLC_GEAR_LOW;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_LVL_5;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->freq_mon_status != 6 &&
 			((pdev->cpu_freq_curr[0] >=
@@ -345,8 +356,8 @@ static void freq_mon_prefer_gpu_gov(struct cache_allocation *pdev)
 			pdev->cpu_freq_curr[1] <
 					pdev->config[1].cpu_instant_thresh[1]))) {
 		pdev->freq_mon_status = 6;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->freq_mon_status != 7 &&
 			(pdev->cpu_freq_curr[0] >=
@@ -354,8 +365,8 @@ static void freq_mon_prefer_gpu_gov(struct cache_allocation *pdev)
 			pdev->cpu_freq_curr[1] >=
 					pdev->config[1].cpu_instant_thresh[1])){
 		pdev->freq_mon_status = 7;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_LOW;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_6;
 		ret = cache_allocation_configure(pdev);
 	}
 
@@ -385,35 +396,35 @@ static void bw_mon_ratio_gov(struct cache_allocation *pdev)
 	if (pdev->bw_mon_ratio_status != 1 &&
 			ratio < pdev->config[0].bw_mon_ratio_thresh[0]) {
 		pdev->bw_mon_ratio_status = 1;
-		pdev->client_input[APPS] = SLC_GEAR_BYPASS;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_BYPASS;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 2 &&
 			ratio >= pdev->config[0].bw_mon_ratio_thresh[0] &&
 			ratio < pdev->config[0].bw_mon_ratio_thresh[1]) {
 		pdev->bw_mon_ratio_status = 2;
-		pdev->client_input[APPS] = SLC_GEAR_LOW;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_LVL_5;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 3 &&
 			ratio >= pdev->config[0].bw_mon_ratio_thresh[1] &&
 			ratio < pdev->config[1].bw_mon_ratio_thresh[0]) {
 		pdev->bw_mon_ratio_status = 3;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 4 &&
 			ratio >= pdev->config[1].bw_mon_ratio_thresh[0] &&
 			ratio < pdev->config[1].bw_mon_ratio_thresh[1]) {
 		pdev->bw_mon_ratio_status = 4;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_LOW;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_6;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 5 &&
 			ratio >= pdev->config[1].bw_mon_ratio_thresh[1]) {
 		pdev->bw_mon_ratio_status = 5;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_BYPASS;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_BYPASS;
 		ret = cache_allocation_configure(pdev);
 	}
 
