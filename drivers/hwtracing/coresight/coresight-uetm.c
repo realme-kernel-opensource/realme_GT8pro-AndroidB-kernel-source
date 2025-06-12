@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/kernel.h>
@@ -165,6 +165,8 @@ static int uetm_scmi_get_uetm_config(struct uetm_drvdata *drvdata)
 		drvdata->lane = UETM_UNCORE_LANE;
 	else if (drvdata->type == QMX_UETM)
 		drvdata->lane = UETM_QMX_LANE;
+	else
+		return -EINVAL;
 
 	return 0;
 }
@@ -739,10 +741,11 @@ static void uetm_store_config(struct uetm_drvdata *drvdata)
 	} else if (drvdata->type == CORE_UETM) {
 		cfg_num = UETM_CORE_CFG_NUM;
 		*base++ = config->ocla_cfg;
-	} else if (drvdata->type == QMX_UETM) {
+	} else {
 		cfg_num = UETM_QMX_CFG_NUM;
 		*base++ = config->ocla_cfg;
 	}
+
 	*base++ = config->atb_cfg;
 	*base++ = config->uetm_cfg;
 
