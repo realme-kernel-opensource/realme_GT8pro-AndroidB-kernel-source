@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk-provider.h>
@@ -1451,24 +1451,6 @@ static struct clk_branch cam_cc_cam_top_fast_ahb_clk = {
 	},
 };
 
-static struct clk_branch cam_cc_camnoc_dcd_xo_clk = {
-	.halt_reg = 0x21308,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0x21308,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "cam_cc_camnoc_dcd_xo_clk",
-			.parent_hws = (const struct clk_hw*[]) {
-				&cam_cc_xo_clk_src.clkr.hw,
-			},
-			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch cam_cc_camnoc_nrt_axi_clk = {
 	.halt_reg = 0x212f8,
 	.halt_check = BRANCH_HALT,
@@ -2606,7 +2588,6 @@ static struct clk_branch cam_cc_tracenoc_tpdm_1_cmb_clk = {
 static struct clk_regmap *cam_cc_alor_clocks[] = {
 	[CAM_CC_CAM_TOP_AHB_CLK] = &cam_cc_cam_top_ahb_clk.clkr,
 	[CAM_CC_CAM_TOP_FAST_AHB_CLK] = &cam_cc_cam_top_fast_ahb_clk.clkr,
-	[CAM_CC_CAMNOC_DCD_XO_CLK] = &cam_cc_camnoc_dcd_xo_clk.clkr,
 	[CAM_CC_CAMNOC_NRT_AXI_CLK] = &cam_cc_camnoc_nrt_axi_clk.clkr,
 	[CAM_CC_CAMNOC_NRT_CRE_CLK] = &cam_cc_camnoc_nrt_cre_clk.clkr,
 	[CAM_CC_CAMNOC_NRT_IPE_NPS_CLK] = &cam_cc_camnoc_nrt_ipe_nps_clk.clkr,
@@ -2724,6 +2705,7 @@ static struct gdsc cam_cc_titan_top_gdsc = {
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
 	.supply = "vdd_mm_mxc_voter",
+	.path_name = "cam-to-ddr",
 };
 
 static struct gdsc cam_cc_ipe_0_gdsc = {
@@ -2870,15 +2852,20 @@ static int cam_cc_alor_probe(struct platform_device *pdev)
 
 	/*
 	 * Keep clocks always enabled:
+	 *	cam_cc_camnoc_dcd_xo_clk
 	 *	cam_cc_drv_ahb_clk
 	 *	cam_cc_drv_xo_clk
 	 *	cam_cc_gdsc_clk
 	 *	cam_cc_sleep_clk
 	 */
+	regmap_update_bits(regmap, 0x21308, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x21398, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x21390, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x21364, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x21368, BIT(0), BIT(0));
+
+	/* Enable camnoc nrt axi dcd */
+	regmap_write(regmap, 0x212F4, 0xC1);
 
 	ret = qcom_cc_really_probe(&pdev->dev, &cam_cc_alor_desc, regmap);
 	if (ret) {
