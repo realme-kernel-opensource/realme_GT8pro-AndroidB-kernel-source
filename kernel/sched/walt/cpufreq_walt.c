@@ -927,11 +927,24 @@ void update_util_inflate_factor(struct waltgov_tunables *tunables,
 	}
 }
 
+int write_once_zone_max_util_pct_cluster[MAX_CLUSTERS];
+
 static ssize_t zone_max_util_pct_show(struct gov_attr_set *attr_set, char *buf)
 {
 	struct waltgov_tunables *tunables = to_waltgov_tunables(attr_set);
+	struct waltgov_policy *wg_policy;
+	struct walt_sched_cluster *cluster;
 	ssize_t len = 0;
 	int i, j;
+
+	list_for_each_entry(wg_policy, &attr_set->policy_list, tunables_hook) {
+		cluster = cpu_cluster(wg_policy->policy->cpu);
+		if (!write_once_zone_max_util_pct_cluster[cluster->id]) {
+			len += scnprintf(buf + len, PAGE_SIZE, "%d %d",
+					INT_MAX, TARGET_LOAD);
+			goto exit;
+		}
+	}
 
 	for (i = 0; i < MAX_ZONES; i++) {
 		if (tunables->zone_util_pct[i][0] == -1)
@@ -942,13 +955,11 @@ static ssize_t zone_max_util_pct_show(struct gov_attr_set *attr_set, char *buf)
 					tunables->zone_util_pct[i][j]);
 		}
 	}
-	len += scnprintf(buf + len, PAGE_SIZE, "\n");
 
+exit:
+	len += scnprintf(buf + len, PAGE_SIZE, "\n");
 	return len;
 }
-
-
-int write_once_zone_max_util_pct_cluster[MAX_CLUSTERS];
 
 static ssize_t zone_max_util_pct_store(struct gov_attr_set *attr_set,
 		const char *buf, size_t count)
