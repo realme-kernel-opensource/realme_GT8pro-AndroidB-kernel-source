@@ -287,6 +287,7 @@
 #define QCOM_ID_VIENNAP			670
 #define QCOM_ID_ALOR			685
 #define QCOM_ID_ALOR_INTERPOSER		704
+#define QCOM_ID_CHORA			724
 
 /*
  * The board type and revision information, used by Qualcomm bootloaders and
