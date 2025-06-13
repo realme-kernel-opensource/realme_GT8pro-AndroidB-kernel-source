@@ -80,7 +80,7 @@ static const struct pll_vco taycan_eko_t_vco[] = {
 };
 
 /* 257.142858 MHz Configuration */
-static const struct alpha_pll_config disp_cc_pll0_config = {
+static struct alpha_pll_config disp_cc_pll0_config = {
 	.l = 0xd,
 	.cal_l = 0x48,
 	.alpha = 0x6492,
@@ -112,6 +112,7 @@ static struct clk_alpha_pll disp_cc_pll0 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
+				[VDD_LOWER] = 700000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -121,7 +122,7 @@ static struct clk_alpha_pll disp_cc_pll0 = {
 };
 
 /* 300.0 MHz Configuration */
-static const struct alpha_pll_config disp_cc_pll1_config = {
+static struct alpha_pll_config disp_cc_pll1_config = {
 	.l = 0xf,
 	.cal_l = 0x48,
 	.alpha = 0xa000,
@@ -152,6 +153,7 @@ static struct clk_alpha_pll disp_cc_pll1 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
+				[VDD_LOWER] = 700000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
@@ -2198,30 +2200,10 @@ static const struct of_device_id disp_cc_canoe_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, disp_cc_canoe_match_table);
 
-static struct clk_init_data disp_cc_mdss_mdp_clk_src_init = {
-	.name = "disp_cc_mdss_mdp_clk_src",
-	.parent_data = disp_cc_parent_data_9,
-	.num_parents = ARRAY_SIZE(disp_cc_parent_data_9),
-	.flags = CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT,
-	.ops = &clk_rcg2_ops,
-};
-
-static struct clk_init_data disp_cc_pll0_init = {
-	.name = "disp_cc_pll0",
-	.parent_data = &(const struct clk_parent_data) {
-		.fw_name = "bi_tcxo",
-		.name = "bi_tcxo",
-	},
-	.num_parents = 1,
-	.flags = CLK_GET_RATE_NOCACHE,
-	.ops = &clk_alpha_pll_taycan_eko_t_ops,
-};
-
 static void disp_cc_alor_fixup(struct regmap *regmap)
 {
-	/* Remove cesta ops until crm enablement for alor*/
-	disp_cc_pll0.clkr.hw.init = &disp_cc_pll0_init;
-	disp_cc_mdss_mdp_clk_src.clkr.hw.init = &disp_cc_mdss_mdp_clk_src_init;
+	disp_cc_pll0_config.config_ctl_hi_val = 0x0a8060e0;
+	disp_cc_pll1_config.config_ctl_hi_val = 0x0a8060e0;
 }
 
 static int disp_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regmap)
@@ -2256,13 +2238,13 @@ static int disp_cc_canoe_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	clk_taycan_eko_t_pll_configure(&disp_cc_pll0, regmap, &disp_cc_pll0_config);
-	clk_taycan_eko_t_pll_configure(&disp_cc_pll1, regmap, &disp_cc_pll1_config);
-	clk_pongo_eko_t_pll_configure(&disp_cc_pll2, regmap, &disp_cc_pll2_config);
-
 	ret = disp_cc_canoe_fixup(pdev, regmap);
 	if (ret)
 		return ret;
+
+	clk_taycan_eko_t_pll_configure(&disp_cc_pll0, regmap, &disp_cc_pll0_config);
+	clk_taycan_eko_t_pll_configure(&disp_cc_pll1, regmap, &disp_cc_pll1_config);
+	clk_pongo_eko_t_pll_configure(&disp_cc_pll2, regmap, &disp_cc_pll2_config);
 
 	/* Enable clock gating for MDP clocks */
 	regmap_update_bits(regmap, DISP_CC_MISC_CMD, 0x10, 0x10);

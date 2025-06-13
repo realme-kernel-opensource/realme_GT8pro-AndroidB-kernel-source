@@ -40,6 +40,20 @@ static struct clk_vdd_class *cam_cc_alor_regulators_1[] = {
 	&vdd_mxc,
 };
 
+static struct clk_crm cam_crm = {
+	.name = "cam_crm",
+	.num_perf_ol = 8,
+	.regs = {
+		.cfg_rcgr = 0x150,
+		.l_val = 0x154,
+		.curr_perf = 0x6c,
+	},
+	.offsets = {
+		.vcd = 0x210,
+		.level = 0x18,
+	},
+};
+
 enum {
 	P_BI_TCXO,
 	P_CAM_CC_PLL0_OUT_EVEN,
@@ -76,6 +90,7 @@ static struct clk_alpha_pll cam_cc_pll0 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.flags = ENABLE_IN_PREPARE,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "cam_cc_pll0",
@@ -90,7 +105,7 @@ static struct clk_alpha_pll cam_cc_pll0 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -174,7 +189,7 @@ static struct clk_alpha_pll cam_cc_pll1 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -212,7 +227,7 @@ static struct clk_alpha_pll cam_cc_pll2 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -243,14 +258,14 @@ static struct clk_alpha_pll cam_cc_pll3 = {
 				.fw_name = "bi_tcxo",
 			},
 			.num_parents = 1,
-			.ops = &clk_alpha_pll_taycan_eko_t_ops,
+			.ops = &clk_alpha_pll_crm_taycan_eko_t_ops,
 		},
 		.vdd_data = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -276,7 +291,7 @@ static struct clk_alpha_pll_postdiv cam_cc_pll3_out_even = {
 		},
 		.num_parents = 1,
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_alpha_pll_postdiv_taycan_eko_t_ops,
+		.ops = &clk_alpha_pll_crm_postdiv_taycan_eko_t_ops,
 	},
 };
 
@@ -304,14 +319,14 @@ static struct clk_alpha_pll cam_cc_pll4 = {
 				.fw_name = "bi_tcxo",
 			},
 			.num_parents = 1,
-			.ops = &clk_alpha_pll_taycan_eko_t_ops,
+			.ops = &clk_alpha_pll_crm_taycan_eko_t_ops,
 		},
 		.vdd_data = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -337,7 +352,7 @@ static struct clk_alpha_pll_postdiv cam_cc_pll4_out_even = {
 		},
 		.num_parents = 1,
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_alpha_pll_postdiv_taycan_eko_t_ops,
+		.ops = &clk_alpha_pll_crm_postdiv_taycan_eko_t_ops,
 	},
 };
 
@@ -365,14 +380,14 @@ static struct clk_alpha_pll cam_cc_pll5 = {
 				.fw_name = "bi_tcxo",
 			},
 			.num_parents = 1,
-			.ops = &clk_alpha_pll_taycan_eko_t_ops,
+			.ops = &clk_alpha_pll_crm_taycan_eko_t_ops,
 		},
 		.vdd_data = {
 			.vdd_class = &vdd_mxc,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -398,7 +413,7 @@ static struct clk_alpha_pll_postdiv cam_cc_pll5_out_even = {
 		},
 		.num_parents = 1,
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_alpha_pll_postdiv_taycan_eko_t_ops,
+		.ops = &clk_alpha_pll_crm_postdiv_taycan_eko_t_ops,
 	},
 };
 
@@ -433,7 +448,7 @@ static struct clk_alpha_pll cam_cc_pll6 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -517,7 +532,7 @@ static struct clk_alpha_pll cam_cc_pll7 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -674,12 +689,17 @@ static struct clk_rcg2 cam_cc_camnoc_rt_axi_clk_src = {
 	.freq_tbl = ftbl_cam_cc_camnoc_rt_axi_clk_src,
 	.enable_safe_config = true,
 	.flags = HW_CLK_CTRL_MODE,
+	.clkr = {
+		.crm = &cam_crm,
+		.crm_vcd = 8,
+		.crm_num_node = 2,
+	},
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "cam_cc_camnoc_rt_axi_clk_src",
 		.parent_data = cam_cc_parent_data_1,
 		.num_parents = ARRAY_SIZE(cam_cc_parent_data_1),
-		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_ops,
+		.flags = CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT,
+		.ops = &clk_rcg2_crmb_ops,
 	},
 	.clkr.vdd_data = {
 		.vdd_classes = cam_cc_alor_regulators_1,
@@ -759,12 +779,16 @@ static struct clk_rcg2 cam_cc_cphy_rx_clk_src = {
 	.freq_tbl = ftbl_cam_cc_cphy_rx_clk_src,
 	.enable_safe_config = true,
 	.flags = HW_CLK_CTRL_MODE,
+	.clkr = {
+		.crm = &cam_crm,
+		.crm_vcd = 7,
+	},
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "cam_cc_cphy_rx_clk_src",
 		.parent_data = cam_cc_parent_data_0,
 		.num_parents = ARRAY_SIZE(cam_cc_parent_data_0),
-		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_ops,
+		.flags = CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT,
+		.ops = &clk_rcg2_crmc_ops,
 	},
 	.clkr.vdd_data = {
 		.vdd_classes = cam_cc_alor_regulators,
@@ -941,12 +965,16 @@ static struct clk_rcg2 cam_cc_csid_clk_src = {
 	.freq_tbl = ftbl_cam_cc_cphy_rx_clk_src,
 	.enable_safe_config = true,
 	.flags = HW_CLK_CTRL_MODE,
+	.clkr = {
+		.crm = &cam_crm,
+		.crm_vcd = 6,
+	},
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "cam_cc_csid_clk_src",
 		.parent_data = cam_cc_parent_data_0,
 		.num_parents = ARRAY_SIZE(cam_cc_parent_data_0),
-		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_ops,
+		.flags = CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT,
+		.ops = &clk_rcg2_crmc_ops,
 	},
 	.clkr.vdd_data = {
 		.vdd_classes = cam_cc_alor_regulators_1,
@@ -1293,12 +1321,16 @@ static struct clk_rcg2 cam_cc_tfe_0_clk_src = {
 	.freq_tbl = ftbl_cam_cc_tfe_0_clk_src,
 	.enable_safe_config = true,
 	.flags = HW_CLK_CTRL_MODE,
+	.clkr = {
+		.crm = &cam_crm,
+		.crm_vcd = 0,
+	},
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "cam_cc_tfe_0_clk_src",
 		.parent_data = cam_cc_parent_data_5,
 		.num_parents = ARRAY_SIZE(cam_cc_parent_data_5),
-		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_ops,
+		.flags = CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT,
+		.ops = &clk_rcg2_crmc_ops,
 	},
 	.clkr.vdd_data = {
 		.vdd_classes = cam_cc_alor_regulators_1,
@@ -1330,12 +1362,16 @@ static struct clk_rcg2 cam_cc_tfe_1_clk_src = {
 	.freq_tbl = ftbl_cam_cc_tfe_1_clk_src,
 	.enable_safe_config = true,
 	.flags = HW_CLK_CTRL_MODE,
+	.clkr = {
+		.crm = &cam_crm,
+		.crm_vcd = 1,
+	},
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "cam_cc_tfe_1_clk_src",
 		.parent_data = cam_cc_parent_data_6,
 		.num_parents = ARRAY_SIZE(cam_cc_parent_data_6),
-		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_ops,
+		.flags = CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT,
+		.ops = &clk_rcg2_crmc_ops,
 	},
 	.clkr.vdd_data = {
 		.vdd_classes = cam_cc_alor_regulators_1,
@@ -1367,12 +1403,16 @@ static struct clk_rcg2 cam_cc_tfe_2_clk_src = {
 	.freq_tbl = ftbl_cam_cc_tfe_2_clk_src,
 	.enable_safe_config = true,
 	.flags = HW_CLK_CTRL_MODE,
+	.clkr = {
+		.crm = &cam_crm,
+		.crm_vcd = 2,
+	},
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "cam_cc_tfe_2_clk_src",
 		.parent_data = cam_cc_parent_data_7,
 		.num_parents = ARRAY_SIZE(cam_cc_parent_data_7),
-		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_ops,
+		.flags = CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT,
+		.ops = &clk_rcg2_crmc_ops,
 	},
 	.clkr.vdd_data = {
 		.vdd_classes = cam_cc_alor_regulators_1,
@@ -1824,7 +1864,7 @@ static struct clk_branch cam_cc_csid_clk = {
 			},
 			.num_parents = 1,
 			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
+			.ops = &clk_branch2_crm_ops,
 		},
 	},
 };
