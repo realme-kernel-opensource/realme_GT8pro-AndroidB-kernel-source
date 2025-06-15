@@ -11,6 +11,7 @@ x1p42100_perf_config = {
     "CONFIG_QCOM_IOMMU_UTIL": "m",
     "CONFIG_QCOM_IPCC": "m",
     "CONFIG_QCOM_LLCC": "m",
+    "CONFIG_QCOM_PDC": "m",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_SMEM": "m",
     "CONFIG_QCOM_SOCINFO": "m",
