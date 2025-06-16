@@ -1783,8 +1783,9 @@ static void zram_compress_success_handler(struct qpace_event_descriptor *ed, int
 	}
 
 	if (ed->replication_found) {
+		unsigned long rep_word = ed->rep_word;
 		atomic64_inc(&zmeta->zram->stats.same_pages);
-		zram_write_finish(zdata, comp_len, ed->rep_word, ZRAM_SAME);
+		zram_write_finish(zdata, comp_len, (rep_word << 32) | rep_word, ZRAM_SAME);
 		return;
 	}
 
