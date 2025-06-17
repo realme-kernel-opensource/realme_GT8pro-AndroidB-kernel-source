@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -35,34 +35,9 @@ static const struct file_operations counter_fops = {
 	.open = simple_open,
 };
 
-static ssize_t smart_freq_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
-{
-	char buffer[1024];
-	int len = 0;
-	int i;
-
-	for (i = 0; i < num_sched_clusters; i++) {
-		struct walt_sched_cluster *cluster = sched_cluster[i];
-		struct smart_freq_cluster_info *smart_freq_info = cluster->smart_freq_info;
-
-		len += scnprintf(buffer + len, sizeof(buffer),
-			"%d: cluster_active_reason 0x%x\n",
-			i,
-			smart_freq_info->cluster_active_reason);
-	}
-
-	return simple_read_from_buffer(buf, count, ppos, buffer, len);
-}
-
-static const struct file_operations smart_freq_fops = {
-	.read = smart_freq_read,
-	.open = simple_open,
-};
-
 void walt_register_debugfs(void)
 {
 	debugfs_walt = debugfs_create_dir("walt", NULL);
 	debugfs_create_u32("walt_features", 0644, debugfs_walt, &debugfs_walt_features);
 	debugfs_create_file("debug_counters", 0444, debugfs_walt, NULL, &counter_fops);
-	debugfs_create_file("smart_freq_status", 0444, debugfs_walt, NULL, &smart_freq_fops);
 }
