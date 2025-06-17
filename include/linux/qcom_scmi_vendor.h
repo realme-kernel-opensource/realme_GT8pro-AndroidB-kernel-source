@@ -2,7 +2,7 @@
 /*
  * Qcom scmi vendor protocol's header
  *
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _QCOM_SCMI_VENDOR_H
@@ -14,25 +14,12 @@
 
 #define QCOM_SCMI_VENDOR_PROTOCOL    0x80
 
-enum qcom_scmi_platforms {
-	QCOM_PLAT_CPUCP,
-	QCOM_PLAT_PDP0,
-	QCOM_PLAT_PDP1,
-	QCOM_PLAT_PDP2,
-	NUM_QCOM_SCMI_PLATFORMS,
-};
-
 struct scmi_protocol_handle;
 
 #if IS_ENABLED(CONFIG_QTI_QCOM_SCMI_CLIENT)
 extern struct scmi_device *get_qcom_scmi_device(void);
-extern struct scmi_device *platform_get_qcom_scmi_device(enum qcom_scmi_platforms plat);
 #else
 static inline struct scmi_device *get_qcom_scmi_device(void)
-{
-	return NULL;
-}
-static inline struct scmi_device *platform_get_qcom_scmi_device(enum qcom_scmi_platforms plat)
 {
 	return NULL;
 }
