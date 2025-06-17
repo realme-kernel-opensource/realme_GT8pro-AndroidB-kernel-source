@@ -318,7 +318,7 @@ static inline bool has_internal_freq_limit_changed(struct walt_sched_cluster *cl
 	cluster->walt_internal_freq_limit = max(ipc_freq,
 			     cluster->walt_internal_freq_limit);
 
-	if (cluster->id > 0 && sysctl_walt_feat(WALT_FEAT_SYNC_FREQ_CAP_BIT)) {
+	if (cluster->id > 0) {
 		prev_id = cluster->id - 1;
 		prev_cluster = sched_cluster[prev_id];
 		prev_cluster_limit = prev_cluster->walt_internal_freq_limit;

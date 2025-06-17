@@ -126,7 +126,6 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
 		trailblazer_floor_freq[0] = 1000000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
-		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 		oscillate_period_ns = 8000000;
@@ -227,7 +226,6 @@ void walt_config(void)
 		trailblazer_floor_freq[1] = 1000000;
 		trailblazer_floor_freq[2] = 1000000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
-		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 
 		/*
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
@@ -244,7 +242,6 @@ void walt_config(void)
 		trailblazer_floor_freq[1] = 1000000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		pipeline_swap_util_th = 100;
-		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 
 		/*
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
