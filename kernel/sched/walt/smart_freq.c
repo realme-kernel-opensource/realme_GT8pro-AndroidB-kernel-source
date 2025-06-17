@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/tick.h>
@@ -287,9 +287,6 @@ static inline bool has_internal_freq_limit_changed(struct walt_sched_cluster *cl
 	unsigned int internal_freq, ipc_freq;
 	int i;
 	struct smart_freq_cluster_info *smci = cluster->smart_freq_info;
-	unsigned int prev_id;
-	struct walt_sched_cluster *prev_cluster;
-	unsigned long prev_cluster_limit = 0;
 
 	internal_freq = cluster->walt_internal_freq_limit;
 	cluster->walt_internal_freq_limit = cluster->max_freq;
@@ -304,16 +301,6 @@ static inline bool has_internal_freq_limit_changed(struct walt_sched_cluster *cl
 	cluster->walt_internal_freq_limit = max(ipc_freq,
 			     cluster->walt_internal_freq_limit);
 
-	if (cluster->id > 0) {
-		prev_id = cluster->id - 1;
-		prev_cluster = sched_cluster[prev_id];
-		prev_cluster_limit = prev_cluster->walt_internal_freq_limit;
-		if (prev_cluster_limit == FREQ_QOS_MAX_DEFAULT_VALUE)
-			prev_cluster_limit = prev_cluster->max_possible_freq;
-
-		if (cluster->walt_internal_freq_limit < prev_cluster_limit)
-			cluster->walt_internal_freq_limit = prev_cluster_limit;
-	}
 	return cluster->walt_internal_freq_limit != internal_freq;
 }
 
