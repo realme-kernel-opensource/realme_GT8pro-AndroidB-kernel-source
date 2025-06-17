@@ -651,6 +651,7 @@ cpu_util_next_walt_prs(int cpu, struct task_struct *p, int dst_cpu, bool prev_ds
 
 static inline unsigned long get_util_to_cost(int cpu, unsigned long util)
 {
+	struct walt_rq *wrq = NULL;
 	struct walt_sched_cluster *cluster;
 	struct em_perf_domain *pd;
 	struct em_perf_table *em_table;
@@ -667,8 +668,8 @@ static inline unsigned long get_util_to_cost(int cpu, unsigned long util)
 		return 0;
 
 	em_table =  rcu_dereference(pd->em_table);
-	freq = mult_frac(cluster->max_possible_freq, util, 1024);
-	freq = freq + (freq >> 2);
+	freq = walt_map_util_freq(util, NULL, arch_scale_cpu_capacity(cpu), cpu);
+	wrq = &per_cpu(walt_rq, cpu);
 
 	for (int i = 0; i < pd->nr_perf_states; i++) {
 		ps = &em_table->state[i];
