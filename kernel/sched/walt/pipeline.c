@@ -562,8 +562,7 @@ int find_heaviest_topapp(u64 window_start)
 		}
 	}
 
-	if (heavy_wts[MAX_NR_PIPELINE - 1] ||
-	    (heavy_wts[0] && is_max_possible_cluster_cpu(cpumask_last(&cpus_for_pipeline))))
+	if (heavy_wts[MAX_NR_PIPELINE - 1] || sysctl_single_thread_pipeline)
 		pipeline_set_unisolation(true, AUTO_PIPELINE);
 	else
 		pipeline_set_unisolation(false, AUTO_PIPELINE);
