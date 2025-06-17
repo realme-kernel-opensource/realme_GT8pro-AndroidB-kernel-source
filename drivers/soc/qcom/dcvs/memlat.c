@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt) "qcom-memlat: " fmt
 
@@ -669,7 +669,7 @@ store_grp_attr(adaptive_level_1, 0U, 8000000U, MEMLAT_ADAPTIVE_LEVEL_1);
 show_attr(min_freq);
 show_attr(max_freq);
 show_attr(ipm_ceil);
-store_attr(ipm_ceil, 1U, 500000U, MEMLAT_IPM_CEIL);
+store_attr(ipm_ceil, 1U, 50000U, MEMLAT_IPM_CEIL);
 show_attr(fe_stall_floor);
 store_attr(fe_stall_floor, 0U, 100U, MEMLAT_FE_STALL_FLOOR);
 show_attr(be_stall_floor);
@@ -1590,7 +1590,6 @@ static int cpucp_memlat_init(struct scmi_device *sdev)
 	struct scmi_protocol_handle *ph;
 	const struct qcom_scmi_vendor_ops *ops;
 	struct memlat_group *grp;
-	struct memlat_mon *mon;
 	bool start_cpucp_timer = false;
 
 	if (!sdev || !sdev->handle)
@@ -1626,11 +1625,10 @@ static int cpucp_memlat_init(struct scmi_device *sdev)
 		}
 
 		for (j = 0; j < grp->num_inited_mons; j++) {
-			mon = &grp->mons[j];
-			if (!(mon->type & CPUCP_MON))
+			if (!grp->cpucp_enabled)
 				continue;
 			/* Configure per monitor parameters */
-			ret = configure_cpucp_mon(mon);
+			ret = configure_cpucp_mon(&grp->mons[j]);
 			if (ret < 0) {
 				pr_err("failed to configure mon: %d\n", ret);
 				goto memlat_unlock;
