@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/align.h>
@@ -847,6 +847,11 @@ static int dump_tracking(struct kmem_cache *s, void *object, void *private)
 	}
 
 	priv_buf = (struct priv_buf *)private;
+	if (priv_buf->offset >= priv_buf->size) {
+		pr_err("slabowner offset is out of bounds.\n");
+		return -ERANGE;
+	}
+
 	buf = priv_buf->buf + priv_buf->offset;
 	size = priv_buf->size - priv_buf->offset;
 #ifdef CONFIG_STACKDEPOT
@@ -866,13 +871,13 @@ static int dump_tracking(struct kmem_cache *s, void *object, void *private)
 			ret = scnprintf(buf, size, "%p %u %u\n",
 				object, handle, nr_entries);
 			if (ret == size - 1)
-				goto err;
+				goto done;
 
 			for (i = 0; i < nr_entries; i++) {
 				ret += scnprintf(buf + ret, size - ret,
 						"%p\n", (void *)entries[i]);
 				if (ret == size - 1)
-					goto err;
+					goto done;
 			}
 		} else {
 			ret = scnprintf(buf, size, "%p %u %u\n",
@@ -883,20 +888,22 @@ static int dump_tracking(struct kmem_cache *s, void *object, void *private)
 	ret = scnprintf(buf, size, "%p %p\n", object, (void *)t->addr);
 
 #endif
-	priv_buf->offset += ret;
-	return 0;
-err:
-	priv_buf->offset += ret;
-	if (priv_buf->offset >= priv_buf->size - 1)
-		pr_err("slabowner minidump region exhausted\n");
 
-	return -EINVAL;
+done:
+	priv_buf->offset += ret;
+	if (priv_buf->offset == priv_buf->size - 1) {
+		pr_err("slabowner minidump region exhausted.\n");
+		return -ERANGE;
+	}
+
+	return 0;
 }
 
 static void md_dump_slabowner(char *m, size_t dump_size)
 {
 	struct kmem_cache *s;
 	struct priv_buf buf;
+	int ret;
 	int i;
 
 	buf.buf = m;
@@ -914,8 +921,11 @@ static void md_dump_slabowner(char *m, size_t dump_size)
 		if (buf.offset == buf.size - 1)
 			return;
 
-		if (IS_ENABLED(CONFIG_SLUB_DEBUG_ON) || (s->flags & SLAB_STORE_USER))
-			get_each_kmemcache_object(s, dump_tracking, &buf);
+		if (IS_ENABLED(CONFIG_SLUB_DEBUG_ON) || (s->flags & SLAB_STORE_USER)) {
+			ret = get_each_kmemcache_object(s, dump_tracking, &buf);
+			if (ret == -ERANGE)
+				return;
+		}
 
 		buf.offset += scnprintf(buf.buf + buf.offset, buf.size - buf.offset, "\n");
 		if (buf.offset == buf.size - 1)
