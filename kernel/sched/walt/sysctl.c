@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kmemleak.h>
@@ -148,7 +148,6 @@ unsigned int sysctl_pipeline_pin_thres_high_pct;
 unsigned int sysctl_pipeline_rearrange_delay_ms[2] = {100, 4};
 unsigned int sysctl_single_thread_pipeline;
 unsigned int sysctl_walt_features;
-unsigned int sysctl_pipeline_force_config;
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
 
@@ -2288,15 +2287,6 @@ static struct ctl_table walt_table[] = {
 		.proc_handler   = walt_features_handler,
 		.extra1         = SYSCTL_ZERO,
 		.extra2         = SYSCTL_INT_MAX,
-	},
-	{
-		.procname	= "sched_pipeline_force_config",
-		.data		= &sysctl_pipeline_force_config,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_INT_MAX,
 	},
 };
 

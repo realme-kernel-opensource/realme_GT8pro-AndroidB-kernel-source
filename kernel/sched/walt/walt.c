@@ -4576,7 +4576,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 	bool is_migration = false, is_asym_migration = false, is_pipeline_sync_migration = false;
 	u32 wakeup_ctr_sum = 0;
 	struct walt_sched_cluster *cluster;
-	int need_assign_heavy;
+	bool need_assign_heavy = false;
 
 	if (irq_work == &walt_migration_irq_work)
 		is_migration = true;
