@@ -13,6 +13,7 @@ int pipeline_nr;
 
 static DEFINE_RAW_SPINLOCK(heavy_lock);
 static struct walt_task_struct *heavy_wts[MAX_NR_PIPELINE];
+bool pipeline_pinning;
 unsigned int pipeline_swap_util_th;
 
 static inline int pipeline_demand(struct walt_task_struct *wts)
@@ -203,27 +204,37 @@ static inline void pipeline_reset_unisolation_state(void)
 	}
 }
 
-static inline bool special_pipeline_thres_valid(void)
-{
-	struct walt_task_struct *special_wts = (struct walt_task_struct *)
-			android_task_vendor_data(pipeline_special_task);
-
-	if (pipeline_demand(special_wts) < sysctl_pipeline_special_task_util_thres)
-		return true;
-
-	return false;
-}
-
 static inline bool should_pipeline_pin_special(void)
 {
 	if (!pipeline_special_task)
 		return false;
 
-	if (!soc_feat(SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING) &&
-			!heavy_wts[MAX_NR_PIPELINE - 1])
+	/*
+	 * if force special pinning is enabled for a SOC:
+	 * Any special pipeline task below configured threshold will be pinned independent
+	 * of other system wide conditions.
+	 */
+	if (soc_feat(SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING)) {
+		if (pipeline_demand(heavy_wts[0]) < sysctl_pipeline_special_task_util_thres)
+			return true;
+		else
+			return false;
+	}
+
+	if (!heavy_wts[MAX_NR_PIPELINE - 1])
+		return false;
+	if (pipeline_demand(heavy_wts[0]) <= sysctl_pipeline_special_task_util_thres)
+		return true;
+	if (pipeline_demand(heavy_wts[1]) <= sysctl_pipeline_non_special_task_util_thres)
+		return true;
+	if (pipeline_pinning && (pipeline_demand(heavy_wts[0]) <=
+		mult_frac(pipeline_demand(heavy_wts[1]), sysctl_pipeline_pin_thres_low_pct, 100)))
+		return false;
+	if (!pipeline_pinning && (pipeline_demand(heavy_wts[0]) <=
+		mult_frac(pipeline_demand(heavy_wts[1]), sysctl_pipeline_pin_thres_high_pct, 100)))
 		return false;
 
-	return special_pipeline_thres_valid();
+	return true;
 }
 
 cpumask_t last_available_big_cpus = CPU_MASK_NONE;
@@ -291,7 +302,7 @@ bool find_heaviest_topapp(u64 window_start)
 	}
 
 	/* Assign user specified one (if exists) to slot 0*/
-	if (pipeline_special_task && special_pipeline_thres_valid()) {
+	if (pipeline_special_task) {
 		heavy_wts[0] = (struct walt_task_struct *)android_task_vendor_data(
 				pipeline_special_task);
 		start = 1;
@@ -577,10 +588,6 @@ void rearrange_heavy(u64 window_start, bool force)
 		return;
 
 	raw_spin_lock_irqsave(&heavy_lock, flags);
-
-	/* Ensure that special pipeline task remains pinned if it is the only pipeline thread */
-	if (should_pipeline_pin_special() && soc_feat(SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING))
-		goto out;
 	/*
 	 * TODO: As primes are isolated under have_heavy_list < 3, and pipeline misfits are also
 	 * disabled, setting the prime worthy task's pipeline_cpu as CPU7 could lead to the
@@ -588,7 +595,8 @@ void rearrange_heavy(u64 window_start, bool force)
 	 * and furthermore remove the task's current gold pipeline_cpu, which could cause the
 	 * task to start bouncing around on the golds, and ultimately lead to suboptimal behavior.
 	 */
-	if (have_heavy_list <= 2) {
+	if ((have_heavy_list <= 2) &&
+		!(pipeline_pinning && soc_feat(SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING))) {
 		find_prime_and_max_tasks(heavy_wts, &prime_wts, &other_wts);
 
 		/* special handling for case where prime is part of cpus_for_pipeline */
@@ -620,8 +628,7 @@ void rearrange_heavy(u64 window_start, bool force)
 		goto out;
 	}
 
-	/* Under pipeline pinning, do not swap for nr = 3*/
-	if (should_pipeline_pin_special())
+	if (pipeline_pinning)
 		goto out;
 
 	if (delay_rearrange(window_start, AUTO_PIPELINE, force))
