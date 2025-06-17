@@ -105,7 +105,8 @@ static struct clk_alpha_pll cam_cc_pll0 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOWER_D1] = 1600000000,
+				[VDD_LOW] = 1066000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -189,7 +190,8 @@ static struct clk_alpha_pll cam_cc_pll1 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOWER_D1] = 1600000000,
+				[VDD_LOW] = 1066000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -250,7 +252,8 @@ static struct clk_alpha_pll cam_cc_pll2 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOWER_D1] = 1600000000,
+				[VDD_LOW] = 1066000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -311,7 +314,8 @@ static struct clk_alpha_pll cam_cc_pll3 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOWER_D1] = 1600000000,
+				[VDD_LOW] = 1066000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -372,7 +376,8 @@ static struct clk_alpha_pll cam_cc_pll4 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOWER_D1] = 1600000000,
+				[VDD_LOW] = 1066000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -433,7 +438,8 @@ static struct clk_alpha_pll cam_cc_pll5 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOWER_D1] = 1600000000,
+				[VDD_LOW] = 1066000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -494,7 +500,8 @@ static struct clk_alpha_pll cam_cc_pll6 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOWER_D1] = 1600000000,
+				[VDD_LOW] = 1066000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -578,7 +585,8 @@ static struct clk_alpha_pll cam_cc_pll7 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOWER_D1] = 1600000000,
+				[VDD_LOW] = 1066000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
