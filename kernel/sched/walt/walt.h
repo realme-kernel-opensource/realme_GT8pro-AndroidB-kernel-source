@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _WALT_H
@@ -93,7 +94,7 @@ enum freq_caps {
 #define SOC_ENABLE_EXPERIMENT3						BIT(9)
 #define SOC_ENABLE_PIPELINE_SWAPPING_BIT		BIT(10)
 #define SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT		BIT(11)
-#define SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING	BIT(12)
+#define SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING	BIT(12)
 
 extern int soc_sched_lib_name_capacity;
 
@@ -577,7 +578,6 @@ extern unsigned int sysctl_sched_sbt_enable;
 extern unsigned int sysctl_sched_sbt_delay_windows;
 
 extern cpumask_t cpus_for_pipeline;
-extern unsigned int pipeline_swap_util_th;
 
 /* WALT cpufreq interface */
 #define WALT_CPUFREQ_ROLLOVER_BIT		BIT(0)
@@ -1331,8 +1331,7 @@ static inline bool walt_flag_test(struct task_struct *p, unsigned int feature)
 #define WALT_RTG_MVP		0
 #define WALT_BINDER_MVP		1
 #define WALT_TASK_BOOST_MVP	2
-#define WALT_LL_MVP		3
-#define WALT_PIPELINE_MVP	4
+#define WALT_LL_PIPE_MVP	3
 
 #define WALT_NOT_MVP		-1
 
@@ -1684,6 +1683,4 @@ DECLARE_PER_CPU(unsigned int, walt_yield_to_sleep);
 extern unsigned int walt_sched_yield_counter;
 extern unsigned int sysctl_force_frequent_yielder;
 void account_yields(u64 window_start);
-extern void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_demand,
-		     u64 *scaled_prime_demand);
 #endif /* _WALT_H */
