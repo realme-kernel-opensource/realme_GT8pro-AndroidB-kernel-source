@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "gunyah_trace: " fmt
@@ -486,9 +486,8 @@ static int __init gunyah_trace_init(void)
 			       ADDRSPACE_INFO_TRACE_INFO_ID, &info_size);
 	if (IS_ERR(info)) {
 		ret = PTR_ERR(info);
-		/* Secure device may not support gunyah trace */
-		pr_err("Gunyah trace not supported ret=%d\n", ret);
-		return 0;
+		pr_err("Failed to get gunyah info ret=%d\n", ret);
+		return ret;
 	}
 	if (info_size != sizeof(*info)) {
 		pr_err("Unexpected gunyah info size: %zu, Expected: %zu\n",

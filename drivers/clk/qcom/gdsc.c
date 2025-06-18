@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015, 2017-2018, 2022, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -350,16 +350,15 @@ static int gdsc_disable(struct generic_pm_domain *domain)
 	if (sc->pwrsts == PWRSTS_ON)
 		return gdsc_assert_reset(sc);
 
-	/* Skip turning off HW_CTRL and GDSC */
-	if (sc->flags & SKIP_DIS) {
-		if (sc->rsupply)
-			return regulator_disable(sc->rsupply);
-
-		return 0;
-	}
-
 	/* Turn off HW trigger mode if supported */
 	if (sc->flags & HW_CTRL) {
+		if (sc->flags & HW_CTRL_SKIP_DIS) {
+			if (sc->rsupply)
+				return regulator_disable(sc->rsupply);
+
+			return 0;
+		}
+
 		ret = gdsc_hwctrl(sc, false);
 		if (ret < 0)
 			return ret;
