@@ -239,7 +239,7 @@ static struct clk_mem_branch eva_cc_mvs0_freerun_clk = {
 			.hw.init = &(const struct clk_init_data) {
 				.name = "eva_cc_mvs0_freerun_clk",
 				.parent_hws = (const struct clk_hw*[]) {
-					&eva_cc_mvs0_clk_src.clkr.hw,
+					&eva_cc_mvs0_div_clk_src.clkr.hw,
 				},
 				.num_parents = 1,
 				.flags = CLK_SET_RATE_PARENT,
