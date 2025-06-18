@@ -7,6 +7,8 @@
 #include <linux/cpufreq.h>
 #include <linux/devfreq.h>
 #include <linux/jiffies.h>
+#include <linux/of_device.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/workqueue.h>
 #include <linux/units.h>
@@ -76,9 +78,20 @@ struct slc_monitor_cfg {
 };
 
 enum {
-	SLC_GEAR_HIGH = 0,
-	SLC_GEAR_LOW,
-	SLC_GEAR_BYPASS,
+	GEAR_BYPASS = 0,
+	GEAR_LVL_1,
+	GEAR_LVL_2,
+	GEAR_LVL_3,
+	GEAR_LVL_4,
+	GEAR_LVL_5,
+	GEAR_LVL_6,
+	GEAR_LVL_7,
+	GEAR_LVL_8,
+	GEAR_LVL_9,
+	GEAR_LVL_10,
+	GEAR_LVL_11,
+	GEAR_LVL_12,
+	GEAR_LVL_13,
 };
 
 enum {
@@ -168,14 +181,14 @@ static void cpu_gpu_freq_update(struct cache_allocation *pdev)
 
 #if IS_ENABLED(CONFIG_QTI_GPU_RESOURCE_ENABLED)
 	struct devfreq *devfreq = pdev->df;
-	struct devfreq_dev_status status;
+	unsigned long cur_freq = 0;
 	pdev->gpu_freq_prev = pdev->gpu_freq_curr;
 
 	mutex_lock(&devfreq->lock);
-	status = devfreq->last_status;
+	devfreq->profile->get_cur_freq(devfreq->dev.parent, &cur_freq);
 	mutex_unlock(&devfreq->lock);
 
-	pdev->gpu_freq_curr = DIV_ROUND_UP(status.current_frequency, HZ_PER_MHZ);
+	pdev->gpu_freq_curr = DIV_ROUND_UP(cur_freq, HZ_PER_MHZ);
 	trace_cache_alloc_gpu_update(pdev->gpu_freq_prev, pdev->gpu_freq_curr);
 #endif
 }
@@ -295,8 +308,8 @@ static void freq_mon_prefer_cpu_gov(struct cache_allocation *pdev)
 			((pdev->cpu_freq_curr[0] >= pdev->cpu_freq_prev[0]) ||
 			(pdev->cpu_freq_curr[1] >= pdev->cpu_freq_prev[1]))) {
 		pdev->freq_mon_status = 2;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_LOW;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_6;
 		ret = cache_allocation_configure(pdev);
 		if (ret < 0) {
 			BUG_ON(1);
@@ -308,8 +321,8 @@ static void freq_mon_prefer_cpu_gov(struct cache_allocation *pdev)
 			(pdev->cpu_freq_curr[1] <=
 					pdev->config[1].cpu_restore_thresh))) {
 		pdev->freq_mon_status = 3;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 		if (ret < 0) {
 			BUG_ON(1);
@@ -330,8 +343,8 @@ static void freq_mon_prefer_gpu_gov(struct cache_allocation *pdev)
 	   (pdev->cpu_freq_curr[0] < pdev->config[0].cpu_instant_thresh[0] ||
 	   pdev->cpu_freq_curr[1] < pdev->config[1].cpu_instant_thresh[0])) {
 		pdev->freq_mon_status = 5;
-		pdev->client_input[APPS] = SLC_GEAR_LOW;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_LVL_5;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->freq_mon_status != 6 &&
 			((pdev->cpu_freq_curr[0] >=
@@ -343,8 +356,8 @@ static void freq_mon_prefer_gpu_gov(struct cache_allocation *pdev)
 			pdev->cpu_freq_curr[1] <
 					pdev->config[1].cpu_instant_thresh[1]))) {
 		pdev->freq_mon_status = 6;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->freq_mon_status != 7 &&
 			(pdev->cpu_freq_curr[0] >=
@@ -352,8 +365,8 @@ static void freq_mon_prefer_gpu_gov(struct cache_allocation *pdev)
 			pdev->cpu_freq_curr[1] >=
 					pdev->config[1].cpu_instant_thresh[1])){
 		pdev->freq_mon_status = 7;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_LOW;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_6;
 		ret = cache_allocation_configure(pdev);
 	}
 
@@ -383,35 +396,35 @@ static void bw_mon_ratio_gov(struct cache_allocation *pdev)
 	if (pdev->bw_mon_ratio_status != 1 &&
 			ratio < pdev->config[0].bw_mon_ratio_thresh[0]) {
 		pdev->bw_mon_ratio_status = 1;
-		pdev->client_input[APPS] = SLC_GEAR_BYPASS;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_BYPASS;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 2 &&
 			ratio >= pdev->config[0].bw_mon_ratio_thresh[0] &&
 			ratio < pdev->config[0].bw_mon_ratio_thresh[1]) {
 		pdev->bw_mon_ratio_status = 2;
-		pdev->client_input[APPS] = SLC_GEAR_LOW;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_LVL_5;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 3 &&
 			ratio >= pdev->config[0].bw_mon_ratio_thresh[1] &&
 			ratio < pdev->config[1].bw_mon_ratio_thresh[0]) {
 		pdev->bw_mon_ratio_status = 3;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 4 &&
 			ratio >= pdev->config[1].bw_mon_ratio_thresh[0] &&
 			ratio < pdev->config[1].bw_mon_ratio_thresh[1]) {
 		pdev->bw_mon_ratio_status = 4;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_LOW;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_LVL_6;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 5 &&
 			ratio >= pdev->config[1].bw_mon_ratio_thresh[1]) {
 		pdev->bw_mon_ratio_status = 5;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
-		pdev->client_input[GPU] = SLC_GEAR_BYPASS;
+		pdev->client_input[APPS] = GEAR_LVL_10;
+		pdev->client_input[GPU] = GEAR_BYPASS;
 		ret = cache_allocation_configure(pdev);
 	}
 
@@ -720,10 +733,39 @@ static int cache_allocation_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 #if IS_ENABLED(CONFIG_QTI_GPU_RESOURCE_ENABLED)
+	struct platform_device *gpu_pdev;
+	struct device_link *link;
+
 	pd->gpu_np = of_parse_phandle(pdev->dev.of_node, "qcom,devfreq", 0);
 	if (IS_ERR(pd->gpu_np))
 		return PTR_ERR(pd->gpu_np);
 
+	gpu_pdev = of_find_device_by_node(pd->gpu_np);
+	if (!gpu_pdev) {
+		pr_err("Cannot find device node %s\n",
+			pd->gpu_np->name);
+		of_node_put(pd->gpu_np);
+		return -ENODEV;
+	}
+
+	link = device_link_add(&pdev->dev, &gpu_pdev->dev,
+		DL_FLAG_AUTOPROBE_CONSUMER);
+
+	put_device(&gpu_pdev->dev);
+	of_node_put(devfreq_cdev->gpu_np);
+
+	if (!link) {
+		pr_err("add gpu device_link fail\n");
+		return -ENODEV;
+	}
+
+	if (link->status == DL_STATE_DORMANT) {
+		pr_warn("kgsl not probed yet\n");
+		device_link_del(link);
+		return -EPROBE_DEFER;
+	}
+
+	device_link_del(link);
 	pd->df = devfreq_get_devfreq_by_node(pd->gpu_np);
 	if (IS_ERR(pd->df)) {
 		of_node_put(pd->gpu_np);
