@@ -3447,8 +3447,7 @@ static void walt_update_cluster_topology(void)
 	build_cpu_array();
 	find_cache_siblings();
 
-	early_walt_config();
-	create_freq_to_cost();
+	create_util_to_cost();
 	walt_clusters_parsed = true;
 }
 
@@ -4577,7 +4576,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 	bool is_migration = false, is_asym_migration = false, is_pipeline_sync_migration = false;
 	u32 wakeup_ctr_sum = 0;
 	struct walt_sched_cluster *cluster;
-	int need_assign_heavy;
+	bool need_assign_heavy = false;
 
 	if (irq_work == &walt_migration_irq_work)
 		is_migration = true;
@@ -5744,7 +5743,7 @@ static void walt_init(struct work_struct *work)
 	if (!rcu_access_pointer(rd->pd)) {
 		/*
 		 * perf domains not properly configured.  this is a must as
-		 * create_freq_to_cost depends on rd->pd being properly
+		 * create_util_to_cost depends on rd->pd being properly
 		 * initialized.
 		 */
 		schedule_work(&rebuild_sd_work);
@@ -5763,7 +5762,7 @@ static void walt_init(struct work_struct *work)
 	 * to work with an asymmetrical soc. This is necessary
 	 * for load balance and task placement to work properly.
 	 * see walt_find_energy_efficient_cpu(), and
-	 * create_freq_to_cost().
+	 * create_util_to_cost().
 	 */
 	if (!rcu_access_pointer(rd->pd) && num_sched_clusters > 1)
 		WALT_BUG(WALT_BUG_WALT, NULL,

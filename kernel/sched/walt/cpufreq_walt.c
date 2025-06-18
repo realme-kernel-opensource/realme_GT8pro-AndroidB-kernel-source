@@ -170,27 +170,16 @@ static void waltgov_deferred_update(struct waltgov_policy *wg_policy, u64 time,
 }
 
 #define TARGET_LOAD 80
-unsigned long walt_map_util_freq(unsigned long util,
+static inline unsigned long walt_map_util_freq(unsigned long util,
 					struct waltgov_policy *wg_policy,
 					unsigned long cap, int cpu)
 {
-	struct waltgov_cpu *wg_cpu;
-	unsigned long fmax = 0;
-	unsigned long util_boost_factor = 0;
-	int i = 0;
-
-	if (!wg_policy) {
-		wg_cpu = &per_cpu(waltgov_cpu, cpu);
-		if (!wg_cpu)
-			return 0;
-		wg_policy = wg_cpu->wg_policy;
-		if (!wg_policy)
-			return 0;
-	}
+	unsigned long fmax = wg_policy->policy->cpuinfo.max_freq;
+	unsigned long util_boost_factor = (fmax + (fmax >> 2));
+	int i;
 
 	util = min(MAX_UTIL, util);
-	fmax = wg_policy->policy->cpuinfo.max_freq;
-	util_boost_factor = (fmax + (fmax >> 2));
+
 	/*
 	 * We are updating util_boost_factor to a set value for a specific utilization if it falls
 	 * under a zone which is defined by sysfs tunable.

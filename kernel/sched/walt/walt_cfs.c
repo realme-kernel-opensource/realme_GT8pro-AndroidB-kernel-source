@@ -13,27 +13,36 @@
 #include "drivers/android/binder_internal.h"
 #include "drivers/android/binder_trace.h"
 
-static void create_freq_to_cost_pd(struct em_perf_domain *pd)
+static void create_util_to_cost_pd(struct em_perf_domain *pd)
 {
-	int cpu = cpumask_first(to_cpumask(pd->cpus));
-	struct walt_sched_cluster *cluster = cpu_cluster(cpu);
+	int util, cpu = cpumask_first(to_cpumask(pd->cpus));
+	unsigned long fmax;
+	unsigned long scale_cpu;
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
+	struct walt_sched_cluster *cluster = wrq->cluster;
 	struct em_perf_table *em_table = rcu_dereference(pd->em_table);
 	struct em_perf_state *ps;
-	bool size_mismatch;
 
-	if (pd->nr_perf_states != soc_cluster_freq_table_size[cluster->id])
-		size_mismatch = true;
+	ps = &em_table->state[pd->nr_perf_states - 1];
+	fmax = (u64)ps->frequency;
+	scale_cpu = arch_scale_cpu_capacity(cpu);
 
-	for (int i = 0; i < pd->nr_perf_states; i++) {
-		ps = &em_table->state[i];
-		if (size_mismatch)
-			cluster->freq_to_cost[i] = ps->cost;
-		else
-			cluster->freq_to_cost[i] = soc_cluster_freq_table[cluster->id][i];
+	for (util = 0; util < 1024; util++) {
+		int j;
+
+		int f = (fmax * util) / scale_cpu;
+		ps = &em_table->state[0];
+
+		for (j = 0; j < pd->nr_perf_states; j++) {
+			ps = &em_table->state[j];
+			if (ps->frequency >= f)
+				break;
+		}
+		cluster->util_to_cost[util] = ps->cost;
 	}
 }
 
-void create_freq_to_cost(void)
+void create_util_to_cost(void)
 {
 	struct perf_domain *pd;
 	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
@@ -41,7 +50,7 @@ void create_freq_to_cost(void)
 	rcu_read_lock();
 	pd = rcu_dereference(rd->pd);
 	for (; pd; pd = pd->next)
-		create_freq_to_cost_pd(pd->em_pd);
+		create_util_to_cost_pd(pd->em_pd);
 	rcu_read_unlock();
 }
 
@@ -651,38 +660,13 @@ cpu_util_next_walt_prs(int cpu, struct task_struct *p, int dst_cpu, bool prev_ds
 
 static inline unsigned long get_util_to_cost(int cpu, unsigned long util)
 {
-	struct walt_rq *wrq = NULL;
-	struct walt_sched_cluster *cluster;
-	struct em_perf_domain *pd;
-	struct em_perf_table *em_table;
-	struct em_perf_state *ps;
-	unsigned long cost;
-	unsigned long freq;
-
-	if (unlikely(walt_disabled))
-		return 0;
-
-	cluster = cpu_cluster(cpu);
-	pd = em_cpu_get(cpu);
-	if (!pd)
-		return 0;
-
-	em_table =  rcu_dereference(pd->em_table);
-	freq = walt_map_util_freq(util, NULL, arch_scale_cpu_capacity(cpu), cpu);
-	wrq = &per_cpu(walt_rq, cpu);
-
-	for (int i = 0; i < pd->nr_perf_states; i++) {
-		ps = &em_table->state[i];
-		cost = cluster->freq_to_cost[i];
-		if (ps->frequency >= freq)
-			break;
-	}
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
 
 	if (cpumask_test_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) &&
 	    util > sysctl_em_inflate_thres)
-		return mult_frac(cost, sysctl_em_inflate_pct, 100);
+		return mult_frac(wrq->cluster->util_to_cost[util], sysctl_em_inflate_pct, 100);
 	else
-		return cost;
+		return wrq->cluster->util_to_cost[util];
 }
 
 /**
@@ -699,18 +683,6 @@ static inline unsigned long get_util_to_cost(int cpu, unsigned long util)
  * Return: the sum of the energy consumed by the CPUs of the domain assuming
  * a capacity state satisfying the max utilization of the domain.
  */
-unsigned long walt_cpu_energy(int cpu,
-			      unsigned long max_util, unsigned long sum_util)
-{
-	unsigned long cost;
-
-	if (!sum_util)
-		return 0;
-
-	cost = get_util_to_cost(cpu, max_util);
-	return cost * sum_util;
-}
-
 static inline unsigned long walt_em_cpu_energy(struct em_perf_domain *pd,
 				unsigned long max_util, unsigned long sum_util,
 				struct compute_energy_output *output, unsigned int x)
@@ -729,6 +701,7 @@ static inline unsigned long walt_em_cpu_energy(struct em_perf_domain *pd,
 	cpu = cpumask_first(to_cpumask(pd->cpus));
 	scale_cpu = arch_scale_cpu_capacity(cpu);
 
+	max_util = max_util + (max_util >> 2); /* account  for TARGET_LOAD usually 80 */
 	max_util = max(max_util,
 			(arch_scale_freq_capacity(cpu) * scale_cpu) >>
 			SCHED_CAPACITY_SHIFT);
