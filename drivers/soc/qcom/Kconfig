@@ -1132,4 +1132,14 @@ config QCOM_SECURE_HIBERNATION
 	  This uses GCM-AES crypto algorithm to encrypt the
 	  pages at the kernel.
 	  If not sure, say N.
+
+config QCOM_LPM_MONITOR
+	tristate "Qualcomm LPM monitor driver"
+	depends on DEBUG_FS && QCOM_RPROC_COMMON && QCOM_QMI_HELPERS
+	help
+	  This is a qcom low power mode monitor driver. This driver realizes the APIs and
+	  debugfs nodes to obtain the clock status of the subsystem. When the user calls
+	  the interface, it sends an indication to the subsystem via the QMI framework and
+	  then waits for the subsystem to return the data of the last ON/OFF timestamps
+	  for each clock.
 endmenu
