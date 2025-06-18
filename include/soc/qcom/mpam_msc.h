@@ -75,6 +75,8 @@ int msc_system_set_partition(uint32_t msc_id, void *arg1, void *arg2);
 int msc_system_reset_partition(uint32_t msc_id, void *arg1, void *arg2);
 int msc_system_mon_read_miss_info(uint32_t msc_id, void *arg1, void *arg2);
 int msc_system_mon_alloc_info(uint32_t msc_id, void *arg1, void *arg2);
+int msc_system_mon_fe_bw_info(uint32_t msc_id, void *arg1, void *arg2);
+int msc_system_mon_be_bw_info(uint32_t msc_id, void *arg1, void *arg2);
 int msc_system_mon_read_all(uint32_t msc_id, void *arg1, void *arg2);
 int msc_system_mon_config(uint32_t msc_id, void *arg1, void *arg2);
 int attach_mpam_msc(struct device *dev, struct qcom_mpam_msc *qcom_msc, uint32_t msc_type);
@@ -117,6 +119,16 @@ static inline int msc_system_mon_read_miss_info(uint32_t msc_id, void *arg1, voi
 }
 
 static inline int msc_system_mon_alloc_info(uint32_t msc_id, void *arg1, void *arg2)
+{
+	return -EINVAL;
+}
+
+static inline int msc_system_mon_fe_bw_info(uint32_t msc_id, void *arg1, void *arg2)
+{
+	return -EINVAL;
+}
+
+static inline int msc_system_mon_be_bw_info(uint32_t msc_id, void *arg1, void *arg2)
 {
 	return -EINVAL;
 }

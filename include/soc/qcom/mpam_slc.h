@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _QCOM_MPAM_SLC_H
@@ -33,7 +33,9 @@ static char gear_index[][25] = {
 #define SLC_INVALID_PARTID      ((1 << 16) - 1)
 
 #define SLC_MPAM_VERSION_0	0x00000000	/* Base firmware */
-#define SLC_MPAM_VERSION_1	0x00000002	/* SLC MPAM More gear support */
+#define SLC_MPAM_VERSION_1	0x00000001	/* SLC MPAM More gear support */
+#define SLC_MPAM_VERSION_2	0x00000002	/* SLC MPAM More gear support */
+#define SLC_MPAM_VERSION_3	0x00000003	/* SLC MPAM iBW Monitor */
 
 enum mpam_slc_get_param_ids {
 	PARAM_GET_CLIENT_INFO_MSC = 1,
@@ -72,6 +74,8 @@ struct slc_partid_capacity_config {
 enum slc_mintor_support {
 	cap_mon_support,
 	read_miss_mon_support,
+	fe_mon_support,
+	be_mon_support,
 };
 
 struct slc_partid_capability_v1 {
@@ -108,6 +112,8 @@ struct slc_partid_config {
 enum slc_mon_function {
 	CACHE_CAPACITY_CONFIG,
 	CACHE_READ_MISS_CONFIG,
+	CACHE_FE_MON_CONFIG,
+	CACHE_BE_MON_CONFIG,
 };
 
 struct slc_mon_config_val {
@@ -149,6 +155,16 @@ struct slc_read_miss_cntr {
 	uint32_t miss_enabled;
 } __packed;
 
+struct slc_fe_bw_info {
+	uint64_t slc_fe_bytes;
+	uint32_t cap_enabled;
+} __packed;
+
+struct slc_be_bw_info {
+	uint64_t slc_be_bytes;
+	uint32_t cap_enabled;
+} __packed;
+
 struct slc_partid_info {
 	uint32_t client_id;
 	uint32_t part_id;
@@ -172,10 +188,42 @@ struct slc_sct_client_info {
 	struct slc_client_details client;
 } __packed;
 
+
 struct qcom_slc_mon_data {
 	struct slc_partid_info part_info;
 	struct slc_capacity cap_stats;
 	struct slc_read_miss_cntr rd_miss_stats;
+} __packed;
+
+struct slc_mon_data_values {
+	uint16_t cntr_index;
+	uint16_t mon_enabled;
+	uint32_t num_cache_lines;
+	uint64_t rd_misses;
+	uint64_t fe_rd_bytes;
+	uint64_t fe_wr_bytes;
+	uint64_t be_rd_bytes;
+	uint64_t be_wr_bytes;
+	uint64_t rd_hits;
+	uint64_t rd_incr;
+	uint64_t wr_hits;
+	uint64_t wr_incr;
+} __packed;
+
+struct qcom_slc_mon_data_v1 {
+	struct slc_partid_info part_info;
+	uint16_t cntr_index;
+	uint16_t mon_enabled;
+	uint32_t num_cache_lines;
+	uint64_t rd_misses;
+	uint64_t fe_rd_bytes;
+	uint64_t fe_wr_bytes;
+	uint64_t be_rd_bytes;
+	uint64_t be_wr_bytes;
+	uint64_t rd_hits;
+	uint64_t rd_incr;
+	uint64_t wr_hits;
+	uint64_t wr_incr;
 } __packed;
 
 #define SLC_NUM_PARTIDS		5
@@ -196,9 +244,20 @@ struct qcom_slc_mon_mem_v1 {
 	struct qcom_slc_mon_data data[];
 } __packed;
 
+/* Needs to be deprecated once FW switched to V3 */
+struct qcom_slc_mon_mem_v2 {
+	uint32_t match_seq;
+	uint16_t msc_id;
+	uint16_t num_active_mon;
+	uint64_t last_capture_time;
+	uint64_t slc_mpam_monitor_size;
+	struct qcom_slc_mon_data_v1 data[];
+} __packed;
+
 union qcom_slc_monitor_memory {
 	struct qcom_slc_mon_mem_v0 mem_v0;
 	struct qcom_slc_mon_mem_v1 mem_v1;
+	struct qcom_slc_mon_mem_v2 mem_v2;
 };
 
 /* slc Monitor capability */
@@ -242,6 +301,18 @@ struct miss_info  {
 	uint64_t num_rd_misses;
 } __packed;
 
+struct slc_fe_stats  {
+	uint32_t slc_mon_function;
+	uint64_t last_capture_time;
+	uint64_t slc_fe_bytes;
+} __packed;
+
+struct slc_be_stats  {
+	uint32_t slc_mon_function;
+	uint64_t last_capture_time;
+	uint64_t slc_be_bytes;
+} __packed;
+
 struct mon_ref {
 	uint32_t slc_mon_function;
 	uint64_t last_capture_time;
@@ -251,6 +322,8 @@ struct mon_ref {
 union mon_values {
 	struct capacity_info capacity;
 	struct miss_info misses;
+	struct slc_fe_stats fe_stats;
+	struct slc_be_stats be_stats;
 	struct mon_ref ref;
 } __packed;
 
