@@ -4,12 +4,13 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/usb/typec_altmode.h>
+#include <linux/usb/typec_mux.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/i2c.h>
 #include <linux/mutex.h>
 #include <linux/usb/typec.h>
-#include <linux/usb/ucsi_glink.h>
 #include <linux/soc/qcom/fsa4480-i2c.h>
 #include <linux/qti-regmap-debugfs.h>
 
@@ -32,7 +33,7 @@
 struct fsa4480_priv {
 	struct regmap *regmap;
 	struct device *dev;
-	struct notifier_block ucsi_nb;
+	struct typec_mux_dev *mux;
 	atomic_t usbc_mode;
 	struct work_struct usbc_analog_work;
 	struct blocking_notifier_head fsa4480_notifier;
@@ -87,39 +88,38 @@ static void fsa4480_usbc_update_settings(struct fsa4480_priv *fsa_priv,
 	regmap_write(fsa_priv->regmap, FSA4480_SWITCH_SETTINGS, switch_enable);
 }
 
-static int fsa4480_usbc_event_changed(struct notifier_block *nb,
-				      unsigned long evt, void *ptr)
+static int fsa4480_usbc_mux_set(struct typec_mux_dev *mux,
+				 struct typec_mux_state *state)
 {
-	struct fsa4480_priv *fsa_priv =
-			container_of(nb, struct fsa4480_priv, ucsi_nb);
-	struct device *dev;
-	enum typec_accessory acc = ((struct ucsi_glink_constat_info *)ptr)->acc;
+	struct fsa4480_priv *fsa_priv = typec_mux_get_drvdata(mux);
+	enum typec_accessory acc;
 
 	if (!fsa_priv)
 		return -EINVAL;
 
-	dev = fsa_priv->dev;
-	if (!dev)
+	if (!fsa_priv->dev)
 		return -EINVAL;
 
-	dev_dbg(dev, "%s: USB change event received, supply mode %d, usbc mode %d, expected %d\n",
+	if (state->mode == TYPEC_MODE_AUDIO)
+		acc = TYPEC_ACCESSORY_AUDIO;
+	else if (state->mode == TYPEC_MODE_DEBUG)
+		acc = TYPEC_ACCESSORY_DEBUG;
+	else
+		acc = TYPEC_ACCESSORY_NONE;
+
+	dev_dbg(fsa_priv->dev, "%s: USB change event received, supply mode %d, usbc mode %d, expected %d\n",
 			__func__, acc, fsa_priv->usbc_mode.counter,
 			TYPEC_ACCESSORY_AUDIO);
 
-	switch (acc) {
-	case TYPEC_ACCESSORY_AUDIO:
-	case TYPEC_ACCESSORY_NONE:
-		if (atomic_read(&(fsa_priv->usbc_mode)) == acc)
-			break; /* filter notifications received before */
-		atomic_set(&(fsa_priv->usbc_mode), acc);
+	if (acc == TYPEC_ACCESSORY_DEBUG)
+		return 0;
 
-		dev_dbg(dev, "%s: queueing usbc_analog_work\n",
-			__func__);
+	if (atomic_read(&(fsa_priv->usbc_mode)) != acc) {
+		atomic_set(&(fsa_priv->usbc_mode), acc);
+		dev_dbg(fsa_priv->dev, "%s: queueing usbc_analog_work\n", __func__);
+
 		pm_stay_awake(fsa_priv->dev);
 		queue_work(system_freezable_wq, &fsa_priv->usbc_analog_work);
-		break;
-	default:
-		break;
 	}
 
 	return 0;
@@ -331,6 +331,7 @@ static void fsa4480_update_reg_defaults(struct regmap *regmap)
 
 static int fsa4480_probe(struct i2c_client *i2c)
 {
+	struct typec_mux_desc mux_desc = { };
 	struct fsa4480_priv *fsa_priv;
 	int rc = 0;
 
@@ -356,12 +357,14 @@ static int fsa4480_probe(struct i2c_client *i2c)
 	fsa4480_update_reg_defaults(fsa_priv->regmap);
 	devm_regmap_qti_debugfs_register(fsa_priv->dev, fsa_priv->regmap);
 
-	fsa_priv->ucsi_nb.notifier_call = fsa4480_usbc_event_changed;
-	fsa_priv->ucsi_nb.priority = 0;
-	rc = register_ucsi_glink_notifier(&fsa_priv->ucsi_nb);
-	if (rc) {
-		dev_err(fsa_priv->dev, "%s: ucsi glink notifier registration failed: %d\n",
-			__func__, rc);
+	mux_desc.drvdata = fsa_priv;
+	mux_desc.fwnode = dev_fwnode(fsa_priv->dev);
+	mux_desc.set = fsa4480_usbc_mux_set;
+
+	fsa_priv->mux = typec_mux_register(fsa_priv->dev, &mux_desc);
+	if (IS_ERR(fsa_priv->mux)) {
+		rc = dev_err_probe(fsa_priv->dev, PTR_ERR(fsa_priv->mux),
+			"failed to register typec mux\n");
 		goto err_data;
 	}
 
@@ -387,7 +390,7 @@ static void fsa4480_remove(struct i2c_client *i2c)
 	if (!fsa_priv)
 		return;
 
-	unregister_ucsi_glink_notifier(&fsa_priv->ucsi_nb);
+	typec_mux_unregister(fsa_priv->mux);
 	fsa4480_usbc_update_settings(fsa_priv, 0x18, 0x98);
 	cancel_work_sync(&fsa_priv->usbc_analog_work);
 	pm_relax(fsa_priv->dev);
