@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __QCOM_QPT_H__
@@ -169,7 +169,6 @@ struct qpt_device {
  * @adc_scaling_factor: ADC to power unit scaling factor
  * @tperiod:		channel pmic hardware time period
  * @bob_tperiod:	BoB channel pmic hardware time period
- * @data_update_sampling: Hardware data reporting period in milliseconds
  * @overflow_counter:   Counter to capture number of channel overflow trigger
  * @rtc_ts:		RTC Timestamp collected just after qpt irq data update
  * @hw_read_ts:		Timestamp collected just after qpt irq data update
@@ -205,7 +204,6 @@ struct qpt_priv {
 	u32			adc_scaling_factor;
 	u32			tperiod;
 	u32			bob_tperiod;
-	u32			data_update_sampling;
 	u32			overflow_counter;
 	u32			rtc_ts;
 	u64			hw_read_ts;
