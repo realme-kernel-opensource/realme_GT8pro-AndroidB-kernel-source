@@ -1024,7 +1024,7 @@ int sysmon_stats_query_power_residency(enum dsp_id_t dsp_id,
 		if (!IS_ERR_OR_NULL(g_sysmon_stats.sysmon_power_stats_cdsp)) {
 			ptr = g_sysmon_stats.sysmon_power_stats_cdsp;
 			size = (((ptr->powerstats.version) >> 16) & 0xFFF) + sizeof(u32);
-			if (!copy_powerstats(&smem_sysmon_power_stats_l, dsp_id))
+			if (copy_powerstats(&smem_sysmon_power_stats_l, dsp_id))
 				return -ENOKEY;
 
 			if (g_sysmon_stats.sleep_stats_cdsp) {
@@ -1044,7 +1044,7 @@ int sysmon_stats_query_power_residency(enum dsp_id_t dsp_id,
 		if (!IS_ERR_OR_NULL(g_sysmon_stats.sysmon_power_stats_slpi)) {
 			ptr = g_sysmon_stats.sysmon_power_stats_slpi;
 			size = (((ptr->powerstats.version) >> 16) & 0xFFF) + sizeof(u32);
-			if (!copy_powerstats(&smem_sysmon_power_stats_l, dsp_id))
+			if (copy_powerstats(&smem_sysmon_power_stats_l, dsp_id))
 				return -ENOKEY;
 			if (g_sysmon_stats.sleep_stats_slpi) {
 				lpm_accumulated = g_sysmon_stats.sleep_stats_slpi->accumulated;
@@ -1422,12 +1422,11 @@ EXPORT_SYMBOL_GPL(sysmon_stats_query_sleep);
 
 static int master_adsp_stats_show(struct seq_file *s, void *d)
 {
-	int i = 0, j = 0, ret = 0;
+	int i = 0, j = 0;
 	u64 lpi_accumulated = 0;
 	u64 lpm_accumulated = 0;
 	u32 q6_load;
 	u8 ver = 0;
-	struct sysmon_smem_power_stats_extended *ptr = NULL;
 	struct sysmon_smem_power_stats sysmon_power_stats = { 0 };
 	struct sysmon_smem_q6_event_stats_extended *events_ptr = NULL;
 
@@ -1501,16 +1500,9 @@ static int master_adsp_stats_show(struct seq_file *s, void *d)
 	}
 
 	if (g_sysmon_stats.sysmon_power_stats_adsp) {
-		if (copy_powerstats(&sysmon_power_stats, ADSP))
+
+		if (sysmon_stats_query_power_residency(ADSP, &sysmon_power_stats))
 			return -ENOKEY;
-		ptr = g_sysmon_stats.sysmon_power_stats_adsp;
-		ver = (ptr->powerstats.version) & 0xFF;
-
-		ret = add_delta_time(ver, lpi_accumulated,
-				lpm_accumulated, &sysmon_power_stats, ADSP);
-
-		if (ret != 0)
-			seq_puts(s, "\nWarning: Power Stats are might be Invalid\n");
 
 		seq_puts(s, "\nPower Stats:\n\n");
 		for (j = 0; j < SYSMON_POWER_STATS_MAX_CLK_LEVELS; j++) {
@@ -1556,7 +1548,6 @@ static int master_cdsp_stats_show(struct seq_file *s, void *d)
 	u32 q6_load;
 	u64 lpm_accumulated = 0;
 	u8 ver = 0;
-	struct sysmon_smem_power_stats_extended *ptr = NULL;
 	struct sysmon_smem_power_stats sysmon_power_stats = { 0 };
 	struct sysmon_smem_ddr_stats sysmon_ddr_stats = {0};
 	struct sysmon_smem_q6_event_stats_extended *events_ptr = NULL;
@@ -1624,14 +1615,9 @@ static int master_cdsp_stats_show(struct seq_file *s, void *d)
 	}
 
 	if (g_sysmon_stats.sysmon_power_stats_cdsp) {
-		if (copy_powerstats(&sysmon_power_stats, CDSP))
-			return -ENOKEY;
-		ptr = g_sysmon_stats.sysmon_power_stats_cdsp;
-		ver = (ptr->powerstats.version) & 0xFF;
-		ret = add_delta_time(ver, 0, lpm_accumulated, &sysmon_power_stats, CDSP);
 
-		if (ret)
-			seq_puts(s, "\nWarning: Power Stats might be Invalid\n");
+		if (sysmon_stats_query_power_residency(CDSP, &sysmon_power_stats))
+			return -ENOKEY;
 
 		seq_puts(s, "\nPower Stats:\n\n");
 		for (j = 0; j < SYSMON_POWER_STATS_MAX_CLK_LEVELS; j++) {
