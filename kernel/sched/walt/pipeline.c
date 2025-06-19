@@ -830,7 +830,7 @@ void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 		goto unlock;
 
 	for_each_sched_cluster(cluster) {
-		if (cluster->id != gold_cluster_id || cluster->id != prime_cluster_id)
+		if (cluster->id != gold_cluster_id && cluster->id != prime_cluster_id)
 			continue;
 
 		non_pipeline_cluster_util[cluster->id] = 0;
@@ -892,11 +892,11 @@ void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 	t1_util = t1_prime;
 	t2_util = t2_gold;
 
-	if (t0_prime && !t1_prime)
+	if (t0_is_prime && !t1_is_prime)
 		t0_util = mult_frac(t0_util, IPC_DEGRADATION_FACTOR, 100);
-	if (!t0_prime && t1_prime)
+	if (!t0_is_prime && t1_is_prime)
 		t1_util = mult_frac(t1_util, IPC_DEGRADATION_FACTOR, 100);
-	if (!t0_prime && !t1_prime)
+	if (!t0_is_prime && !t1_is_prime)
 		t0_util = mult_frac(t0_util, IPC_DEGRADATION_FACTOR, 100);
 
 
