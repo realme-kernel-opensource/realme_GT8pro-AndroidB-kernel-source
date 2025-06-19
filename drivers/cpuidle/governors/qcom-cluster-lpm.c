@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. All rights reserved.
  */
 
 #include <linux/cpu.h>
@@ -600,6 +600,7 @@ static int lpm_cluster_gov_probe(struct platform_device *pdev)
 	hrtimer_init(&cluster_gov->histtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	cluster_gov->genpd = pd_to_genpd(cluster_gov->dev->pm_domain);
 	cluster_gov->genpd_nb.notifier_call = cluster_power_cb;
+	cluster_gov->genpd_nb.priority = INT_MAX;
 	cluster_gov->genpd->flags |= GENPD_FLAG_MIN_RESIDENCY;
 	ret = dev_pm_genpd_add_notifier(cluster_gov->dev,
 					&cluster_gov->genpd_nb);
