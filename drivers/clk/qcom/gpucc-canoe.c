@@ -48,7 +48,7 @@ static const struct pll_vco taycan_eko_t_vco[] = {
 };
 
 /* 950.0 MHz Configuration */
-static const struct alpha_pll_config gpu_cc_pll0_config = {
+static struct alpha_pll_config gpu_cc_pll0_config = {
 	.l = 0x31,
 	.cal_l = 0x48,
 	.alpha = 0x7aaa,
@@ -77,9 +77,8 @@ static struct clk_alpha_pll gpu_cc_pll0 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D2] = 1600000000,
-				[VDD_LOW] = 1600000000,
-				[VDD_LOW_L1] = 1600000000,
+				[VDD_LOWER_D2] = 621000000,
+				[VDD_LOWER_D1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -232,6 +231,7 @@ static struct clk_branch gpu_cc_ahb_clk = {
 	.clkr = {
 		.enable_reg = 0x90bc,
 		.enable_mask = BIT(0),
+		.flags = QCOM_CLK_MINIDUMP_ENABLE,
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gpu_cc_ahb_clk",
 			.parent_hws = (const struct clk_hw*[]) {
@@ -263,6 +263,7 @@ static struct clk_branch gpu_cc_cx_gmu_clk = {
 	.clkr = {
 		.enable_reg = 0x90d4,
 		.enable_mask = BIT(0),
+		.flags = QCOM_CLK_MINIDUMP_ENABLE,
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gpu_cc_cx_gmu_clk",
 			.parent_hws = (const struct clk_hw*[]) {
@@ -281,6 +282,7 @@ static struct clk_branch gpu_cc_cxo_clk = {
 	.clkr = {
 		.enable_reg = 0x90e4,
 		.enable_mask = BIT(0),
+		.flags = QCOM_CLK_MINIDUMP_ENABLE,
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gpu_cc_cxo_clk",
 			.flags = CLK_DONT_HOLD_STATE,
@@ -334,6 +336,7 @@ static struct clk_branch gpu_cc_gpu_smmu_vote_clk = {
 	.clkr = {
 		.enable_reg = 0x7000,
 		.enable_mask = BIT(0),
+		.flags = QCOM_CLK_MINIDUMP_ENABLE,
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gpu_cc_gpu_smmu_vote_clk",
 			.ops = &clk_branch2_ops,
@@ -396,6 +399,7 @@ static struct clk_branch gpu_cc_hub_cx_int_clk = {
 	.clkr = {
 		.enable_reg = 0x90e8,
 		.enable_mask = BIT(0),
+		.flags = QCOM_CLK_MINIDUMP_ENABLE,
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gpu_cc_hub_cx_int_clk",
 			.parent_hws = (const struct clk_hw*[]) {
@@ -563,9 +567,37 @@ static const struct qcom_cc_desc gx_clkctl_canoe_desc = {
 
 static const struct of_device_id gpu_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-gpucc" },
+	{ .compatible = "qcom,alor-gpucc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gpu_cc_canoe_match_table);
+
+static void gpu_cc_alor_fixup(struct regmap *regmap)
+{
+	gpu_cc_pll0_config.config_ctl_hi_val = 0x0a8060e0;
+
+	gpu_cc_cx_accu_shift_clk.halt_reg = 0x9108;
+	gpu_cc_cx_accu_shift_clk.clkr.enable_reg = 0x9108;
+	gpu_cc_dpm_clk.halt_reg = 0x910c;
+	gpu_cc_dpm_clk.clkr.enable_reg = 0x910c;
+	gpu_cc_memnoc_gfx_clk.halt_reg = 0x90f0;
+	gpu_cc_memnoc_gfx_clk.clkr.enable_reg = 0x90f0;
+}
+
+static int gpu_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,alor-gpucc"))
+		gpu_cc_alor_fixup(regmap);
+
+	return 0;
+}
 
 static int gpu_cc_canoe_probe(struct platform_device *pdev)
 {
@@ -575,6 +607,10 @@ static int gpu_cc_canoe_probe(struct platform_device *pdev)
 	regmap = qcom_cc_map(pdev, &gpu_cc_canoe_desc);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
+
+	ret = gpu_cc_canoe_fixup(pdev, regmap);
+	if (ret)
+		return ret;
 
 	clk_taycan_eko_t_pll_configure(&gpu_cc_pll0, regmap, &gpu_cc_pll0_config);
 

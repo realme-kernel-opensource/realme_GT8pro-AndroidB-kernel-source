@@ -1783,8 +1783,9 @@ static void zram_compress_success_handler(struct qpace_event_descriptor *ed, int
 	}
 
 	if (ed->replication_found) {
+		unsigned long rep_word = ed->rep_word;
 		atomic64_inc(&zmeta->zram->stats.same_pages);
-		zram_write_finish(zdata, comp_len, ed->rep_word, ZRAM_SAME);
+		zram_write_finish(zdata, comp_len, (rep_word << 32) | rep_word, ZRAM_SAME);
 		return;
 	}
 
@@ -1873,7 +1874,7 @@ static void zram_qpace_work_fn(struct work_struct *work)
 	bool triggered_compress;
 	int n_entries_consumed;
 
-	get_qpace(COMPRESS_RING);
+	get_qpace();
 
 	pr_debug("kthread: about to kick off compression\n");
 
@@ -1942,7 +1943,7 @@ static void zram_qpace_work_fn(struct work_struct *work)
 
 	mutex_unlock(&zram_comp_queue_lock);
 
-	put_qpace(COMPRESS_RING, 1);
+	put_qpace();
 }
 
 static int qpace_zram_write_page(struct zram *zram, struct bio *bio)

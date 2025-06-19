@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016, 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __QCOM_CLK_DEBUG_H__
@@ -103,6 +103,11 @@ int clk_hw_debug_register(struct device *dev, struct clk_hw *clk_hw);
 int clk_debug_init(void);
 void clk_debug_exit(void);
 extern void clk_debug_print_hw(struct clk_hw *hw, struct seq_file *f);
+#ifdef CONFIG_QCOM_MINIDUMP_CLK
+void clk_debug_register_minidump(struct clk_hw *hw);
+#else
+static inline void clk_debug_register_minidump(struct clk_hw *hw) {}
+#endif
 
 #define WARN_CLK(hw, cond, fmt, ...)						\
 	do {									\

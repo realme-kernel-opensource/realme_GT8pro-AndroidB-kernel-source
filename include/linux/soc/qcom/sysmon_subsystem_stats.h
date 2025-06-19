@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 /*
  * This header is for sysmon subsystem stats query API's in drivers.
@@ -8,7 +8,8 @@
 #ifndef __QCOM_SYSMON_SUBSYSTEM_STATS_H__
 #define __QCOM_SYSMON_SUBSYSTEM_STATS_H__
 /* Maximum number of clock levels in power stats */
-#define SYSMON_POWER_STATS_MAX_CLK_LEVELS 32
+#define SYSMON_POWER_STATS_MAX_CLK_LEVELS   32
+#define SYSMON_DDR_STATS_MAX_CLK_LEVELS     32
 
 /* Error Codes */
 /* Error code when DSP PMU Counters are unavailable/overridden */
@@ -123,6 +124,28 @@ struct sleep_stats_island {
 	 *Island mode since device booted up
 	 */
 };
+
+/*
+ * @struct ddr_stats
+ * @brief DDR residency statistics
+ */
+struct sysmon_smem_ddr_stats {
+	uint32_t clk_arr[SYSMON_DDR_STATS_MAX_CLK_LEVELS];
+	/**< DDR clock frequency(kHz) array */
+
+	uint32_t active_time[SYSMON_DDR_STATS_MAX_CLK_LEVELS];
+	/**< Active time(seconds) array correspons to DDR clock array */
+
+	uint32_t num_ddrclk_levels;
+	/**< Number of levels present in DDR clock table */
+
+	uint32_t pc_time;
+	/**< DSP Power collapse time(seconds) */
+
+	uint32_t curr_clk;
+	/**< Current DDR clock frequency(kHz) */
+};
+
 /*
  * @enum dsp_id_t
  * @brief Enum to hold SMEM HOST ID for DSP subsystems.

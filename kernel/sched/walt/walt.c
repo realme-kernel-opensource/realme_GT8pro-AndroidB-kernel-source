@@ -2242,6 +2242,7 @@ static inline u32 scale_util_to_time(u16 util)
 	return util * walt_scale_demand_divisor;
 }
 
+#define PIPELINE_IDLE_MS 100000000
 static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 		u32 runtime, u16 runtime_scaled, u32 *demand, u16 *trailblazer_demand)
 {
@@ -2251,6 +2252,10 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 	u64 trailblazer_capacity;
 
 	if (sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
+		((wts->mark_start + PIPELINE_IDLE_MS) <  walt_rq_clock(rq)))
+		wts->high_util_history = 0;
+
+	if (!pipeline_in_progress() && sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
 			(((runtime >= *demand) && (wts->high_util_history >= TRAILBLAZER_THRES)) ||
 			wts->high_util_history >= TRAILBLAZER_BYPASS)) {
 		*trailblazer_demand = 1 << SCHED_CAPACITY_SHIFT;
@@ -2289,6 +2294,69 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 	} else if (wts->high_util_history) {
 		wts->high_util_history -= FINAL_BUCKET_STEP_DOWN;
 	}
+}
+
+#define MIN_WINDOWS_FOR_LST	3ULL
+#define LST_ACTIVATION_TIMEOUT	250ULL
+#define LST_DELAY_MULTIPLIER	5
+/*
+ * LST detection and timeout flow:
+ * - For > 3 windows didn't receive any event thus marked as LST
+ * - LST timeout
+ * ms                                         ms   ms    ms    ms             ms
+ * |        |         |         |         |    |    |     |     |              |
+ * |        |         |         |         |    |    |     |     |              |
+ * v--------|---------|---------|---------|----v----v-----v-----v--------------v
+ *          |         |         |         |   LST(marked here)
+ *          |         |         |         |    |                           |
+ *       window    window    window    window  |<------------------------->|
+ *          1         2         3         4    |  Task in LST state        |
+ *								        LST timeout
+ */
+static void update_lst(struct walt_task_struct *wts, u64 wallclock,
+		       int new_window)
+{
+	u64 lst_delay_factor;
+	u64 activity_target_hyst_ns = MIN_WINDOWS_FOR_LST * sched_ravg_window;
+
+	if ((wts->mark_start != 0) && ((wts->mark_start + activity_target_hyst_ns) < wallclock)) {
+		/*
+		 * task has been inactive for the threshold period treat it as
+		 * LST task.
+		 */
+		wts->lst = true;
+		wts->lst_state_counter++;
+
+		/* LST delay calculation based on how frequent task was in LST */
+		lst_delay_factor = min((wts->lst_state_counter  + LST_DELAY_MULTIPLIER)  /
+				       LST_DELAY_MULTIPLIER, 10);
+
+		/* target time after which task will come out of LST state */
+		wts->lst_tgt_ns = wallclock +
+			(LST_ACTIVATION_TIMEOUT * MSEC_TO_NSEC * lst_delay_factor);
+		wts->continuous_active = 0;
+	} else {
+		if (wts->lst_tgt_ns && (wts->lst_tgt_ns < wallclock)) {
+			wts->lst = false;
+			wts->lst_tgt_ns = 0;
+		}
+
+		wts->continuous_active++;
+
+		/*
+		 * reduce lst_state_counter for active task if task is active, this in-turn
+		 * influences calculation for LST delay.
+		 */
+		if (wts->continuous_active > 10) {
+			wts->lst_state_counter = max_t(s64, wts->lst_state_counter - 10, 0);
+			wts->continuous_active = 0;
+		}
+	}
+
+	/* tracking the number of windows where a task has encountered an event. */
+	if (new_window)
+		atomic_inc(&wts->event_windows);
+
 }
 
 /*
@@ -2453,6 +2521,7 @@ static u64 update_task_demand(struct task_struct *p, struct rq *rq,
 			       int event, u64 wallclock)
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
+	struct walt_related_thread_group *rtg = wts->grp;
 	u64 mark_start = wts->mark_start;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	u64 delta, window_start = wrq->window_start;
@@ -2461,6 +2530,13 @@ static u64 update_task_demand(struct task_struct *p, struct rq *rq,
 	u64 runtime;
 
 	new_window = mark_start < window_start;
+	/*
+	 * activity count is only used for pipeline filtering
+	 * update activity count only if pipleine is in progress.
+	 */
+	if (pipeline_in_progress() && rtg && rtg->id == DEFAULT_CGROUP_COLOC_ID)
+		update_lst(wts, wallclock, new_window);
+
 	if (!account_busy_for_task_demand(rq, p, event)) {
 		if (new_window)
 			/*
@@ -2742,45 +2818,39 @@ static void update_busy_bitmap(struct task_struct *p, struct rq *rq, int event,
 	if (running)
 		wts->period_contrib_run = wallclock % NSEC_PER_MSEC;
 
-	/* task had already set a boost since wakeup, boost just once since wakeup */
-	if (walt_flag_test(p, WALT_LRB_PIPELINE_BIT)) {
-		no_boost_reason = 1;
-		goto out;
-	}
-
 	/*
 	 * task is not on_rq - if it is in the process of waking up, boost will be applied on the
 	 * right cpu at PICK event
 	 */
 	if (!task_is_runnable(p)) {
-		no_boost_reason = 2;
+		no_boost_reason = 1;
 		goto out;
 	}
 
 	if (sched_ravg_window <= SCHED_RAVG_8MS_WINDOW &&
 			((hweight16(wts->busy_bitmap & 0x00FF) < sysctl_sched_lrpb_active_ms[0]) ||
 			!sysctl_sched_lrpb_active_ms[0])) {
-		no_boost_reason = 3;
+		no_boost_reason = 2;
 		goto out;
 	}
 
 	if (sched_ravg_window == SCHED_RAVG_12MS_WINDOW &&
 			((hweight16(wts->busy_bitmap & 0x0FFF) < sysctl_sched_lrpb_active_ms[1]) ||
 			 !sysctl_sched_lrpb_active_ms[1])) {
-		no_boost_reason = 4;
+		no_boost_reason = 3;
 		goto out;
 	}
 
 	if (sched_ravg_window >= SCHED_RAVG_16MS_WINDOW &&
 			((hweight16(wts->busy_bitmap) < sysctl_sched_lrpb_active_ms[2]) ||
 			 !sysctl_sched_lrpb_active_ms[2])) {
-		no_boost_reason = 5;
+		no_boost_reason = 4;
 		goto out;
 	}
 
 	/* cpu already boosted, so don't extend */
 	if (wrq->lrb_pipeline_start_time != 0) {
-		no_boost_reason = 6;
+		no_boost_reason = 5;
 		goto out;
 	}
 
@@ -2873,6 +2943,12 @@ static inline void __sched_fork_init(struct task_struct *p)
 	wts->load_boost		= 0;
 	wts->boosted_task_load	= 0;
 	wts->reduce_mask	= CPU_MASK_ALL;
+	wts->lst		= false;
+	wts->lst_tgt_ns		= 0;
+	wts->lst_state_counter	= 0;
+	wts->continuous_active	= 0;
+	wts->pipeline_activity_cnt = 0;
+	atomic_set(&wts->event_windows, 0);
 }
 
 static void init_new_task_load(struct task_struct *p)
@@ -3370,7 +3446,8 @@ static void walt_update_cluster_topology(void)
 	build_cpu_array();
 	find_cache_siblings();
 
-	create_util_to_cost();
+	early_walt_config();
+	create_freq_to_cost();
 	walt_clusters_parsed = true;
 }
 
@@ -4499,7 +4576,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 	bool is_migration = false, is_asym_migration = false, is_pipeline_sync_migration = false;
 	u32 wakeup_ctr_sum = 0;
 	struct walt_sched_cluster *cluster;
-	bool need_assign_heavy = false;
+	int need_assign_heavy;
 
 	if (irq_work == &walt_migration_irq_work)
 		is_migration = true;
@@ -5062,9 +5139,9 @@ static void android_rvh_update_misfit_status(void *unused, struct task_struct *p
 	change = misfit - old_misfit;
 	if (change) {
 		sched_update_nr_prod(rq->cpu, 0);
-		wts->misfit = misfit;
 		wrq->walt_stats.nr_big_tasks += change;
 		BUG_ON(wrq->walt_stats.nr_big_tasks < 0);
+		wts->misfit = misfit;
 	}
 }
 
@@ -5288,7 +5365,15 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 		if (inform_governor) {
 			per_cpu(ipc_level, cpu) = curr_ipc_level;
 			per_cpu(ipc_deactivate_ns, cpu) = 0;
-			waltgov_run_callback(rq, WALT_CPUFREQ_SMART_FREQ_BIT);
+			/*
+			 * update this and bigger clusters. The bigger clusters will update their
+			 * caps to ensure their capacities are higher than the smaller ones
+			 */
+			for_each_sched_cluster(cluster) {
+				struct rq *rq_iter = cpu_rq(cpumask_first(&cluster->cpus));
+
+				waltgov_run_callback(rq_iter, WALT_CPUFREQ_SMART_FREQ_BIT);
+			}
 		}
 	}
 }
@@ -5410,8 +5495,10 @@ static void walt_do_sched_yield(void *unused, struct rq *rq)
 
 	walt_lockdep_assert_rq(rq, NULL);
 
-	if (!list_empty(&wts->mvp_list) && wts->mvp_list.next)
-		walt_cfs_deactivate_mvp_task(rq, curr);
+	if (!list_empty(&wts->mvp_list) && wts->mvp_list.next) {
+		if (!pipeline_in_progress() || !walt_pipeline_low_latency_task(curr))
+			walt_cfs_deactivate_mvp_task(rq, curr);
+	}
 
 	if (per_cpu(rt_task_arrival_time, cpu_of(rq)))
 		per_cpu(rt_task_arrival_time, cpu_of(rq)) = 0;
@@ -5664,7 +5751,7 @@ static void walt_init(struct work_struct *work)
 	if (!rcu_access_pointer(rd->pd)) {
 		/*
 		 * perf domains not properly configured.  this is a must as
-		 * create_util_to_cost depends on rd->pd being properly
+		 * create_freq_to_cost depends on rd->pd being properly
 		 * initialized.
 		 */
 		schedule_work(&rebuild_sd_work);
@@ -5683,7 +5770,7 @@ static void walt_init(struct work_struct *work)
 	 * to work with an asymmetrical soc. This is necessary
 	 * for load balance and task placement to work properly.
 	 * see walt_find_energy_efficient_cpu(), and
-	 * create_util_to_cost().
+	 * create_freq_to_cost().
 	 */
 	if (!rcu_access_pointer(rd->pd) && num_sched_clusters > 1)
 		WALT_BUG(WALT_BUG_WALT, NULL,

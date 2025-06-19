@@ -324,7 +324,7 @@ static int translate_hwkm_slot(struct qcom_ice *ice, int slot)
 	return (ice->hwkm_version == 1) ? slot : (slot * 2);
 }
 
-#if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO_QTI)
+#if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO_QTI) || IS_ENABLED(CONFIG_MMC_CRYPTO_QTI)
 static int qcom_ice_program_wrapped_key(struct qcom_ice *ice,
 					const struct blk_crypto_key *key,
 					u8 data_unit_size, int slot)

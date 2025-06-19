@@ -146,3 +146,12 @@ config QTI_THERMAL_VENDOR_HOOK
 	   It registers for thermal cooling device stats vendor hook and
 	   disables cooling stats for different thermal cooling devices
 	   selectively.
+
+config QTI_DYNAMIC_HW_THERMAL_TRIP
+	tristate "QTI SCMI vendor thermal driver"
+	depends on THERMAL && QTI_SCMI_VENDOR_PROTOCOL
+	help
+	   This is a thermal driver to support dynamic threshold update for
+	   different hardware mitigation. It registers for thermal framework
+	   as thermal zone and enable thermal zone sysfs interface to modify
+	   hardware mitigation threshold via SCMI communication.

@@ -941,6 +941,22 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qcom_lpm_monitor",
+        out = "qcom_lpm_monitor.ko",
+        config = "CONFIG_QCOM_LPM_MONITOR",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_lpm_monitor.c",
+            "drivers/soc/qcom/qcom_lpm_monitor_service_v01.c",
+            "drivers/soc/qcom/qcom_lpm_monitor_service_v01.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qmi_helpers",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom_ramdump",
         out = "qcom_ramdump.ko",
         config = "CONFIG_QCOM_RAMDUMP",
@@ -1031,7 +1047,7 @@ def register_modules(registry):
     )
 
     registry.register(
-        name = "drivers/soc/qcom/qcom_tlmm_vm_irqchip.ko",
+        name = "drivers/soc/qcom/qcom_tlmm_vm_irqchip",
         out = "qcom_tlmm_vm_irqchip.ko",
         config = "CONFIG_QCOM_TLMM_VM_IRQCHIP",
         srcs = [

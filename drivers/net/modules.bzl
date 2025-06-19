@@ -1,9 +1,11 @@
 load(":drivers/net/ethernet/stmicro/stmmac/modules.bzl", register_stmmac_eth = "register_modules")
 load(":drivers/net/pcs/modules.bzl", register_pcs = "register_modules")
+load(":drivers/net/phy/aquantia/modules.bzl", register_phy_aquantia = "register_modules")
 
 def register_modules(registry):
     register_pcs(registry)
     register_stmmac_eth(registry)
+    register_phy_aquantia(registry)
     registry.register(
         name = "net/core/failover",
         out = "failover.ko",

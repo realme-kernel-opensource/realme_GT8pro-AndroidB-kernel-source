@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2022, Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/acpi.h>
@@ -2062,6 +2062,23 @@ store_ufs_to_mem_max_bus_bw(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
+/**
+ * ufs_qcom_enable_crash_on_err - read from DTS whether crash_on_err
+ * should be enabled during boot.
+ * @hba: per adapter instance
+ */
+static void ufs_qcom_enable_crash_on_err(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct device *dev = hba->dev;
+	struct device_node *np = dev->of_node;
+
+	if (!np)
+		return;
+	host->crash_on_err =
+		of_property_read_bool(np, "qcom,enable-crash-on-err");
+}
+
 static void ufs_qcom_dev_ref_clk_ctrl(struct ufs_qcom_host *host, bool enable)
 {
 	if (host->dev_ref_clk_ctrl_mmio &&
@@ -2836,14 +2853,24 @@ static void ufs_qcom_qos(struct ufs_hba *hba, int tag)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct qos_cpu_group *qcg;
-	int cpu;
+	int rq_cpu, cur_cpu;
 
 	if (!host->ufs_qos)
 		return;
-	cpu = tag_to_cpu(hba, tag);
-	if (cpu < 0)
+
+	rq_cpu = tag_to_cpu(hba, tag);
+	cur_cpu = raw_smp_processor_id();
+	if (cur_cpu != rq_cpu) {
+		qcg = cpu_to_group(host->ufs_qos, cur_cpu);
+		if (qcg && !qcg->voted) {
+			queue_work(host->ufs_qos->workq, &qcg->vwork);
+			dev_dbg(hba->dev, "Queued QoS work- cpu: %d\n", cur_cpu);
+		}
+	}
+
+	if (rq_cpu < 0)
 		return;
-	qcg = cpu_to_group(host->ufs_qos, cpu);
+	qcg = cpu_to_group(host->ufs_qos, rq_cpu);
 	if (!qcg)
 		return;
 
@@ -2856,7 +2883,7 @@ static void ufs_qcom_qos(struct ufs_hba *hba, int tag)
 		return;
 	}
 	queue_work(host->ufs_qos->workq, &qcg->vwork);
-	dev_dbg(hba->dev, "Queued QoS work- cpu: %d\n", cpu);
+	dev_dbg(hba->dev, "Queued QoS work- cpu: %d\n", rq_cpu);
 }
 
 static void ufs_qcom_vote_work(struct work_struct *work)
@@ -2947,9 +2974,8 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 	struct device_node *group_node;
 	struct ufs_qcom_qos_req *qr;
 	struct qos_cpu_group *qcg;
-	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int i, err;
-	u32 mask = 0;
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	host->cpufreq_dis = true;
 	/*
@@ -2995,15 +3021,6 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 			qcg->mask.bits[0] = host->qos_non_perf_mask.bits[0];
 			if (host->enforce_high_irq_cpus)
 				qcg->perf_core = true;
-		}
-
-		/* Override cpu mask of qcg if it is provided by DT */
-		if (!of_property_read_u32(group_node, "mask", &mask)) {
-			qcg->mask.bits[0] = mask;
-			if (!cpumask_subset(&qcg->mask, cpu_possible_mask)) {
-				dev_err(dev, "Invalid qos group mask 0x%x\n", mask);
-				qcg->mask.bits[0] = mask & cpu_possible_mask->bits[0];
-			}
 		}
 
 		err = of_property_count_u32_elems(group_node, "vote");
@@ -3808,6 +3825,8 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 #if defined(CONFIG_UFS_DBG)
 	host->dbg_en = true;
 #endif
+
+	ufs_qcom_enable_crash_on_err(hba);
 
 	/* Setup the optional reset control of HCI */
 	host->core_reset = devm_reset_control_get_optional(hba->dev, "rst");
@@ -5041,8 +5060,28 @@ static struct ufs_dev_quirk ufs_qcom_dev_fixups[] = {
 	{ .wmanufacturerid = UFS_VENDOR_SAMSUNG,
 	  .model = UFS_ANY_MODEL,
 	  .quirk = UFS_DEVICE_QUIRK_PA_HIBER8TIME |
-			UFS_DEVICE_QUIRK_PA_TX_HSG1_SYNC_LENGTH |
-			UFS_DEVICE_QUIRK_PA_TX_DEEMPHASIS_TUNING },
+			UFS_DEVICE_QUIRK_PA_TX_HSG1_SYNC_LENGTH },
+	{ .wmanufacturerid = UFS_VENDOR_SAMSUNG,
+	  .model = "KLUEG4RHHD-B0G1",
+	  .quirk = UFS_DEVICE_QUIRK_PA_TX_DEEMPHASIS_TUNING },
+	{ .wmanufacturerid = UFS_VENDOR_SAMSUNG,
+	  .model = "KLUFG8RHHD-B0G1",
+	  .quirk = UFS_DEVICE_QUIRK_PA_TX_DEEMPHASIS_TUNING },
+	{ .wmanufacturerid = UFS_VENDOR_SAMSUNG,
+	  .model = "KLUGGARHHD-B0G1",
+	  .quirk = UFS_DEVICE_QUIRK_PA_TX_DEEMPHASIS_TUNING },
+	{ .wmanufacturerid = UFS_VENDOR_SAMSUNG,
+	  .model = "KLUEG4RHHF-F0G1",
+	  .quirk = UFS_DEVICE_QUIRK_PA_TX_DEEMPHASIS_TUNING },
+	{ .wmanufacturerid = UFS_VENDOR_SAMSUNG,
+	  .model = "KLUFG8RHHF-F0G1",
+	  .quirk = UFS_DEVICE_QUIRK_PA_TX_DEEMPHASIS_TUNING },
+	{ .wmanufacturerid = UFS_VENDOR_SAMSUNG,
+	  .model = "KLUFG4NHHB-F0G1",
+	  .quirk = UFS_DEVICE_QUIRK_PA_TX_DEEMPHASIS_TUNING },
+	{ .wmanufacturerid = UFS_VENDOR_SAMSUNG,
+	  .model = "KLUGG8NHHB-F0G1",
+	  .quirk = UFS_DEVICE_QUIRK_PA_TX_DEEMPHASIS_TUNING },
 	{ .wmanufacturerid = UFS_VENDOR_MICRON,
 	  .model = UFS_ANY_MODEL,
 	  .quirk = UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM },
@@ -5288,7 +5327,7 @@ static int ufs_qcom_config_esi(struct ufs_hba *hba)
 
 static u32 ufs_qcom_freq_to_gear_speed(struct ufs_hba *hba, unsigned long freq)
 {
-	u32 gear = 0;
+	u32 gear = UFS_HS_DONT_CHANGE;
 
 	switch (freq) {
 	case 403000000:
@@ -5310,10 +5349,10 @@ static u32 ufs_qcom_freq_to_gear_speed(struct ufs_hba *hba, unsigned long freq)
 		break;
 	default:
 		dev_err(hba->dev, "%s: Unsupported clock freq : %lu\n", __func__, freq);
-		break;
+		return UFS_HS_DONT_CHANGE;
 	}
 
-	return gear;
+	return min_t(u32, gear, hba->max_pwr_info.info.gear_rx);
 }
 
 /*

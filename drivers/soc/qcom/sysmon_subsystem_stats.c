@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
@@ -167,6 +167,45 @@ struct sysmon_smem_q6_event_stats_extended {
 	/**< Extended DSP Q6 event stats */
 };
 
+struct sysmon_smem_ddr_stats_local {
+	uint32_t clk_arr[SYSMON_DDR_STATS_MAX_CLK_LEVELS];
+	/**< DDR clock frequency(kHz) array */
+
+	uint32_t active_time[SYSMON_DDR_STATS_MAX_CLK_LEVELS];
+	/**< Active time(seconds) array correspons to DDR clock array */
+
+	uint32_t num_ddrclk_levels;
+	/**< Number of levels present in DDR clock table */
+
+	uint32_t pc_time;
+	/**< DSP Power collapse time(seconds) */
+
+	uint32_t curr_clk;
+	/**< Current DDR clock frequency(kHz) */
+
+	uint32_t reserved;
+	/**< Reserved field for future use */
+
+	uint64_t checksum;
+	/**< Check sum */
+};
+struct sysmon_smem_ddr_stats_extended {
+	u32 featureId_ddrStats;
+	/**< FeatureID[31:28] Size[27:16] version[15:0] */
+
+	u32 reserved;
+	/**< For structure alignment */
+
+	struct sysmon_smem_ddr_stats_local stats;
+	/**< Structure to hold DDR stats */
+
+	uint32_t Last_update_time_event_lsb;
+	/**< LSB of Smem update lsb timestamp for event based stat updates*/
+
+	uint32_t Last_update_time_event_msb;
+	/**< MSB of Smem updatemsb timestamp for event based stat updates*/
+};
+
 struct sysmon_smem_stats {
 	bool smem_init_adsp;
 	bool smem_init_cdsp;
@@ -178,6 +217,7 @@ struct sysmon_smem_stats {
 	struct sysmon_smem_q6_event_stats_extended *sysmon_event_stats_adsp;
 	struct sysmon_smem_q6_event_stats_extended *sysmon_event_stats_cdsp;
 	struct sysmon_smem_q6_event_stats_extended *sysmon_event_stats_slpi;
+	struct sysmon_smem_ddr_stats_extended *sysmon_ddr_stats;
 	struct sleep_stats *sleep_stats_adsp;
 	struct sleep_stats *sleep_stats_cdsp;
 	struct sleep_stats *sleep_stats_slpi;
@@ -197,10 +237,13 @@ struct sysmon_smem_stats {
 
 enum feature_id {
 	SYSMONSTATS_Q6_LOAD_FEATUREID = 1,
-	SYSMONSTATS_Q6_EVENT_FEATUREID,
-	SYSMON_POWER_STATS_FEATUREID,
-	SYSMON_HMX_UTIL_FEATUREID,
-	SYSMON_HVX_UTIL_FEATUREID
+	SYSMONSTATS_Q6_EVENT_FEATUREID = 2,
+	SYSMON_POWER_STATS_FEATUREID = 3,
+	SYSMON_HMX_UTIL_FEATUREID = 4,
+	SYSMON_HVX_UTIL_FEATUREID = 5,
+	SYSMON_RUNNING_STATS_FEATUREID = 6,
+	SYSMON_HMX_POWER_STATS_FEATUREID = 7,
+	SYSMON_DDR_POWER_STATS_FEATUREID = 8
 };
 
 struct sysmon_smem_q6_load_stats {
@@ -221,7 +264,67 @@ struct sysmon_smem_hmx_stats {
 	u32 Last_update_time_load_msb;
 };
 
+enum sub_id {
+	HMX_CDSP,
+	DDR_CDSP
+};
+struct delta_time {
+	uint32_t active_time;
+	uint32_t pc_time;
+	uint32_t lpi_time;
+};
 static struct sysmon_smem_stats g_sysmon_stats;
+
+static int get_delta_time(enum sub_id sub_id, struct delta_time *delta_time,
+	u64 last_updated_time, u32 pc_time_updated, u32 lpi_time_updated)
+{
+	u64 lpm_acc = 0, lpi_acc = 0;
+	u64 updated_ticks = 0, curr_timestamp = 0, diff_ticks = 0;
+	u64 pc_time = 0, lpi_time = 0, active_time = 0, diff_time = 0;
+
+	if (delta_time == NULL)
+		return -EINVAL;
+
+	if (sub_id == DDR_CDSP) {
+		if (g_sysmon_stats.sleep_stats_cdsp) {
+			lpm_acc = g_sysmon_stats.sleep_stats_cdsp->accumulated;
+			if (g_sysmon_stats.sleep_stats_cdsp->last_entered_at >
+					g_sysmon_stats.sleep_stats_cdsp->last_exited_at)
+				lpm_acc += arch_timer_read_counter() -
+					g_sysmon_stats.sleep_stats_cdsp->last_entered_at;
+		} else
+			return -EINVAL;
+	}
+	updated_ticks = (last_updated_time);
+	curr_timestamp = __arch_counter_get_cntvct();
+
+	if (curr_timestamp < updated_ticks)
+		diff_ticks = curr_timestamp + (ULLONG_MAX - updated_ticks);
+	else
+		diff_ticks = (curr_timestamp - updated_ticks);
+
+	diff_time = (diff_ticks / SYS_CLK_TICKS_PER_SEC);
+	if (diff_time > 0) {
+		pc_time = (lpm_acc / SYS_CLK_TICKS_PER_SEC);
+		lpi_time = (lpi_acc / SYS_CLK_TICKS_PER_SEC);
+
+		if (pc_time >= pc_time_updated)
+			pc_time -= pc_time_updated;
+
+		if (diff_time >= pc_time)
+			active_time = diff_time - pc_time;
+
+		if ((lpi_time) && (lpi_time >= lpi_time_updated))
+			lpi_time -= lpi_time_updated;
+
+		if ((lpi_time) && (pc_time >= lpi_time))
+			pc_time -= lpi_time;
+	}
+	delta_time->active_time = active_time;
+	delta_time->pc_time = pc_time;
+	delta_time->lpi_time = lpi_time;
+	return 0;
+}
 
 /* Adds delta between SMEM powerstats updated time to current time */
 static int add_delta_time(
@@ -396,6 +499,19 @@ static void update_sysmon_smem_pointers(void *smem_pointer, enum dsp_id_t dsp_id
 			} else {
 				pr_err("%s: Failed to fetch %d feature pointer\n",
 					__func__, SYSMON_HVX_UTIL_FEATUREID);
+				size = 0;
+			}
+		break;
+		case SYSMON_DDR_POWER_STATS_FEATUREID:
+			if (!IS_ERR_OR_NULL(smem_pointer)) {
+				if (dsp_id == CDSP) {
+					g_sysmon_stats.sysmon_ddr_stats = smem_pointer;
+				} else
+					pr_err("%s:subsystem not supported %d stats\n",
+						__func__, SYSMON_DDR_POWER_STATS_FEATUREID);
+			} else {
+				pr_err("%s: Failed to fetch %d feature pointer\n",
+					__func__, SYSMON_DDR_POWER_STATS_FEATUREID);
 				size = 0;
 			}
 		break;
@@ -800,6 +916,58 @@ int copy_powerstats(struct sysmon_smem_power_stats *out_ptr, enum dsp_id_t dsp_i
 	}
 	return 0;
 }
+
+/**
+ * sysmon_stats_query_ddr_residency() - * API to query requested
+ * DDR power residency.
+ * On success, returns 0 and copies power residency
+ *      statistics in the given sysmon_smem_ddr_stats structure.
+ */
+int sysmon_stats_query_ddr_residency(struct sysmon_smem_ddr_stats *sysmon_ddr_stats)
+{
+	struct delta_time delta = {0};
+	uint32_t dtime = 0, j = 0;
+	struct sysmon_smem_ddr_stats_extended *stats = g_sysmon_stats.sysmon_ddr_stats;
+
+	if (!sysmon_ddr_stats) {
+		pr_err("%s: Null pointer received\n", __func__);
+		return -EINVAL;
+	}
+
+	if (g_sysmon_stats.sysmon_ddr_stats) {
+		if (get_delta_time(DDR_CDSP, &delta,
+				(u64)(((u64)stats->Last_update_time_event_msb << 32)
+				| stats->Last_update_time_event_lsb),
+				stats->stats.pc_time, 0))
+			return -ENOKEY;
+
+		if (stats->stats.num_ddrclk_levels > SYSMON_DDR_STATS_MAX_CLK_LEVELS) {
+			pr_err("%s: Number of DDR clock levels (%d) are more than expected %d\n",
+				__func__, stats->stats.num_ddrclk_levels,
+				SYSMON_DDR_STATS_MAX_CLK_LEVELS);
+			return -EINVAL;
+		}
+
+		for (j = 0; j < stats->stats.num_ddrclk_levels; j++) {
+			if (stats->stats.clk_arr[j]) {
+				if (stats->stats.clk_arr[j] == stats->stats.curr_clk)
+					dtime = delta.active_time;
+				else
+					dtime = 0;
+
+				sysmon_ddr_stats->clk_arr[j] = stats->stats.clk_arr[j];
+				sysmon_ddr_stats->active_time[j] =
+						stats->stats.active_time[j] + dtime;
+			}
+		}
+		sysmon_ddr_stats->pc_time = stats->stats.pc_time + delta.pc_time;
+		sysmon_ddr_stats->curr_clk = stats->stats.curr_clk;
+		sysmon_ddr_stats->num_ddrclk_levels = stats->stats.num_ddrclk_levels;
+	} else
+		return -ENOKEY;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sysmon_stats_query_ddr_residency);
 
 /**
  * sysmon_stats_query_power_residency() - * API to query requested
@@ -1390,6 +1558,7 @@ static int master_cdsp_stats_show(struct seq_file *s, void *d)
 	u8 ver = 0;
 	struct sysmon_smem_power_stats_extended *ptr = NULL;
 	struct sysmon_smem_power_stats sysmon_power_stats = { 0 };
+	struct sysmon_smem_ddr_stats sysmon_ddr_stats = {0};
 	struct sysmon_smem_q6_event_stats_extended *events_ptr = NULL;
 
 	if (!g_sysmon_stats.smem_init_cdsp)
@@ -1487,6 +1656,32 @@ static int master_cdsp_stats_show(struct seq_file *s, void *d)
 
 	}
 
+	if (g_sysmon_stats.sysmon_ddr_stats) {
+
+		seq_puts(s, "\nDDR stats :\n");
+
+		if (sysmon_stats_query_ddr_residency(&sysmon_ddr_stats)) {
+			seq_puts(s, "DDR Stats Query API failed\n");
+			return -ENOKEY;
+		}
+
+		for (j = 0; j < sysmon_ddr_stats.num_ddrclk_levels; j++) {
+			seq_printf(s, "%u : DDR Clock(KHz) : %u \tActive Time(sec) : %u\n",
+				j,
+				sysmon_ddr_stats.clk_arr[j],
+				sysmon_ddr_stats.active_time[j]);
+		}
+
+		seq_printf(s, "Number of DDR clock levels = %u\n",
+			sysmon_ddr_stats.num_ddrclk_levels);
+
+		seq_printf(s, "Power collapse time(sec) = %u\n",
+			sysmon_ddr_stats.pc_time);
+
+		seq_printf(s, "Current DDR clock(KHz) = %u\n",
+				sysmon_ddr_stats.curr_clk);
+
+	}
 	if (g_sysmon_stats.q6_avg_load_cdsp) {
 		seq_puts(s, "\nQ6 load:\n\n");
 		q6_load = sysmon_read_q6_load(CDSP);

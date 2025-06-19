@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -515,42 +515,75 @@ static int active_rings;
 
 static bool rings_inited_since_activation[NUM_RINGS];
 
-/*
- * get_qpace() - prepare a given ring for usage and ref count its usage
- * @ring_num: the ring we want to use
- *
- * Call the necessary PM callbacks on the first get_qpace() call. Initialize
- * @ring_num if it has not been initialized already for the current usage
- * period. This function implicitly increments a reference counter that
- * tracks the number of items in the ring.
- */
-void get_qpace(int ring_num)
+static void _get_qpace(void)
 {
-	struct transfer_ring *tr = &tr_rings[ring_num];
-
-	mutex_lock(&qpace_ref_lock);
+	lockdep_assert_held(&qpace_ref_lock);
 	if (!active_rings) {
 		pm_stay_awake(qpace_dev);
 		dev_pm_qos_update_request(&qos_req, 300);
 	}
+	active_rings++;
+}
+
+static void _put_qpace(void)
+{
+	lockdep_assert_held(&qpace_ref_lock);
+	active_rings--;
+	if (!active_rings) {
+		dev_pm_qos_update_request(&qos_req, 0);
+		pm_relax(qpace_dev);
+		for (int i = 0; i < ARRAY_SIZE(rings_inited_since_activation); i++)
+			rings_inited_since_activation[i] = false;
+	}
+}
+
+void get_qpace(void)
+{
+	mutex_lock(&qpace_ref_lock);
+	_get_qpace();
+	mutex_unlock(&qpace_ref_lock);
+}
+EXPORT_SYMBOL_GPL(get_qpace);
+
+void put_qpace(void)
+{
+	mutex_lock(&qpace_ref_lock);
+	_put_qpace();
+	mutex_unlock(&qpace_ref_lock);
+}
+EXPORT_SYMBOL_GPL(put_qpace);
+
+/*
+ * get_ring() - prepare a given ring for usage and ref count its usage
+ * @ring_num: the ring we want to use
+ *
+ * Call the necessary PM callbacks on the first get_ring() call. Initialize
+ * @ring_num if it has not been initialized already for the current usage
+ * period. This function implicitly increments a reference counter that
+ * tracks the number of items in the ring.
+ */
+static void get_ring(int ring_num)
+{
+	struct transfer_ring *tr = &tr_rings[ring_num];
+
+	mutex_lock(&qpace_ref_lock);
 
 	if (!tr->item_count) {
+		_get_qpace();
+
 		if (!rings_inited_since_activation[ring_num]) {
 			rings_inited_since_activation[ring_num] = true;
 			init_event_ring(ring_num, true);
 			init_transfer_ring(ring_num, true);
 		}
-
-		active_rings++;
 	}
 	tr->item_count++;
 
 	mutex_unlock(&qpace_ref_lock);
 }
-EXPORT_SYMBOL_GPL(get_qpace);
 
 /*
- * put_qpace() - Reduce the number of items tracked by a ring
+ * put_ring() - Reduce the number of items tracked by a ring
  * @ring_num: The ring we're modifying usage stats for
  * @n_consumed_entries: The number of items we want to mark as unused
  *
@@ -559,7 +592,7 @@ EXPORT_SYMBOL_GPL(get_qpace);
  * we call the necessary PM callbacks to allow QPaCE's resources to be
  * collapsed.
  */
-void put_qpace(int ring_num, int  n_consumed_entries)
+static void put_ring(int ring_num, int  n_consumed_entries)
 {
 	struct transfer_ring *tr = &tr_rings[ring_num];
 
@@ -567,19 +600,10 @@ void put_qpace(int ring_num, int  n_consumed_entries)
 	tr->item_count -= n_consumed_entries;
 
 	if (!tr->item_count)
-		active_rings--;
-
-	if (!active_rings) {
-		dev_pm_qos_update_request(&qos_req, PM_QOS_RESUME_LATENCY_DEFAULT_VALUE);
-		pm_relax(qpace_dev);
-
-		for (int i = 0; i < ARRAY_SIZE(rings_inited_since_activation); i++)
-			rings_inited_since_activation[i] = false;
-	}
+		_put_qpace();
 
 	mutex_unlock(&qpace_ref_lock);
 }
-EXPORT_SYMBOL_GPL(put_qpace);
 
 /*
  * =============================================================================
@@ -610,7 +634,7 @@ int qpace_queue_copy(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr, siz
 	struct qpace_transfer_descriptor *td;
 	int ret;
 
-	get_qpace(tr_num);
+	get_ring(tr_num);
 
 	td = ring->hw_write_ptr;
 
@@ -650,7 +674,7 @@ int qpace_queue_compress(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr)
 	struct qpace_transfer_descriptor *td;
 	int ret;
 
-	get_qpace(tr_num);
+	get_ring(tr_num);
 
 	td = ring->hw_write_ptr;
 
@@ -678,28 +702,23 @@ int qpace_queue_compress(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr)
 }
 EXPORT_SYMBOL_GPL(qpace_queue_compress);
 
-static inline void qpace_free_tr_entries(int tr_num)
+static inline void qpace_free_tr_entries(int tr_num, int n_consumed_entries)
 {
 	struct transfer_ring *ring = &tr_rings[tr_num];
-	struct qpace_transfer_descriptor *last_processed_td;
 
-	if (ring->hw_write_ptr == ring->ring_buffer_start)
-		last_processed_td = ring->ring_buffer_start + DESCRIPTORS_PER_RING - 1;
-	else
-		last_processed_td = ring->hw_write_ptr - 1;
+	/* Update hw_read_ptr */
+	int offset = (ring->hw_read_ptr - ring->ring_buffer_start);
+	int new_offset = (offset + n_consumed_entries) % DESCRIPTORS_PER_RING;
 
-	/* Reset BEI and update hw_read_ptr */
-	ring->hw_read_ptr = last_processed_td;
-	last_processed_td->bei = 1;
+	ring->hw_read_ptr = ring->ring_buffer_start + new_offset;
+
+	/* Reset BEI */
+	ring->hw_read_ptr->bei = 1;
 }
 
 static inline bool transfer_ring_is_empty(struct transfer_ring *ring)
 {
-	if (ring->hw_write_ptr == ring->ring_buffer_start)
-		return (ring->hw_read_ptr == ring->ring_buffer_start +
-			DESCRIPTORS_PER_RING - 1) ? true : false;
-	else
-		return (ring->hw_read_ptr + 1 == ring->hw_write_ptr) ? true : false;
+	return ring->item_count == 0;
 }
 
 /*
@@ -776,8 +795,6 @@ retry:
 	 */
 	if (first_ed_to_consume->cycle_bit != ev_ring->cycle_bit)
 		goto retry;
-
-	qpace_free_tr_entries(tr_num);
 }
 EXPORT_SYMBOL_GPL(qpace_wait_for_tr_consumption);
 
@@ -799,7 +816,7 @@ static inline void qpace_free_er_entries(int er_num, int n_consumed_entries)
 	QPACE_WRITE_ER_REG(er_num, QPACE_DMA_ER_MGR_0_RD_PTR_L_OFFSET,
 			   FIELD_GET(GENMASK(31, 0), last_processed_ed_phys_addr));
 
-	put_qpace(er_num, n_consumed_entries);
+	put_ring(er_num, n_consumed_entries);
 }
 
 static inline void consume_ed(struct qpace_event_descriptor *ed, int ed_index,
@@ -859,6 +876,8 @@ loop_again:
 	ring->hw_write_ptr = ed;
 
 	qpace_free_er_entries(er_num, n_consumed_entries);
+	qpace_free_tr_entries(er_num, n_consumed_entries);
+
 
 	return n_consumed_entries;
 }
@@ -1105,7 +1124,7 @@ static int qpace_init(void)
 		   COMP_CORE_BULK_MODE_CORE_4;
 	QPACE_WRITE_COMP_CORE_REG(QPACE_COMP_CORE_BULK_MODE_OFFSET, reg_val);
 
-	reg_val = QPACE_READ_GEN_CORE_REG(QPACE_CORE_OPER_CORE_READY_OFFSET);
+	reg_val = QPACE_READ_GEN_CORE_REG(QPACE_CORE_OPER_CFG_OFFSET);
 	reg_val |= CORE_OPER_CFG_COMP_MEM_PWR_DWN_1;
 	QPACE_WRITE_GEN_CORE_REG(QPACE_CORE_OPER_CFG_OFFSET,
 				 reg_val);

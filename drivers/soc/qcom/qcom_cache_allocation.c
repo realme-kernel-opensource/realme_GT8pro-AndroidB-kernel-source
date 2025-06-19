@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
@@ -33,7 +33,7 @@ struct cpu_gpu_bw_config {
 	u32 cpu_restore_thresh;
 	u32 cpu_instant_thresh[2];
 	u32 gpu_instant_thresh;
-	u64 bw_mon_ratio_thresh;
+	u64 bw_mon_ratio_thresh[2];
 };
 
 struct bw_monitor_data {
@@ -271,7 +271,7 @@ static void platform_bw_thresh_monitor(struct cache_allocation *pdev, u64 *ratio
 		module_bw_monitor(pdev, &slc_config[2], &gpu_mbps, 2);
 
 		if (gpu_mbps == 0)
-			*ratio = pdev->config[pdev->cluster_num - 1].bw_mon_ratio_thresh + 1;
+			*ratio = pdev->config[pdev->cluster_num - 1].bw_mon_ratio_thresh[1] + 1;
 		else
 			*ratio = 100 * cpu_mbps / gpu_mbps;
 		trace_cache_alloc_bw_ratio(m_mbps, l_mbps, cpu_mbps, gpu_mbps, *ratio);
@@ -381,23 +381,37 @@ static void bw_mon_ratio_gov(struct cache_allocation *pdev)
 		return;
 
 	if (pdev->bw_mon_ratio_status != 1 &&
-			ratio < pdev->config[0].bw_mon_ratio_thresh) {
+			ratio < pdev->config[0].bw_mon_ratio_thresh[0]) {
 		pdev->bw_mon_ratio_status = 1;
-		pdev->client_input[APPS] = SLC_GEAR_LOW;
+		pdev->client_input[APPS] = SLC_GEAR_BYPASS;
 		pdev->client_input[GPU] = SLC_GEAR_HIGH;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 2 &&
-			ratio >= pdev->config[0].bw_mon_ratio_thresh &&
-			ratio <= pdev->config[1].bw_mon_ratio_thresh) {
+			ratio >= pdev->config[0].bw_mon_ratio_thresh[0] &&
+			ratio < pdev->config[0].bw_mon_ratio_thresh[1]) {
 		pdev->bw_mon_ratio_status = 2;
-		pdev->client_input[APPS] = SLC_GEAR_HIGH;
+		pdev->client_input[APPS] = SLC_GEAR_LOW;
 		pdev->client_input[GPU] = SLC_GEAR_HIGH;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 3 &&
-			ratio > pdev->config[1].bw_mon_ratio_thresh) {
+			ratio >= pdev->config[0].bw_mon_ratio_thresh[1] &&
+			ratio < pdev->config[1].bw_mon_ratio_thresh[0]) {
 		pdev->bw_mon_ratio_status = 3;
 		pdev->client_input[APPS] = SLC_GEAR_HIGH;
+		pdev->client_input[GPU] = SLC_GEAR_HIGH;
+		ret = cache_allocation_configure(pdev);
+	} else if (pdev->bw_mon_ratio_status != 4 &&
+			ratio >= pdev->config[1].bw_mon_ratio_thresh[0] &&
+			ratio < pdev->config[1].bw_mon_ratio_thresh[1]) {
+		pdev->bw_mon_ratio_status = 4;
+		pdev->client_input[APPS] = SLC_GEAR_HIGH;
 		pdev->client_input[GPU] = SLC_GEAR_LOW;
+		ret = cache_allocation_configure(pdev);
+	} else if (pdev->bw_mon_ratio_status != 5 &&
+			ratio >= pdev->config[1].bw_mon_ratio_thresh[1]) {
+		pdev->bw_mon_ratio_status = 5;
+		pdev->client_input[APPS] = SLC_GEAR_HIGH;
+		pdev->client_input[GPU] = SLC_GEAR_BYPASS;
 		ret = cache_allocation_configure(pdev);
 	}
 
@@ -472,16 +486,14 @@ static ssize_t bw_mon_ratio_thresh_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct cache_allocation *pd = dev_get_drvdata(dev);
-	int i, cnt = 0;
+	int i, j, cnt = 0;
 
 	for (i = 0; i < pd->cluster_num; i++) {
-		if (i != pd->cluster_num - 1)
+		for (j = 0; j < 2; j++)
 			cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%llu ",
-					pd->config[i].bw_mon_ratio_thresh);
-		else
-			cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%llu\n",
-					pd->config[i].bw_mon_ratio_thresh);
+					pd->config[i].bw_mon_ratio_thresh[j]);
 	}
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "\n");
 
 	return cnt;
 }
@@ -490,8 +502,8 @@ static ssize_t bw_mon_ratio_thresh_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct cache_allocation *pd = dev_get_drvdata(dev);
-	int var[2] = {0};
-	int ret, i = 0;
+	int var[4] = {0};
+	int ret, i = 0, j = 0;
 	char *kbuf, *s, *str;
 
 	kbuf = kstrdup(buf, GFP_KERNEL);
@@ -499,7 +511,7 @@ static ssize_t bw_mon_ratio_thresh_store(struct device *dev,
 		return -ENOMEM;
 
 	s = kbuf;
-	while (((str = strsep(&s, " ")) != NULL) && i < 2) {
+	while (((str = strsep(&s, " ")) != NULL) && i < 4) {
 		ret = kstrtoint(str, 10, &var[i]);
 		if (ret < 0) {
 			pr_err("Invalid value :%d\n", ret);
@@ -509,8 +521,10 @@ static ssize_t bw_mon_ratio_thresh_store(struct device *dev,
 	}
 
 	mutex_lock(&pd->lock);
-	for (i = 0; i < 2; i++)
-		pd->config[i].bw_mon_ratio_thresh = var[i];
+	for (i = 0; i < 2; i++) {
+		for (j = 0; j < 2; j++)
+			pd->config[i].bw_mon_ratio_thresh[j] = var[i * 2 + j];
+	}
 	mutex_unlock(&pd->lock);
 
 out:
@@ -743,7 +757,7 @@ static int cache_allocation_probe(struct platform_device *pdev)
 	pd->current_governor = 1;
 	pd->freq_mon_status = 0;
 	pd->bw_mon_ratio_status = 0;
-	pd->win_count_config = 10;
+	pd->win_count_config = 16;
 	pd->win_active = false;
 	pd->client_input[APPS] = 0;
 	pd->client_input[GPU] = 0;
@@ -834,7 +848,7 @@ static struct cpu_gpu_bw_config canoe_config[] = {
 		.cpu_restore_thresh = 1000000,
 		.cpu_instant_thresh = { 115200, 1996800 },
 		.gpu_instant_thresh = 443,
-		.bw_mon_ratio_thresh = 50,
+		.bw_mon_ratio_thresh = { 10, 50 },
 	},
 	[1] = {
 		.cluster_id = 6,
@@ -842,7 +856,7 @@ static struct cpu_gpu_bw_config canoe_config[] = {
 		.cpu_restore_thresh = 1400000,
 		.cpu_instant_thresh = { 1689600, 3072000 },
 		.gpu_instant_thresh = 607,
-		.bw_mon_ratio_thresh = 150,
+		.bw_mon_ratio_thresh = { 150, 1000 },
 	},
 };
 

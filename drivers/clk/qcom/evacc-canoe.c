@@ -43,7 +43,7 @@ static const struct pll_vco taycan_eko_t_vco[] = {
 };
 
 /* 1050.0 MHz Configuration */
-static const struct alpha_pll_config eva_cc_pll0_config = {
+static struct alpha_pll_config eva_cc_pll0_config = {
 	.l = 0x36,
 	.cal_l = 0x48,
 	.alpha = 0xb000,
@@ -73,8 +73,7 @@ static struct clk_alpha_pll eva_cc_pll0 = {
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_LOWER_D2] = 621000000,
-				[VDD_LOW] = 1066000000,
-				[VDD_LOW_L1] = 1600000000,
+				[VDD_LOWER_D1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH] = 2500000000},
 		},
@@ -225,20 +224,27 @@ static struct clk_branch eva_cc_mvs0_clk = {
 	},
 };
 
-static struct clk_branch eva_cc_mvs0_freerun_clk = {
-	.halt_reg = 0x808c,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0x808c,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "eva_cc_mvs0_freerun_clk",
-			.parent_hws = (const struct clk_hw*[]) {
-				&eva_cc_mvs0_div_clk_src.clkr.hw,
+static struct clk_mem_branch eva_cc_mvs0_freerun_clk = {
+	.mem_enable_reg = 0x8090,
+	.mem_ack_reg =  0x8090,
+	.mem_enable_mask = BIT(3),
+	.mem_enable_ack_mask = 0xc00,
+	.mem_enable_inverted = true,
+	.branch = {
+		.halt_reg = 0x808c,
+		.halt_check = BRANCH_HALT,
+		.clkr = {
+			.enable_reg = 0x808c,
+			.enable_mask = BIT(0),
+			.hw.init = &(const struct clk_init_data) {
+				.name = "eva_cc_mvs0_freerun_clk",
+				.parent_hws = (const struct clk_hw*[]) {
+					&eva_cc_mvs0_clk_src.clkr.hw,
+				},
+				.num_parents = 1,
+				.flags = CLK_SET_RATE_PARENT,
+				.ops = &clk_branch2_mem_ops,
 			},
-			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
 		},
 	},
 };
@@ -351,7 +357,7 @@ static struct clk_regmap *eva_cc_canoe_clocks[] = {
 	[EVA_CC_MVS0_CLK] = &eva_cc_mvs0_clk.clkr,
 	[EVA_CC_MVS0_CLK_SRC] = &eva_cc_mvs0_clk_src.clkr,
 	[EVA_CC_MVS0_DIV_CLK_SRC] = &eva_cc_mvs0_div_clk_src.clkr,
-	[EVA_CC_MVS0_FREERUN_CLK] = &eva_cc_mvs0_freerun_clk.clkr,
+	[EVA_CC_MVS0_FREERUN_CLK] = &eva_cc_mvs0_freerun_clk.branch.clkr,
 	[EVA_CC_MVS0_SHIFT_CLK] = &eva_cc_mvs0_shift_clk.clkr,
 	[EVA_CC_MVS0C_CLK] = &eva_cc_mvs0c_clk.clkr,
 	[EVA_CC_MVS0C_DIV2_DIV_CLK_SRC] = &eva_cc_mvs0c_div2_div_clk_src.clkr,
@@ -395,9 +401,30 @@ static struct qcom_cc_desc eva_cc_canoe_desc = {
 
 static const struct of_device_id eva_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-evacc" },
+	{ .compatible = "qcom,alor-evacc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, eva_cc_canoe_match_table);
+
+static void eva_cc_alor_fixup(struct regmap *regmap)
+{
+	eva_cc_pll0_config.config_ctl_hi_val = 0x0a8060e0;
+}
+
+static int eva_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,alor-evacc"))
+		eva_cc_alor_fixup(regmap);
+
+	return 0;
+}
 
 static int eva_cc_canoe_probe(struct platform_device *pdev)
 {
@@ -414,6 +441,10 @@ static int eva_cc_canoe_probe(struct platform_device *pdev)
 		return ret;
 
 	ret = pm_runtime_resume_and_get(&pdev->dev);
+	if (ret)
+		return ret;
+
+	ret = eva_cc_canoe_fixup(pdev, regmap);
 	if (ret)
 		return ret;
 

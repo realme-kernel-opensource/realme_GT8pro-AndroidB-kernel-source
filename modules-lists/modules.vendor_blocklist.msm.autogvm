@@ -4,6 +4,7 @@
 blocklist 8250_of
 blocklist adc-tm
 blocklist atomic64_test
+blocklist boot_stats
 blocklist dummy-cpufreq
 blocklist dummy_hcd
 blocklist dummy_hcd

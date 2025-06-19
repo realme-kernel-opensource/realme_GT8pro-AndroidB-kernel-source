@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include "walt.h"
@@ -17,6 +17,9 @@ int soc_sched_lib_name_capacity;
 #define PIPELINE_BUSY_THRESH_8MS_WINDOW 7
 #define PIPELINE_BUSY_THRESH_12MS_WINDOW 11
 #define PIPELINE_BUSY_THRESH_16MS_WINDOW 15
+unsigned int gold_cluster_id, prime_cluster_id;
+unsigned int soc_cluster_freq_table_size[MAX_CLUSTERS];
+unsigned int soc_cluster_freq_table[MAX_CLUSTERS][MAX_FREQ_TABLE_ENTRIES];
 
 void walt_config(void)
 {
@@ -104,14 +107,12 @@ void walt_config(void)
 	soc_feat_set(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
 	soc_feat_set(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	sysctl_pipeline_special_task_util_thres = 100;
-	sysctl_pipeline_non_special_task_util_thres = 200;
-	sysctl_pipeline_pin_thres_low_pct = 50;
-	sysctl_pipeline_pin_thres_high_pct = 60;
+	pipeline_swap_util_th = 0;
+	prime_cluster_id = num_sched_clusters - 1;
+	gold_cluster_id = num_sched_clusters > 2 ? 1 : 0;
 
 	/* Initialize smart freq configurations */
 	smart_freq_init(name);
-
 	/* return if socinfo is not available */
 	if (!name)
 		return;
@@ -125,6 +126,7 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
 		trailblazer_floor_freq[0] = 1000000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 		oscillate_period_ns = 8000000;
@@ -202,7 +204,7 @@ void walt_config(void)
 	} else if (!strcmp(name, "TUNA")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
-		soc_feat_set(SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING);
+		soc_feat_set(SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING);
 		soc_sched_lib_name_capacity = 2;
 		/*
 		 * Treat Golds and Primes as candidates for load sync under pipeline usecase.
@@ -216,6 +218,7 @@ void walt_config(void)
 			cpumask_or(&pipeline_sync_cpus,
 				&pipeline_sync_cpus, &cpu_array[0][3]);
 		}
+		pipeline_swap_util_th = 100;
 
 		/*
 		 * Trailblazer settings
@@ -224,6 +227,7 @@ void walt_config(void)
 		trailblazer_floor_freq[1] = 1000000;
 		trailblazer_floor_freq[2] = 1000000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 
 		/*
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
@@ -231,7 +235,6 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
 		sysctl_sched_suppress_region2 = 1;
-
 	} else if (!strcmp(name, "KERA")) {
 		soc_sched_lib_name_capacity = 3;
 		/*
@@ -240,6 +243,8 @@ void walt_config(void)
 		trailblazer_floor_freq[0] = 1000000;
 		trailblazer_floor_freq[1] = 1000000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+		pipeline_swap_util_th = 100;
+		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 
 		/*
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
@@ -247,4 +252,120 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
 	}
+}
+
+void early_walt_config(void)
+{
+	const char *name = socinfo_get_id_string();
+
+	memset(soc_cluster_freq_table_size, 0, sizeof(soc_cluster_freq_table_size));
+	memset(soc_cluster_freq_table, 0, sizeof(soc_cluster_freq_table));
+	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP")) {
+		soc_cluster_freq_table_size[0] = 16;
+		soc_cluster_freq_table_size[1] = 16;
+
+		soc_cluster_freq_table[0][0] = 683;
+		soc_cluster_freq_table[0][1] = 731;
+		soc_cluster_freq_table[0][2] = 782;
+		soc_cluster_freq_table[0][3] = 792;
+		soc_cluster_freq_table[0][4] = 813;
+		soc_cluster_freq_table[0][5] = 856;
+		soc_cluster_freq_table[0][6] = 884;
+		soc_cluster_freq_table[0][7] = 958;
+		soc_cluster_freq_table[0][8] = 1004;
+		soc_cluster_freq_table[0][9] = 1087;
+		soc_cluster_freq_table[0][10] = 1153;
+		soc_cluster_freq_table[0][11] = 1300;
+		soc_cluster_freq_table[0][12] = 1462;
+		soc_cluster_freq_table[0][13] = 1629;
+		soc_cluster_freq_table[0][14] = 1894;
+		soc_cluster_freq_table[0][15] = 2183;
+
+		soc_cluster_freq_table[1][0] = 1655;
+		soc_cluster_freq_table[1][1] = 1749;
+		soc_cluster_freq_table[1][2] = 1775;
+		soc_cluster_freq_table[1][3] = 1951;
+		soc_cluster_freq_table[1][4] = 2104;
+		soc_cluster_freq_table[1][5] = 2268;
+		soc_cluster_freq_table[1][6] = 2425;
+		soc_cluster_freq_table[1][7] = 2530;
+		soc_cluster_freq_table[1][8] = 2652;
+		soc_cluster_freq_table[1][9] = 2903;
+		soc_cluster_freq_table[1][10] = 3225;
+		soc_cluster_freq_table[1][11] = 3592;
+		soc_cluster_freq_table[1][12] = 4384;
+		soc_cluster_freq_table[1][13] = 5087;
+		soc_cluster_freq_table[1][14] = 5390;
+		soc_cluster_freq_table[1][15] = 5516;
+	} else if (!strcmp(name, "CANOE")) {
+		soc_cluster_freq_table_size[0] = 32;
+		soc_cluster_freq_table_size[1] = 32;
+
+		soc_cluster_freq_table[0][0] = 752;
+		soc_cluster_freq_table[0][1] = 792;
+		soc_cluster_freq_table[0][2] = 834;
+		soc_cluster_freq_table[0][3] = 877;
+		soc_cluster_freq_table[0][4] = 924;
+		soc_cluster_freq_table[0][5] = 972;
+		soc_cluster_freq_table[0][6] = 1023;
+		soc_cluster_freq_table[0][7] = 1053;
+		soc_cluster_freq_table[0][8] = 1065;
+		soc_cluster_freq_table[0][9] = 1068;
+		soc_cluster_freq_table[0][10] = 1078;
+		soc_cluster_freq_table[0][11] = 1089;
+		soc_cluster_freq_table[0][12] = 1110;
+		soc_cluster_freq_table[0][13] = 1137;
+		soc_cluster_freq_table[0][14] = 1180;
+		soc_cluster_freq_table[0][15] = 1227;
+		soc_cluster_freq_table[0][16] = 1303;
+		soc_cluster_freq_table[0][17] = 1352;
+		soc_cluster_freq_table[0][18] = 1439;
+		soc_cluster_freq_table[0][19] = 1582;
+		soc_cluster_freq_table[0][20] = 1797;
+		soc_cluster_freq_table[0][21] = 1889;
+		soc_cluster_freq_table[0][22] = 2003;
+		soc_cluster_freq_table[0][23] = 2202;
+		soc_cluster_freq_table[0][24] = 2338;
+		soc_cluster_freq_table[0][25] = 2499;
+		soc_cluster_freq_table[0][26] = 2659;
+		soc_cluster_freq_table[0][27] = 2832;
+		soc_cluster_freq_table[0][28] = 3019;
+		soc_cluster_freq_table[0][29] = 3238;
+		soc_cluster_freq_table[0][30] = 3458;
+		soc_cluster_freq_table[0][31] = 3714;
+
+		soc_cluster_freq_table[1][0] = 1441;
+		soc_cluster_freq_table[1][1] = 1549;
+		soc_cluster_freq_table[1][2] = 1666;
+		soc_cluster_freq_table[1][3] = 1791;
+		soc_cluster_freq_table[1][4] = 1926;
+		soc_cluster_freq_table[1][5] = 1942;
+		soc_cluster_freq_table[1][6] = 2111;
+		soc_cluster_freq_table[1][7] = 2189;
+		soc_cluster_freq_table[1][8] = 2310;
+		soc_cluster_freq_table[1][9] = 2449;
+		soc_cluster_freq_table[1][10] = 2606;
+		soc_cluster_freq_table[1][11] = 2757;
+		soc_cluster_freq_table[1][12] = 2950;
+		soc_cluster_freq_table[1][13] = 3098;
+		soc_cluster_freq_table[1][14] = 3253;
+		soc_cluster_freq_table[1][15] = 3383;
+		soc_cluster_freq_table[1][16] = 3518;
+		soc_cluster_freq_table[1][17] = 3659;
+		soc_cluster_freq_table[1][18] = 3992;
+		soc_cluster_freq_table[1][19] = 4180;
+		soc_cluster_freq_table[1][20] = 4402;
+		soc_cluster_freq_table[1][21] = 4659;
+		soc_cluster_freq_table[1][22] = 4777;
+		soc_cluster_freq_table[1][23] = 5121;
+		soc_cluster_freq_table[1][24] = 5283;
+		soc_cluster_freq_table[1][25] = 5529;
+		soc_cluster_freq_table[1][26] = 5645;
+		soc_cluster_freq_table[1][27] = 5799;
+		soc_cluster_freq_table[1][28] = 6108;
+		soc_cluster_freq_table[1][29] = 6463;
+		soc_cluster_freq_table[1][30] = 6968;
+		soc_cluster_freq_table[1][31] = 7516;
+	}
+
 }

@@ -1,8 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
- * Copyright (c) Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _WALT_H
@@ -94,13 +93,14 @@ enum freq_caps {
 #define SOC_ENABLE_EXPERIMENT3						BIT(9)
 #define SOC_ENABLE_PIPELINE_SWAPPING_BIT		BIT(10)
 #define SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT		BIT(11)
-#define SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING	BIT(12)
+#define SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING	BIT(12)
 
 extern int soc_sched_lib_name_capacity;
 
 /* WALT feature */
 #define WALT_FEAT_TRAILBLAZER_BIT	BIT_ULL(0)
 #define WALT_FEAT_UCLAMP_FREQ_BIT	BIT_ULL(1)
+#define WALT_FEAT_SYNC_FREQ_CAP_BIT	BIT_ULL(2)
 
 extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 
@@ -218,6 +218,7 @@ extern bool smart_freq_init_done;
 extern unsigned int big_task_cnt;
 extern struct smart_freq_cluster_info default_freq_config[MAX_CLUSTERS];
 /*=========================================================================*/
+#define MAX_FREQ_TABLE_ENTRIES 100
 struct walt_sched_cluster {
 	raw_spinlock_t		load_lock;
 	struct list_head	list;
@@ -233,7 +234,8 @@ struct walt_sched_cluster {
 	unsigned int		walt_internal_freq_limit;
 	unsigned long		pre_smart_freq_capacity;
 	u64			aggr_grp_load;
-	unsigned long		util_to_cost[1024];
+	/* Assume at most 100 frequency states per cluster */
+	unsigned int		freq_to_cost[MAX_FREQ_TABLE_ENTRIES];
 	u64			found_ts;
 	struct smart_freq_cluster_info *smart_freq_info;
 	int8_t			sibling_cluster;
@@ -578,6 +580,7 @@ extern unsigned int sysctl_sched_sbt_enable;
 extern unsigned int sysctl_sched_sbt_delay_windows;
 
 extern cpumask_t cpus_for_pipeline;
+extern unsigned int pipeline_swap_util_th;
 
 /* WALT cpufreq interface */
 #define WALT_CPUFREQ_ROLLOVER_BIT		BIT(0)
@@ -1331,7 +1334,8 @@ static inline bool walt_flag_test(struct task_struct *p, unsigned int feature)
 #define WALT_RTG_MVP		0
 #define WALT_BINDER_MVP		1
 #define WALT_TASK_BOOST_MVP	2
-#define WALT_LL_PIPE_MVP	3
+#define WALT_LL_MVP		3
+#define WALT_PIPELINE_MVP	4
 
 #define WALT_NOT_MVP		-1
 
@@ -1353,7 +1357,7 @@ static inline u64 scale_time_to_util(u64 d)
 	return d;
 }
 
-void create_util_to_cost(void);
+void create_freq_to_cost(void);
 struct compute_energy_output {
 	unsigned long	sum_util[MAX_CLUSTERS];
 	unsigned long	max_util[MAX_CLUSTERS];
@@ -1574,8 +1578,8 @@ static inline void walt_lockdep_assert(int cond, int cpu, struct task_struct *p)
 #define walt_lockdep_assert_rq(rq, p)			\
 	walt_lockdep_assert_held(&rq->__lock, cpu_of(rq), p)
 
-extern bool pipeline_check(struct walt_rq *wrq);
-extern void pipeline_rearrange(struct walt_rq *wrq, bool need_assign_heavy);
+extern int pipeline_check(struct walt_rq *wrq);
+extern void pipeline_rearrange(struct walt_rq *wrq, int need_assign_heavy);
 extern void walt_configure_single_thread_pipeline(unsigned int val);
 extern bool enable_load_sync(int cpu);
 extern struct walt_related_thread_group *lookup_related_thread_group(unsigned int group_id);
@@ -1683,4 +1687,16 @@ DECLARE_PER_CPU(unsigned int, walt_yield_to_sleep);
 extern unsigned int walt_sched_yield_counter;
 extern unsigned int sysctl_force_frequent_yielder;
 void account_yields(u64 window_start);
+extern void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_demand,
+		     u64 *scaled_prime_demand);
+extern unsigned int sysctl_pipeline_force_config;
+extern unsigned long walt_cpu_energy(int cpu,
+				     unsigned long max_util, unsigned long sum_util);
+extern unsigned int gold_cluster_id, prime_cluster_id;
+extern unsigned int soc_cluster_freq_table_size[MAX_CLUSTERS];
+extern unsigned int soc_cluster_freq_table[MAX_CLUSTERS][MAX_FREQ_TABLE_ENTRIES];
+struct waltgov_policy;
+extern unsigned long walt_map_util_freq(unsigned long util,
+		struct waltgov_policy *wg_policy, unsigned long cap, int cpu);
+extern void early_walt_config(void);
 #endif /* _WALT_H */

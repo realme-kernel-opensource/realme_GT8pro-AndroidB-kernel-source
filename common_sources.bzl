@@ -15,6 +15,7 @@ COPY_FILES = [
     "drivers/char/virtio_console.c",
     "drivers/virtio/virtio_input.c",
     "net/core/failover.c",
+    "lib/crc-itu-t.c",
     "drivers/net/net_failover.c",
     "drivers/net/virtio_net.c",
     "drivers/net/pcs/pcs-xpcs.c",
@@ -22,6 +23,8 @@ COPY_FILES = [
     "drivers/net/pcs/pcs-xpcs-nxp.c",
     "drivers/net/pcs/pcs-xpcs-plat.c",
     "drivers/net/pcs/pcs-xpcs-wx.c",
+    "drivers/net/phy/aquantia/aquantia_leds.c",
+    "drivers/net/phy/aquantia/aquantia_firmware.c",
     # cfg80211.ko files start
     "net/wireless/ap.c",
     "net/wireless/certs/sforshee.hex",

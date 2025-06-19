@@ -102,6 +102,7 @@ def define_qc_core_kernel(name, defconfig, defconfig_fragments = None):
         keep_module_symvers = True,
         module_signing_key = ":signing_key",
         strip_modules = True,
+        collect_unstripped_modules = True,
         post_defconfig_fragments = defconfig_fragments,
         make_goals = [
             "Image",

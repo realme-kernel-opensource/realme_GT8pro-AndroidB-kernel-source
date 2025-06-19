@@ -80,7 +80,7 @@ def define_consolidated_kernel(name = "kernel_aarch64_consolidate"):
         kernel_build = name,
         boot_img_sizes = {
             # Assume BUILD_GKI_BOOT_IMG_SIZE is the following
-            "": "67108864",
+            "": "83886080",
             # Assume BUILD_GKI_BOOT_IMG_LZ4_SIZE is the following
             "lz4": "53477376",
             # Assume BUILD_GKI_BOOT_IMG_GZ_SIZE is the following

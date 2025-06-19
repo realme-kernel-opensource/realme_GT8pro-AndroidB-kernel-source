@@ -6,6 +6,7 @@ targets = [
     "lahaina",
     "sun",
     "vienna",
+    "x1p42100",
 ]
 
 la_variants = [

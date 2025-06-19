@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
  #define pr_fmt(fmt) "cpu_mpam: " fmt
 
@@ -27,7 +27,7 @@ struct cpu_mpam_msc {
 
 static unsigned long *part_id_free_bitmap;
 static unsigned long *monitor_free_bitmap;
-static struct mpam_config_val mpam_default_val;
+static struct mpam_config_val mpam_default_val[MSC_MAX];
 static struct monitors_value *mpam_mon_base;
 static struct cpu_mpam_msc *mpam_mscs;
 static int monitor_enabled[MONITOR_MAX];
@@ -474,14 +474,13 @@ static void cpu_mpam_reset_param(int part_id)
 	int i;
 	struct mpam_set_cache_partition mpam_param;
 
-	mpam_param.part_id = part_id + PARTID_RESERVED;
-	mpam_param.dspri = mpam_default_val.dspri;
-	mpam_param.cpbm_mask = mpam_default_val.cpbm;
-	mpam_param.cache_capacity = mpam_default_val.capacity;
-	mpam_param.slc_partition_id = mpam_default_val.slc_partition_id;
-	mpam_param.mpam_config_ctrl = SET_ALL_CPU_TUNABLE;
-
 	for (i = 0; i < mpam_msc_cnt; i++) {
+		mpam_param.part_id = part_id + PARTID_RESERVED;
+		mpam_param.dspri = mpam_default_val[i].dspri;
+		mpam_param.cpbm_mask = mpam_default_val[i].cpbm;
+		mpam_param.cache_capacity = mpam_default_val[i].capacity;
+		mpam_param.slc_partition_id = mpam_default_val[i].slc_partition_id;
+		mpam_param.mpam_config_ctrl = SET_ALL_CPU_TUNABLE;
 		mpam_param.msc_id = mpam_mscs[i].msc_id;
 		qcom_mpam_set_cache_partition(&mpam_param);
 	}
@@ -505,15 +504,28 @@ static void cpu_mpam_drop_item(struct config_group *group,
 	}
 	cpu_mpam_reset_param(part_id);
 
-	kfree(to_partition(item)->val);
-	kfree(to_partition(item));
+	config_item_put(item);
 }
 
+static void cpu_mpam_attr_release(struct config_item *item)
+{
+	struct cpu_mpam_partition *partition = to_partition(item);
+
+	kfree(partition->val);
+	kfree(partition);
+}
+
+static struct configfs_item_operations cpu_mpam_item_ops = {
+	.release                = cpu_mpam_attr_release,
+};
+
 static const struct config_item_type cpu_mpam_item_type = {
+	.ct_item_ops	= &cpu_mpam_item_ops,
 	.ct_attrs	= cpu_mpam_attrs,
 };
 
 static const struct config_item_type cpu_mpam_item_type_legacy = {
+	.ct_item_ops    = &cpu_mpam_item_ops,
 	.ct_attrs	= cpu_mpam_attrs_legacy,
 };
 
@@ -542,7 +554,7 @@ static struct config_group *cpu_mpam_make_group(
 		return ERR_PTR(-ENOMEM);
 
 	for (i = 0; i < mpam_msc_cnt; i++)
-		memcpy(&(partition->val[i]), &mpam_default_val, sizeof(struct mpam_config_val));
+		memcpy(&(partition->val[i]), &mpam_default_val[i], sizeof(struct mpam_config_val));
 
 	cpu_mpam_reset_param(part_id);
 
@@ -688,13 +700,16 @@ static int cpu_mpam_probe(struct platform_device *pdev)
 	}
 	mpam_msc_cnt = i;
 
-	mpam_param.msc_id = 0;
-	mpam_param.part_id = PARTID_MAX - 1;
-	ret = qcom_mpam_get_cache_partition(&mpam_param, &mpam_default_val);
-	if (ret) {
-		dev_err(&pdev->dev, "Error getting default value %d\n", ret);
-		mpam_default_val.cpbm = UINT_MAX;
+	for (i = 0; i < mpam_msc_cnt; i++) {
+		mpam_param.msc_id = i;
+		mpam_param.part_id = PARTID_MAX - 1;
+		ret = qcom_mpam_get_cache_partition(&mpam_param, &mpam_default_val[i]);
+		if (ret) {
+			dev_err(&pdev->dev, "Error getting default value %d\n", ret);
+			mpam_default_val[i].cpbm = UINT_MAX;
+		}
 	}
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mon-base");
 	if (!res) {
 		dev_err(&pdev->dev, "cpu mpam does not have monitoring support\n");
@@ -708,8 +723,10 @@ static int cpu_mpam_probe(struct platform_device *pdev)
 		can_monitor = true;
 	}
 	if (can_monitor) {
-		mpam_default_val.capacity = 100;
-		mpam_default_val.dspri = 0;
+		for (i = 0; i < mpam_msc_cnt; i++) {
+			mpam_default_val[i].capacity = 100;
+			mpam_default_val[i].dspri = 0;
+		}
 	}
 
 	for (i = 0; i < MONITOR_MAX; i++)

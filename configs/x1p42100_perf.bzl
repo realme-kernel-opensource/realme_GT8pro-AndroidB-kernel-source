@@ -1,0 +1,21 @@
+x1p42100_perf_config = {
+    # keep sorted
+    "CONFIG_ARCH_X1P42100": "y",
+    "CONFIG_ARM_SMMU": "m",
+    "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
+    "CONFIG_ARM_SMMU_QCOM": "m",
+    "CONFIG_HWSPINLOCK_QCOM": "m",
+    "CONFIG_PINCTRL_MSM": "m",
+    "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
+    "CONFIG_PINCTRL_X1E80100": "m",
+    "CONFIG_QCOM_IOMMU_UTIL": "m",
+    "CONFIG_QCOM_IPCC": "m",
+    "CONFIG_QCOM_LLCC": "m",
+    "CONFIG_QCOM_PDC": "m",
+    "CONFIG_QCOM_SCM": "m",
+    "CONFIG_QCOM_SMEM": "m",
+    "CONFIG_QCOM_SOCINFO": "m",
+    "CONFIG_QCOM_TZMEM": "m",
+    "CONFIG_QCOM_TZMEM_MODE_GENERIC": "y",
+    "CONFIG_QTEE_SHM_BRIDGE": "y",
+}
