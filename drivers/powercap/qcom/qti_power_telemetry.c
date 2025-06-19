@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt)	"qpt_hw: %s: " fmt, __func__
@@ -38,6 +38,9 @@
 
 #define QPT_GET_CMLTV_POWER_UW_FROM_ADC(qpt, adc)	(adc * qpt->adc_scaling_factor)
 #define QPT_HW "qpt-hw"
+
+static int qpt_update_interval_ms;
+module_param_named(reporting_interval, qpt_update_interval_ms, int, 0444);
 
 static int qpt_sdam_nvmem_write(struct qpt_priv *qpt, struct qpt_sdam *sdam,
 		uint16_t offset, size_t bytes, void *data)
@@ -152,7 +155,7 @@ static int qti_qpt_sync_common_telemetry_config(struct qpt_priv *qpt)
 	qpt->ready_max_count = config_sdam[CONFIG_SDAM_DATA_READY_MAX_COUNT];
 	qpt->bob_max_count = config_sdam[CONFIG_SDAM_BOB_MAX_COUNT];
 	qpt->hsr_ver = config_sdam[CONFIG_SDAM_HSR_VER];
-	qpt->data_update_sampling = get_data_update_rate_from_config(
+	qpt_update_interval_ms = get_data_update_rate_from_config(
 				config_sdam[CONFIG_SDAM_TELEMETRY_TIMER_LB],
 				config_sdam[CONFIG_SDAM_TELEMETRY_TIMER_UB],
 				config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG0],
@@ -162,7 +165,7 @@ static int qti_qpt_sync_common_telemetry_config(struct qpt_priv *qpt)
 				config_sdam[CONFIG_SDAM_TELEMETRY_TIMER_UB],
 				config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG0],
 				config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG1]);
-	qpt->bob_tperiod = qpt->data_update_sampling / qpt->bob_max_count;
+	qpt->bob_tperiod = qpt_update_interval_ms / qpt->bob_max_count;
 	qpt->adc_scaling_factor = get_scaling_factor_from_config(
 					config_sdam[CONFIG_SDAM_TELEMETRY_CONFIG0],
 					config_sdam[CONFIG_SDAM_SPARE]);
@@ -171,7 +174,7 @@ static int qti_qpt_sync_common_telemetry_config(struct qpt_priv *qpt)
 			qpt->ready_max_count, qpt->bob_max_count, qpt->bob_tperiod,
 			qpt->tperiod);
 	QPT_DBG_EVENT(qpt, "scaling_factor:%d reporting sampling:%d",
-			qpt->adc_scaling_factor, qpt->data_update_sampling);
+			qpt->adc_scaling_factor, qpt_update_interval_ms);
 
 unlock_exit:
 	mutex_unlock(&qpt->hw_read_lock);
@@ -660,7 +663,7 @@ static int qpt_pd_callback(struct notifier_block *nfb,
 			break;
 		now = ktime_get();
 		diff = ktime_to_ms(ktime_sub(now, qpt->hw_read_ts));
-		if (diff > qpt->data_update_sampling) {
+		if (diff > qpt_update_interval_ms) {
 			list_for_each_entry(qpt_dev, &qpt->qpt_dev_head,
 					qpt_node)
 				qpt_dev->pavg = 0;
@@ -816,7 +819,7 @@ static int qti_qpt_resume(struct device *dev)
 
 	now = ktime_get();
 	diff = ktime_to_ms(ktime_sub(now, qpt->hw_read_ts));
-	if (diff > qpt->data_update_sampling) {
+	if (diff > qpt_update_interval_ms) {
 		list_for_each_entry(qpt_dev, &qpt->qpt_dev_head,
 					qpt_node)
 			qpt_dev->pavg = 0;
