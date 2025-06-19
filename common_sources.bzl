@@ -13,6 +13,11 @@ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 COPY_FILES = [
     "drivers/leds/trigger/ledtrig-pattern.c",
     "drivers/char/virtio_console.c",
+    "drivers/dma/qcom/gpi.c",
+    "drivers/dma/dmaengine.h",
+    "drivers/dma/virt-dma.h",
+    "drivers/i2c/busses/i2c-qcom-geni.c",
+    "drivers/spi/spi-geni-qcom.c",
     "drivers/virtio/virtio_input.c",
     "net/core/failover.c",
     "drivers/net/net_failover.c",
@@ -41,4 +46,14 @@ def define_common_upstream_files():
         ],
         outs = ["drivers/regulator/qti_fixed_regulator.c"],
         cmd = "patch --follow-symlinks -o $@ -i $(execpath :drivers/regulator/fixed.diff) $(execpath //common:drivers/regulator/fixed.c)",
+    )
+
+    native.genrule(
+        name = "patched-drivers/dma/qcom/gpi.c",
+        srcs = [
+            "//common:drivers/dma/qcom/gpi.c",
+            ":drivers/dma/qcom/gpi_fix.diff",
+        ],
+        outs = ["drivers/dma/qcom/gpi_fixed.c"],
+        cmd = "patch --follow-symlinks -o $@ -i $(execpath :drivers/dma/qcom/gpi_fix.diff) $(execpath //common:drivers/dma/qcom/gpi.c)",
     )
