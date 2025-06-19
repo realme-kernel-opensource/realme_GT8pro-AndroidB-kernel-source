@@ -463,7 +463,7 @@ static int slc_config_fs_register(struct  device *dev)
 	}
 
 	qcom_msc = qcom_msc_lookup(SLC);
-	if (qcom_msc->qcom_msc_id.qcom_msc_type != SLC)
+	if (!qcom_msc || qcom_msc->qcom_msc_id.qcom_msc_type != SLC)
 		return -EINVAL;
 
 	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
