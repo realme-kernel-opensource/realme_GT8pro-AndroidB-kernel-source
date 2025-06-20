@@ -6,7 +6,7 @@
  *	Copyright © 2006-2009, Intel Corporation.
  *
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/dma-mapping-fast.h>
@@ -258,11 +258,11 @@ int qcom_iommu_get_fast_iova_range(struct device *dev, dma_addr_t *ret_iova_base
 	u64 fastmap_max_iova = SZ_4G - 1;
 	struct device_node *np;
 
-	np = qcom_iommu_group_parse_phandle(dev);
-	if (!np)
+	if (!dev || !ret_iova_base || !ret_iova_end)
 		return -EINVAL;
 
-	if (!dev || !ret_iova_base || !ret_iova_end)
+	np = qcom_iommu_group_parse_phandle(dev);
+	if (!np)
 		return -EINVAL;
 
 	get_addr_range_cb_data.arg = &dma_range;
