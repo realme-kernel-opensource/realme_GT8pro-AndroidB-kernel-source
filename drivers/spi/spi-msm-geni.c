@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -123,8 +123,8 @@
 #define MAX_TX_SG		(3 + TX_SPLIT_ADDITIONAL_TRE)
 #define NUM_SPI_XFER		(8 + TX_SPLIT_ADDITIONAL_TRE)
 #define MAX_TX_DMA_TRE		(1 + TX_SPLIT_ADDITIONAL_TRE)
-#define SPI_DMA_ADDR_ALIGN_BYTE	(16)
-#define SPI_SPLIT_DMA_TRE_SIZE	(16)
+#define SPI_DMA_ADDR_ALIGN_BYTE	(QUP_DMA_ADDR_ALIGN_BYTE)
+#define SPI_SPLIT_DMA_TRE_SIZE	(QUP_SPLIT_DMA_TRE_SIZE)
 #define SPI_DMA_BUF_SIZE_MAX	(64 * 1024)
 #define SPI_PREALLOC_BUF_SIZE	(SPI_DMA_BUF_SIZE_MAX + SPI_DMA_ADDR_ALIGN_BYTE)
 
