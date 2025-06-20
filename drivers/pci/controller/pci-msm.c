@@ -9539,7 +9539,7 @@ static void msm_pcie_drv_connect_notify_all(struct work_struct *work)
 	struct pcie_drv_sta *pcie_drv = container_of(work, struct pcie_drv_sta,
 						     drv_connect_notify_all);
 	struct msm_pcie_drv_info *drv_info;
-	struct msm_pcie_dev_t *pcie_itr, *pcie_dev;
+	struct msm_pcie_dev_t *pcie_itr, *pcie_dev = NULL;
 	int i;
 
 	/* rpmsg probe hasn't happened yet */
@@ -9573,6 +9573,11 @@ static void msm_pcie_drv_connect_notify_all(struct work_struct *work)
 		if (pcie_itr->drv_disable_pc_vote)
 			queue_work(mpcie_wq, &pcie_itr->drv_disable_pc_work);
 		mutex_unlock(&pcie_itr->drv_pc_lock);
+	}
+
+	if (!pcie_dev) {
+		pr_err("PCIe: Could not find an RC supporting DRV.\n");
+		return;
 	}
 
 	if (!pcie_drv->notifier) {
