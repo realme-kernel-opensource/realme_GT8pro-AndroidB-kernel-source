@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * Qualcomm Technologies, Inc. SPSS Peripheral Image Loader
  *
  */
@@ -130,8 +130,7 @@ static void read_sp2cl_debug_registers(struct qcom_spss *spss)
 	for (iter = 0; iter < NUM_OF_DEBUG_REGISTERS_READ; iter++) {
 		addr = ioremap(debug_register_addr[iter], sizeof(uint32_t)*2);
 		if (!addr) {
-			dev_err(spss->dev, "Iteration: [0x%x], addr: [0x%x]\n",
-					iter, *(uint32_t *)addr);
+			dev_err(spss->dev, "Iteration: [0x%x] is NULL\n", iter);
 			continue;
 		}
 		dev_info(spss->dev, "Iteration: [0x%x], Debug Data1: [0x%x], Debug Data2: [0x%x]\n",
