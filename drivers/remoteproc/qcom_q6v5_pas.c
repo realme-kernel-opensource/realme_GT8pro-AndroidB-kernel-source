@@ -1219,7 +1219,11 @@ static int adsp_attach(struct rproc *rproc)
 		if (!adsp->firmware) {
 			ret = request_firmware(&adsp->firmware, rproc->firmware, adsp->dev);
 			if (ret) {
-				dev_err(adsp->dev, "request_firmware failed: %d\n", ret);
+				dev_err(adsp->dev, "request_firmware failed during attach: %d\n",
+					ret);
+				if (ret == -ENOENT)
+					ret = 0;
+
 				return ret;
 			}
 			adsp_add_coredump_segments(adsp, adsp->firmware);
