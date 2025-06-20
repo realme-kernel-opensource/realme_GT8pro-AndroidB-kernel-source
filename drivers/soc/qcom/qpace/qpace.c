@@ -180,39 +180,29 @@ static inline u32 qpace_urgent_command_trigger(phys_addr_t input_addr,
 					       int urg_reg_num,
 					       enum urg_reg_cxts command)
 {
-	u32 urg_addr_field, stat_reg, tmp_addr_bits;
+	void *td_dst_src_reg = qpace_urg_regs + (urg_reg_num * QPACE_REG_PAGE_SIZE) +
+			       QPACE_URG_CMD_0_TD_DST_ADDR_L_CFG_CNTXT_OFFSET;
+	u64 urg_addr_field_lower, urg_addr_field_upper;
+	u32 stat_reg;
 
-	urg_addr_field = FIELD_PREP(URG_CMD_0_TD_DST_ADDR_L__CMD_CFG_CNTXT,
-			 command);
+	urg_addr_field_lower = FIELD_PREP(URG_CMD_0_TD_DST_ADDR_L__CMD_CFG_CNTXT,
+					  command);
+	urg_addr_field_lower |= GENMASK(63, 8) & output_addr;
 
-	tmp_addr_bits = FIELD_GET(GENMASK(31, 8), output_addr);
-	urg_addr_field |= FIELD_PREP(URG_CMD_0_TD_DST_ADDR_L__DST_ADDR_L,
-				     tmp_addr_bits);
-	QPACE_WRITE_URG_CMD_REG(urg_reg_num,
-				QPACE_URG_CMD_0_TD_DST_ADDR_L_CFG_CNTXT_OFFSET,
-				urg_addr_field);
+	urg_addr_field_upper = input_addr;
 
-	urg_addr_field = FIELD_GET(GENMASK(63, 32), output_addr);
-	QPACE_WRITE_URG_CMD_REG(urg_reg_num,
-				QPACE_URG_CMD_0_TD_DST_ADDR_H_OFFSET,
-				urg_addr_field);
+	asm volatile(
+	"stp %0, %1, [%2]\n"
+	: : "r" (urg_addr_field_lower), "r" (urg_addr_field_upper), "r" (td_dst_src_reg)
+	: "memory");
 
-	urg_addr_field = FIELD_GET(GENMASK(31, 0), input_addr);
-	QPACE_WRITE_URG_CMD_REG(urg_reg_num,
-				QPACE_URG_CMD_0_TD_SRC_ADDR_L_OFFSET,
-				urg_addr_field);
-
-	/* This triggers the operation */
-	urg_addr_field = FIELD_GET(GENMASK(63, 32), input_addr);
-	QPACE_WRITE_URG_CMD_REG(urg_reg_num,
-				QPACE_URG_CMD_0_TD_SRC_ADDR_H_OFFSET,
-				urg_addr_field);
+	stat_reg = QPACE_READ_URG_CMD_REG(urg_reg_num,
+					  QPACE_URG_CMD_0_ED_STAT_OFFSET);
 
 	/* Wait for operation to finish */
-	do {
+	while (FIELD_GET(URG_CMD_0_ED_STAT_COMP_CODE, stat_reg) == OP_URG_ONGOING)
 		stat_reg = QPACE_READ_URG_CMD_REG(urg_reg_num,
 						  QPACE_URG_CMD_0_ED_STAT_OFFSET);
-	} while (FIELD_GET(URG_CMD_0_ED_STAT_COMP_CODE, stat_reg) == OP_URG_ONGOING);
 
 	return stat_reg;
 }
