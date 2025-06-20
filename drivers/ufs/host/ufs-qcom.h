@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef UFS_QCOM_H_
@@ -67,8 +67,8 @@ enum ufs_qcom_ber_mode {
 #define UFS_QCOM_LIMIT_PHY_SUBMODE	UFS_QCOM_PHY_SUBMODE_G4
 #define UFS_MEM_REG_PA_ERR_CODE	0xCC
 
-/* default value of auto suspend is 3 seconds */
-#define UFS_QCOM_AUTO_SUSPEND_DELAY	3000
+/* default value of auto suspend is 50 msecs */
+#define UFS_QCOM_AUTO_SUSPEND_DELAY		50
 #define UFS_QCOM_CLK_GATING_DELAY_MS_PWR_SAVE	10
 #define UFS_QCOM_CLK_GATING_DELAY_MS_PERF	50
 
