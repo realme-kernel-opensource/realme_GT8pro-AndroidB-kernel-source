@@ -43,6 +43,7 @@ canoe_perf_config = {
     "CONFIG_DEVFREQ_GOV_QCOM_GPUBW_MON": "m",
     "CONFIG_DRM_DISPLAY_DP_HELPER": "y",
     "CONFIG_DRM_DISPLAY_HELPER": "m",
+    "CONFIG_DRM_LT9611UXC": "m",
     "CONFIG_DRM_MSM_HELPER": "m",
     "CONFIG_EDAC_QCOM": "m",
     "CONFIG_FTRACE_STARTUP_TEST": "n",
