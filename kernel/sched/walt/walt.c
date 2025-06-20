@@ -20,6 +20,7 @@
 
 #include <trace/hooks/sched.h>
 #include <trace/hooks/cpufreq.h>
+#include <trace/hooks/power.h>
 #include <trace/events/power.h>
 #include "walt.h"
 #include "trace.h"
@@ -5611,6 +5612,32 @@ cpumask_t walt_get_halted_cpus(void)
 }
 EXPORT_SYMBOL_GPL(walt_get_halted_cpus);
 
+static void android_vh_freq_qos_add_request(void *unused, struct freq_constraints *qos,
+		struct freq_qos_request *req, enum freq_qos_req_type type, int value, int ret)
+{
+	if (unlikely(walt_disabled))
+		return;
+
+	trace_freq_qos_request("add", __builtin_return_address(2), type, value);
+}
+
+static void android_vh_freq_qos_update_request(void *unused, struct freq_qos_request *req,
+		int value)
+{
+	if (unlikely(walt_disabled))
+		return;
+
+	trace_freq_qos_request("update", __builtin_return_address(2), req->type, value);
+}
+
+static void android_vh_freq_qos_remove_request(void *unused, struct freq_qos_request *req)
+{
+	if (unlikely(walt_disabled))
+		return;
+
+	trace_freq_qos_request("remove", __builtin_return_address(2), req->type, -1);
+}
+
 static void register_walt_hooks(void)
 {
 	register_trace_android_rvh_wake_up_new_task(android_rvh_wake_up_new_task, NULL);
@@ -5638,6 +5665,9 @@ static void register_walt_hooks(void)
 	register_trace_android_rvh_do_sched_yield(walt_do_sched_yield, NULL);
 	register_trace_android_rvh_update_thermal_stats(android_rvh_update_thermal_stats, NULL);
 	register_trace_android_vh_dup_task_struct(android_vh_dup_task_struct, NULL);
+	register_trace_android_vh_freq_qos_add_request(android_vh_freq_qos_add_request, NULL);
+	register_trace_android_vh_freq_qos_update_request(android_vh_freq_qos_update_request, NULL);
+	register_trace_android_vh_freq_qos_remove_request(android_vh_freq_qos_remove_request, NULL);
 }
 
 atomic64_t walt_irq_work_lastq_ws;
