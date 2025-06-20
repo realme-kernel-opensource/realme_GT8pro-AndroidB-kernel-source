@@ -6646,7 +6646,7 @@ int msm_pcie_enumerate(u32 rc_idx)
 	if (!bus) {
 		PCIE_ERR(dev, "PCIe: RC%d: Fetching bus resource failed\n",
 			dev->rc_idx);
-		ret = PTR_ERR(cfg);
+		ret = -ENODEV;
 		goto out;
 	}
 
