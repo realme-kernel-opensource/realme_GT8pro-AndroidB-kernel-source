@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -133,7 +132,7 @@ static ssize_t enable_tgu_store(struct device *dev,
 
 		/* program the TGU Group data for the desired use case*/
 
-		for (i = 0; i <= drvdata->grp_refcnt; i++)
+		for (i = 0; i < drvdata->grp_refcnt; i++)
 			tgu_writel(drvdata, drvdata->grp_data[i].value,
 						drvdata->grp_data[i].grpaddr);
 
@@ -144,12 +143,12 @@ static ssize_t enable_tgu_store(struct device *dev,
 						CONDITION_DECODE_STEP(i, j));
 		}
 		/* program the TGU Condition Decode for the desired use case*/
-		for (i = 0; i <= drvdata->cond_refcnt; i++)
+		for (i = 0; i < drvdata->cond_refcnt; i++)
 			tgu_writel(drvdata, drvdata->condition_data[i].value,
 					drvdata->condition_data[i].condaddr);
 
 		/* program the TGU Condition Select for the desired use case*/
-		for (i = 0; i <= drvdata->select_refcnt; i++)
+		for (i = 0; i < drvdata->select_refcnt; i++)
 			tgu_writel(drvdata, drvdata->select_data[i].value,
 					drvdata->select_data[i].selectaddr);
 
@@ -158,7 +157,7 @@ static ssize_t enable_tgu_store(struct device *dev,
 			tgu_writel(drvdata, drvdata->timer_data[i].value,
 					drvdata->timer_data[i].timeraddr);
 
-		for (i = 0; i <= drvdata->counter_refcnt; i++)
+		for (i = 0; i < drvdata->counter_refcnt; i++)
 			tgu_writel(drvdata, drvdata->counter_data[i].value,
 					drvdata->counter_data[i].counteraddr);
 
