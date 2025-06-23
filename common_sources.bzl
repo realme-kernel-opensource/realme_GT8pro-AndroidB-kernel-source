@@ -75,6 +75,8 @@ COPY_FILES = [
     "net/wireless/wext-sme.c",
     "net/wireless/wext-spy.c",
     # cfg80211.ko files end
+    "drivers/mfd/qcom-pm8008.c",
+    "drivers/regulator/qcom-pm8008-regulator.c",
 ]
 
 def define_common_upstream_files():
