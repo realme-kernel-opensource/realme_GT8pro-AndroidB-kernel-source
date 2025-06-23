@@ -130,4 +130,6 @@ source "$(KCONFIG_EXT_PREFIX)drivers/block/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)Kconfig.qtvm"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/block/zram/Kconfig"
+
 endmenu
