@@ -1669,7 +1669,7 @@ TRACE_EVENT(sched_freq_uncap,
 		__entry->max_reason = BIT(max_reason);
 	),
 
-	TP_printk("cluster=%d nr_big=%d wakeup_ctr_sum=%d cuuret_reasons=0x%x cluster_active_reason=0x%x max_cap=%lu max_reason=0x%x",
+	TP_printk("cluster=%d nr_big=%d wakeup_ctr_sum=%d current_reasons=0x%x cluster_active_reason=0x%x max_cap=%lu max_reason=0x%x",
 		  __entry->id, __entry->nr_big, __entry->wakeup_ctr_sum, __entry->reasons,
 		  __entry->cluster_active_reason, __entry->max_cap, __entry->max_reason)
 );
@@ -1703,7 +1703,7 @@ TRACE_EVENT(ipc_freq,
 		__entry->ipc_cnt = ipc_cnt;
 	),
 
-	TP_printk("cluster=%d winning_cpu=%d winning_index=%d winning_freq=%u curr_time=%llu dactivate_time=%llu current_cpu=%d current_cpu_ipc_count=%lu",
+	TP_printk("cluster=%d winning_cpu=%d winning_index=%d winning_freq=%u curr_time=%llu deactivate_time=%llu current_cpu=%d current_cpu_ipc_count=%lu",
 		  __entry->id, __entry->cpu, __entry->index, __entry->freq,
 		  __entry->time, __entry->deactivate_ns, __entry->curr_cpu, __entry->ipc_cnt)
 );
@@ -1941,7 +1941,7 @@ TRACE_EVENT(walt_account_yields,
 		__entry->target_threshold_sleep	= target_threshold_sleep;
 	),
 
-	TP_printk("wallclock=%llu start_ts=%llu continous_windows=%u global_yield_cnt=%u target_yield_th=%u global_sleep_cnt=%u target_induced_sleep_th=%u",
+	TP_printk("wallclock=%llu start_ts=%llu continuous_windows=%u global_yield_cnt=%u target_yield_th=%u global_sleep_cnt=%u target_induced_sleep_th=%u",
 		  __entry->wc, __entry->start_ts, __entry->window_cnt, __entry->total_yield_cnt,
 		  __entry->target_threshold_wake, __entry->total_sleep_cnt,
 		  __entry->target_threshold_sleep)
