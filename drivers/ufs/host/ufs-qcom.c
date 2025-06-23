@@ -2690,9 +2690,10 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 				idle_time[mode] += ktime_to_ms(ktime_sub(ktime_get(),
 									idle_start));
 
-			if (!host->cpufreq_dis && !atomic_read(&host->therm_mitigation)) {
+			if (!host->cpufreq_dis && !atomic_read(&host->therm_mitigation) &&
+			    host->ufs_qos) {
 				queue_delayed_work(host->ufs_qos->workq, &host->fwork,
-				msecs_to_jiffies(host->boost_monitor_timer));
+						   msecs_to_jiffies(host->boost_monitor_timer));
 			}
 		}
 		if (!err)
@@ -4226,10 +4227,15 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba, bool scale_up,
 		if (err)
 			ufshcd_uic_hibern8_exit(hba);
 	} else {
-		if (scale_up)
+		if (scale_up) {
 			err = ufs_qcom_clk_scale_up_post_change(hba);
-		else
+			if (!host->cpufreq_dis && !atomic_read(&host->therm_mitigation) &&
+			    host->ufs_qos)
+				queue_delayed_work(host->ufs_qos->workq, &host->fwork,
+						   msecs_to_jiffies(host->boost_monitor_timer));
+		} else {
 			err = ufs_qcom_clk_scale_down_post_change(hba, target_freq);
+		}
 
 
 		if (err || !dev_req_params) {
