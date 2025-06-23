@@ -1784,7 +1784,7 @@ static inline void zram_copy_queue(struct qpace_request_data *zdata,
 static void zram_compress_success_handler(struct qpace_event_descriptor *ed, int ed_index)
 {
 	unsigned long handle;
-	unsigned int comp_len = ed->size;
+	unsigned int comp_len = 0;
 	phys_addr_t comp_source;
 	struct qpace_request_data *zdata = &comp_out_queue.request_arr[ed_index].zdata;
 	struct qpace_request_meta *zmeta = zdata->zmeta;
@@ -1807,6 +1807,8 @@ static void zram_compress_success_handler(struct qpace_event_descriptor *ed, int
 		zram_write_finish(zdata, comp_len, (rep_word << 32) | rep_word, ZRAM_SAME);
 		return;
 	}
+
+	comp_len = ed->size;
 
 	if (comp_len >= huge_class_size) {
 		comp_len = PAGE_SIZE;
