@@ -114,6 +114,7 @@ enum slc_mon_function {
 	CACHE_READ_MISS_CONFIG,
 	CACHE_FE_MON_CONFIG,
 	CACHE_BE_MON_CONFIG,
+	CACHE_MON_STATS_READ,
 };
 
 struct slc_mon_config_val {
@@ -193,21 +194,6 @@ struct qcom_slc_mon_data {
 	struct slc_partid_info part_info;
 	struct slc_capacity cap_stats;
 	struct slc_read_miss_cntr rd_miss_stats;
-} __packed;
-
-struct slc_mon_data_values {
-	uint16_t cntr_index;
-	uint16_t mon_enabled;
-	uint32_t num_cache_lines;
-	uint64_t rd_misses;
-	uint64_t fe_rd_bytes;
-	uint64_t fe_wr_bytes;
-	uint64_t be_rd_bytes;
-	uint64_t be_wr_bytes;
-	uint64_t rd_hits;
-	uint64_t rd_incr;
-	uint64_t wr_hits;
-	uint64_t wr_incr;
 } __packed;
 
 struct qcom_slc_mon_data_v1 {
@@ -313,6 +299,15 @@ struct slc_be_stats  {
 	uint64_t slc_be_bytes;
 } __packed;
 
+struct slc_partid_mon_stats  {
+	uint32_t slc_mon_function;
+	uint64_t last_capture_time;
+	uint32_t num_cache_lines;
+	uint64_t num_rd_misses;
+	uint64_t slc_fe_bytes;
+	uint64_t slc_be_bytes;
+} __packed;
+
 struct mon_ref {
 	uint32_t slc_mon_function;
 	uint64_t last_capture_time;
@@ -324,6 +319,7 @@ union mon_values {
 	struct miss_info misses;
 	struct slc_fe_stats fe_stats;
 	struct slc_be_stats be_stats;
+	struct slc_partid_mon_stats mon_stats;
 	struct mon_ref ref;
 } __packed;
 

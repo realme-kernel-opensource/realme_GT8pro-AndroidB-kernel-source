@@ -350,8 +350,10 @@ static struct qcom_mpam_msc *slc_config_request_check(struct device *dev, struct
 	slc_capability =  (struct qcom_slc_capability *)qcom_msc->msc_capability;
 	mon_idx = mon_idx_lookup(qcom_msc->mon_base, query->client_id, query->part_id,
 			slc_capability);
-	if (mon_idx < 0)
+	if (mon_idx < 0) {
+		pr_err("Failed to get monitor index\n");
 		return NULL;
+	}
 
 	switch (mon_cfg->slc_mon_function) {
 	default:
@@ -640,6 +642,27 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 				mon_data->be_stats.slc_be_bytes =
 					data_mem_v1->be_rd_bytes +
 					data_mem_v1->be_wr_bytes;
+
+			if (mon_data->ref.slc_mon_function == CACHE_MON_STATS_READ) {
+				if (data_mem_v1->mon_enabled & (1 << cap_mon_support)) {
+					mon_data->mon_stats.num_cache_lines =
+						 data_mem_v1->num_cache_lines;
+				}
+
+				if (data_mem_v1->mon_enabled & (1 << read_miss_mon_support))
+					mon_data->mon_stats.num_rd_misses =
+						data_mem_v1->rd_misses;
+
+				if (data_mem_v1->mon_enabled & (1 << fe_mon_support))
+					mon_data->mon_stats.slc_fe_bytes =
+						data_mem_v1->fe_rd_bytes +
+						data_mem_v1->fe_wr_bytes;
+
+				if (data_mem_v1->mon_enabled & (1 << be_mon_support))
+					mon_data->mon_stats.slc_be_bytes =
+						data_mem_v1->be_rd_bytes +
+						data_mem_v1->be_wr_bytes;
+			}
 
 		} else {
 			if ((mon_data->ref.slc_mon_function == CACHE_CAPACITY_CONFIG) &&
