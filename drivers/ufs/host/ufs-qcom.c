@@ -2874,24 +2874,14 @@ static void ufs_qcom_qos(struct ufs_hba *hba, int tag)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct qos_cpu_group *qcg;
-	int rq_cpu, cur_cpu;
+	int cpu;
 
 	if (!host->ufs_qos)
 		return;
-
-	rq_cpu = tag_to_cpu(hba, tag);
-	cur_cpu = raw_smp_processor_id();
-	if (cur_cpu != rq_cpu) {
-		qcg = cpu_to_group(host->ufs_qos, cur_cpu);
-		if (qcg && !qcg->voted) {
-			queue_work(host->ufs_qos->workq, &qcg->vwork);
-			dev_dbg(hba->dev, "Queued QoS work- cpu: %d\n", cur_cpu);
-		}
-	}
-
-	if (rq_cpu < 0)
+	cpu = tag_to_cpu(hba, tag);
+	if (cpu < 0)
 		return;
-	qcg = cpu_to_group(host->ufs_qos, rq_cpu);
+	qcg = cpu_to_group(host->ufs_qos, cpu);
 	if (!qcg)
 		return;
 
@@ -2904,7 +2894,7 @@ static void ufs_qcom_qos(struct ufs_hba *hba, int tag)
 		return;
 	}
 	queue_work(host->ufs_qos->workq, &qcg->vwork);
-	dev_dbg(hba->dev, "Queued QoS work- cpu: %d\n", rq_cpu);
+	dev_dbg(hba->dev, "Queued QoS work- cpu: %d\n", cpu);
 }
 
 static void ufs_qcom_vote_work(struct work_struct *work)
