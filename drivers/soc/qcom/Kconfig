@@ -831,6 +831,15 @@ config QCOM_MEM_HOOKS
 	  If unsure, say 'M' here to ensure that the hooks are compiled
 	  in.
 
+config CMA_BEST_FIT
+	bool "Use best fit over first fit for CMA allocations"
+	depends on CMA
+	help
+	  This options uses best fit algorithm over first fit algorithm
+	  which help to allocate the pages coming from CMA requests in
+	  optimized manner to reduce the fragmentation in the CMA area
+	  and can help to reduce the total CMA area reserved size.
+
 source "$(KCONFIG_EXT_PREFIX)drivers/soc/qcom/mem_buf/Kconfig"
 
 config QCOM_MEM_OFFLINE

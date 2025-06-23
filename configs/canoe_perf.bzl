@@ -192,6 +192,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_MDT_LOADER": "m",
     "CONFIG_QCOM_MEMLAT": "m",
     "CONFIG_QCOM_MEMORY_DUMP_V2": "m",
+    "CONFIG_CMA_BEST_FIT": "y",
     "CONFIG_QCOM_MEM_BUF": "m",
     "CONFIG_QCOM_MEM_BUF_DEV": "m",
     "CONFIG_QCOM_MEM_BUF_DEV_GH": "y",
