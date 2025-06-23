@@ -189,6 +189,14 @@ config QCOM_LLCC_HEURISTICS
 	  enablement from DTB itself. Also Provide the capability to disable,
 	  enable HERISTIC SCID functionality from SYSFS.
 
+config QCOM_SLC_PERFMON
+	tristate "Qualcomm Technologies, Inc. SLC PERFMON Driver"
+	help
+	  This option enables driver to pass the configuration parameters to
+	  SLC Performance Monitoring feature implemented in CPUCP and collect
+	  SLC data traffic dumps from SLC Performance Monitoring Tool.
+	  Configuration and collecting dumps can be done using SYSFS nodes.
+
 config QCOM_MDT_LOADER
 	tristate
 	select QCOM_SCM
