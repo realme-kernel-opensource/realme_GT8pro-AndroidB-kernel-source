@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -136,6 +136,9 @@
 
 #define SS_PHY_CTRL_REG		(QSCRATCH_REG_OFFSET + 0x30)
 #define LANE0_PWR_PRESENT	BIT(24)
+
+#define USB_STS_REG		(QSCRATCH_REG_OFFSET + 0xF8)
+#define USB_UTMI_SUSPEND_N	BIT(4)
 
 /* USB DBM Hardware registers */
 #define DBM_REG_OFFSET		0xF8000
@@ -3799,6 +3802,13 @@ static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc, bool ignore_p3_state)
 			return -EBUSY;
 		}
 	}
+
+	/* Read USB_STS register to get UTMI Suspend status */
+	reg = dwc3_msm_read_reg(mdwc->base, USB_STS_REG);
+
+	/* when this bit is low the HSPHY is in suspend, return from here */
+	if (!(reg & USB_UTMI_SUSPEND_N))
+		return 0;
 
 	/* Clear previous L2 events */
 	dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_STAT_REG,
