@@ -340,7 +340,7 @@ int find_heaviest_topapp(u64 window_start)
 		int penalty = 0;
 		u64 gold_demand_to_be, prime_demand_to_be;
 
-		pipeline_demand(wts, &gold_demand_to_be, &prime_demand_to_be);
+		pipeline_demand(to_be_placed_wts, &gold_demand_to_be, &prime_demand_to_be);
 		if (have_heavy_list)
 			win_cnt = atomic_read(&to_be_placed_wts->event_windows);
 
@@ -430,8 +430,11 @@ int find_heaviest_topapp(u64 window_start)
 			} else if (to_be_placed_wts->pipeline_activity_cnt >=
 					heavy_wts[i]->pipeline_activity_cnt) {
 				struct walt_task_struct *tmp;
+
 				pipeline_demand(heavy_wts[i], &gold_demand_heavy,
 						&prime_demand_heavy);
+				pipeline_demand(to_be_placed_wts, &gold_demand_to_be,
+						&prime_demand_to_be);
 
 				if (to_be_placed_wts->pipeline_activity_cnt ==
 							heavy_wts[i]->pipeline_activity_cnt) {
