@@ -164,3 +164,14 @@ config QTI_THERMAL_LMH_STATS
 	   It monitors limits hardware throttling via scmi perf notification
 	   interface and enables different statistics of hardware throttling
 	   to userspace via sysfs interface.
+
+config QCOM_SPMI_ADC_TM5
+        tristate "Qualcomm SPMI PMIC Thermal Monitor ADC5"
+        depends on OF && SPMI && IIO
+        select REGMAP_SPMI
+        select QCOM_VADC_COMMON
+        help
+           This enables the thermal driver for the ADC thermal monitoring
+           device. It shows up as a thermal zone with multiple trip points.
+           Thermal client sets threshold temperature for both warm and cool and
+           gets updated when a threshold is reached.
