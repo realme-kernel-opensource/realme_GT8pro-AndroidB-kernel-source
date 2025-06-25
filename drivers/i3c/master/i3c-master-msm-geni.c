@@ -1738,7 +1738,7 @@ static void set_new_addr_slot(unsigned long *addrslot, u8 addr)
 		return;
 
 	ptr = addrslot + (addr / BITS_PER_LONG);
-	*ptr |= 1 << (addr % BITS_PER_LONG);
+	*ptr |= (uint64_t)1 << (addr % BITS_PER_LONG);
 }
 
 static void clear_new_addr_slot(unsigned long *addrslot, u8 addr)
@@ -1749,7 +1749,7 @@ static void clear_new_addr_slot(unsigned long *addrslot, u8 addr)
 		return;
 
 	ptr = addrslot + (addr / BITS_PER_LONG);
-	*ptr &= ~(1 << (addr % BITS_PER_LONG));
+	*ptr &= ~((uint64_t)1 << (addr % BITS_PER_LONG));
 }
 
 static bool is_new_addr_slot_set(unsigned long *addrslot, u8 addr)
@@ -1760,7 +1760,7 @@ static bool is_new_addr_slot_set(unsigned long *addrslot, u8 addr)
 		return false;
 
 	ptr = addrslot + (addr / BITS_PER_LONG);
-	return ((*ptr & (1 << (addr % BITS_PER_LONG))) != 0);
+	return ((*ptr & ((uint64_t)1 << (addr % BITS_PER_LONG))) != 0);
 }
 
 static int qcom_geni_i3c_conf(struct geni_i3c_dev *gi3c, enum i3c_bus_phase bus_phase)
