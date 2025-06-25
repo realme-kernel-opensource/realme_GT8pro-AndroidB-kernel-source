@@ -1997,8 +1997,12 @@ static void msm_geni_uart_gsi_tx_cb(void *ptr)
 	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
 		     "%s: Start\n", __func__);
 	uart_xmit_advance(uport, msm_port->xmit_size);
-	geni_se_tx_dma_unprep(&msm_port->se, msm_port->tx_dma,
-			      msm_port->xmit_size);
+
+	if (msm_port->split_dma_tre.immediate_dma_in_progress)
+		msm_port->split_dma_tre.immediate_dma_in_progress = false;
+	else
+		geni_se_tx_dma_unprep(&msm_port->se, msm_port->tx_dma, msm_port->xmit_size);
+
 	uport->icount.tx += msm_port->xmit_size;
 	msm_port->tx_dma = (dma_addr_t)NULL;
 	msm_port->xmit_size = 0;
@@ -2236,6 +2240,89 @@ static int msm_geni_serial_align_tx_buf(struct msm_geni_serial_port *msm_port,
 	return 0;
 }
 
+/**
+ * msm_geni_serial_gsi_xfer_split_tx() - splits gsi tx transfer into multiple transfer
+ * @msm_port: pointer to the msm_geni_serial_port.
+ * @buf: data buffer to be transferred.
+ * @xmit_size: data length.
+ *
+ * Return: 0 on success, or a negative error code upon failure.
+ */
+static int msm_geni_serial_gsi_xfer_split_tx(struct msm_geni_serial_port *msm_port,
+					    void *buf, unsigned int xmit_size)
+{
+	int ret = 0;
+
+	if (xmit_size >= SPLIT_DMA_TX_SIZE) {
+		/* Align transmit size to 16 byte boundary */
+		xmit_size = xmit_size & ~(SPLIT_DMA_TX_SIZE - 1);
+		msm_port->xmit_size = xmit_size;
+		msm_port->split_dma_tre.immediate_dma_in_progress = false;
+		ret = geni_se_common_iommu_map_buf(msm_port->wrapper_dev, &msm_port->tx_dma,
+						   buf, xmit_size, DMA_TO_DEVICE);
+		if (ret) {
+			UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+				     "Error %d Failed to map tx buffer\n", ret);
+			msm_geni_deallocate_chan(&msm_port->uport);
+			return ret;
+		}
+
+		if (!IS_ALIGNED(msm_port->tx_dma, SERIAL_DMA_ADDR_ALIGN_BYTE)) {
+			ret = geni_se_common_iommu_unmap_buf(msm_port->wrapper_dev,
+							     &msm_port->tx_dma, xmit_size,
+							     DMA_TO_DEVICE);
+			if (ret) {
+				UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+				     "Error %d Failed to unmap tx buffer\n", ret);
+				return ret;
+			}
+
+			ret = msm_geni_serial_align_tx_buf(msm_port, buf, xmit_size);
+			if (ret) {
+				UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+					     "Error Failed to obtain aligned tx buffers\n");
+				return ret;
+			}
+			msm_port->gsi->tx_t.dword[0] =
+				MSM_GPI_DMA_W_BUFFER_TRE_DWORD0(
+					msm_port->split_dma_tre.aligned_tx_dma_buf
+				);
+			msm_port->gsi->tx_t.dword[1] =
+				MSM_GPI_DMA_W_BUFFER_TRE_DWORD1(
+					msm_port->split_dma_tre.aligned_tx_dma_buf
+				);
+			msm_port->gsi->tx_t.dword[2] =
+				MSM_GPI_DMA_W_BUFFER_TRE_DWORD2(xmit_size);
+			msm_port->gsi->tx_t.dword[3] =
+				MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0, 0, 1, 0, 0);
+		} else {
+			msm_port->gsi->tx_t.dword[0] =
+				MSM_GPI_DMA_W_BUFFER_TRE_DWORD0(msm_port->tx_dma);
+			msm_port->gsi->tx_t.dword[1] =
+				MSM_GPI_DMA_W_BUFFER_TRE_DWORD1(msm_port->tx_dma);
+			msm_port->gsi->tx_t.dword[2] =
+				MSM_GPI_DMA_W_BUFFER_TRE_DWORD2(xmit_size);
+			msm_port->gsi->tx_t.dword[3] =
+				MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0, 0, 1, 0, 0);
+		}
+	}  else  {
+		if (xmit_size >= IMMEDIATE_DMA_LEN)
+			msm_port->xmit_size = IMMEDIATE_DMA_LEN;
+		else
+			msm_port->xmit_size = xmit_size;
+
+		msm_port->split_dma_tre.immediate_dma_in_progress = true;
+		msm_port->gsi->tx_t.dword[0] = 0;
+		msm_port->gsi->tx_t.dword[1] = 0;
+		memcpy((u8 *)&msm_port->gsi->tx_t.dword[0], (u8 *)buf, msm_port->xmit_size);
+		msm_port->gsi->tx_t.dword[2] =
+			MSM_GPI_DMA_IMMEDIATE_TRE_DWORD2(msm_port->xmit_size);
+		msm_port->gsi->tx_t.dword[3] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD3(0, 0, 1, 0, 0);
+	}
+
+	return ret;
+}
+
 static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 {
 	struct msm_geni_serial_port *msm_port = container_of(work,
@@ -2280,36 +2367,34 @@ static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 
 	sg_set_buf(&msm_port->gsi->tx_sg[index++], go_t,
 		   sizeof(*go_t));
-
-	ret = geni_se_common_iommu_map_buf(tx_dev, &msm_port->tx_dma,
-					   tail_ptr, xmit_size,
-					   DMA_TO_DEVICE);
-	if (!ret) {
-		msm_port->xmit_size = xmit_size;
+	if (msm_port->split_dma_tre.split_tx) {
+		ret = msm_geni_serial_gsi_xfer_split_tx(msm_port, tail_ptr, xmit_size);
+		if (ret) {
+			UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
+				     "Error %d Split gsi transfer failed\n", ret);
+			goto exit_gsi_tx_xfer;
+		}
 	} else {
-		dev_err(uport->dev, "%s:Failed to allocate memory\n",
-			__func__);
-		msm_geni_deallocate_chan(uport);
-		return;
+		ret = geni_se_common_iommu_map_buf(tx_dev, &msm_port->tx_dma, tail_ptr, xmit_size,
+						   DMA_TO_DEVICE);
+		if (!ret) {
+			msm_port->xmit_size = xmit_size;
+		} else {
+			dev_err(uport->dev, "%s:Failed to allocate memory\n",
+				__func__);
+			msm_geni_deallocate_chan(uport);
+			return;
+		}
+		msm_port->gsi->tx_t.dword[0] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD0(msm_port->tx_dma);
+		msm_port->gsi->tx_t.dword[1] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD1(msm_port->tx_dma);
+		msm_port->gsi->tx_t.dword[2] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD2(xmit_size);
+		msm_port->gsi->tx_t.dword[3] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0, 0, 1, 0, 0);
 	}
-	msm_port->gsi->tx_t.dword[0] =
-			MSM_GPI_DMA_W_BUFFER_TRE_DWORD0(msm_port->tx_dma);
-
-	msm_port->gsi->tx_t.dword[1] =
-			MSM_GPI_DMA_W_BUFFER_TRE_DWORD1(msm_port->tx_dma);
-	msm_port->gsi->tx_t.dword[2] =
-			MSM_GPI_DMA_W_BUFFER_TRE_DWORD2(xmit_size);
-	msm_port->gsi->tx_t.dword[3] =
-			MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0, 0, 1, 0, 0);
-
 	sg_set_buf(&msm_port->gsi->tx_sg[index++], &msm_port->gsi->tx_t,
 		   sizeof(msm_port->gsi->tx_t));
-
-	msm_port->gsi->tx_desc = dmaengine_prep_slave_sg(msm_port->gsi->tx_c,
-							 msm_port->gsi->tx_sg,
+	msm_port->gsi->tx_desc = dmaengine_prep_slave_sg(msm_port->gsi->tx_c, msm_port->gsi->tx_sg,
 							 3, DMA_MEM_TO_DEV,
-							 (DMA_PREP_INTERRUPT |
-							 DMA_CTRL_ACK));
+							 (DMA_PREP_INTERRUPT | DMA_CTRL_ACK));
 	if (!msm_port->gsi->tx_desc) {
 		dev_err(uport->dev, "%s:TX descriptor prep failed\n",
 			__func__);
@@ -2335,8 +2420,10 @@ static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 
 	return;
 exit_gsi_tx_xfer:
-	geni_se_common_iommu_unmap_buf(tx_dev, &msm_port->tx_dma,
-				       msm_port->xmit_size, DMA_TO_DEVICE);
+	if (!msm_port->split_dma_tre.immediate_dma_in_progress)
+		geni_se_common_iommu_unmap_buf(tx_dev, &msm_port->tx_dma,
+					       msm_port->xmit_size, DMA_TO_DEVICE);
+
 	msm_geni_deallocate_chan(uport);
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
 		     "%s: Failed to prep Tx descriptor", __func__);
@@ -2769,7 +2856,7 @@ static void msm_geni_serial_start_tx(struct uart_port *uport)
 			goto exit_start_tx;
 		}
 	} else if (msm_port->xfer_mode == GENI_GPI_DMA) {
-		if (msm_port->tx_dma)
+		if (msm_port->tx_dma || msm_port->split_dma_tre.immediate_dma_in_progress)
 			goto check_flow_ctrl;
 		queue_work(msm_port->tx_wq, &msm_port->tx_xfer_work);
 	}
