@@ -30,12 +30,16 @@ def register_modules(registry):
             "drivers/soc/qcom/hab/khab_test.h",
             "drivers/soc/qcom/hab/qvm_comm.c",
             "drivers/soc/qcom/hab/qvm_comm_linux.c",
-	    "drivers/soc/qcom/hab/hab_virtio.c",
-	    "drivers/soc/qcom/hab/hab_virtio.h",
+            "drivers/soc/qcom/hab/hab_virtio.c",
+            "drivers/soc/qcom/hab/hab_virtio.h",
+            "drivers/soc/qcom/hab/hab_virq.h",
+            "drivers/soc/qcom/hab/hab_virq_hgy.h",
+            "drivers/soc/qcom/hab/hab_virq.c",
+            "drivers/soc/qcom/hab/hab_virq_hgy.c",
         ],
         deps = [
             # do not sort
-            "drivers/soc/qcom/hab/hab"
+            "drivers/soc/qcom/hab/hab",
+            "drivers/virt/gunyah/gh_dbl",
         ],
     )
-

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef __HAB_H
 #define __HAB_H
@@ -302,6 +302,52 @@ struct hab_device {
 	int openq_cnt;
 };
 
+typedef int32_t (*virq_rx_cb_t)(int32_t irq, void *priv_data, uint32_t flags);
+struct hvirq_dbl {
+	struct list_head node;
+	void *tx_dbl;
+	void *rx_dbl;
+	spinlock_t dbl_lock;
+	int id;
+	struct kref refcount;
+	int virq_registered;
+	int virtirq_label;
+	int virtirq_num;
+
+	/* QVM specific fields*/
+	int32_t irq;
+	void __iomem *base;
+
+	int dom_id;
+
+	/* Eventfd specific data*/
+	struct eventfd_ctx *efd;
+	int32_t fd;
+
+	virq_rx_cb_t client_cb;
+	void *client_pdata;
+	uint32_t virq_send;
+	uint32_t virq_recv;
+	uint32_t flags;
+};
+
+struct virq_uhab_context {
+	struct list_head node; /* managed by the driver */
+	struct kref refcount;
+
+	/* used for virt-irq setup
+	 * During tx-rx register
+	 * keeps track of virq setup per context
+	 */
+	struct list_head virq;
+	int virq_total;
+
+	rwlock_t ctx_lock;
+
+	int kernel;
+	int owner;
+};
+
 struct uhab_context {
 	struct list_head node; /* managed by the driver */
 	struct kref refcount;
@@ -379,6 +425,12 @@ struct hab_driver_ops {
 			int pchan_cnt,
 			char *dest,
 			int dest_siz);
+	int (*habhyp_virq_tx_register)(struct hvirq_dbl *dbl, int dbl_label);
+	int (*habhyp_virq_rx_register)(struct hvirq_dbl *dbl, int dbl_label);
+	int (*habhyp_virq_send)(struct hvirq_dbl *dbl);
+	int (*habhyp_virq_tx_unregister)(struct hvirq_dbl *dbl);
+	int (*habhyp_virq_rx_unregister)(struct hvirq_dbl *dbl);
+	int (*habhyp_get_virq_num_id)(void **virqdev, int label);
 };
 
 struct hab_driver {
@@ -391,9 +443,13 @@ struct hab_driver {
 	int ndevices;
 	struct hab_device *devp;
 	struct uhab_context *kctx;
+	struct virq_uhab_context *kvirq_ctx;
 
 	struct list_head uctx_list;
 	int ctx_cnt;
+	struct list_head virq_uctx_list;
+	int virq_ctx_cnt;
+
 	spinlock_t drvlock;
 
 	struct list_head imp_list;
@@ -738,6 +794,36 @@ static inline int hab_stat_log(struct physical_channel **pchans, int pchan_cnt, 
 	return hab_driver.ops->hab_stat_log(pchans, pchan_cnt, dest, dest_size);
 }
 
+static inline int habhyp_virq_tx_register(struct hvirq_dbl *dbl, int dbl_label)
+{
+	return hab_driver.ops->habhyp_virq_tx_register(dbl, dbl_label);
+}
+
+static inline int habhyp_virq_rx_register(struct hvirq_dbl *dbl, int dbl_label)
+{
+	return hab_driver.ops->habhyp_virq_rx_register(dbl, dbl_label);
+}
+
+static inline int habhyp_virq_send(struct hvirq_dbl *dbl)
+{
+	return hab_driver.ops->habhyp_virq_send(dbl);
+}
+
+static inline int habhyp_virq_tx_unregister(struct hvirq_dbl *dbl)
+{
+	return hab_driver.ops->habhyp_virq_tx_unregister(dbl);
+}
+
+static inline int habhyp_virq_rx_unregister(struct hvirq_dbl *dbl)
+{
+	return hab_driver.ops->habhyp_virq_rx_unregister(dbl);
+}
+
+static inline int habhyp_get_virq_num_id(void **virqdev, int label)
+{
+	return hab_driver.ops->habhyp_get_virq_num_id(virqdev, label);
+}
+
 static inline void hab_hypervisor_unregister(void)
 {
 	hab_driver.ops->hab_hypervisor_unregister();
@@ -787,6 +873,7 @@ int hab_stat_show_vchan(struct hab_driver *drv, char *buf, int sz);
 int hab_stat_show_ctx(struct hab_driver *drv, char *buf, int sz);
 int hab_stat_show_expimp(struct hab_driver *drv, int pid, char *buf, int sz);
 int hab_stat_show_reclaim(struct hab_driver *drv, char *buf, int sz);
+int hab_stat_show_virq(struct hab_driver *drv, char *buf, int sz);
 int hab_stat_init_sub(struct hab_driver *drv);
 int hab_stat_deinit_sub(struct hab_driver *drv);
 

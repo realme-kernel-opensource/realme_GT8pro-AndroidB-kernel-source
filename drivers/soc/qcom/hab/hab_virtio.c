@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <linux/module.h>
 #include <linux/virtio.h>
@@ -12,6 +12,7 @@
 
 #include "hab_virtio.h" /* requires hab.h */
 #include "hab_trace_os.h"
+#include "hab_virq_hgy.h"
 
 #define HAB_VIRTIO_DEVICE_ID_HAB	88
 #define HAB_VIRTIO_DEVICE_ID_BUFFERQ	89
@@ -111,6 +112,12 @@ struct hab_driver_ops virtio_ops = {
 	.hab_pipe_read_dump = virtio_hab_pipe_read_dump,
 	.hab_stat_log = virtio_hab_stat_log,
 	.hab_hypervisor_unregister = virtio_hab_hypervisor_unregister,
+	.habhyp_virq_tx_register = hgy_virq_tx_register,
+	.habhyp_virq_rx_register = hgy_virq_rx_register,
+	.habhyp_virq_send = hgy_virq_send,
+	.habhyp_virq_tx_unregister = hgy_virq_tx_unregister,
+	.habhyp_virq_rx_unregister = hgy_virq_rx_unregister,
+	.habhyp_get_virq_num_id = hgy_get_virq_num_id,
 };
 
 struct virtio_hab *get_vh(struct virtio_device *vdev)

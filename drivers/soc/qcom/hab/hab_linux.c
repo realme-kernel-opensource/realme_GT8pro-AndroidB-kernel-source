@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <linux/of_device.h>
 #include "hab.h"
+#include "hab_virq.h"
 #include "hab_qvm.h"
 #include "hab_virtio.h"
 
@@ -483,8 +484,11 @@ struct export_desc_super *hab_rb_exp_insert(struct rb_root *root, struct export_
 	return NULL;
 }
 
-/* create one more char device for /dev/hab */
-#define CDEV_NUM_MAX (MM_ID_MAX / 100 + 1)
+/* create one more char device for /dev/hab
+ * Additional +1 added for extra node for hab-virq
+ * which will exist at the end of cdev array
+ */
+#define CDEV_NUM_MAX (MM_ID_MAX / 100 + 2)
 
 int hab_create_cdev_node(int mmid_grp_index)
 {
@@ -569,7 +573,7 @@ int hab_driver_init(void)
 	}
 
 	result = register_reboot_notifier(&hab_reboot_notifier);
-	if (result)
+	if (result != 0)
 		pr_err("failed to register reboot notifier %d\n", result);
 
 	INIT_WORK(&hab_driver.reclaim_work, reclaim_cleanup);
@@ -587,11 +591,24 @@ int hab_driver_init(void)
 		goto err_hab_parse;
 	}
 
+	hab_driver.kvirq_ctx = virq_hab_ctx_alloc(1);
+	if (!hab_driver.kvirq_ctx)
+		pr_err("virq_hab_ctx_alloc failed resume with HAB init\n");
+
 	/* create the super char device node /dev/hab */
 	result = hab_create_cdev_node(0);
 	if (result)
 		goto err;
 
+	/* at this point all MM device nodea are created check if this index is not
+	 * used for MM HAB device nodes
+	 */
+	if (hab_driver.dev[CDEV_NUM_MAX-1] == NULL) {
+		/* Create /dev/hab-virq */
+		result = hab_create_virq_cdev_node(CDEV_NUM_MAX-1);
+		if (result)
+			pr_err("VIRQ node creation fail resume with hab init result %d\n", result);
+	}
 	hab_stat_init(&hab_driver);
 
 	pr_info("succeeds\n");
@@ -599,7 +616,10 @@ int hab_driver_init(void)
 	return 0;
 
 err:
-	hab_ctx_put(hab_driver.kctx);
+	if (hab_driver.kctx != NULL)
+		hab_ctx_put(hab_driver.kctx);
+	if (hab_driver.kvirq_ctx != NULL)
+		virq_hab_ctx_put(hab_driver.kvirq_ctx);
 err_hab_parse:
 	if (!IS_ERR_OR_NULL(hab_driver.class))
 		class_destroy(hab_driver.class);
@@ -638,6 +658,9 @@ static void __exit hab_exit(void)
 	hab_hypervisor_unregister();
 	hab_stat_deinit(&hab_driver);
 	hab_ctx_put(hab_driver.kctx);
+
+	if (hab_driver.kvirq_ctx != NULL)
+		virq_hab_ctx_put(hab_driver.kvirq_ctx);
 	for (i = 0; i < CDEV_NUM_MAX; i++) {
 		if (!IS_ERR_OR_NULL(hab_driver.dev[i])) {
 			device_destroy(hab_driver.class, MKDEV(hab_driver.major, i));
