@@ -33,9 +33,6 @@ static char gear_index[][25] = {
 #define SLC_INVALID_PARTID      ((1 << 16) - 1)
 
 #define SLC_MPAM_VERSION_0	0x00000000	/* Base firmware */
-#define SLC_MPAM_VERSION_1	0x00000001	/* SLC MPAM More gear support */
-#define SLC_MPAM_VERSION_2	0x00000002	/* SLC MPAM More gear support */
-#define SLC_MPAM_VERSION_3	0x00000003	/* SLC MPAM iBW Monitor */
 
 enum mpam_slc_get_param_ids {
 	PARAM_GET_CLIENT_INFO_MSC = 1,
@@ -233,23 +230,12 @@ struct qcom_slc_mon_mem_v1 {
 	uint16_t num_active_mon;
 	uint64_t last_capture_time;
 	uint64_t slc_mpam_monitor_size;
-	struct qcom_slc_mon_data data[];
-} __packed;
-
-/* Needs to be deprecated once FW switched to V3 */
-struct qcom_slc_mon_mem_v2 {
-	uint32_t match_seq;
-	uint16_t msc_id;
-	uint16_t num_active_mon;
-	uint64_t last_capture_time;
-	uint64_t slc_mpam_monitor_size;
 	struct qcom_slc_mon_data_v1 data[];
 } __packed;
 
 union qcom_slc_monitor_memory {
 	struct qcom_slc_mon_mem_v0 mem_v0;
 	struct qcom_slc_mon_mem_v1 mem_v1;
-	struct qcom_slc_mon_mem_v2 mem_v2;
 };
 
 /* slc Monitor capability */

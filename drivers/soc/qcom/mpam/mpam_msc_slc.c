@@ -294,13 +294,10 @@ static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
 
 	mon_idx = 0;
 	slc_client_cap = slc_capability->slc_client_cap;
-	if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_3)
-		data_v1 = &(mon_mem->mem_v2.data[0]);
-	else if ((slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_1) ||
-		(slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_2))
-		data = &(mon_mem->mem_v1.data[0]);
-	else
+	if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0)
 		data = &(mon_mem->mem_v0.data[0]);
+	else
+		data_v1 = &(mon_mem->mem_v1.data[0]);
 
 	for (client_idx = 0; client_idx < slc_capability->num_clients; client_idx++) {
 		slc_partid_cap = slc_client_cap->slc_partid_cap;
@@ -308,8 +305,7 @@ static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
 			if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0) {
 				part_info = &(data->part_info);
 				data++;
-			} else if (slc_capability->firmware_ver.firmware_version ==
-					SLC_MPAM_VERSION_3) {
+			} else {
 				if (slc_partid_cap->v1_cap.mon_support == 0) {
 					slc_partid_cap++;
 					continue;
@@ -317,14 +313,6 @@ static int mon_idx_lookup(void __iomem *mem, int client_id, int part_id,
 
 				part_info = &(data_v1->part_info);
 				data_v1++;
-			} else {
-				if (slc_partid_cap->v1_cap.mon_support == 0) {
-					slc_partid_cap++;
-					continue;
-				}
-
-				part_info = &(data->part_info);
-				data++;
 			}
 
 			if ((client_id == part_info->client_id) &&
@@ -541,7 +529,7 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 			break;
 
 		case CACHE_FE_MON_CONFIG:
-			if (firmware_ver != SLC_MPAM_VERSION_3)
+			if (firmware_ver == SLC_MPAM_VERSION_0)
 				return -EPERM;
 
 			if ((partid_cap.mon_support & (1 << fe_mon_support)) == 0)
@@ -553,7 +541,7 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 			break;
 
 		case CACHE_BE_MON_CONFIG:
-			if (firmware_ver != SLC_MPAM_VERSION_3)
+			if (firmware_ver == SLC_MPAM_VERSION_0)
 				return -EPERM;
 
 			if ((partid_cap.mon_support & (1 << be_mon_support)) == 0)
@@ -627,19 +615,14 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 		return -EINVAL;
 
 	mon_mem = (union qcom_slc_monitor_memory *)qcom_msc->mon_base;
-	if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_3) {
-		data_mem_v1 = &(mon_mem->mem_v2.data[mon_idx]);
-		match_seq_ptr = &(mon_mem->mem_v2.match_seq);
-		last_capture_time = &(mon_mem->mem_v2.last_capture_time);
-	} else if ((slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_1) ||
-			(slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_2)) {
-		data_mem = &(mon_mem->mem_v1.data[mon_idx]);
-		match_seq_ptr = &(mon_mem->mem_v1.match_seq);
-		last_capture_time = &(mon_mem->mem_v1.last_capture_time);
-	} else {
+	if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0) {
 		data_mem = &(mon_mem->mem_v0.data[mon_idx]);
 		match_seq_ptr = &(mon_mem->mem_v0.match_seq);
 		last_capture_time = &(mon_mem->mem_v0.last_capture_time);
+	} else {
+		data_mem_v1 = &(mon_mem->mem_v1.data[mon_idx]);
+		match_seq_ptr = &(mon_mem->mem_v1.match_seq);
+		last_capture_time = &(mon_mem->mem_v1.last_capture_time);
 	}
 
 	do {
@@ -658,60 +641,74 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 		mon_data->mon_stats.num_rd_misses = 0;
 		mon_data->mon_stats.slc_fe_bytes = 0;
 		mon_data->mon_stats.slc_be_bytes = 0;
-		if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_3) {
+		if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0) {
+			switch (mon_data->ref.slc_mon_function) {
+			case CACHE_CAPACITY_CONFIG:
+				if (data_mem->cap_stats.cap_enabled)
+					mon_data->capacity.num_cache_lines =
+						data_mem->cap_stats.num_cache_lines;
+				break;
 
-			if ((mon_data->ref.slc_mon_function == CACHE_CAPACITY_CONFIG) &&
-					(data_mem_v1->mon_enabled & (1 << cap_mon_support)))
-				mon_data->capacity.num_cache_lines =
-					data_mem_v1->num_cache_lines;
+			case CACHE_READ_MISS_CONFIG:
+				if (data_mem->rd_miss_stats.miss_enabled)
+					mon_data->misses.num_rd_misses =
+						data_mem->rd_miss_stats.rd_misses;
+				break;
 
-			if ((mon_data->ref.slc_mon_function == CACHE_READ_MISS_CONFIG) &&
-					(data_mem_v1->mon_enabled & (1 << read_miss_mon_support)))
-				mon_data->misses.num_rd_misses =
-					data_mem_v1->rd_misses;
-
-			if ((mon_data->ref.slc_mon_function == CACHE_FE_MON_CONFIG) &&
-					(data_mem_v1->mon_enabled & (1 << fe_mon_support)))
-				mon_data->fe_stats.slc_fe_bytes =
-					data_mem_v1->fe_rd_bytes +
-					data_mem_v1->fe_wr_bytes;
-
-			if ((mon_data->ref.slc_mon_function == CACHE_BE_MON_CONFIG) &&
-					(data_mem_v1->mon_enabled & (1 << be_mon_support)))
-				mon_data->be_stats.slc_be_bytes =
-					data_mem_v1->be_rd_bytes +
-					data_mem_v1->be_wr_bytes;
-
-			if (mon_data->ref.slc_mon_function == CACHE_MON_STATS_READ) {
-				if (data_mem_v1->mon_enabled & (1 << cap_mon_support)) {
-					mon_data->mon_stats.num_cache_lines =
-						 data_mem_v1->num_cache_lines;
-				}
-
-				if (data_mem_v1->mon_enabled & (1 << read_miss_mon_support))
-					mon_data->mon_stats.num_rd_misses =
-						data_mem_v1->rd_misses;
-
-				if (data_mem_v1->mon_enabled & (1 << fe_mon_support))
-					mon_data->mon_stats.slc_fe_bytes =
-						data_mem_v1->fe_rd_bytes +
-						data_mem_v1->fe_wr_bytes;
-
-				if (data_mem_v1->mon_enabled & (1 << be_mon_support))
-					mon_data->mon_stats.slc_be_bytes =
-						data_mem_v1->be_rd_bytes +
-						data_mem_v1->be_wr_bytes;
+			default:
+				break;
 			}
 
 		} else {
-			if ((mon_data->ref.slc_mon_function == CACHE_CAPACITY_CONFIG) &&
-					(data_mem->cap_stats.cap_enabled))
-				mon_data->capacity.num_cache_lines =
-					data_mem->cap_stats.num_cache_lines;
+			switch (mon_data->ref.slc_mon_function) {
+			case CACHE_CAPACITY_CONFIG:
+				if (data_mem_v1->mon_enabled & (1 << cap_mon_support))
+					mon_data->capacity.num_cache_lines =
+						data_mem_v1->num_cache_lines;
 
-			if ((mon_data->ref.slc_mon_function == CACHE_READ_MISS_CONFIG) &&
-					(data_mem->rd_miss_stats.miss_enabled))
-				mon_data->misses.num_rd_misses = data_mem->rd_miss_stats.rd_misses;
+				break;
+
+			case CACHE_READ_MISS_CONFIG:
+				if (data_mem_v1->mon_enabled & (1 << read_miss_mon_support))
+					mon_data->misses.num_rd_misses = data_mem_v1->rd_misses;
+
+				break;
+
+			case CACHE_FE_MON_CONFIG:
+				if (data_mem_v1->mon_enabled & (1 << fe_mon_support))
+					mon_data->fe_stats.slc_fe_bytes = data_mem_v1->fe_rd_bytes +
+						data_mem_v1->fe_wr_bytes;
+
+				break;
+
+			case CACHE_BE_MON_CONFIG:
+				if (data_mem_v1->mon_enabled & (1 << be_mon_support))
+					mon_data->be_stats.slc_be_bytes = data_mem_v1->be_rd_bytes +
+						data_mem_v1->be_wr_bytes;
+
+				break;
+
+			case CACHE_MON_STATS_READ:
+				if (data_mem_v1->mon_enabled & (1 << cap_mon_support))
+					mon_data->mon_stats.num_cache_lines =
+						data_mem_v1->num_cache_lines;
+
+				if (data_mem_v1->mon_enabled & (1 << read_miss_mon_support))
+					mon_data->mon_stats.num_rd_misses = data_mem_v1->rd_misses;
+
+				if (data_mem_v1->mon_enabled & (1 << fe_mon_support))
+					mon_data->mon_stats.slc_fe_bytes = data_mem_v1->fe_rd_bytes
+						+ data_mem_v1->fe_wr_bytes;
+
+				if (data_mem_v1->mon_enabled & (1 << be_mon_support))
+					mon_data->mon_stats.slc_be_bytes = data_mem_v1->be_rd_bytes
+						+ data_mem_v1->be_wr_bytes;
+
+				break;
+
+			default:
+				break;
+			}
 		}
 
 		mon_data->ref.last_capture_time = *last_capture_time;
@@ -872,19 +869,6 @@ static ssize_t slc_mon_stats_print_data(void *buf, struct qcom_slc_capability *s
 			/* Handling More than 1 Part ID's */
 			for (part_idx = 0; part_idx < slc_client_cap->client_info.num_part_id;
 					part_idx++) {
-				if ((slc_capability->firmware_ver.firmware_version ==
-						SLC_MPAM_VERSION_1) ||
-						(slc_capability->firmware_ver.firmware_version ==
-						 SLC_MPAM_VERSION_2)) {
-					struct slc_partid_capability_v1 *cap;
-
-					cap = (struct slc_partid_capability_v1 *)
-						&slc_client_cap->slc_partid_cap[part_idx];
-
-					if (!cap->mon_support)
-						continue;
-				}
-
 				cap_stats = &data->cap_stats;
 				rd_miss_stats = &data->rd_miss_stats;
 				if (!cap_stats->cap_enabled &&
@@ -941,27 +925,20 @@ static int slc_mon_stats_print(struct device *dev, void *msc_partid, void *buf)
 	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;
 	mon_mem = (union qcom_slc_monitor_memory *)qcom_msc->mon_base;
 
-	if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_3) {
-		match_seq_ptr = &(mon_mem->mem_v2.match_seq);
-		last_capture_time = &(mon_mem->mem_v2.last_capture_time);
-	} else if ((slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_1) ||
-			(slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_2)) {
-		match_seq_ptr = &(mon_mem->mem_v1.match_seq);
-		last_capture_time = &(mon_mem->mem_v1.last_capture_time);
-	} else {
+	if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0) {
 		match_seq_ptr = &(mon_mem->mem_v0.match_seq);
 		last_capture_time = &(mon_mem->mem_v0.last_capture_time);
+	} else {
+		match_seq_ptr = &(mon_mem->mem_v1.match_seq);
+		last_capture_time = &(mon_mem->mem_v1.last_capture_time);
 	}
 
 	do {
 		retry_cnt = 0;
-		if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_3)
-			data_v1 = &(mon_mem->mem_v2.data[0]);
-		else if ((slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_1) ||
-			(slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_2))
-			data = &(mon_mem->mem_v1.data[0]);
-		else
+		if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0)
 			data = &(mon_mem->mem_v0.data[0]);
+		else
+			data_v1 = &(mon_mem->mem_v1.data[0]);
 
 		while (unlikely((match_seq = *match_seq_ptr) % 2)
 				&& (retry_cnt++ < MAX_SHARED_MEM_RETRY_CNT))
@@ -972,11 +949,11 @@ static int slc_mon_stats_print(struct device *dev, void *msc_partid, void *buf)
 			return -EIO;
 		}
 
-		if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_3)
-			len = slc_mon_stats_print_data_v1(buf, slc_capability, data_v1,
+		if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_0)
+			len = slc_mon_stats_print_data(buf, slc_capability, data,
 					*last_capture_time);
 		else
-			len = slc_mon_stats_print_data(buf, slc_capability, data,
+			len = slc_mon_stats_print_data_v1(buf, slc_capability, data_v1,
 					*last_capture_time);
 
 	} while ((match_seq != *match_seq_ptr) && (match_seq_cnt++ < MAX_SHARED_MATCH_SEQ_CNT));
