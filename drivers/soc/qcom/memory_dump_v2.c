@@ -949,6 +949,35 @@ int msm_dump_data_register_nominidump(enum msm_dump_table_ids id,
 EXPORT_SYMBOL(msm_dump_data_register_nominidump);
 
 #define MSM_DUMP_TOTAL_SIZE_OFFSET	0x724
+
+static bool is_memdump_imem_area_intact(struct platform_device *pdev,
+					size_t size)
+{
+	struct device_node *np;
+	void __iomem *imem_base;
+	uint64_t *table_data = devm_kzalloc(&pdev->dev,
+		sizeof(memdump.table_phys), GFP_KERNEL);
+	size_t size_data;
+
+	np = of_find_compatible_node(NULL, NULL, "qcom,msm-imem-mem_dump_table");
+	if (!np)
+		return false;
+
+	imem_base = of_iomap(np, 0);
+	if (!imem_base)
+		return false;
+
+	memcpy_fromio(table_data, imem_base, sizeof(memdump.table_phys));
+	memcpy_fromio(&size_data, imem_base + MSM_DUMP_TOTAL_SIZE_OFFSET,
+		      sizeof(memdump.table_phys));
+
+	if (!memcmp(table_data, &memdump.table_phys, sizeof(memdump.table_phys))
+	    && (size_data == size))
+		return true;
+	else
+		return false;
+}
+
 static int init_memdump_imem_area(size_t size)
 {
 	struct device_node *np;
@@ -1583,11 +1612,15 @@ static int mem_dump_resume(struct platform_device *pdev)
 {
 	int ret;
 
-	ret = qcom_scm_assign_dump_table_region(1, global_mini_phys_addr, total_size);
-	if (ret) {
-		ret = init_memdump_imem_area(total_size);
-		if (ret)
-			dev_err(&pdev->dev, "init memdump imem area failed, ret=%d\n", ret);
+	if (!is_memdump_imem_area_intact(pdev, total_size)) {
+		ret = qcom_scm_assign_dump_table_region(1, global_mini_phys_addr,
+							total_size);
+		if (ret) {
+			ret = init_memdump_imem_area(total_size);
+			if (ret)
+				dev_err(&pdev->dev,
+					"init memdump imem area failed, ret=%d\n", ret);
+		}
 	}
 
 	return 0;
