@@ -96,8 +96,14 @@ struct qcom_slc_gear_val {
 } __packed;
 
 /* PARAM_GET_SLC_MPAM_VERSION */
-struct qcom_slc_firmware_version {
+struct qcom_slc_firmware_version_flds {
+	uint32_t fixes :8;
+	uint32_t minor :8;
+	uint32_t major :16;
+};
+union qcom_slc_firmware_version {
 	uint32_t firmware_version;
+	struct qcom_slc_firmware_version_flds ver;
 } __packed;
 
 /* SET_PARAM */
@@ -255,6 +261,7 @@ struct slc_mon_capability {
 struct slc_mon_configured {
 	uint32_t read_miss_configured;
 	uint32_t capacity_configured;
+	uint32_t mon_cfgd;
 };
 
 /* msc slc capability */
@@ -270,7 +277,7 @@ struct qcom_slc_capability {
 	struct slc_client_capability *slc_client_cap;
 	struct slc_mon_capability slc_mon_list;
 	struct slc_mon_configured slc_mon_configured;
-	struct qcom_slc_firmware_version firmware_ver;
+	union qcom_slc_firmware_version firmware_ver;
 	uint32_t num_partids;
 } __packed;
 

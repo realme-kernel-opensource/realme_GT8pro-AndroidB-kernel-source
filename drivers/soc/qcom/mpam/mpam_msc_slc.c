@@ -204,15 +204,15 @@ static int slc_firmware_version_query(struct device *dev, void *msc_partid, void
 {
 	struct qcom_mpam_msc *qcom_msc;
 	struct msc_query query;
-	struct qcom_slc_firmware_version *firmware_ver;
+	union qcom_slc_firmware_version *firmware_ver;
 
-	firmware_ver = (struct qcom_slc_firmware_version *)version;
+	firmware_ver = (union qcom_slc_firmware_version *)version;
 	qcom_msc = (struct qcom_mpam_msc *)dev_get_drvdata(dev);
 	if (qcom_msc == NULL)
 		return -EINVAL;
 
 	return mpam_msc_slc_get_params(dev, &query, sizeof(struct msc_query), firmware_ver,
-			sizeof(struct qcom_slc_firmware_version), PARAM_GET_SLC_MPAM_VERSION);
+			sizeof(union qcom_slc_firmware_version), PARAM_GET_SLC_MPAM_VERSION);
 }
 
 static int slc_client_query(struct device *dev, void *msc_partid, void *msc_partconfig)
@@ -442,10 +442,12 @@ static int update_mon_stats(struct device *dev, struct msc_query *query,
 
 		case 0:
 			slc_capability->slc_mon_configured.capacity_configured--;
+			slc_capability->slc_mon_configured.mon_cfgd--;
 			break;
 
 		case 1:
 			slc_capability->slc_mon_configured.capacity_configured++;
+			slc_capability->slc_mon_configured.mon_cfgd++;
 			break;
 
 		}
@@ -458,14 +460,41 @@ static int update_mon_stats(struct device *dev, struct msc_query *query,
 
 		case 0:
 			slc_capability->slc_mon_configured.read_miss_configured--;
+			slc_capability->slc_mon_configured.mon_cfgd--;
 			break;
 
 		case 1:
 			slc_capability->slc_mon_configured.read_miss_configured++;
+			slc_capability->slc_mon_configured.mon_cfgd++;
 			break;
 
 		}
 		break;
+
+	case CACHE_FE_MON_CONFIG:
+	case CACHE_BE_MON_CONFIG:
+		switch (mon_cfg->enable) {
+		default:
+			break;
+
+		case 0:
+			slc_capability->slc_mon_configured.mon_cfgd--;
+			break;
+
+		case 1:
+			slc_capability->slc_mon_configured.mon_cfgd++;
+			break;
+
+		}
+		break;
+	}
+
+	if (mon_cfg->enable) {
+		if (slc_capability->slc_mon_configured.mon_cfgd == 1)
+			__module_get(THIS_MODULE);
+	} else {
+		if (slc_capability->slc_mon_configured.mon_cfgd == 0)
+			module_put(THIS_MODULE);
 	}
 
 	return 0;
@@ -625,7 +654,10 @@ static int slc_mon_stats_read(struct device *dev, void *msc_partid, void *data)
 		}
 
 		/* Read as zero if monitor not enabled */
-		mon_data->ref.mon_data = 0;
+		mon_data->mon_stats.num_cache_lines = 0;
+		mon_data->mon_stats.num_rd_misses = 0;
+		mon_data->mon_stats.slc_fe_bytes = 0;
+		mon_data->mon_stats.slc_be_bytes = 0;
 		if (slc_capability->firmware_ver.firmware_version == SLC_MPAM_VERSION_3) {
 
 			if ((mon_data->ref.slc_mon_function == CACHE_CAPACITY_CONFIG) &&
@@ -1255,6 +1287,10 @@ static int mpam_msc_slc_probe(struct platform_device *pdev)
 		}
 	}
 
+	dev_info(&pdev->dev, "SLC MPAM Firmware version %d.%d.%d\n",
+			qcom_slc_capability->firmware_ver.ver.major,
+			qcom_slc_capability->firmware_ver.ver.minor,
+			qcom_slc_capability->firmware_ver.ver.fixes);
 	qcom_slc_capability->slc_mon_configured.read_miss_configured = 0;
 	qcom_slc_capability->slc_mon_configured.capacity_configured = 0;
 	qcom_msc->mpam_available = MPAM_MONITRS_AVAILABLE;
@@ -1268,10 +1304,19 @@ err_detach:
 static void mpam_msc_slc_remove(struct platform_device *pdev)
 {
 	struct qcom_mpam_msc *qcom_msc;
+	struct qcom_slc_capability *slc_capability;
 
 	qcom_msc = (struct qcom_mpam_msc *)platform_get_drvdata(pdev);
 	if (qcom_msc != NULL) {
+		slc_capability =  (struct qcom_slc_capability *)qcom_msc->msc_capability;
+
+		if (slc_capability->slc_mon_configured.mon_cfgd) {
+			dev_err(&pdev->dev, "Monitors are configured!\n");
+			return;
+		}
+
 		qcom_msc->mpam_available = MPAM_AVAILABLE;
+
 		if (slc_mpam_start_stop(&pdev->dev, mpam_slc_reset))
 			dev_err(&pdev->dev, "Failed to stop SLC Monitor thread\n");
 
