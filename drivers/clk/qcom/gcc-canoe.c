@@ -3936,11 +3936,38 @@ static struct gdsc gcc_ufs_phy_gdsc = {
 	.supply = "vdd_cx",
 };
 
+static struct gdsc gcc_usb30_prim_gdsc = {
+	.gdscr = 0x39004,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "gcc_usb30_prim_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+};
+
+static struct gdsc gcc_usb3_phy_gdsc = {
+	.gdscr = 0x50018,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x2,
+	.pd = {
+		.name = "gcc_usb3_phy_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_mx",
+};
+
 static struct gdsc *gcc_canoe_gdscs[] = {
 	[GCC_PCIE_0_GDSC] = &gcc_pcie_0_gdsc,
 	[GCC_PCIE_0_PHY_GDSC] = &gcc_pcie_0_phy_gdsc,
 	[GCC_UFS_PHY_GDSC] = &gcc_ufs_phy_gdsc,
 	[GCC_UFS_MEM_PHY_GDSC] = &gcc_ufs_mem_phy_gdsc,
+	[GCC_USB30_PRIM_GDSC] = &gcc_usb30_prim_gdsc,
+	[GCC_USB3_PHY_GDSC] = &gcc_usb3_phy_gdsc,
 };
 
 static const struct regmap_config gcc_canoe_regmap_config = {
