@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -7739,7 +7739,6 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 
 static int dwc3_msm_pm_resume(struct device *dev)
 {
-	int ret;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
 
 	dev_dbg(dev, "dwc3-msm PM resume\n");
@@ -7751,17 +7750,6 @@ static int dwc3_msm_pm_resume(struct device *dev)
 	if (!mdwc->in_host_mode)
 		return 0;
 
-	/* Resume dwc to avoid unclocked access by xhci_plat_resume */
-	ret = dwc3_msm_resume(mdwc);
-	if (ret) {
-		dev_err(mdwc->dev, "%s: dwc3_msm_resume failed\n", __func__);
-		atomic_set(&mdwc->pm_suspended, 1);
-		return ret;
-	}
-	pm_runtime_disable(dev);
-	pm_runtime_set_active(dev);
-	pm_runtime_enable(dev);
-
 	if (mdwc->host_poweroff_in_pm_suspend && mdwc->in_host_mode) {
 		/* Restore PHY flags if hibernated in host mode */
 		dwc3_msm_set_usbphy_flags(mdwc->hs_phy, PHY_HOST_MODE);
@@ -7772,8 +7760,6 @@ static int dwc3_msm_pm_resume(struct device *dev)
 						USB_SPEED_SUPER);
 		}
 	}
-	/* kick in otg state machine */
-	queue_work(mdwc->dwc3_wq, &mdwc->resume_work);
 
 	return 0;
 }
