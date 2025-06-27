@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright(C) 2016 Linaro Limited. All rights reserved.
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Author: Mathieu Poirier <mathieu.poirier@linaro.org>
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/atomic.h>
@@ -311,6 +311,12 @@ static long tmc_sg_get_rwp_offset(struct tmc_drvdata *drvdata)
 long tmc_get_rwp_offset(struct tmc_drvdata *drvdata)
 {
 	struct etr_buf *etr_buf = drvdata->sysfs_buf;
+
+	if (!etr_buf) {
+		dev_err(&drvdata->csdev->dev,
+			"sysfs_buf is NULL, unable to get rwp offset\n");
+		return -EINVAL;
+	}
 
 	if (etr_buf->mode == ETR_MODE_FLAT)
 		return tmc_flat_get_rwp_offset(drvdata);
