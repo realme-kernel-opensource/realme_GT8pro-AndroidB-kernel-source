@@ -31,12 +31,17 @@ static uint16_t slc_client_id[] = {
 static struct clk *llcc_perfmon_clock;
 static int perf_clk_enable;
 
-static void llcc_perf_clk_enable(int enable)
+static int llcc_perf_clk_enable(bool enable)
 {
+	if (llcc_perfmon_clock == NULL)
+		return -ENOENT;
+
 	if (enable)
 		clk_prepare_enable(llcc_perfmon_clock);
 	else
 		clk_disable_unprepare(llcc_perfmon_clock);
+
+	return 0;
 }
 
 static int mpam_msc_slc_set_params(struct device *dev, void *param, int param_len,
@@ -514,7 +519,8 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 				return -EPERM;
 
 			if (mon_cfg_val->enable && !perf_clk_enable)
-				llcc_perf_clk_enable(1);
+				if (llcc_perf_clk_enable(true))
+					return -EPERM;
 			break;
 
 		case CACHE_BE_MON_CONFIG:
@@ -525,7 +531,8 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 				return -EPERM;
 
 			if (mon_cfg_val->enable && !perf_clk_enable)
-				llcc_perf_clk_enable(1);
+				if (llcc_perf_clk_enable(true))
+					return -EPERM;
 			break;
 
 		}
@@ -539,7 +546,7 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 		if ((mon_cfg_val->slc_mon_function == CACHE_FE_MON_CONFIG) ||
 			(mon_cfg_val->slc_mon_function == CACHE_BE_MON_CONFIG)) {
 			if (mon_cfg_val->enable && !perf_clk_enable)
-				llcc_perf_clk_enable(0);
+				llcc_perf_clk_enable(false);
 		}
 
 		pr_err("Failed to Config SLC Mon\n");
@@ -552,7 +559,7 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 				perf_clk_enable--;
 
 			if (!mon_cfg_val->enable && !perf_clk_enable)
-				llcc_perf_clk_enable(0);
+				llcc_perf_clk_enable(false);
 		}
 
 		update_mon_stats(dev, query, mon_cfg_val);
@@ -1188,15 +1195,15 @@ static void mpam_msc_slc_remove(struct platform_device *pdev)
 	struct qcom_mpam_msc *qcom_msc;
 
 	qcom_msc = (struct qcom_mpam_msc *)platform_get_drvdata(pdev);
-	qcom_msc->mpam_available = MPAM_AVAILABLE;
 	if (qcom_msc != NULL) {
+		qcom_msc->mpam_available = MPAM_AVAILABLE;
 		if (slc_mpam_start_stop(&pdev->dev, mpam_slc_reset))
 			dev_err(&pdev->dev, "Failed to stop SLC Monitor thread\n");
 
 		detach_mpam_msc(&pdev->dev, qcom_msc, SLC);
+		qcom_msc->mpam_available = MPAM_UNINITIALIZAED;
 	}
 
-	qcom_msc->mpam_available = MPAM_UNINITIALIZAED;
 	platform_set_drvdata(pdev, NULL);
 }
 static const struct of_device_id mpam_msc_slc_table[] = {
