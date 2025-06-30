@@ -19,3 +19,4 @@ gh_virt_wdt.ko
 nvmem_qfprom.ko
 debug_symbol.ko
 minidump.ko
+qcom-dcvs.ko
