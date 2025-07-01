@@ -178,53 +178,23 @@ static void program_urg_command_contexts(void)
 static inline u32 qpace_urgent_command_trigger(phys_addr_t input_addr,
 					       phys_addr_t output_addr,
 					       int urg_reg_num,
-					       enum urg_reg_cxts command,
-					       bool use_disjoint_writes)
+					       enum urg_reg_cxts command)
 {
 	void *td_dst_src_reg = qpace_urg_regs + (urg_reg_num * QPACE_REG_PAGE_SIZE) +
 			       QPACE_URG_CMD_0_TD_DST_ADDR_L_CFG_CNTXT_OFFSET;
 	u64 urg_addr_field_lower, urg_addr_field_upper;
 	u32 stat_reg;
-	u32 urg_addr_field, tmp_addr_bits;
 
-	if (!use_disjoint_writes) {
-		urg_addr_field_lower = FIELD_PREP(URG_CMD_0_TD_DST_ADDR_L__CMD_CFG_CNTXT,
-						command);
-		urg_addr_field_lower |= GENMASK(63, 8) & output_addr;
+	urg_addr_field_lower = FIELD_PREP(URG_CMD_0_TD_DST_ADDR_L__CMD_CFG_CNTXT,
+					  command);
+	urg_addr_field_lower |= GENMASK(63, 8) & output_addr;
 
-		urg_addr_field_upper = input_addr;
+	urg_addr_field_upper = input_addr;
 
-		asm volatile(
-		"stp %0, %1, [%2]\n"
-		: : "r" (urg_addr_field_lower), "r" (urg_addr_field_upper), "r" (td_dst_src_reg)
-		: "memory");
-	} else {
-		urg_addr_field = FIELD_PREP(URG_CMD_0_TD_DST_ADDR_L__CMD_CFG_CNTXT,
-					    command);
-
-		tmp_addr_bits = FIELD_GET(GENMASK(31, 8), output_addr);
-		urg_addr_field |= FIELD_PREP(URG_CMD_0_TD_DST_ADDR_L__DST_ADDR_L,
-					     tmp_addr_bits);
-		QPACE_WRITE_URG_CMD_REG(urg_reg_num,
-					QPACE_URG_CMD_0_TD_DST_ADDR_L_CFG_CNTXT_OFFSET,
-					urg_addr_field);
-
-		urg_addr_field = FIELD_GET(GENMASK(63, 32), output_addr);
-		QPACE_WRITE_URG_CMD_REG(urg_reg_num,
-					QPACE_URG_CMD_0_TD_DST_ADDR_H_OFFSET,
-					urg_addr_field);
-
-		urg_addr_field = FIELD_GET(GENMASK(31, 0), input_addr);
-		QPACE_WRITE_URG_CMD_REG(urg_reg_num,
-					QPACE_URG_CMD_0_TD_SRC_ADDR_L_OFFSET,
-					urg_addr_field);
-
-		/* This triggers the operation */
-		urg_addr_field = FIELD_GET(GENMASK(63, 32), input_addr);
-		QPACE_WRITE_URG_CMD_REG(urg_reg_num,
-					QPACE_URG_CMD_0_TD_SRC_ADDR_H_OFFSET,
-					urg_addr_field);
-	}
+	asm volatile(
+	"stp %0, %1, [%2]\n"
+	: : "r" (urg_addr_field_lower), "r" (urg_addr_field_upper), "r" (td_dst_src_reg)
+	: "memory");
 
 	stat_reg = QPACE_READ_URG_CMD_REG(urg_reg_num,
 					  QPACE_URG_CMD_0_ED_STAT_OFFSET);
@@ -252,20 +222,14 @@ int qpace_urgent_compress(phys_addr_t input_addr, phys_addr_t output_addr)
 	/* We have 8 cores and 8 urgent command registers */
 	int urg_reg_num;
 	u32 stat_reg, stat_reg_val;
-	bool use_disjoint_writes = false;
 
-retry:
 	urg_reg_num = get_cpu();
 	stat_reg = qpace_urgent_command_trigger(input_addr, output_addr, urg_reg_num,
-						URG_COMP_CNTXT, use_disjoint_writes);
+						URG_COMP_CNTXT);
 	put_cpu();
 
 	stat_reg_val = FIELD_GET(URG_CMD_0_ED_STAT_COMP_CODE, stat_reg);
 	if (stat_reg_val != OP_OK) {
-		if (!use_disjoint_writes) {
-			use_disjoint_writes = true;
-			goto retry;
-		}
 		pr_err("%s: register %d failed with %u\n",
 		       __func__, urg_reg_num, stat_reg_val);
 		return -EINVAL;
@@ -295,20 +259,15 @@ int qpace_urgent_decompress(phys_addr_t input_addr,
 	/* We have 8 cores and 8 urgent command registers */
 	int urg_reg_num;
 	u32 stat_reg, stat_reg_val;
-	bool use_disjoint_writes = false;
 
-retry:
 	urg_reg_num = get_cpu();
+
 	stat_reg = qpace_urgent_command_trigger(input_addr, output_addr, urg_reg_num,
-						URG_DECOMP_CNTXT, use_disjoint_writes);
+						URG_DECOMP_CNTXT);
 	put_cpu();
 
 	stat_reg_val = FIELD_GET(URG_CMD_0_ED_STAT_COMP_CODE, stat_reg);
 	if (stat_reg_val != OP_OK) {
-		if (!use_disjoint_writes) {
-			use_disjoint_writes = true;
-			goto retry;
-		}
 		pr_err("%s: register %d failed with %u\n",
 		       __func__, urg_reg_num, stat_reg_val);
 		return -EINVAL;
