@@ -41,8 +41,8 @@ struct gh_proxy_vm {
 	gh_capid_t wdog_cap_id;
 };
 
-static bool trustvm_keep_running = false;
-static bool oemvm_keep_running = false;
+static bool trustvm_keep_running = true;
+static bool oemvm_keep_running = true;
 
 static struct gh_proxy_vm *gh_vms;
 static bool init_done;
