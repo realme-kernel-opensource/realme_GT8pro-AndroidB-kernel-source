@@ -5,7 +5,7 @@
  * Copyright (C) 2016 Linaro Ltd
  * Copyright (C) 2014 Sony Mobile Communications AB
  * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -1215,19 +1215,6 @@ static int adsp_attach(struct rproc *rproc)
 			panic("Panicking, timed out on ping/pong for %s\n", rproc->name);
 		}
 		adsp->q6v5.running = true;
-
-		if (!adsp->firmware) {
-			ret = request_firmware(&adsp->firmware, rproc->firmware, adsp->dev);
-			if (ret) {
-				dev_err(adsp->dev, "request_firmware failed: %d\n", ret);
-				return ret;
-			}
-			adsp_add_coredump_segments(adsp, adsp->firmware);
-			release_firmware(adsp->firmware);
-			adsp->firmware = NULL;
-		} else {
-			adsp_add_coredump_segments(adsp, adsp->firmware);
-		}
 	}
 
 	return ret;
