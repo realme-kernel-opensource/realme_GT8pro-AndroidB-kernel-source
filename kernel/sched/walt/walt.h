@@ -90,10 +90,9 @@ enum freq_caps {
 #define	SOC_ENABLE_SW_CYCLE_COUNTER_BIT			BIT(6)
 #define SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT	BIT(7)
 #define SOC_ENABLE_FT_BOOST_TO_ALL			BIT(8)
-#define SOC_ENABLE_EXPERIMENT3						BIT(9)
-#define SOC_ENABLE_PIPELINE_SWAPPING_BIT		BIT(10)
-#define SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT		BIT(11)
-#define SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING	BIT(12)
+#define SOC_ENABLE_PIPELINE_SWAPPING_BIT		BIT(9)
+#define SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT		BIT(10)
+#define SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING	BIT(11)
 
 extern int soc_sched_lib_name_capacity;
 
@@ -101,6 +100,7 @@ extern int soc_sched_lib_name_capacity;
 #define WALT_FEAT_TRAILBLAZER_BIT	BIT_ULL(0)
 #define WALT_FEAT_UCLAMP_FREQ_BIT	BIT_ULL(1)
 #define WALT_FEAT_SYNC_FREQ_CAP_BIT	BIT_ULL(2)
+#define WALT_FEAT_TOPAPP_BASED_HISPEED	BIT_ULL(3)
 
 extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 
@@ -1696,4 +1696,5 @@ struct waltgov_policy;
 extern unsigned long walt_map_util_freq(unsigned long util,
 		struct waltgov_policy *wg_policy, unsigned long cap, int cpu);
 extern void early_walt_config(void);
+extern unsigned int sysctl_topapp_weight_pct;
 #endif /* _WALT_H */

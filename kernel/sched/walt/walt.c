@@ -641,7 +641,6 @@ should_apply_suh_freq_boost(struct walt_sched_cluster *cluster)
 	return is_cluster_hosting_top_app(cluster);
 }
 
-#define HISPEED_BASED_ON_TOPAPP_ONLY 0
 static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
 		bool trace, u64 *non_boosted_load)
 {
@@ -676,7 +675,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
 		*reason = CPUFREQ_REASON_FREQ_AGR_BIT;
 	} else {
 		load = wrq->prev_runnable_sum +
-					wrq->grp_time.prev_runnable_sum;
+			mult_frac(wrq->grp_time.prev_runnable_sum, sysctl_topapp_weight_pct, 100);
 	}
 
 	if (cpu_ksoftirqd && READ_ONCE(cpu_ksoftirqd->__state) == TASK_RUNNING) {
@@ -699,7 +698,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
 	}
 
 	*non_boosted_load = load;
-	if (HISPEED_BASED_ON_TOPAPP_ONLY)
+	if (sysctl_walt_feat(WALT_FEAT_TOPAPP_BASED_HISPEED))
 		*non_boosted_load = wrq->grp_time.prev_runnable_sum;
 
 	if (wrq->ed_task) {
