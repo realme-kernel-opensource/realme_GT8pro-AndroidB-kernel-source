@@ -536,18 +536,6 @@ def register_modules(registry):
                     "drivers/soc/qcom/minidump_memory.c",
                 ],
             },
-            "CONFIG_QCOM_MINIDUMP_SMEM": {
-                True: [
-                    # do not sort
-                    "drivers/soc/qcom/minidump_smem.c",
-                ],
-            },
-            "CONFIG_QCOM_MINIDUMP_RM": {
-                True: [
-                    # do not sort
-                    "drivers/soc/qcom/minidump_rm.c",
-                ],
-            },
         },
         deps = [
             # do not sort
