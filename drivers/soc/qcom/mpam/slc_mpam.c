@@ -264,16 +264,16 @@ static ssize_t slc_mpam_monitor_data_show(struct config_item *item,
 			"timestamp=%llu,", last_capture_time);
 	if (pm_item->cap_mon_enabled)
 		len += scnprintf(page + len, PAGE_SIZE - len,
-			"cap_cnt=%u,", num_cache_lines);
+			"cap=%u,", num_cache_lines);
 	if (pm_item->miss_mon_enabled)
 		len += scnprintf(page + len, PAGE_SIZE - len,
-			"miss_cnt=%llu,", num_rd_misses);
+			"miss=%llu,", num_rd_misses);
 	if (pm_item->fe_mon_enabled)
 		len += scnprintf(page + len, PAGE_SIZE - len,
-			"fe_bytes=%llu,", slc_fe_bytes);
+			"fe=%llu,", slc_fe_bytes);
 	if (pm_item->be_mon_enabled)
 		len += scnprintf(page + len, PAGE_SIZE - len,
-			"be_bytes=%llu,", slc_be_bytes);
+			"be=%llu,", slc_be_bytes);
 
 	len -= 1;
 	len += scnprintf(page + len, PAGE_SIZE - len, "\n");
