@@ -246,6 +246,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_SOCINFO": "m",
     "CONFIG_QCOM_SOC_WATCHDOG": "m",
     "CONFIG_QCOM_SPMI_ADC5_GEN3": "m",
+    "CONFIG_QCOM_SPMI_PMIC_ERR_DBG": "m",
     "CONFIG_QCOM_SPMI_TEMP_ALARM": "m",
     "CONFIG_QCOM_SPSS": "m",
     "CONFIG_QCOM_STATS": "m",
