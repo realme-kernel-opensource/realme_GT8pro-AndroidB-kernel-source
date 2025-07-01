@@ -21,7 +21,7 @@ static void create_freq_to_cost_pd(struct em_perf_domain *pd)
 	struct em_perf_state *ps;
 	bool size_mismatch;
 
-	if (pd->nr_perf_states > soc_cluster_freq_table_size[cluster->id])
+	if (pd->nr_perf_states != soc_cluster_freq_table_size[cluster->id])
 		size_mismatch = true;
 
 	for (int i = 0; i < pd->nr_perf_states; i++) {
