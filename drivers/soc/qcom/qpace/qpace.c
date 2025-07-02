@@ -785,7 +785,7 @@ void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep)
 retry:
 	if (no_sleep)
 		while (!try_wait_for_completion(&ev_rings[tr_num].ring_has_events))
-			udelay(1);
+			udelay(100);
 	else
 		wait_for_completion(&ev_rings[tr_num].ring_has_events);
 
