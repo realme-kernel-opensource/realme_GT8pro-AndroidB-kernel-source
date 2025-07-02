@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/atomic.h>
@@ -1529,7 +1529,11 @@ int gsi_common_fill_tre_buf(struct gsi_common *gsi, bool tx_chan)
 	if (xfer->tre.flags & GO_TRE_SET)
 		sg_set_buf(&xfer->sg[index++], &xfer->tre.go_t, sizeof(xfer->tre.go_t));
 	if (xfer->tre.flags & DMA_TRE_SET)
-		sg_set_buf(&xfer->sg[index++], &xfer->tre.dma_t, sizeof(xfer->tre.dma_t));
+		sg_set_buf(&xfer->sg[index++], &xfer->tre.dma_t[0], sizeof(xfer->tre.dma_t[0]));
+	if (xfer->tre.flags & DMA1_TRE_SET)
+		sg_set_buf(&xfer->sg[index++], &xfer->tre.dma_t[1], sizeof(xfer->tre.dma_t[1]));
+	if (xfer->tre.flags & DMA2_TRE_SET)
+		sg_set_buf(&xfer->sg[index++], &xfer->tre.dma_t[2], sizeof(xfer->tre.dma_t[2]));
 	if (xfer->tre.flags & UNLOCK_TRE_SET)
 		sg_set_buf(&xfer->sg[index++], &xfer->tre.unlock_t, sizeof(xfer->tre.unlock_t));
 	GSI_SE_DBG(gsi->ipc, false, gsi->dev, "%s: tre_cnt:%d chan:%d flags:0x%x\n",
@@ -1688,7 +1692,7 @@ static int gpi_send_cmd(struct gpii *gpii,
 			enum gpi_cmd gpi_cmd)
 {
 	u32 chid = MAX_CHANNELS_PER_GPII;
-	u32 cmd, state;
+	u32 cmd, state = MAX_CH_STATES;
 	u32 irq_stat, offset, ch_irq;
 	unsigned long timeout;
 	void __iomem *cmd_reg;
@@ -1717,7 +1721,8 @@ static int gpi_send_cmd(struct gpii *gpii,
 	if (!timeout) {
 		offset = GPI_GPII_n_CNTXT_TYPE_IRQ_OFFS(gpii->gpii_id);
 		irq_stat = gpi_read_reg(gpii, gpii->regs + offset);
-		state = gpi_read_ch_state(gpii_chan);
+		if (gpii_chan)
+			state = gpi_read_ch_state(gpii_chan);
 		/* Fallback mechanism for verifying the state of the register */
 		if (irq_stat & GPI_GPII_n_CNTXT_TYPE_IRQ_MSK_CH_CTRL) {
 			offset = GPI_GPII_n_CNTXT_SRC_GPII_CH_IRQ_OFFS(gpii->gpii_id);

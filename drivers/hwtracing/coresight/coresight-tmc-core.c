@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (c) 2012, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Description: CoreSight Trace Memory Controller driver
  */
@@ -333,6 +333,34 @@ out:
 		return sysfs_emit(buf, "0x%llx\n", val);
 }
 
+static ssize_t coresight_tmc_reg32_store(struct device *dev,
+					 struct device_attribute *attr,
+					 const char *buf, size_t size)
+{
+	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct cs_off_attribute *cs_attr = container_of(attr, struct cs_off_attribute, attr);
+	int ret;
+	unsigned long val;
+
+	ret = pm_runtime_resume_and_get(dev->parent);
+	if (ret < 0)
+		return ret;
+
+	spin_lock(&drvdata->spinlock);
+	if (!drvdata->pm_config.hw_powered || kstrtoul(buf, 0, &val)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	CS_UNLOCK(drvdata->base);
+	writel_relaxed(val, drvdata->base + cs_attr->off);
+	CS_LOCK(drvdata->base);
+out:
+	spin_unlock(&drvdata->spinlock);
+	pm_runtime_put_sync(dev->parent);
+	return size;
+}
+
 #define coresight_tmc_reg32(name, offset)				\
 	(&((struct cs_off_attribute[]) {				\
 	   {								\
@@ -348,6 +376,15 @@ out:
 	   }								\
 	})[0].attr.attr)
 
+#define coresight_tmc_reg32_rw(name, offset)				\
+	(&((struct cs_off_attribute[]) {				\
+	   {								\
+		__ATTR(name, 0644, coresight_tmc_reg32_show,		\
+		coresight_tmc_reg32_store), offset			\
+	   }								\
+	})[0].attr.attr)
+
+
 static struct attribute *coresight_tmc_mgmt_attrs[] = {
 	coresight_tmc_reg32(rsz, TMC_RSZ),
 	coresight_tmc_reg32(sts, TMC_STS),
@@ -356,7 +393,7 @@ static struct attribute *coresight_tmc_mgmt_attrs[] = {
 	coresight_tmc_reg32(trg, TMC_TRG),
 	coresight_tmc_reg32(ctl, TMC_CTL),
 	coresight_tmc_reg32(ffsr, TMC_FFSR),
-	coresight_tmc_reg32(ffcr, TMC_FFCR),
+	coresight_tmc_reg32_rw(ffcr, TMC_FFCR),
 	coresight_tmc_reg32(mode, TMC_MODE),
 	coresight_tmc_reg32(pscr, TMC_PSCR),
 	coresight_tmc_reg32(devid, CORESIGHT_DEVID),

@@ -209,71 +209,32 @@ static ssize_t slc_mpam_monitor_data_show(struct config_item *item,
 		char *page)
 {
 	ssize_t len = 0;
-	uint32_t retry_cnt = 0;
 	struct msc_query query;
 	union mon_values mon_data;
 	struct slc_mpam_item *pm_item = get_pm_item(item);
-	uint64_t last_capture_time;
-	uint32_t num_cache_lines;
-	uint64_t num_rd_misses, slc_fe_bytes, slc_be_bytes;
 
-	set_msc_query(&query, get_pm_item(item));
+	set_msc_query(&query, pm_item);
 
 	if (!pm_item->cap_mon_enabled && !pm_item->miss_mon_enabled &&
 			!pm_item->fe_mon_enabled && !pm_item->be_mon_enabled)
 		return 0;
 
-	do {
-		last_capture_time = 0;
-
-		if (pm_item->cap_mon_enabled) {
-			msc_system_mon_alloc_info(SLC, &query, &mon_data);
-			last_capture_time = mon_data.capacity.last_capture_time;
-			num_cache_lines = mon_data.capacity.num_cache_lines;
-		}
-
-		if (pm_item->miss_mon_enabled) {
-			msc_system_mon_read_miss_info(SLC, &query, &mon_data);
-			if (!last_capture_time)
-				last_capture_time = mon_data.misses.last_capture_time;
-			else if (last_capture_time != mon_data.misses.last_capture_time)
-				continue;
-			num_rd_misses = mon_data.misses.num_rd_misses;
-		}
-
-		if (pm_item->fe_mon_enabled) {
-			msc_system_mon_fe_bw_info(SLC, &query, &mon_data);
-			if (!last_capture_time)
-				last_capture_time = mon_data.fe_stats.last_capture_time;
-			else if (last_capture_time != mon_data.fe_stats.last_capture_time)
-				continue;
-			slc_fe_bytes = mon_data.fe_stats.slc_fe_bytes;
-		}
-
-		if (pm_item->be_mon_enabled) {
-			msc_system_mon_be_bw_info(SLC, &query, &mon_data);
-			if (!last_capture_time)
-				last_capture_time = mon_data.be_stats.last_capture_time;
-			else if (last_capture_time != mon_data.be_stats.last_capture_time)
-				continue;
-			slc_be_bytes = mon_data.be_stats.slc_be_bytes;
-		}
-	} while (retry_cnt++ < MAX_RETRY_CNT);
+	msc_system_mon_stats_read(SLC, &query, &mon_data);
 
 	len = scnprintf(page, PAGE_SIZE,
-			"timestamp=%llu,", last_capture_time);
+			"timestamp=%llu,", mon_data.mon_stats.last_capture_time);
 	if (pm_item->cap_mon_enabled)
 		len += scnprintf(page + len, PAGE_SIZE - len,
-			"cap=%u,", num_cache_lines);
+			"cap_cnt=%u,", mon_data.mon_stats.num_cache_lines);
 	if (pm_item->miss_mon_enabled)
 		len += scnprintf(page + len, PAGE_SIZE - len,
-			"miss=%llu,", num_rd_misses);
+			"miss_cnt=%llu,", mon_data.mon_stats.num_rd_misses);
 	if (pm_item->fe_mon_enabled)
 		len += scnprintf(page + len, PAGE_SIZE - len,
-			"fe=%llu,", slc_fe_bytes);
+			"fe_bytes=%llu,", mon_data.mon_stats.slc_fe_bytes);
 	if (pm_item->be_mon_enabled)
 		len += scnprintf(page + len, PAGE_SIZE - len,
-			"be=%llu,", slc_be_bytes);
+			"be_bytes=%llu,", mon_data.mon_stats.slc_be_bytes);
 
 	len -= 1;
 	len += scnprintf(page + len, PAGE_SIZE - len, "\n");
@@ -463,7 +424,7 @@ static int slc_config_fs_register(struct  device *dev)
 	}
 
 	qcom_msc = qcom_msc_lookup(SLC);
-	if (qcom_msc->qcom_msc_id.qcom_msc_type != SLC)
+	if (!qcom_msc || qcom_msc->qcom_msc_id.qcom_msc_type != SLC)
 		return -EINVAL;
 
 	slc_capability = (struct qcom_slc_capability *)qcom_msc->msc_capability;

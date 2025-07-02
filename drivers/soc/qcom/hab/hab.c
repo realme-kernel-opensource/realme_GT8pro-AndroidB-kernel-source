@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include "hab.h"
+#include "hab_virq.h"
 
 #define CREATE_TRACE_POINTS
 #include "hab_trace_os.h"
@@ -61,6 +62,7 @@ struct hab_driver hab_driver = {
 	.ndevices = ARRAY_SIZE(hab_devices),
 	.devp = hab_devices,
 	.uctx_list = LIST_HEAD_INIT(hab_driver.uctx_list),
+	.virq_uctx_list = LIST_HEAD_INIT(hab_driver.virq_uctx_list),
 	.drvlock = __SPIN_LOCK_UNLOCKED(hab_driver.drvlock),
 	.imp_list = LIST_HEAD_INIT(hab_driver.imp_list),
 	.imp_lock = __SPIN_LOCK_UNLOCKED(hab_driver.imp_lock),
@@ -1081,6 +1083,44 @@ static int hab_generate_pchan_list(struct local_vmid *settings)
 	return ret;
 }
 
+/* This function deallocate virq based on settings */
+static int hab_dealloc_virtirq(struct local_vmid *settings)
+{
+	int i, j, ret = 0;
+
+	/* scan by valid VMs, then virtirq */
+	for (i = 0; i < HABCFG_VMID_MAX; i++) {
+		if (HABCFG_GET_VMID(settings, i) != HABCFG_VMID_INVALID &&
+				HABCFG_GET_VMID(settings, i) != settings->self) {
+			pr_debug("dealloc virtirq for vm %d\n", i);
+
+			for (j = 0; j < virqsettings.cnt_virq; j++)
+				ret = hab_virq_dealloc(j, i);
+		}
+	}
+	return ret;
+}
+
+/* This function generates virt_irq based on labels read
+ * from devicetree.
+ */
+static int hab_generate_virtirq(struct local_vmid *settings)
+{
+	int i, j, ret = 0;
+
+	/* scan by valid VMs, then virtirq */
+	for (i = 0; i < HABCFG_VMID_MAX; i++) {
+		if (HABCFG_GET_VMID(settings, i) != HABCFG_VMID_INVALID &&
+				HABCFG_GET_VMID(settings, i) != settings->self) {
+			pr_debug("create virtirq for vm %d\n", i);
+
+			for (j = 0; j < virqsettings.cnt_virq; j++)
+				ret = hab_virq_alloc(j, i, virqsettings.label[j], 0, NULL);
+		}
+	}
+	return ret;
+}
+
 /*
  * This function checks hypervisor plug-in readiness, read in hab configs,
  * and configure pchans
@@ -1136,6 +1176,10 @@ int do_hab_parse(void)
 				 result, pchan_total, hab_driver.ndevices);
 	}
 
+	result = hab_generate_virtirq(&hab_driver.settings);
+	if (result)
+		pr_err("generate virtirq failed ret %d\n", result);
+
 	return result;
 }
 
@@ -1158,6 +1202,11 @@ void hab_hypervisor_unregister_common(void)
 			}
 		}
 	}
+
+	/* Deallocate HAB virq */
+	status = hab_dealloc_virtirq(&hab_driver.settings);
+	if (status != 0)
+		pr_err("failed to free virq setup ret %d\n", status);
 
 	/* detect leaking uctx */
 	spin_lock_bh(&hab_driver.drvlock);

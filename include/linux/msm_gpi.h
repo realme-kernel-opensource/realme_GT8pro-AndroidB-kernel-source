@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __MSM_GPI_H_
@@ -259,11 +259,17 @@ if (print) { \
 #define CONFIG_TRE_SET		BIT(1)
 #define GO_TRE_SET		BIT(2)
 #define DMA_TRE_SET		BIT(3)
-#define UNLOCK_TRE_SET		BIT(4)
-#define GSI_MAX_TRE_TYPES	(5)
+#define DMA1_TRE_SET		BIT(4)
+#define DMA2_TRE_SET		BIT(5)
+#define UNLOCK_TRE_SET		BIT(6)
+#define GSI_MAX_TRE_TYPES	(7)
 
 #define GSI_MAX_NUM_TRE_MSGS		(448)
 #define GSI_MAX_IMMEDIATE_DMA_LEN	(8)
+
+#define QUP_DMA_ADDR_ALIGN_BYTE		(16)
+#define QUP_SPLIT_DMA_TRE_SIZE		(16)
+#define QUP_MAX_SPLIT_TRE_MSGS		(3)
 
 /* cmds to perform by using dmaengine_slave_config() */
 enum msm_gpi_ctrl_cmd {
@@ -379,7 +385,7 @@ struct gsi_tre_info {
 	struct msm_gpi_tre lock_t;
 	struct msm_gpi_tre go_t;
 	struct msm_gpi_tre config_t;
-	struct msm_gpi_tre dma_t;
+	struct msm_gpi_tre dma_t[QUP_MAX_SPLIT_TRE_MSGS];
 	struct msm_gpi_tre unlock_t;
 	u8 flags;
 };

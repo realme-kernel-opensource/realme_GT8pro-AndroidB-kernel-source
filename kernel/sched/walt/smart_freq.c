@@ -659,7 +659,7 @@ void smart_freq_init(const char *name)
 		goto done;
 
 	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP") || !strcmp(name, "CANOE")
-			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")) {
+			|| !strcmp(name, "ALOR_INTERPOSER")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */
@@ -723,6 +723,50 @@ void smart_freq_init(const char *name)
 					BIT(IPC_A) | BIT(IPC_B) | BIT(IPC_C) | BIT(IPC_D) |
 					BIT(IPC_E);
 				cluster->smart_freq_info->min_cycles = 7004160;
+			}
+		}
+	} else if (!strcmp(name, "ALOR")) {
+		for_each_sched_cluster(cluster) {
+			if (cluster->id == 0) {
+				/* Legacy */
+				cluster->smart_freq_info->legacy_reason_config[0].freq_allowed =
+					2400000;
+				cluster->smart_freq_info->legacy_reason_config[2].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[3].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
+					300000000;
+				cluster->smart_freq_info->smart_freq_participation_mask |=
+					BIT(BOOST_SMART_FREQ) |
+					BIT(SUSTAINED_HIGH_UTIL_SMART_FREQ) |
+					BIT(BIG_TASKCNT_SMART_FREQ) |
+					BIT(TRAILBLAZER_SMART_FREQ) |
+					BIT(SBT_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ) |
+					BIT(THERMAL_ROTATION_SMART_FREQ);
+			} else if (cluster->id == 1) {
+				/* Legacy */
+				cluster->smart_freq_info->legacy_reason_config[0].freq_allowed =
+					3513600;
+				cluster->smart_freq_info->legacy_reason_config[2].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[3].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
+					300000000;
+				cluster->smart_freq_info->smart_freq_participation_mask |=
+					BIT(BOOST_SMART_FREQ) |
+					BIT(SUSTAINED_HIGH_UTIL_SMART_FREQ) |
+					BIT(BIG_TASKCNT_SMART_FREQ) |
+					BIT(TRAILBLAZER_SMART_FREQ) |
+					BIT(SBT_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ) |
+					BIT(THERMAL_ROTATION_SMART_FREQ);
 			}
 		}
 	} else if (!strcmp(name, "TUNA")) {

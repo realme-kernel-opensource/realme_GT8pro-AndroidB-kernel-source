@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef __PINCTRL_MSM_H__
 #define __PINCTRL_MSM_H__
@@ -218,6 +218,7 @@ struct msm_pinctrl_soc_data {
 	unsigned int nqup_regs;
 	unsigned int gpio_func;
 	unsigned int egpio_func;
+	u32 *dir_conn_addr;
 	const struct msm_spare_tlmm *spare_regs;
 	unsigned int nspare_regs;
 	struct msm_dir_conn *dir_conn;

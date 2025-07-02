@@ -292,6 +292,16 @@ class BazelBuilder:
             menuconfig_target = [Target(self.workspace, t, v, menuconfig_label, self.out_dir)]
             self.bazel("run", menuconfig_target, bazel_target_opts=["menuconfig"])
 
+    def build_gbl(self):
+        """Run the exact Bazel GBL command from the BazelBuilder's workspace"""
+        cmdline = [
+            self.bazel_bin,
+            "run",
+            "--config=gbl",
+            "//bootable/libbootloader:gbl_efi_dist"
+        ]
+        subprocess.call(cmdline, cwd=self.workspace)
+
     def write_opts(self, out_dir):
         with open(os.path.join(out_dir, "build_opts.txt"), "w") as opt_file:
             if self.user_opts:
@@ -305,6 +315,11 @@ class BazelBuilder:
         if not targets_to_build:
             logging.error("no targets to build")
             sys.exit(1)
+
+        for user_opt in self.user_opts:
+            if "--lto" in user_opt:
+                logging.error("--lto is not supported now, please remove")
+                sys.exit(1)
 
         if self.skip_list:
             self.user_opts.extend(["--//soc-repo:skip_{}=true".format(s) for s in self.skip_list if s != 'abi'])
@@ -427,6 +442,7 @@ def main():
             builder.run_menuconfig()
         else:
             builder.build()
+            builder.build_gbl()
     except KeyboardInterrupt:
         logging.info("Received keyboard interrupt... exiting")
         del builder

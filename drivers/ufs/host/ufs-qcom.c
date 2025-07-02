@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2013-2022, Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2021, Linux Foundation. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -285,6 +285,22 @@ static int ufs_qcom_ber_duration_set(const char *val, const struct kernel_param 
 static inline bool ufs_qcom_partial_cpu_found(struct ufs_qcom_host *host)
 {
 	return cpumask_weight(cpu_possible_mask) != host->max_cpus;
+}
+
+/**
+ * ufs_qcom_is_genpd_supported - Check if Generic Power Domain (genpd) is supported
+ * @hba: Pointer to the UFS host bus adapter structure
+ *
+ * Return: true if genpd is supported, false otherwise.
+ */
+static inline bool ufs_qcom_is_genpd_supported(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct phy *phy = host->generic_phy;
+
+	return !(IS_ERR_OR_NULL(hba->dev->pm_domain) ||
+		 IS_ERR_OR_NULL(phy->dev.parent) ||
+		 IS_ERR_OR_NULL(phy->dev.parent->pm_domain));
 }
 
 /**
@@ -1882,8 +1898,7 @@ static void ufs_qcom_genpd_setup(struct ufs_hba *hba, bool always_on)
 	struct generic_pm_domain *core_genpd;
 	struct generic_pm_domain *phy_genpd;
 
-	if (IS_ERR_OR_NULL(hba->dev->pm_domain) ||
-		IS_ERR_OR_NULL(phy->dev.parent->pm_domain))
+	if (!ufs_qcom_is_genpd_supported(hba))
 		return;
 
 	core_genpd = pd_to_genpd(hba->dev->pm_domain);
@@ -2512,7 +2527,6 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 			UFSHCD_CAP_CLK_SCALING |
 			UFSHCD_CAP_AUTO_BKOPS_SUSPEND |
 			UFSHCD_CAP_AGGR_POWER_COLLAPSE |
-			UFSHCD_CAP_RPM_AUTOSUSPEND |
 			UFSHCD_CAP_WB_WITH_CLK_SCALING;
 		if (!host->disable_wb_support)
 			hba->caps |= UFSHCD_CAP_WB_EN;
@@ -2520,6 +2534,12 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 
 	if (host->hw_ver.major >= 0x5)
 		host->caps |= UFS_QCOM_CAP_SHARED_ICE;
+
+	if (ufs_qcom_is_genpd_supported(hba)) {
+		hba->caps |= UFSHCD_CAP_RPM_AUTOSUSPEND;
+		hba->caps &= ~(UFSHCD_CAP_CLK_GATING |
+			       UFSHCD_CAP_HIBERN8_WITH_CLK_GATING);
+	}
 }
 
 static int ufs_qcom_unvote_qos_all(struct ufs_hba *hba)
@@ -2670,9 +2690,10 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 				idle_time[mode] += ktime_to_ms(ktime_sub(ktime_get(),
 									idle_start));
 
-			if (!host->cpufreq_dis && !atomic_read(&host->therm_mitigation)) {
+			if (!host->cpufreq_dis && !atomic_read(&host->therm_mitigation) &&
+			    host->ufs_qos) {
 				queue_delayed_work(host->ufs_qos->workq, &host->fwork,
-				msecs_to_jiffies(host->boost_monitor_timer));
+						   msecs_to_jiffies(host->boost_monitor_timer));
 			}
 		}
 		if (!err)
@@ -2853,24 +2874,14 @@ static void ufs_qcom_qos(struct ufs_hba *hba, int tag)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct qos_cpu_group *qcg;
-	int rq_cpu, cur_cpu;
+	int cpu;
 
 	if (!host->ufs_qos)
 		return;
-
-	rq_cpu = tag_to_cpu(hba, tag);
-	cur_cpu = raw_smp_processor_id();
-	if (cur_cpu != rq_cpu) {
-		qcg = cpu_to_group(host->ufs_qos, cur_cpu);
-		if (qcg && !qcg->voted) {
-			queue_work(host->ufs_qos->workq, &qcg->vwork);
-			dev_dbg(hba->dev, "Queued QoS work- cpu: %d\n", cur_cpu);
-		}
-	}
-
-	if (rq_cpu < 0)
+	cpu = tag_to_cpu(hba, tag);
+	if (cpu < 0)
 		return;
-	qcg = cpu_to_group(host->ufs_qos, rq_cpu);
+	qcg = cpu_to_group(host->ufs_qos, cpu);
 	if (!qcg)
 		return;
 
@@ -2883,7 +2894,7 @@ static void ufs_qcom_qos(struct ufs_hba *hba, int tag)
 		return;
 	}
 	queue_work(host->ufs_qos->workq, &qcg->vwork);
-	dev_dbg(hba->dev, "Queued QoS work- cpu: %d\n", rq_cpu);
+	dev_dbg(hba->dev, "Queued QoS work- cpu: %d\n", cpu);
 }
 
 static void ufs_qcom_vote_work(struct work_struct *work)
@@ -3927,6 +3938,11 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	if (err)
 		goto out_disable_vccq_parent;
 
+	if (ufs_qcom_is_genpd_supported(hba)) {
+		hba->host->rpm_autosuspend_delay = UFS_QCOM_AUTO_SUSPEND_DELAY;
+		hba->rpm_lvl = 1;
+	}
+
 	ufs_qcom_get_device_id(host);
 	ufs_qcom_parse_pm_levels(hba);
 	ufs_qcom_parse_limits(host);
@@ -4211,10 +4227,15 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba, bool scale_up,
 		if (err)
 			ufshcd_uic_hibern8_exit(hba);
 	} else {
-		if (scale_up)
+		if (scale_up) {
 			err = ufs_qcom_clk_scale_up_post_change(hba);
-		else
+			if (!host->cpufreq_dis && !atomic_read(&host->therm_mitigation) &&
+			    host->ufs_qos)
+				queue_delayed_work(host->ufs_qos->workq, &host->fwork,
+						   msecs_to_jiffies(host->boost_monitor_timer));
+		} else {
 			err = ufs_qcom_clk_scale_down_post_change(hba, target_freq);
+		}
 
 
 		if (err || !dev_req_params) {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/kernel.h>
@@ -83,6 +83,9 @@ struct uetm_reg_config {
 	u64     ocla_cfg2;
 	u64     ocla_cfg;
 	u64     diff_dmask_cfg[UETM_MAX_CFG];
+	u64     reu_hwtrace_cfg;
+	u64     lsu_hwtrace_cfg;
+	u64     mmu_hwtrace_cfg;
 };
 
 struct uetm_drvdata {
@@ -165,6 +168,8 @@ static int uetm_scmi_get_uetm_config(struct uetm_drvdata *drvdata)
 		drvdata->lane = UETM_UNCORE_LANE;
 	else if (drvdata->type == QMX_UETM)
 		drvdata->lane = UETM_QMX_LANE;
+	else
+		return -EINVAL;
 
 	return 0;
 }
@@ -600,6 +605,93 @@ static ssize_t atb_cfg_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(atb_cfg);
 
+static ssize_t reu_cfg_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	struct uetm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct uetm_reg_config *config = drvdata->config;
+	unsigned long val;
+
+	val = config->reu_hwtrace_cfg;
+	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
+}
+
+static ssize_t reu_cfg_store(struct device *dev,
+			     struct device_attribute *attr,
+			     const char *buf, size_t size)
+{
+	struct uetm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct uetm_reg_config *config = drvdata->config;
+	unsigned long val;
+
+	if (kstrtoul(buf, 16, &val))
+		return -EINVAL;
+
+	spin_lock(&drvdata->spinlock);
+	config->reu_hwtrace_cfg = (u64)val;
+	spin_unlock(&drvdata->spinlock);
+	return size;
+}
+static DEVICE_ATTR_RW(reu_cfg);
+
+static ssize_t lsu_cfg_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	struct uetm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct uetm_reg_config *config = drvdata->config;
+	unsigned long val;
+
+	val = config->lsu_hwtrace_cfg;
+	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
+}
+
+static ssize_t lsu_cfg_store(struct device *dev,
+			     struct device_attribute *attr,
+			     const char *buf, size_t size)
+{
+	struct uetm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct uetm_reg_config *config = drvdata->config;
+	unsigned long val;
+
+	if (kstrtoul(buf, 16, &val))
+		return -EINVAL;
+
+	spin_lock(&drvdata->spinlock);
+	config->lsu_hwtrace_cfg = (u64)val;
+	spin_unlock(&drvdata->spinlock);
+	return size;
+}
+static DEVICE_ATTR_RW(lsu_cfg);
+
+static ssize_t mmu_cfg_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	struct uetm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct uetm_reg_config *config = drvdata->config;
+	unsigned long val;
+
+	val = config->mmu_hwtrace_cfg;
+	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
+}
+
+static ssize_t mmu_cfg_store(struct device *dev,
+			     struct device_attribute *attr,
+			     const char *buf, size_t size)
+{
+	struct uetm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct uetm_reg_config *config = drvdata->config;
+	unsigned long val;
+
+	if (kstrtoul(buf, 16, &val))
+		return -EINVAL;
+
+	spin_lock(&drvdata->spinlock);
+	config->mmu_hwtrace_cfg = (u64)val;
+	spin_unlock(&drvdata->spinlock);
+	return size;
+}
+static DEVICE_ATTR_RW(mmu_cfg);
+
 static ssize_t ocla_cfg_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
@@ -711,6 +803,9 @@ static struct attribute *uetm_attrs[] = {
 	&dev_attr_uetm_cfg.attr,
 	&dev_attr_atb_cfg.attr,
 	&dev_attr_ocla_cfg.attr,
+	&dev_attr_reu_cfg.attr,
+	&dev_attr_lsu_cfg.attr,
+	&dev_attr_mmu_cfg.attr,
 	&dev_attr_lane.attr,
 	&dev_attr_state.attr,
 	&dev_attr_traceid.attr,
@@ -739,10 +834,11 @@ static void uetm_store_config(struct uetm_drvdata *drvdata)
 	} else if (drvdata->type == CORE_UETM) {
 		cfg_num = UETM_CORE_CFG_NUM;
 		*base++ = config->ocla_cfg;
-	} else if (drvdata->type == QMX_UETM) {
+	} else {
 		cfg_num = UETM_QMX_CFG_NUM;
 		*base++ = config->ocla_cfg;
 	}
+
 	*base++ = config->atb_cfg;
 	*base++ = config->uetm_cfg;
 
@@ -776,6 +872,11 @@ static void uetm_store_config(struct uetm_drvdata *drvdata)
 
 	for (j = 0; j < cfg_num; j++)
 		*base++ = config->diff_dmask_cfg[j];
+
+	*base++ = config->reu_hwtrace_cfg;
+	*base++ = config->lsu_hwtrace_cfg;
+	*base++ = config->mmu_hwtrace_cfg;
+
 	/* Wait for config to settle */
 	mb();
 }

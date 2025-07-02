@@ -536,6 +536,18 @@ def register_modules(registry):
                     "drivers/soc/qcom/minidump_memory.c",
                 ],
             },
+            "CONFIG_QCOM_MINIDUMP_SMEM": {
+                True: [
+                    # do not sort
+                    "drivers/soc/qcom/minidump_smem.c",
+                ],
+            },
+            "CONFIG_QCOM_MINIDUMP_RM": {
+                True: [
+                    # do not sort
+                    "drivers/soc/qcom/minidump_rm.c",
+                ],
+            },
         },
         deps = [
             # do not sort
@@ -1542,4 +1554,21 @@ def register_modules(registry):
             "drivers/soc/qcom/qcom_hib",
         ],
         includes = ["include"],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/minidump_virtio",
+        out = "minidump_virtio.ko",
+        config = "CONFIG_QCOM_MINIDUMP_VIRTIO",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/minidump_virtio.c",
+            "drivers/soc/qcom/debug_symbol.h",
+            "drivers/soc/qcom/minidump_private.h",
+            "drivers/soc/qcom/elf.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/minidump",
+        ],
     )

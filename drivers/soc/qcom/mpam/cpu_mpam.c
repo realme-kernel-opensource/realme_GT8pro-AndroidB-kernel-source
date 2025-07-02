@@ -357,7 +357,7 @@ static ssize_t cpu_mpam_enable_monitor_store(struct config_item *item,
 	} else if (input && monitor_id == INT_MAX) {
 		monitor_id = bitmap_find_next_zero_area(monitor_free_bitmap,
 				MONITOR_MAX, 0, 1, 0);
-		if (monitor_id > MONITOR_MAX) {
+		if (monitor_id >= MONITOR_MAX) {
 			pr_err("no available monitor\n");
 			goto exit;
 		}

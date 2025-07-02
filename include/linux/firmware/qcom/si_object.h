@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _LINUX_SI_OBJECT_H__
@@ -223,6 +223,8 @@ void free_si_object(struct si_object *object);
 
 int init_si_object_user(struct si_object *object, enum si_object_type ot,
 	struct si_object_operations *ops, const char *fmt, ...);
+struct si_object *init_si_mem_object(phys_addr_t paddr, size_t size,
+	void (*release)(void *), void *private);
 
 int get_si_object(struct si_object *object);
 void put_si_object(struct si_object *object);

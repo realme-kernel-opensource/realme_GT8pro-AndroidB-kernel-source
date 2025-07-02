@@ -64,6 +64,7 @@ static struct clk_alpha_pll video_cc_pll0 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.flags = DISABLE_TO_OFF,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "video_cc_pll0",
@@ -102,6 +103,7 @@ static struct clk_alpha_pll video_cc_pll1 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.flags = DISABLE_TO_OFF,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "video_cc_pll1",
@@ -140,6 +142,7 @@ static struct clk_alpha_pll video_cc_pll2 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.flags = DISABLE_TO_OFF,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "video_cc_pll2",
@@ -178,6 +181,7 @@ static struct clk_alpha_pll video_cc_pll3 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.flags = DISABLE_TO_OFF,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "video_cc_pll3",
@@ -384,7 +388,7 @@ static const struct freq_tbl ftbl_video_cc_mvs0b_clk_src_canoe_v2[] = {
 	F(444000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
 	F(533000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
 	F(630000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
-	F(800000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
+	F(850000000, P_VIDEO_CC_PLL2_OUT_MAIN, 2, 0, 0),
 	{ }
 };
 
@@ -931,7 +935,7 @@ static int video_cc_canoe_fixup(struct platform_device *pdev, struct regmap *reg
 		video_cc_mvs0b_clk_src.freq_tbl = ftbl_video_cc_mvs0b_clk_src_canoe_v2;
 		video_cc_mvs0_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L0] = 800000000;
 		video_cc_mvs0_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L1] = 1000000000;
-		video_cc_mvs0b_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L1] = 800000000;
+		video_cc_mvs0b_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L1] = 850000000;
 		video_cc_mvs0c_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L0] = 1260000000;
 	}
 

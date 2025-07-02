@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -129,7 +129,7 @@ if (dev) \
 #define I2C_HS_TLOW_CNT		38
 #define I2C_HS_TCYCLE_CNT	28
 
-#define MAX_SPLIT_TRE_MSGS	3
+#define MAX_SPLIT_TRE_MSGS	QUP_MAX_SPLIT_TRE_MSGS
 
 /* FTRACE Logging */
 void i2c_trace_log(struct device *dev, const char *fmt, ...)

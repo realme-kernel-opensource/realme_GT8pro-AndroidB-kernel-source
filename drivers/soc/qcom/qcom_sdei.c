@@ -36,7 +36,7 @@ static int sdei_standard_cb(u32 event, struct pt_regs *regs, void *arg)
 
 static int sdei_event_signal(u64 target_pe)
 {
-	struct arm_smccc_res res;
+	struct arm_smccc_res res = { 0 };
 
 	arm_smccc_1_1_hvc(SDEI_1_0_FN_SDEI_EVENT_SIGNAL, 0, target_pe, &res);
 

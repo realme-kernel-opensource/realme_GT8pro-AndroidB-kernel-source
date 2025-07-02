@@ -235,3 +235,29 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/thermal/qcom/lmh_stats",
+        out = "lmh_stats.ko",
+        config = "CONFIG_QTI_THERMAL_LMH_STATS",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/lmh_stats.c",
+            "drivers/thermal/qcom/trace_lmh_stats.h",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/thermal/qcom/qcom-spmi-adc-tm5",
+        out = "qcom-spmi-adc-tm5.ko",
+        config = "CONFIG_QCOM_SPMI_ADC_TM5",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/qcom-spmi-adc-tm5.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/thermal/qcom/qcom-spmi-adc5",
+            "drivers/iio/adc/qcom-vadc-common",
+        ],
+    )

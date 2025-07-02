@@ -6646,7 +6646,7 @@ int msm_pcie_enumerate(u32 rc_idx)
 	if (!bus) {
 		PCIE_ERR(dev, "PCIe: RC%d: Fetching bus resource failed\n",
 			dev->rc_idx);
-		ret = PTR_ERR(cfg);
+		ret = -ENODEV;
 		goto out;
 	}
 
@@ -8964,6 +8964,8 @@ int msm_pcie_allow_l1(struct pci_dev *pci_dev)
 		return -ENODEV;
 
 	pcie_dev = msm_pcie_bus_priv_data(root_pci_dev->bus);
+	if (!pcie_dev)
+		return 0;
 
 	mutex_lock(&pcie_dev->setup_lock);
 	mutex_lock(&pcie_dev->aspm_lock);
@@ -9031,6 +9033,8 @@ int msm_pcie_prevent_l1(struct pci_dev *pci_dev)
 		return -ENODEV;
 
 	pcie_dev = msm_pcie_bus_priv_data(root_pci_dev->bus);
+	if (!pcie_dev)
+		return 0;
 
 	/* disable L1 */
 	mutex_lock(&pcie_dev->setup_lock);
@@ -9295,6 +9299,10 @@ static int msm_pci_probe(struct pci_dev *pci_dev,
 	struct msm_pcie_dev_t *pcie_dev = msm_pcie_bus_priv_data(pci_dev->bus);
 	struct msm_root_dev_t *root_dev;
 
+	if (!pcie_dev || !pcie_dev->pdev) {
+		pr_err("PCIe: Skip probe as platform device not registered.\n");
+		return -ENODEV;
+	}
 	PCIE_DBG(pcie_dev, "PCIe: RC%d: PCI Probe\n", pcie_dev->rc_idx);
 
 	if (!pci_dev->dev.of_node)
@@ -9539,7 +9547,7 @@ static void msm_pcie_drv_connect_notify_all(struct work_struct *work)
 	struct pcie_drv_sta *pcie_drv = container_of(work, struct pcie_drv_sta,
 						     drv_connect_notify_all);
 	struct msm_pcie_drv_info *drv_info;
-	struct msm_pcie_dev_t *pcie_itr, *pcie_dev;
+	struct msm_pcie_dev_t *pcie_itr, *pcie_dev = NULL;
 	int i;
 
 	/* rpmsg probe hasn't happened yet */
@@ -9573,6 +9581,11 @@ static void msm_pcie_drv_connect_notify_all(struct work_struct *work)
 		if (pcie_itr->drv_disable_pc_vote)
 			queue_work(mpcie_wq, &pcie_itr->drv_disable_pc_work);
 		mutex_unlock(&pcie_itr->drv_pc_lock);
+	}
+
+	if (!pcie_dev) {
+		pr_err("PCIe: Could not find an RC supporting DRV.\n");
+		return;
 	}
 
 	if (!pcie_drv->notifier) {
@@ -9749,40 +9762,37 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 		return ret;
 	}
 
-	if (dev) {
-		if (msm_pcie_confirm_linkup(pcie_dev, true, true, dev)) {
-			PCIE_DBG(pcie_dev, "PCIe: RC%d: save config space\n",
-					 pcie_dev->rc_idx);
-			ret = pci_save_state(dev);
-			if (ret) {
-				PCIE_ERR(pcie_dev,
-					 "PCIe: RC%d: fail to save state:%d.\n",
-					 pcie_dev->rc_idx, ret);
-				pcie_dev->suspending = false;
-				return ret;
-			}
-
-		} else {
-			kfree(pcie_dev->saved_state);
-			pcie_dev->saved_state = NULL;
-
-			PCIE_DBG(pcie_dev,
-				 "PCIe: RC%d: load default config space\n",
+	if (msm_pcie_confirm_linkup(pcie_dev, true, true, dev)) {
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: save config space\n",
 				 pcie_dev->rc_idx);
-			ret = pci_load_saved_state(dev, pcie_dev->default_state);
-			if (ret) {
-				PCIE_ERR(pcie_dev,
-					 "PCIe: RC%d: fail to load default state:%d.\n",
-					 pcie_dev->rc_idx, ret);
-				pcie_dev->suspending = false;
-				return ret;
-			}
+		ret = pci_save_state(dev);
+		if (ret) {
+			PCIE_ERR(pcie_dev,
+				 "PCIe: RC%d: fail to save state:%d.\n",
+				 pcie_dev->rc_idx, ret);
+			pcie_dev->suspending = false;
+			return ret;
 		}
 
-		PCIE_DBG(pcie_dev, "PCIe: RC%d: store saved state\n",
-							 pcie_dev->rc_idx);
-		pcie_dev->saved_state = pci_store_saved_state(dev);
+	} else {
+		kfree(pcie_dev->saved_state);
+		pcie_dev->saved_state = NULL;
+
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: load default config space\n",
+			 pcie_dev->rc_idx);
+		ret = pci_load_saved_state(dev, pcie_dev->default_state);
+		if (ret) {
+			PCIE_ERR(pcie_dev,
+				 "PCIe: RC%d: fail to load default state:%d.\n",
+				 pcie_dev->rc_idx, ret);
+			pcie_dev->suspending = false;
+			return ret;
+		}
 	}
+
+	PCIE_DBG(pcie_dev, "PCIe: RC%d: store saved state\n",
+						 pcie_dev->rc_idx);
+	pcie_dev->saved_state = pci_store_saved_state(dev);
 
 	spin_lock_irqsave(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
@@ -9890,26 +9900,23 @@ static int msm_pcie_pm_resume(struct pci_dev *dev,
 		"dev->bus->number = %d dev->bus->primary = %d\n",
 		 dev->bus->number, dev->bus->primary);
 
-	if (dev) {
-		PCIE_DBG(pcie_dev, "RC%d: restore config space\n",
-			 pcie_dev->rc_idx);
+	PCIE_DBG(pcie_dev, "RC%d: restore config space\n", pcie_dev->rc_idx);
 
-		/*
-		 * Pci framework tries to read the pm_cap config register
-		 * during the system resume process and since our pcie
-		 * controller might not have the clocks/regulators on at
-		 * that time, framework will put the power_state as D3Cold.
-		 *
-		 * Since the power_state is D3Cold, pci_restore_state API
-		 * will not be able to write the MSI address to config space.
-		 * Thereby resulting in a smmu fault when trying to rise a
-		 * MSI for the AER.
-		 */
-		pci_set_power_state(dev, PCI_D0);
+	/*
+	 * Pci framework tries to read the pm_cap config register
+	 * during the system resume process and since our pcie
+	 * controller might not have the clocks/regulators on at
+	 * that time, framework will put the power_state as D3Cold.
+	 *
+	 * Since the power_state is D3Cold, pci_restore_state API
+	 * will not be able to write the MSI address to config space.
+	 * Thereby resulting in a smmu fault when trying to rise a
+	 * MSI for the AER.
+	 */
+	pci_set_power_state(dev, PCI_D0);
 
-		pci_load_and_free_saved_state(dev, &pcie_dev->saved_state);
-		pci_restore_state(dev);
-	}
+	pci_load_and_free_saved_state(dev, &pcie_dev->saved_state);
+	pci_restore_state(dev);
 
 	PCIE_DBG(pcie_dev, "RC%d: exit\n", pcie_dev->rc_idx);
 

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _LINUX_QCOM_GENI_SE_COMMON
@@ -64,6 +64,7 @@ if (print) { \
 #define GENI_GENERAL_CFG		(0x10)
 #define GENI_CLK_CTRL_RO		(0x60)
 #define GENI_FW_MULTILOCK_MSA_RO	(0x74)
+#define GENI_INIT_CFG_REVISION		(0x0)
 
 /* SE_DMA_GENERAL_CFG */
 #define DMA_IF_EN_RO			(0xe20)
@@ -139,6 +140,14 @@ if (print) { \
 #define IO_MACRO_IO0_SEL_BIT	BIT(0)
 
 static const char * const icc_path_names[] = {"qup-core", "qup-config", "qup-memory"};
+
+struct geni_se_ver_info {
+	int hw_major_ver;
+	int hw_minor_ver;
+	int hw_step_ver;
+	int m_fw_ver;
+	int s_fw_ver;
+};
 
 /**
  * struct kpi_time - Help to capture KPI information

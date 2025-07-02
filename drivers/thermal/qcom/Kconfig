@@ -155,3 +155,23 @@ config QTI_DYNAMIC_HW_THERMAL_TRIP
 	   different hardware mitigation. It registers for thermal framework
 	   as thermal zone and enable thermal zone sysfs interface to modify
 	   hardware mitigation threshold via SCMI communication.
+
+config QTI_THERMAL_LMH_STATS
+	tristate "QTI Thermal lmh stats driver"
+	depends on ARM_SCMI_CPUFREQ
+	help
+	   This enable QTI limits hardware throttling monitor stats driver.
+	   It monitors limits hardware throttling via scmi perf notification
+	   interface and enables different statistics of hardware throttling
+	   to userspace via sysfs interface.
+
+config QCOM_SPMI_ADC_TM5
+        tristate "Qualcomm SPMI PMIC Thermal Monitor ADC5"
+        depends on OF && SPMI && IIO
+        select REGMAP_SPMI
+        select QCOM_VADC_COMMON
+        help
+           This enables the thermal driver for the ADC thermal monitoring
+           device. It shows up as a thermal zone with multiple trip points.
+           Thermal client sets threshold temperature for both warm and cool and
+           gets updated when a threshold is reached.

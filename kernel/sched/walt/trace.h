@@ -1669,7 +1669,7 @@ TRACE_EVENT(sched_freq_uncap,
 		__entry->max_reason = BIT(max_reason);
 	),
 
-	TP_printk("cluster=%d nr_big=%d wakeup_ctr_sum=%d cuuret_reasons=0x%x cluster_active_reason=0x%x max_cap=%lu max_reason=0x%x",
+	TP_printk("cluster=%d nr_big=%d wakeup_ctr_sum=%d current_reasons=0x%x cluster_active_reason=0x%x max_cap=%lu max_reason=0x%x",
 		  __entry->id, __entry->nr_big, __entry->wakeup_ctr_sum, __entry->reasons,
 		  __entry->cluster_active_reason, __entry->max_cap, __entry->max_reason)
 );
@@ -1703,7 +1703,7 @@ TRACE_EVENT(ipc_freq,
 		__entry->ipc_cnt = ipc_cnt;
 	),
 
-	TP_printk("cluster=%d winning_cpu=%d winning_index=%d winning_freq=%u curr_time=%llu dactivate_time=%llu current_cpu=%d current_cpu_ipc_count=%lu",
+	TP_printk("cluster=%d winning_cpu=%d winning_index=%d winning_freq=%u curr_time=%llu deactivate_time=%llu current_cpu=%d current_cpu_ipc_count=%lu",
 		  __entry->id, __entry->cpu, __entry->index, __entry->freq,
 		  __entry->time, __entry->deactivate_ns, __entry->curr_cpu, __entry->ipc_cnt)
 );
@@ -1913,14 +1913,13 @@ TRACE_EVENT(sched_boost_bus_dcvs,
 		__entry->storage_boosted)
 );
 
-TRACE_EVENT(sched_yielder,
+TRACE_EVENT(walt_account_yields,
 	TP_PROTO(u64 wc, u64 start_ts, u8 window_cnt,
 		 unsigned int total_yield_cnt, unsigned int target_threshold_wake,
-		 unsigned int total_sleep_cnt, unsigned int target_threshold_sleep,
-		 unsigned int in_legacy_uncap),
+		 unsigned int total_sleep_cnt, unsigned int target_threshold_sleep),
 
 	TP_ARGS(wc, start_ts, window_cnt, total_yield_cnt, target_threshold_wake,
-		total_sleep_cnt, target_threshold_sleep, in_legacy_uncap),
+		total_sleep_cnt, target_threshold_sleep),
 
 	TP_STRUCT__entry(
 		__field(u64,		wc)
@@ -1930,7 +1929,6 @@ TRACE_EVENT(sched_yielder,
 		 __field(unsigned int,	target_threshold_wake)
 		 __field(unsigned int,	total_sleep_cnt)
 		 __field(unsigned int,	target_threshold_sleep)
-		 __field(unsigned int,	in_legacy_uncap)
 	),
 
 	TP_fast_assign(
@@ -1941,13 +1939,12 @@ TRACE_EVENT(sched_yielder,
 		__entry->target_threshold_wake	= target_threshold_wake;
 		__entry->total_sleep_cnt	= total_sleep_cnt;
 		__entry->target_threshold_sleep	= target_threshold_sleep;
-		__entry->in_legacy_uncap	= in_legacy_uncap;
 	),
 
-	TP_printk("wallclock=%llu start_ts=%llu continous_windows=%u global_yield_cnt=%u target_yield_th=%u global_sleep_cnt=%u target_induced_sleep_th=%u in_legacy_frequency_uncap=0x%x",
+	TP_printk("wallclock=%llu start_ts=%llu continuous_windows=%u global_yield_cnt=%u target_yield_th=%u global_sleep_cnt=%u target_induced_sleep_th=%u",
 		  __entry->wc, __entry->start_ts, __entry->window_cnt, __entry->total_yield_cnt,
 		  __entry->target_threshold_wake, __entry->total_sleep_cnt,
-		  __entry->target_threshold_sleep, __entry->in_legacy_uncap)
+		  __entry->target_threshold_sleep)
 );
 
 TRACE_EVENT(sched_update_busy_bitmap,
@@ -2127,6 +2124,32 @@ TRACE_EVENT(sched_votable_result,
 			__entry->enable[7], __entry->vote[7]
 		 )
 );
+
+TRACE_EVENT(freq_qos_request,
+
+	TP_PROTO(const char *variation, void *addr, enum freq_qos_req_type type, int val),
+
+	TP_ARGS(variation, addr, type, val),
+
+	TP_STRUCT__entry(
+		__string(variation, variation)
+		__array(char,		variation, TASK_COMM_LEN)
+		__field(void *,		addr)
+		__field(int,		type)
+		__field(int,		val)
+		),
+
+	TP_fast_assign(
+		__assign_str(variation);
+		__entry->addr	= addr;
+		__entry->type	= type;
+		__entry->val	= val;
+		),
+
+	TP_printk("variation=%s client=%pS type=%d val=%d",
+			__get_str(variation), __entry->addr, __entry->type, __entry->val)
+);
+
 
 #endif /* _TRACE_WALT_H */
 

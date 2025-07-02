@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -28,7 +28,7 @@
 #define RM_HEAP_LABEL		0x1
 
 bool rm_heap_manager_enabled;
-bool hyp_heap_manage_supported;
+static bool hyp_heap_manage_supported;
 
 static DEFINE_MUTEX(rm_heap_lock);
 
@@ -69,6 +69,9 @@ static struct rm_heap_manager *rm_heap_manager;
 /* get the total hypervisor heap memory added by hlos */
 uint64_t gh_rm_heap_get_total_heap_added(void)
 {
+	if (!rm_heap_manager_enabled)
+		return 0;
+
 	return rm_heap_manager->total_heap_added[GH_HYP_HEAP_ROOT] +
 			rm_heap_manager->total_heap_added[GH_HYP_HEAP_RM];
 }
@@ -104,6 +107,9 @@ static uint64_t gh_get_rm_heap_free(enum gh_hyp_heap_label label)
 	size_t resp_size;
 	uint64_t total_size, allocated_size;
 	uint64_t rm_heap_free;
+
+	if (!rm_heap_manager_enabled)
+		return 0;
 
 	ret = gh_rm_heap_query(rm_heap_manager->heap_handle[label],
 			GH_RM_HEAP_QUERY_TYPE_MEM, (void *)&heap_info, &resp_size);
@@ -231,6 +237,9 @@ static void gh_rm_remove_all_free_heap(enum gh_hyp_heap_label label)
 
 uint64_t gh_rm_heap_get_hyp_heap_free(void)
 {
+	if (!rm_heap_manager_enabled)
+		return 0;
+
 	return gh_get_rm_heap_free(GH_HYP_HEAP_ROOT) +
 			gh_get_rm_heap_free(GH_HYP_HEAP_RM);
 }
@@ -247,9 +256,6 @@ static int gh_rm_heap_add_chunk(size_t size, enum gh_hyp_heap_label label)
 	struct gh_acl_desc *acl_desc;
 	struct gh_sgl_desc *sgl_desc;
 	gh_memparcel_handle_t mp_handle;
-
-	if (!rm_heap_manager_enabled)
-		return 0;
 
 	if (!IS_ALIGNED(size, HEAP_MIN_RESOLUTION)) {
 		pr_err("size 0x%zx should be aligned to 1MB\n", size);
@@ -379,6 +385,9 @@ static void remove_chunk_retry(void)
  */
 void gh_rm_heap_shrink(void)
 {
+	if (!rm_heap_manager_enabled)
+		return;
+
 	gh_rm_remove_all_free_heap(GH_HYP_HEAP_ROOT);
 	gh_rm_remove_all_free_heap(GH_HYP_HEAP_RM);
 
@@ -400,6 +409,9 @@ void gh_rm_heap_memlend_prealloc(size_t dmabuf_size)
 {
 	size_t heap_increase, heap_free;
 	u16 i, heap, fail = 0, num_chunks;
+
+	if (!rm_heap_manager_enabled)
+		return;
 
 	for (heap = 0; heap < GH_HYP_HEAP_OBJ_MAX; heap++, fail = 0) {
 
@@ -434,7 +446,7 @@ static int gh_rm_get_heap_resource_info(void)
 	res_entries = gh_rm_vm_get_hyp_res(rm_heap_manager->rm_vmid, &n_res);
 	if (IS_ERR_OR_NULL(res_entries)) {
 		pr_err("get hyp resources failed.\n");
-		return -EINVAL;
+		return PTR_ERR(res_entries);
 	}
 
 	/* get the heap object resource info */
@@ -499,15 +511,15 @@ static int __init gh_rm_heap_manager_init(void)
 
 	if (!hyp_heap_manage_supported) {
 		pr_err("hyp heap management not supported by Hypervisor\n");
-		ret = -EOPNOTSUPP;
 		goto out_err;
 	}
 
 	if (!check_mem_prot_enabled()) {
 		pr_err("memory protection feature is not supported\n");
-		ret = -EOPNOTSUPP;
 		goto out_err;
 	}
+
+	rm_heap_manager_enabled = true;
 
 	pr_info("free heap memory %s: 0x%llx %s: 0x%llx\n",
 			get_heap_object_name(GH_HYP_HEAP_ROOT),
@@ -515,8 +527,7 @@ static int __init gh_rm_heap_manager_init(void)
 			get_heap_object_name(GH_HYP_HEAP_RM),
 			gh_get_rm_heap_free(GH_HYP_HEAP_RM));
 
-	rm_heap_manager_enabled = true;
-	return ret;
+	return 0;
 
 out_err:
 	kfree(rm_heap_manager);
