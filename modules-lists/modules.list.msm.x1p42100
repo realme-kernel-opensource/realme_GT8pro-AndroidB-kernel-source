@@ -17,3 +17,5 @@ qcom-pdc.ko
 qcom_wdt_core.ko
 gh_virt_wdt.ko
 nvmem_qfprom.ko
+debug_symbol.ko
+minidump.ko
