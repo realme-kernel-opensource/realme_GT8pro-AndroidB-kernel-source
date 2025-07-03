@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/init.h>
@@ -193,7 +193,7 @@ static int md_smem_init_md_table(void)
 	}
 
 	/*Check global minidump support initialization */
-	if (!md_global_toc->md_toc_init) {
+	if (size < sizeof(*md_global_toc) || !md_global_toc->md_toc_init) {
 		pr_err("System Minidump TOC not initialized\n");
 		return -ENODEV;
 	}
