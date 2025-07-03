@@ -151,6 +151,8 @@ def define_vm_build(
         vm_opts = vm_image_opts()
 
         #use only dtbs related to the variant for dtb image creation
+        if "canoe" in name:
+            dtb_list = dtbo_list
 
         if "tuivm" in name:
             seg_dtb_list = [dtb for dtb in dtb_list if "-vm-" in dtb]
