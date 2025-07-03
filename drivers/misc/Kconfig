@@ -23,4 +23,17 @@ config QSEECOM_PROXY
 	 These callback functions can be used to start, shutdown and
 	 send commands to the trusted apps.
 
+config LKDTM
+	tristate "Linux Kernel Dump Test Tool Module"
+	depends on DEBUG_FS
+	help
+	This module enables testing of the different dumping mechanisms by
+	inducing system failures at predefined crash points.
+	If you don't need it: say N
+	Choose M here to compile this code as a module. The module will be
+	called lkdtm.
+
+	Documentation on how to use the module can be found in
+	Documentation/fault-injection/provoke-crashes.rst
+
 endmenu
