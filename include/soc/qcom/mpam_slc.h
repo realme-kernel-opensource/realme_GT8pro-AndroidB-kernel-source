@@ -33,9 +33,6 @@ static char gear_index[][25] = {
 #define SLC_INVALID_PARTID      ((1 << 16) - 1)
 
 #define SLC_MPAM_VERSION_0	0x00000000	/* Base firmware */
-#define SLC_MPAM_VERSION_1	0x00000001	/* SLC MPAM More gear support */
-#define SLC_MPAM_VERSION_2	0x00000002	/* SLC MPAM More gear support */
-#define SLC_MPAM_VERSION_3	0x00000003	/* SLC MPAM iBW Monitor */
 
 enum mpam_slc_get_param_ids {
 	PARAM_GET_CLIENT_INFO_MSC = 1,
@@ -96,8 +93,14 @@ struct qcom_slc_gear_val {
 } __packed;
 
 /* PARAM_GET_SLC_MPAM_VERSION */
-struct qcom_slc_firmware_version {
+struct qcom_slc_firmware_version_flds {
+	uint32_t fixes :8;
+	uint32_t minor :8;
+	uint32_t major :16;
+};
+union qcom_slc_firmware_version {
 	uint32_t firmware_version;
+	struct qcom_slc_firmware_version_flds ver;
 } __packed;
 
 /* SET_PARAM */
@@ -227,23 +230,12 @@ struct qcom_slc_mon_mem_v1 {
 	uint16_t num_active_mon;
 	uint64_t last_capture_time;
 	uint64_t slc_mpam_monitor_size;
-	struct qcom_slc_mon_data data[];
-} __packed;
-
-/* Needs to be deprecated once FW switched to V3 */
-struct qcom_slc_mon_mem_v2 {
-	uint32_t match_seq;
-	uint16_t msc_id;
-	uint16_t num_active_mon;
-	uint64_t last_capture_time;
-	uint64_t slc_mpam_monitor_size;
 	struct qcom_slc_mon_data_v1 data[];
 } __packed;
 
 union qcom_slc_monitor_memory {
 	struct qcom_slc_mon_mem_v0 mem_v0;
 	struct qcom_slc_mon_mem_v1 mem_v1;
-	struct qcom_slc_mon_mem_v2 mem_v2;
 };
 
 /* slc Monitor capability */
@@ -255,6 +247,7 @@ struct slc_mon_capability {
 struct slc_mon_configured {
 	uint32_t read_miss_configured;
 	uint32_t capacity_configured;
+	uint32_t mon_cfgd;
 };
 
 /* msc slc capability */
@@ -270,7 +263,7 @@ struct qcom_slc_capability {
 	struct slc_client_capability *slc_client_cap;
 	struct slc_mon_capability slc_mon_list;
 	struct slc_mon_configured slc_mon_configured;
-	struct qcom_slc_firmware_version firmware_ver;
+	union qcom_slc_firmware_version firmware_ver;
 	uint32_t num_partids;
 } __packed;
 
