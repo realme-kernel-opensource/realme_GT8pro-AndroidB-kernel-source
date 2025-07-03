@@ -517,6 +517,22 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/microdump_collector",
+        out = "microdump_collector.ko",
+        config = "CONFIG_QCOM_MICRODUMP",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/microdump_collector.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/qcom_ramdump",
+            "drivers/remoteproc/rproc_qcom_common",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/minidump",
         out = "minidump.ko",
         config = "CONFIG_QCOM_MINIDUMP",
