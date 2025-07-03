@@ -57,7 +57,8 @@ static ssize_t platform_mpam_schemata_show(struct config_item *item,
 		len += scnprintf(page + len, PAGE_SIZE - len,
 			",limit_ratio=%d,limit_mbps=%d\n",
 			pm_item->bw_cfg->limit_ratio,
-			pm_item->bw_cfg->limit_mbps);
+			pm_item->bw_cfg->limit_ratio *
+			pm_item->bw_cfg->max_bw / 100);
 	}
 
 	return len;
@@ -98,7 +99,7 @@ static ssize_t platform_mpam_schemata_store(struct config_item *item,
 			bw_set_ratio = input;
 		else if (!strcmp("limit_mbps", param_name) &&
 				pm_item->bw_cfg->max_bw != 0)
-			bw_set_ratio = (long)(input) * 100 / pm_item->bw_cfg->max_bw;
+			bw_set_ratio = DIV_ROUND_UP(input, pm_item->bw_cfg->max_bw / 100);
 
 		if (bw_set_ratio)
 			qcom_mpam_set_bw_limit_rpmsg(bw_set_ratio);
