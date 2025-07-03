@@ -313,6 +313,12 @@ long tmc_get_rwp_offset(struct tmc_drvdata *drvdata)
 {
 	struct etr_buf *etr_buf = drvdata->sysfs_buf;
 
+	if (!etr_buf) {
+		dev_err(&drvdata->csdev->dev,
+			"sysfs_buf is NULL, unable to get rwp offset\n");
+		return -EINVAL;
+	}
+
 	if (etr_buf->mode == ETR_MODE_FLAT)
 		return tmc_flat_get_rwp_offset(drvdata);
 	else
