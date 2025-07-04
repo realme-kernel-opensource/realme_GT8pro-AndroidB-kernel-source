@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Description: CoreSight Replicator driver
  */
@@ -395,10 +395,10 @@ static int replicator_platform_probe(struct platform_device *pdev)
 	pm_runtime_enable(&pdev->dev);
 
 	ret = replicator_add_coresight_dev(&pdev->dev, res);
-	pm_runtime_put_sync(&pdev->dev);
-	if (ret)
+	if (ret) {
+		pm_runtime_put_sync(&pdev->dev);
 		pm_runtime_disable(&pdev->dev);
-
+	}
 	return ret;
 }
 
@@ -664,9 +664,6 @@ static int dynamic_replicator_probe(struct amba_device *adev,
 	}
 
 	ret = replicator_add_coresight_dev(dev, &adev->res);
-
-	if (!ret)
-		pm_runtime_put_sync(dev);
 
 	return ret;
 }
