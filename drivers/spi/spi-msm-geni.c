@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -2070,7 +2070,7 @@ static void spi_geni_set_sampling_rate(struct spi_geni_master *mas,
 static int spi_verify_proto(struct spi_geni_master *mas)
 {
 	struct spi_controller *spi = dev_get_drvdata(mas->dev);
-	int ret;
+	int ret = 0;
 
 	if (!mas->is_le_vm) {
 		ret = geni_se_resources_on(&mas->spi_rsc);
@@ -2094,8 +2094,7 @@ static int spi_verify_proto(struct spi_geni_master *mas)
 	}
 
 	if (!mas->is_le_vm)
-		geni_se_resources_off(&mas->spi_rsc);
-
+		ret = geni_se_resources_off(&mas->spi_rsc);
 	return ret;
 }
 
