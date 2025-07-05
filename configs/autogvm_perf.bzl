@@ -94,7 +94,6 @@ autogvm_perf_config = {
     "CONFIG_QTI_QMI_SENSOR_V2": "n",
     "CONFIG_R8712U": "n",
     "CONFIG_QCOM_IPCC": "m",
-    "CONFIG_QCOM_MEMORY_DUMP_V2": "m",
     "CONFIG_MFD_SPMI_PMIC": "m",
     "CONFIG_QCOM_SMEM": "m",
     "CONFIG_RPMSG_QCOM_GLINK": "m",
