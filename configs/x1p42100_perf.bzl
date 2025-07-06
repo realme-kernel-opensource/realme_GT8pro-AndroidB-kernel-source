@@ -33,6 +33,7 @@ x1p42100_perf_config = {
     "CONFIG_PINCTRL_X1E80100": "m",
     "CONFIG_QCOM_AOSS_QMP": "m",
     "CONFIG_QCOM_COMMAND_DB": "m",
+    "CONFIG_QCOM_DCVS": "m",
     "CONFIG_QCOM_DEBUG_SYMBOL": "m",
     "CONFIG_QCOM_FORCE_WDOG_BITE_ON_PANIC": "y",
     "CONFIG_QCOM_GLINK": "n",
