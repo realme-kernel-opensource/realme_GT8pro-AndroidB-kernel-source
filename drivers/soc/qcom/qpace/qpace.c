@@ -561,7 +561,7 @@ static void _put_qpace(void)
 	lockdep_assert_held(&qpace_ref_lock);
 	active_rings--;
 	if (!active_rings) {
-		dev_pm_qos_update_request(&qos_req, 0);
+		dev_pm_qos_update_request(&qos_req, PM_QOS_RESUME_LATENCY_DEFAULT_VALUE);
 		pm_relax(qpace_dev);
 		for (int i = 0; i < ARRAY_SIZE(rings_inited_since_activation); i++)
 			rings_inited_since_activation[i] = false;
