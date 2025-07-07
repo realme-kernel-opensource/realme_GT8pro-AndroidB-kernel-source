@@ -296,6 +296,7 @@ static ssize_t store_##name(struct kobject *kobj,			\
 		return ret;						\
 	val = max(val, _min);						\
 	val = min(val, _max);						\
+	mon->name = val;						\
 	if ((mon->type & CPUCP_MON) && ops)  {				\
 		msg.hw_type = grp->hw_type;                                             \
 		msg.mon_idx = mon->index;                                                \
@@ -307,7 +308,6 @@ static ssize_t store_##name(struct kobject *kobj,			\
 			return ret;					\
 		}							\
 	}								\
-	mon->name = val;						\
 	return count;							\
 }									\
 
@@ -334,6 +334,7 @@ static ssize_t store_##name(struct kobject *kobj,                      \
 			return ret;                                             \
 		val = max(val, _min);                                           \
 		val = min(val, _max);                                           \
+		grp->name = val;                                                \
 		if (grp->cpucp_enabled && ops) {                                        \
 			msg.hw_type = grp->hw_type;                                             \
 			msg.mon_idx = 0;                                                \
@@ -345,7 +346,6 @@ static ssize_t store_##name(struct kobject *kobj,                      \
 				return ret;                                     \
 			}                                                       \
 		}                                                               \
-		grp->name = val;                                                \
 		return count;                                                   \
 }
 
@@ -365,6 +365,8 @@ static ssize_t store_min_freq(struct kobject *kobj,
 		return ret;
 	freq = max(freq, grp->hw_min_freq);
 	freq = min(freq, mon->max_freq);
+	mon->min_freq = freq;
+
 	if ((mon->type & CPUCP_MON) && ops) {
 		msg.hw_type = grp->hw_type;
 		msg.mon_idx = mon->index;
@@ -376,7 +378,6 @@ static ssize_t store_min_freq(struct kobject *kobj,
 			return ret;
 		}
 	}
-	mon->min_freq = freq;
 
 	return count;
 }
@@ -397,6 +398,7 @@ static ssize_t store_max_freq(struct kobject *kobj,
 		return ret;
 	freq = max(freq, mon->min_freq);
 	freq = min(freq, grp->hw_max_freq);
+	mon->max_freq = freq;
 	if ((mon->type & CPUCP_MON) && ops) {
 		msg.hw_type = grp->hw_type;
 		msg.mon_idx = mon->index;
@@ -408,7 +410,6 @@ static ssize_t store_max_freq(struct kobject *kobj,
 			return ret;
 		}
 	}
-	mon->max_freq = freq;
 
 	return count;
 }
