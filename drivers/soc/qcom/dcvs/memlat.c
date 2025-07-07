@@ -194,6 +194,7 @@ struct memlat_mon {
 	struct kobject			kobj;
 	bool				is_compute;
 	u32				index;
+	struct mutex			sysfs_lock;
 };
 
 struct memlat_group {
@@ -218,6 +219,7 @@ struct memlat_group {
 	u32				num_mons;
 	u32				num_inited_mons;
 	struct mutex			mons_lock;
+	struct mutex			sysfs_lock;
 	struct kobject			kobj;
 };
 
@@ -277,7 +279,12 @@ static ssize_t show_##name(struct kobject *kobj,			\
 			struct attribute *attr, char *buf)		\
 {									\
 	struct memlat_mon *mon = to_memlat_mon(kobj);			\
-	return scnprintf(buf, PAGE_SIZE, "%u\n", mon->name);		\
+	int ret;							\
+									\
+	mutex_lock(&mon->sysfs_lock);					\
+	ret = scnprintf(buf, PAGE_SIZE, "%u\n", mon->name);		\
+	mutex_unlock(&mon->sysfs_lock);					\
+	return ret;							\
 }									\
 
 #define store_attr(name, _min, _max, param_id)					\
@@ -291,11 +298,13 @@ static ssize_t store_##name(struct kobject *kobj,			\
 	struct memlat_mon *mon = to_memlat_mon(kobj);			\
 	struct memlat_group *grp = mon->memlat_grp;			\
 	const struct qcom_scmi_vendor_ops *ops = memlat_data->ops;       \
+									\
 	ret = kstrtouint(buf, 10, &val);				\
 	if (ret < 0)							\
 		return ret;						\
 	val = max(val, _min);						\
 	val = min(val, _max);						\
+	mutex_lock(&mon->sysfs_lock);					\
 	if ((mon->type & CPUCP_MON) && ops)  {				\
 		msg.hw_type = grp->hw_type;                                             \
 		msg.mon_idx = mon->index;                                                \
@@ -304,10 +313,12 @@ static ssize_t store_##name(struct kobject *kobj,			\
 				param_id, sizeof(msg));                              \
 		if (ret < 0) {						\
 			pr_err("failed to set mon tunable :%d\n", ret);	\
+			mutex_unlock(&mon->sysfs_lock);			\
 			return ret;					\
 		}							\
 	}								\
 	mon->name = val;						\
+	mutex_unlock(&mon->sysfs_lock);					\
 	return count;							\
 }									\
 
@@ -316,7 +327,12 @@ static ssize_t show_##name(struct kobject *kobj,			\
 			struct attribute *attr, char *buf)		\
 {									\
 	struct memlat_group *grp = to_memlat_grp(kobj);			\
-	return scnprintf(buf, PAGE_SIZE, "%u\n", grp->name);		\
+	int ret;							\
+									\
+	mutex_lock(&grp->sysfs_lock);					\
+	ret = scnprintf(buf, PAGE_SIZE, "%u\n", grp->name);		\
+	mutex_unlock(&grp->sysfs_lock);					\
+	return ret;							\
 }									\
 
 #define store_grp_attr(name, _min, _max, param_id)				\
@@ -329,11 +345,13 @@ static ssize_t store_##name(struct kobject *kobj,                      \
 		struct scalar_param_msg msg;                                            \
 		struct memlat_group *grp = to_memlat_grp(kobj);                 \
 		const struct qcom_scmi_vendor_ops *ops = memlat_data->ops;       \
+									\
 		ret = kstrtouint(buf, 10, &val);                                \
 		if (ret < 0)                                                    \
 			return ret;                                             \
 		val = max(val, _min);                                           \
 		val = min(val, _max);                                           \
+		mutex_lock(&grp->sysfs_lock);					\
 		if (grp->cpucp_enabled && ops) {                                        \
 			msg.hw_type = grp->hw_type;                                             \
 			msg.mon_idx = 0;                                                \
@@ -342,10 +360,12 @@ static ssize_t store_##name(struct kobject *kobj,                      \
 					param_id, sizeof(msg));	 \
 			if (ret < 0) {                                          \
 				pr_err("failed to set grp tunable :%d\n", ret); \
+				mutex_unlock(&grp->sysfs_lock);			\
 				return ret;                                     \
 			}                                                       \
 		}                                                               \
 		grp->name = val;                                                \
+		mutex_unlock(&grp->sysfs_lock);					\
 		return count;                                                   \
 }
 
@@ -365,6 +385,7 @@ static ssize_t store_min_freq(struct kobject *kobj,
 		return ret;
 	freq = max(freq, grp->hw_min_freq);
 	freq = min(freq, mon->max_freq);
+	mutex_lock(&mon->sysfs_lock);
 	if ((mon->type & CPUCP_MON) && ops) {
 		msg.hw_type = grp->hw_type;
 		msg.mon_idx = mon->index;
@@ -373,11 +394,12 @@ static ssize_t store_min_freq(struct kobject *kobj,
 				&msg, MEMLAT_ALGO_STR, MEMLAT_SET_MIN_FREQ, sizeof(msg));
 		if (ret < 0) {
 			pr_err("failed to set min_freq :%d\n", ret);
+			mutex_unlock(&mon->sysfs_lock);
 			return ret;
 		}
 	}
 	mon->min_freq = freq;
-
+	mutex_unlock(&mon->sysfs_lock);
 	return count;
 }
 
@@ -397,6 +419,7 @@ static ssize_t store_max_freq(struct kobject *kobj,
 		return ret;
 	freq = max(freq, mon->min_freq);
 	freq = min(freq, grp->hw_max_freq);
+	mutex_lock(&mon->sysfs_lock);
 	if ((mon->type & CPUCP_MON) && ops) {
 		msg.hw_type = grp->hw_type;
 		msg.mon_idx = mon->index;
@@ -405,11 +428,12 @@ static ssize_t store_max_freq(struct kobject *kobj,
 				&msg, MEMLAT_ALGO_STR, MEMLAT_SET_MAX_FREQ, sizeof(msg));
 		if (ret < 0) {
 			pr_err("failed to set max_freq :%d\n", ret);
+			mutex_unlock(&mon->sysfs_lock);
 			return ret;
 		}
 	}
 	mon->max_freq = freq;
-
+	mutex_unlock(&mon->sysfs_lock);
 	return count;
 }
 
@@ -451,24 +475,6 @@ static bool is_cpucp_enabled(void)
 	return false;
 }
 
-static int update_cpucp_sample_ms(unsigned int val)
-{
-	const struct qcom_scmi_vendor_ops *ops =  memlat_data->ops;
-	int ret;
-
-	if (!is_cpucp_enabled())
-		return -ENODEV;
-
-	ret = ops->set_param(memlat_data->ph, &val,
-			MEMLAT_ALGO_STR, MEMLAT_SAMPLE_MS, sizeof(val));
-	if (ret < 0) {
-		pr_err("Failed to set cpucp sample ms :%d\n", ret);
-		return ret;
-	}
-
-	return ret;
-}
-
 #define MIN_SAMPLE_MS	4U
 #define MAX_SAMPLE_MS	1000U
 static ssize_t store_sample_ms(struct kobject *kobj,
@@ -477,28 +483,37 @@ static ssize_t store_sample_ms(struct kobject *kobj,
 {
 	int ret;
 	unsigned int val;
+	const struct qcom_scmi_vendor_ops *ops =  memlat_data->ops;
 
 	ret = kstrtouint(buf, 10, &val);
 	if (ret < 0)
 		return ret;
 	val = max(val, MIN_SAMPLE_MS);
 	val = min(val, MAX_SAMPLE_MS);
-
-	memlat_data->sample_ms = val;
-
-	if (memlat_data->ops) {
-		ret = update_cpucp_sample_ms(val);
-		if (ret < 0)
-			pr_err("Warning: CPUCP sample_ms not set: %d\n", ret);
+	mutex_lock(&memlat_lock);
+	if (is_cpucp_enabled()) {
+		ret = ops->set_param(memlat_data->ph, &val,
+				MEMLAT_ALGO_STR, MEMLAT_SAMPLE_MS, sizeof(val));
+		if (ret < 0) {
+			pr_err("Failed to set cpucp sample ms :%d\n", ret);
+			mutex_unlock(&memlat_lock);
+			return ret;
+		}
 	}
-
+	memlat_data->sample_ms = val;
+	mutex_unlock(&memlat_lock);
 	return count;
 }
 
 static ssize_t show_sample_ms(struct kobject *kobj,
 			struct attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%u\n", memlat_data->sample_ms);
+	int ret;
+
+	mutex_lock(&memlat_lock);
+	ret = scnprintf(buf, PAGE_SIZE, "%u\n", memlat_data->sample_ms);
+	mutex_unlock(&memlat_lock);
+	return ret;
 }
 
 static ssize_t store_cpucp_log_level(struct kobject *kobj,
@@ -515,21 +530,28 @@ static ssize_t store_cpucp_log_level(struct kobject *kobj,
 	ret = kstrtouint(buf, 10, &val);
 	if (ret < 0)
 		return ret;
+	mutex_lock(&memlat_lock);
 	ret = ops->set_param(memlat_data->ph, &val,
 			MEMLAT_ALGO_STR, MEMLAT_SET_LOG_LEVEL, sizeof(val));
 	if (ret < 0) {
 		pr_err("failed to configure log_level, ret = %d\n", ret);
+		mutex_unlock(&memlat_lock);
 		return ret;
 	}
-
 	memlat_data->cpucp_log_level = val;
+	mutex_unlock(&memlat_lock);
 	return count;
 }
 
 static ssize_t show_cpucp_log_level(struct kobject *kobj,
 				    struct attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%d\n", memlat_data->cpucp_log_level);
+	int ret;
+
+	mutex_lock(&memlat_lock);
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n", memlat_data->cpucp_log_level);
+	mutex_unlock(&memlat_lock);
+	return ret;
 }
 
 static ssize_t store_flush_cpucp_log(struct kobject *kobj,
@@ -596,6 +618,7 @@ static ssize_t store_subsampling_enabled(struct kobject *kobj,
 
 	val = input ? 1 : 0;
 
+	mutex_lock(&memlat_lock);
 	if (val == memlat_data->subsampling_enabled)
 		return count;
 
@@ -603,18 +626,23 @@ static ssize_t store_subsampling_enabled(struct kobject *kobj,
 				MEMLAT_SET_SUBSAMPLING_ENABLED, sizeof(val));
 	if (ret < 0) {
 		pr_err("failed to set SS ENABLED, val=%d ret=%d\n", val, ret);
+		mutex_unlock(&memlat_lock);
 		return ret;
 	}
-
 	memlat_data->subsampling_enabled = val;
-
+	mutex_unlock(&memlat_lock);
 	return count;
 }
 
 static ssize_t show_subsampling_enabled(struct kobject *kobj,
 				    struct attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%u\n", memlat_data->subsampling_enabled);
+	int ret;
+
+	mutex_lock(&memlat_lock);
+	ret = scnprintf(buf, PAGE_SIZE, "%u\n", memlat_data->subsampling_enabled);
+	mutex_unlock(&memlat_lock);
+	return ret;
 }
 
 static ssize_t show_cur_freq(struct kobject *kobj,
@@ -1892,6 +1920,7 @@ static int memlat_grp_probe(struct platform_device *pdev)
 	memlat_grp->num_mons = num_mons;
 	memlat_grp->num_inited_mons = 0;
 	mutex_init(&memlat_grp->mons_lock);
+	mutex_init(&memlat_grp->sysfs_lock);
 
 	ret = of_property_read_u32(dev->of_node, "qcom,miss-ev", &event_id);
 	if (ret < 0) {
@@ -2070,6 +2099,7 @@ static int memlat_mon_probe(struct platform_device *pdev)
 	}
 
 	mon->index = memlat_grp->num_inited_mons++;
+	mutex_init(&mon->sysfs_lock);
 unlock_out_init:
 	if (memlat_grps_and_mons_inited()) {
 		memlat_data->inited = true;
