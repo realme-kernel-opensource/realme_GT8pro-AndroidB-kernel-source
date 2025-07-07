@@ -73,6 +73,7 @@ enum scmi_memlat_protocol_cmd {
 	MEMLAT_GET_TIMESTAMP,
 	MEMLAT_SET_EFFECTIVE_FREQ_METHOD,
 	MEMLAT_ADAPTIVE_LEVEL_1,
+	MEMLAT_SET_SUBSAMPLING_ENABLED,
 	MEMLAT_MAX_MSG
 };
 
@@ -243,6 +244,7 @@ struct memlat_dev_data {
 	const struct qcom_scmi_vendor_ops *ops;
 	struct scmi_protocol_handle	*ph;
 	u32				cpucp_sample_ms;
+	bool				subsampling_enabled;
 	u32				cpucp_log_level;
 };
 
@@ -295,7 +297,6 @@ static ssize_t store_##name(struct kobject *kobj,			\
 		return ret;						\
 	val = max(val, _min);						\
 	val = min(val, _max);						\
-	mon->name = val;						\
 	if ((mon->type & CPUCP_MON) && ops)  {				\
 		msg.hw_type = grp->hw_type;                                             \
 		msg.mon_idx = mon->index;                                                \
@@ -307,6 +308,7 @@ static ssize_t store_##name(struct kobject *kobj,			\
 			return ret;					\
 		}							\
 	}								\
+	mon->name = val;						\
 	return count;							\
 }									\
 
@@ -333,7 +335,6 @@ static ssize_t store_##name(struct kobject *kobj,                      \
 			return ret;                                             \
 		val = max(val, _min);                                           \
 		val = min(val, _max);                                           \
-		grp->name = val;                                                \
 		if (grp->cpucp_enabled && ops) {                                        \
 			msg.hw_type = grp->hw_type;                                             \
 			msg.mon_idx = 0;                                                \
@@ -345,6 +346,7 @@ static ssize_t store_##name(struct kobject *kobj,                      \
 				return ret;                                     \
 			}                                                       \
 		}                                                               \
+		grp->name = val;                                                \
 		return count;                                                   \
 }
 
@@ -364,8 +366,6 @@ static ssize_t store_min_freq(struct kobject *kobj,
 		return ret;
 	freq = max(freq, grp->hw_min_freq);
 	freq = min(freq, mon->max_freq);
-	mon->min_freq = freq;
-
 	if ((mon->type & CPUCP_MON) && ops) {
 		msg.hw_type = grp->hw_type;
 		msg.mon_idx = mon->index;
@@ -377,6 +377,7 @@ static ssize_t store_min_freq(struct kobject *kobj,
 			return ret;
 		}
 	}
+	mon->min_freq = freq;
 
 	return count;
 }
@@ -397,7 +398,6 @@ static ssize_t store_max_freq(struct kobject *kobj,
 		return ret;
 	freq = max(freq, mon->min_freq);
 	freq = min(freq, grp->hw_max_freq);
-	mon->max_freq = freq;
 	if ((mon->type & CPUCP_MON) && ops) {
 		msg.hw_type = grp->hw_type;
 		msg.mon_idx = mon->index;
@@ -409,6 +409,7 @@ static ssize_t store_max_freq(struct kobject *kobj,
 			return ret;
 		}
 	}
+	mon->max_freq = freq;
 
 	return count;
 }
@@ -433,22 +434,31 @@ static ssize_t show_freq_map(struct kobject *kobj,
 	return cnt;
 }
 
-static int update_cpucp_sample_ms(unsigned int val)
+static bool is_cpucp_enabled(void)
 {
 	const struct qcom_scmi_vendor_ops *ops =  memlat_data->ops;
 	struct memlat_group *grp;
-	int i, ret;
+	int i;
 
 	if (!ops)
-		return -ENODEV;
+		return false;
 
 	for (i = 0; i < MAX_MEMLAT_GRPS; i++) {
 		grp = memlat_data->groups[i];
 		if (grp && grp->cpucp_enabled)
-			break;
+			return true;
 	}
-	if (i == MAX_MEMLAT_GRPS)
-		return 0;
+
+	return false;
+}
+
+static int update_cpucp_sample_ms(unsigned int val)
+{
+	const struct qcom_scmi_vendor_ops *ops =  memlat_data->ops;
+	int ret;
+
+	if (!is_cpucp_enabled())
+		return -ENODEV;
 
 	ret = ops->set_param(memlat_data->ph, &val,
 			MEMLAT_ALGO_STR, MEMLAT_SAMPLE_MS, sizeof(val));
@@ -524,21 +534,12 @@ static ssize_t store_cpucp_log_level(struct kobject *kobj,
 				     struct attribute *attr, const char *buf,
 				     size_t count)
 {
-	int ret, i;
+	int ret;
 	unsigned int val;
 	const struct qcom_scmi_vendor_ops *ops =  memlat_data->ops;
-	struct memlat_group *grp;
 
-	if (!ops)
+	if (!is_cpucp_enabled())
 		return -ENODEV;
-
-	for (i = 0; i < MAX_MEMLAT_GRPS; i++) {
-		grp = memlat_data->groups[i];
-		if (grp && grp->cpucp_enabled)
-			break;
-	}
-	if (i == MAX_MEMLAT_GRPS)
-		return count;
 
 	ret = kstrtouint(buf, 10, &val);
 	if (ret < 0)
@@ -604,6 +605,45 @@ static ssize_t show_hlos_cpucp_offset(struct kobject *kobj,
 	hlos_ts = sched_clock()/1000;
 
 	return scnprintf(buf, PAGE_SIZE, "%llu\n", le64_to_cpu(cpucp_ts) - hlos_ts);
+}
+
+static ssize_t store_subsampling_enabled(struct kobject *kobj,
+				     struct attribute *attr, const char *buf,
+				     size_t count)
+{
+	int ret;
+	bool input;
+	unsigned int val;
+	const struct qcom_scmi_vendor_ops *ops =  memlat_data->ops;
+
+	if (!is_cpucp_enabled())
+		return -ENODEV;
+
+	ret = kstrtobool(buf, &input);
+	if (ret < 0)
+		return ret;
+
+	val = input ? 1 : 0;
+
+	if (val == memlat_data->subsampling_enabled)
+		return count;
+
+	ret = ops->set_param(memlat_data->ph, &val, MEMLAT_ALGO_STR,
+				MEMLAT_SET_SUBSAMPLING_ENABLED, sizeof(val));
+	if (ret < 0) {
+		pr_err("failed to set SS ENABLED, val=%d ret=%d\n", val, ret);
+		return ret;
+	}
+
+	memlat_data->subsampling_enabled = val;
+
+	return count;
+}
+
+static ssize_t show_subsampling_enabled(struct kobject *kobj,
+				    struct attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%u\n", memlat_data->subsampling_enabled);
 }
 
 static ssize_t show_cur_freq(struct kobject *kobj,
@@ -691,6 +731,7 @@ MEMLAT_ATTR_RW(cpucp_sample_ms);
 MEMLAT_ATTR_RW(cpucp_log_level);
 MEMLAT_ATTR_RW(flush_cpucp_log);
 MEMLAT_ATTR_RO(hlos_cpucp_offset);
+MEMLAT_ATTR_RW(subsampling_enabled);
 
 MEMLAT_ATTR_RO(sampling_cur_freq);
 MEMLAT_ATTR_RO(adaptive_cur_freq);
@@ -717,6 +758,7 @@ static struct attribute *memlat_settings_attrs[] = {
 	&cpucp_log_level.attr,
 	&flush_cpucp_log.attr,
 	&hlos_cpucp_offset.attr,
+	&subsampling_enabled.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(memlat_settings);
