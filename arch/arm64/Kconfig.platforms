@@ -27,6 +27,16 @@ config ARCH_CHORA
 	  If you do not wish to build a kernel that runs on this
 	  chipset or if you are unsure, say 'N' here.
 
+config ARCH_MALABAR
+	bool "Enable support for Qualcomm Technologies, Inc. Malabar"
+	depends on ARCH_QCOM
+	help
+	  This enables support for Qualcomm Technologies, Inc. Malabar
+	  chipset.
+
+	  If you do not wish to build a kernel that runs on this
+	  chipset or if you are unsure, say 'N' here.
+
 config ARCH_QTI_VM
        bool "Enable Virtual Machines Support for Qualcomm Technologies, Inc."
        depends on ARCH_QCOM
