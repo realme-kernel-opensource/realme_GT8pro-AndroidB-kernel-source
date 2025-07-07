@@ -368,7 +368,7 @@ static ssize_t store_min_freq(struct kobject *kobj,
 	if ((mon->type & CPUCP_MON) && ops) {
 		msg.hw_type = grp->hw_type;
 		msg.mon_idx = mon->index;
-		msg.val = mon->min_freq;
+		msg.val = freq;
 		ret = ops->set_param(memlat_data->ph,
 				&msg, MEMLAT_ALGO_STR, MEMLAT_SET_MIN_FREQ, sizeof(msg));
 		if (ret < 0) {
@@ -400,7 +400,7 @@ static ssize_t store_max_freq(struct kobject *kobj,
 	if ((mon->type & CPUCP_MON) && ops) {
 		msg.hw_type = grp->hw_type;
 		msg.mon_idx = mon->index;
-		msg.val = mon->max_freq;
+		msg.val = freq;
 		ret = ops->set_param(memlat_data->ph,
 				&msg, MEMLAT_ALGO_STR, MEMLAT_SET_MAX_FREQ, sizeof(msg));
 		if (ret < 0) {
