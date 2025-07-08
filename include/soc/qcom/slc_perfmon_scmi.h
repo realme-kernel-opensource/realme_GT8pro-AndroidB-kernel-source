@@ -63,6 +63,17 @@ struct slc_version {
 } __packed;
 
 /*
+ * struct mem_cntrl_channel	memory controller and channel inforation.
+ *
+ * @channels:			No. of channels.
+ * @num_mc:			No. of memory controller.
+ */
+struct mem_cntrl_channel {
+	uint8_t channels : 6;
+	uint8_t num_mc : 2;
+} __packed;
+
+/*
  * struct slc_info_attr		PERFMON_SLC_COMMON_INFO SCMI interface.
  *
  * @version:			SLC version.
@@ -76,7 +87,7 @@ struct slc_info_attr {
 	struct slc_version version;
 	u8 max_fltr_idx;
 	u8 max_cntr;
-	u8 num_mc;
+	struct mem_cntrl_channel mc_ch;
 	u8 cacheline_size;
 	u16 port_registered;
 } __packed;

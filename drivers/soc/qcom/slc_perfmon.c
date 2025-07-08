@@ -13,6 +13,7 @@
 #include <linux/clk.h>
 #include <linux/mutex.h>
 #include <linux/sysfs.h>
+#include <linux/regmap.h>
 #include <linux/scmi_protocol.h>
 #include <linux/qcom_scmi_vendor.h>
 #include <soc/qcom/slc_perfmon_scmi.h>
@@ -30,6 +31,19 @@
 
 /* Payload sizing */
 #define SCMI_PAYLOAD_SIZE		(5 * sizeof(struct filter_config))
+
+/* TRP offsets */
+#define TRP_CAP_COUNTERS_DUMP_CFG	(0x48100)
+#define TRP_SCID_n_STATUS(n)		(0x000004 + (0x1000 * (n)))
+#define TRP_SCID_STATUS_CURRENT_CAP_SHIFT	(16)
+#define TRP_SCID_STATUS_CURRENT_CAP_MASK	GENMASK(TRP_SCID_STATUS_CURRENT_CAP_SHIFT + 15,\
+						TRP_SCID_STATUS_CURRENT_CAP_SHIFT)
+#define TRP_SCID_STATUS_ACTIVE_SHIFT	(0)
+#define TRP_SCID_STATUS_ACTIVE_MASK	GENMASK(TRP_SCID_STATUS_ACTIVE_SHIFT + 0,\
+						TRP_SCID_STATUS_ACTIVE_SHIFT)
+
+#define VERSION_6			6
+#define FLTR_TYPE_LEN			70
 
 /**
  * struct filter_attribute	filter attribute
@@ -95,6 +109,10 @@ struct filtered_port {
  * @mutex:			To protect private structure
  * @res:			PERFMON resource
  * @perfmon_base:		PERFMON memory base.
+ * @slc_maps:			SLC register address space mappings
+ * @slc_bcast_map:		SLC broadcast register address space map
+ * @scid_status_trigger:		Flag for trigger based scid_status dump
+ * @num_ports:			Number of ports register.
  */
 struct slc_perfmon_private {
 	bool clock_enabled;
@@ -120,6 +138,39 @@ struct slc_perfmon_private {
 	struct mutex mutex;
 	struct resource *res;
 	struct qcom_slc_perfmon_mem __iomem *perfmon_base;
+	struct regmap **slc_maps;
+	struct regmap *slc_bcast_map;
+	bool scid_status_trigger;
+	u8 num_ports;
+};
+
+static char *ports_v5[] = {
+	"FEAC",
+	"FERC",
+	"FEWC",
+	"BEAC",
+	"BERC",
+	"TRP",
+	"DRP",
+};
+
+static char *ports_v6[] = {
+	"FEAC",
+	"FERC",
+	"FEWC",
+	"EWB",
+	"BERC",
+	"TRP",
+	"DRP",
+};
+
+static char *filters[] = {
+	" SCID MULTISCID",
+	" MID",
+	" PROFILING_TAG",
+	" OPCODE",
+	" CACHEALLOC",
+	" MEMTAGOPS"
 };
 
 /* filter index from input */
@@ -195,7 +246,6 @@ static int send_set_scmi(struct slc_perfmon_private *slc_priv,
 static int receive_get_scmi(struct slc_perfmon_private *slc_priv, int attr)
 {
 	int ret = 0;
-	u16 ports = 0, n_port = 0;
 	u8 size = 0;
 
 	switch (attr) {
@@ -207,13 +257,7 @@ static int receive_get_scmi(struct slc_perfmon_private *slc_priv, int attr)
 		break;
 
 	case PERFMON_CONFIG_INFO:
-		ports = slc_priv->info_attr->port_registered;
-		while (ports) {
-			ports &= (ports - 1);
-			n_port++;
-		}
-
-		size = sizeof(struct slc_perfmon_info_attr) + (n_port * sizeof(u8));
+		size = sizeof(struct slc_perfmon_info_attr) + (slc_priv->num_ports * sizeof(u8));
 		ret = slc_priv->ops->get_param(slc_priv->ph, (void *)slc_priv->perf_info_attr,
 			SLC_PERFMON_ALGO_STR, attr, size, size);
 
@@ -856,7 +900,7 @@ static ssize_t perfmon_counter_dump_show(struct device *dev, struct device_attri
 	ssize_t cnt = 0;
 	int retry_cnt = 0, match_seq_cnt = 0;
 	u32 port, event, match_seq, num_cntr;
-	u64 current_time;
+	u64 current_time, dump;
 	struct platform_device *pdev = container_of(dev, struct platform_device, dev);
 	struct slc_perfmon_private *slc_priv = platform_get_drvdata(pdev);
 
@@ -892,18 +936,119 @@ static ssize_t perfmon_counter_dump_show(struct device *dev, struct device_attri
 		port = slc_priv->prt_evnt_map[i].port;
 		event = slc_priv->prt_evnt_map[i].event;
 
-		if (port == CLOCK_PORT)
+		if (port == CLOCK_PORT) {
 			cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "CYCLE COUNT,,");
-		else
+			dump = slc_priv->dump[i] / slc_priv->info_attr->mc_ch.channels;
+		} else {
 			cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt,
 				"PORT %02u,EVENT %03u,", port, event);
+			dump = slc_priv->dump[i];
+		}
 
-		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "0x%016llx\n", slc_priv->dump[i]);
+		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "0x%016llx\n", dump);
 	}
 
 	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "LAST CAPTURED TIME,,");
 	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "0x%016llx\n", current_time);
 	slc_priv->perfmon_base->last_captured_time = current_time;
+	return cnt;
+}
+
+/* SCID capacity status */
+static ssize_t perfmon_scid_status_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	u8 max_scid;
+	u32 val, snap_reg_val;
+	unsigned int i, j, offset;
+	ssize_t cnt = 0;
+	unsigned long total;
+	struct platform_device *pdev = container_of(dev, struct platform_device, dev);
+	struct slc_perfmon_private *slc_priv = platform_get_drvdata(pdev);
+
+	max_scid = slc_priv->perf_info_attr->filter_max_match[SCID];
+	if (slc_priv->scid_status_trigger) {
+		regmap_read(slc_priv->slc_bcast_map, TRP_CAP_COUNTERS_DUMP_CFG, &snap_reg_val);
+		regmap_write(slc_priv->slc_bcast_map, TRP_CAP_COUNTERS_DUMP_CFG, 0);
+		regmap_write(slc_priv->slc_bcast_map, TRP_CAP_COUNTERS_DUMP_CFG, 1);
+		regmap_write(slc_priv->slc_bcast_map, TRP_CAP_COUNTERS_DUMP_CFG, 0);
+	}
+
+	for (i = 0; i < max_scid; i++) {
+		total = 0;
+		offset = TRP_SCID_n_STATUS(i);
+		for (j = 0; j < slc_priv->info_attr->mc_ch.channels; j++) {
+			regmap_read(slc_priv->slc_maps[j], offset, &val);
+			val = (val & TRP_SCID_STATUS_CURRENT_CAP_MASK) >>
+				TRP_SCID_STATUS_CURRENT_CAP_SHIFT;
+			total += val;
+		}
+
+		regmap_read(slc_priv->slc_bcast_map, offset, &val);
+		if (val & TRP_SCID_STATUS_ACTIVE_MASK)
+			cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt,
+					"SCID %02d %10s", i, "ACTIVE");
+		else
+			cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt,
+					"SCID %02d %10s", i, "DE-ACTIVE");
+
+		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, ",0x%08lx\n", total);
+	}
+
+	if (slc_priv->scid_status_trigger)
+		regmap_write(slc_priv->slc_bcast_map, TRP_CAP_COUNTERS_DUMP_CFG, snap_reg_val);
+
+	return cnt;
+}
+
+/* SLC PERFMON Information */
+static ssize_t perfmon_info_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	ssize_t cnt = 0;
+	struct platform_device *pdev = container_of(dev, struct platform_device, dev);
+	struct slc_perfmon_private *slc_priv = platform_get_drvdata(pdev);
+	struct slc_version version = slc_priv->info_attr->version;
+	u8 port_fltr;
+
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "\nSLC Version: %u.%u.%u ",
+			version.major, version.branch, version.minor);
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "No. of Memory Controller: %u ",
+			slc_priv->info_attr->mc_ch.num_mc);
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "No. of Channels: %u.\n",
+			slc_priv->info_attr->mc_ch.channels);
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "Max no. of counters supported: %u ",
+			slc_priv->info_attr->max_cntr);
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "Max no. of filters supported: %u\n\n",
+			slc_priv->info_attr->max_fltr_idx);
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "SLC port filter support:\n");
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "|--------+---------------------");
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "----------------------------|\n");
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "| PORT\t | FILTER SUPPORT      ");
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "                            |\n");
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "|--------+---------------------");
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "----------------------------|\n");
+
+	for (int i = 0; i < slc_priv->num_ports; i++) {
+		char fltr_types[FLTR_TYPE_LEN] = "";
+		const char *port_name = (slc_priv->info_attr->version.major < VERSION_6) ?
+					ports_v5[i] : ports_v6[i];
+
+		port_fltr = slc_priv->perf_info_attr->filter_port_support[i];
+		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "| %s\t |", port_name);
+
+
+		for (int j = 0; j < MAX_FILTER_TYPE; j++) {
+			if (port_fltr & (1 << j))
+				strlcat(fltr_types, filters[j], FLTR_TYPE_LEN);
+		}
+
+		strlcat(fltr_types, "\0", FLTR_TYPE_LEN);
+		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%-48s |\n", fltr_types);
+	}
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "|--------+---------------------");
+	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "----------------------------|\n");
+
 	return cnt;
 }
 
@@ -913,6 +1058,8 @@ static DEVICE_ATTR_WO(perfmon_start);
 static DEVICE_ATTR_WO(perfmon_timer_configure);
 static DEVICE_ATTR_WO(perfmon_remove);
 static DEVICE_ATTR_RO(perfmon_counter_dump);
+static DEVICE_ATTR_RO(perfmon_scid_status);
+static DEVICE_ATTR_RO(perfmon_info);
 
 static struct attribute *slc_perfmon_attrs[] = {
 	&dev_attr_perfmon_filter_configure.attr,
@@ -921,6 +1068,8 @@ static struct attribute *slc_perfmon_attrs[] = {
 	&dev_attr_perfmon_start.attr,
 	&dev_attr_perfmon_remove.attr,
 	&dev_attr_perfmon_counter_dump.attr,
+	&dev_attr_perfmon_scid_status.attr,
+	&dev_attr_perfmon_info.attr,
 	NULL,
 };
 
@@ -928,14 +1077,39 @@ static struct attribute_group slc_perfmon_group = {
 	.attrs	= slc_perfmon_attrs,
 };
 
+/* Initialize regmap */
+static struct regmap *qcom_slc_init_mmio(struct platform_device *pdev, const char *name)
+{
+	void __iomem *base;
+	struct resource *res;
+
+	const struct regmap_config slc_regmap_config = {
+		.reg_bits = 32,
+		.reg_stride = 4,
+		.val_bits = 32,
+		.fast_io = true,
+		.name = name,
+	};
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);
+	if (IS_ERR_OR_NULL(res))
+		return NULL;
+
+	base = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+	if (IS_ERR_OR_NULL(base))
+		return NULL;
+
+	return devm_regmap_init_mmio(&pdev->dev, base, &slc_regmap_config);
+}
+
 static int slc_perfmon_probe(struct platform_device *pdev)
 {
 	struct slc_perfmon_private *slc_priv;
 	struct scmi_device *sdev;
 	struct clk *clock;
 	struct slc_version version;
-	u16 ports = 0, n_port = 0;
-	int ret;
+	u16 ports = 0;
+	int ret, reg_count;
 
 	/* Initializing SCMI Device */
 	sdev = get_qcom_scmi_device();
@@ -1000,18 +1174,6 @@ static int slc_perfmon_probe(struct platform_device *pdev)
 	if (IS_ERR_OR_NULL(slc_priv->info_attr))
 		return -ENOMEM;
 
-	/* Initializing perfmon info attribute */
-	ports = slc_priv->info_attr->port_registered;
-	while (ports) {
-		ports &= (ports - 1);
-		n_port++;
-	}
-
-	slc_priv->perf_info_attr = devm_kzalloc(&pdev->dev,
-			sizeof(struct slc_perfmon_info_attr) + (n_port * sizeof(u8)), GFP_KERNEL);
-	if (IS_ERR_OR_NULL(slc_priv->perf_info_attr))
-		return -ENOMEM;
-
 	/* PERFMON common info should be fetched using SCMI */
 	ret = receive_get_scmi(slc_priv, PERFMON_SLC_COMMON_INFO);
 	if (ret) {
@@ -1020,12 +1182,58 @@ static int slc_perfmon_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	/* Initializing perfmon info attribute */
+	ports = slc_priv->info_attr->port_registered;
+	while (ports) {
+		ports &= (ports - 1);
+		slc_priv->num_ports++;
+	}
+
+	slc_priv->perf_info_attr = devm_kzalloc(&pdev->dev,
+			sizeof(struct slc_perfmon_info_attr) + (slc_priv->num_ports * sizeof(u8)),
+			GFP_KERNEL);
+	if (IS_ERR_OR_NULL(slc_priv->perf_info_attr))
+		return -ENOMEM;
+
 	ret = receive_get_scmi(slc_priv, PERFMON_CONFIG_INFO);
 	if (ret) {
 		dev_err(&pdev->dev, "Receive SCMI: attr %d err: %d, %s\n",
 			PERFMON_CONFIG_INFO, ret, "remove and try again.");
 		return -EINVAL;
 	}
+
+	reg_count = of_property_count_elems_of_size(pdev->dev.of_node, "reg", sizeof(u32));
+	/* regmaps should include shm base, broadcast or base and 4 channel bases */
+	if (reg_count < slc_priv->info_attr->mc_ch.channels + 2) {
+		dev_err(&pdev->dev, "Insufficient no. of regmaps\n");
+		return -EINVAL;
+	}
+
+	/* Initialize all TRP channels regmap */
+	slc_priv->slc_maps = devm_kcalloc(&pdev->dev, slc_priv->info_attr->mc_ch.channels,
+					sizeof(*slc_priv->slc_maps), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(slc_priv->slc_maps)) {
+		dev_err(&pdev->dev, "Error: trp regmap allocation failedn %ld\n",
+			PTR_ERR(slc_priv->slc_maps));
+		return -ENOMEM;
+	}
+
+	for (int i = 0; i < slc_priv->info_attr->mc_ch.channels; i++) {
+		char *base __free(kfree) = kasprintf(GFP_KERNEL, "trp_%d_base", i);
+		slc_priv->slc_maps[i] = qcom_slc_init_mmio(pdev, base);
+	}
+
+	/* Initialize TRP broadcast or regmap */
+	slc_priv->slc_bcast_map = qcom_slc_init_mmio(pdev, "trp_or_bcast_base");
+	if (IS_ERR_OR_NULL(slc_priv->slc_bcast_map)) {
+		dev_err(&pdev->dev, "Error: bcast trp regmap allocation failed, %ld\n",
+			PTR_ERR(slc_priv->slc_bcast_map));
+		return -ENOMEM;
+	}
+
+	/* Set scid_status_trigger flag based on DT entry for supported platforms */
+	slc_priv->scid_status_trigger = of_property_read_bool(pdev->dev.of_node,
+							"slc-scid-status-snapshot");
 
 	/* Initializing payload capacities */
 	slc_priv->filter_payload_capacity = (slc_priv->info_attr->max_fltr_idx *
@@ -1069,7 +1277,7 @@ static int slc_perfmon_probe(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "SLC Version: %u.%u.%u.\n", version.major, version.branch,
 		version.minor);
-	dev_dbg(&pdev->dev, "No. of Memory Controller: %u.\n", slc_priv->info_attr->num_mc);
+	dev_dbg(&pdev->dev, "No. of Memory Controller: %u.\n", slc_priv->info_attr->mc_ch.num_mc);
 	dev_dbg(&pdev->dev, "Max. Counters: %u.\n", slc_priv->info_attr->max_cntr);
 	dev_dbg(&pdev->dev, "Max. Filters: %u.\n", slc_priv->info_attr->max_fltr_idx);
 	dev_info(&pdev->dev, "Module inserted successfully.\n");
