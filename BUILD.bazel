@@ -253,6 +253,15 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+label_flag(
+    name = "msm_kernel_build",
+    build_setting_default = "//common:kernel_aarch64",
+    visibility = [
+        "//private/devices/google/aarch64/qcom:__subpackages__",
+        "//private/google-modules/qcom:__subpackages__",
+    ],
+)
+
 define_canoe()
 
 define_sun()
