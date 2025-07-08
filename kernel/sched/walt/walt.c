@@ -2243,7 +2243,7 @@ static inline u32 scale_util_to_time(u16 util)
 	return util * walt_scale_demand_divisor;
 }
 
-#define PIPELINE_IDLE_MS 100000000
+#define PIPELINE_IDLE_MS 3000000000
 static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 		u32 runtime, u16 runtime_scaled, u32 *demand, u16 *trailblazer_demand)
 {
