@@ -61,6 +61,7 @@ qcom_logbuf_boot_log.ko
 pinctrl-msm.ko
 pinctrl-alor.ko
 pinctrl-canoe.ko
+pinctrl-chora.ko
 qcom_tsens.ko
 qcom-ipcc.ko
 qcom-reboot-reason.ko
