@@ -242,6 +242,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_SI_CORE": "m",
     "CONFIG_QCOM_SI_CORE_MEM_OBJECT": "m",
     "CONFIG_QCOM_SI_CORE_WQ": "y",
+    "CONFIG_QCOM_SLC_PERFMON": "m",
     "CONFIG_QCOM_SMEM": "m",
     "CONFIG_QCOM_SMP2P": "m",
     "CONFIG_QCOM_SMP2P_SLEEPSTATE": "m",
