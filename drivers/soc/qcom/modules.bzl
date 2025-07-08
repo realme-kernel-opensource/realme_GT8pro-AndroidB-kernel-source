@@ -1299,6 +1299,19 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/slc_perfmon",
+        out = "slc_perfmon.ko",
+        config = "CONFIG_QCOM_SLC_PERFMON",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slc_perfmon.c",
+        ],
+        deps = [
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/smem",
         out = "smem.ko",
         config = "CONFIG_QCOM_SMEM",
