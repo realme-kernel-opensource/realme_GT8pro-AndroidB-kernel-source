@@ -6,7 +6,7 @@
  *
  * Author: Will Deacon <will.deacon@arm.com>
  *
- * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt)	"arm-lpae io-pgtable: " fmt
@@ -613,7 +613,7 @@ static int __arm_lpae_map(struct arm_lpae_io_pgtable *data, unsigned long iova,
 			ms->prev_pgtable = prev_ptep;
 			ms->pgsize = size;
 			ms->pte_start = ptep;
-			ms->num_pte = 1;
+			ms->num_pte = pgcount;
 		} else {
 			/*
 			 * We have some map state from previous page mappings,
@@ -629,7 +629,7 @@ static int __arm_lpae_map(struct arm_lpae_io_pgtable *data, unsigned long iova,
 			ms = NULL;
 		}
 
-		ret = arm_lpae_init_pte(data, iova, paddr, prot, lvl, 1, ptep, prev_ptep,
+		ret = arm_lpae_init_pte(data, iova, paddr, prot, lvl, pgcount, ptep, prev_ptep,
 					ms == NULL);
 		if (!ret && mapped)
 			*mapped += size;
@@ -879,12 +879,15 @@ static int arm_lpae_map_by_pgsize(struct io_pgtable_ops *ops,
 		pgsize = arm_lpae_pgsize(cfg->pgsize_bitmap, iova | paddr, size);
 
 		if (ms->pgtable && (iova < ms->iova_end)) {
+			int num_entries;
+
+			num_entries = arm_check_and_set_num_cont(data, pgsize, MAP_STATE_LVL);
 			ms_ptep = ms->pgtable + ARM_LPAE_LVL_IDX(iova, MAP_STATE_LVL, data);
 			ret = arm_lpae_init_pte(data, iova, paddr, prot, MAP_STATE_LVL,
-					  1, ms_ptep, ms->prev_pgtable, false);
+					  num_entries, ms_ptep, ms->prev_pgtable, false);
 			if (ret)
 				return ret;
-			ms->num_pte++;
+			ms->num_pte += num_entries;
 		} else {
 			ret = __arm_lpae_map(data, iova, paddr, pgsize, 1,
 					     prot, lvl, ptep, NULL, ms, gfp,
