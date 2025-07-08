@@ -125,7 +125,7 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
 		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
 		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
-		trailblazer_floor_freq[0] = 1000000;
+		trailblazer_floor_freq[0] = 2500000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
