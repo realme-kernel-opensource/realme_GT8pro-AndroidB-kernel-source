@@ -382,7 +382,7 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 			is_state1())
 		skip = true;
 
-	if (wg_cpu->walt_load.trailblazer_state && wg_cpu->walt_load.trailblazer_boost_state &&
+	if (wg_cpu->walt_load.trailblazer_boost_state &&
 	    freq < trailblazer_floor_freq[cluster->id] &&
 	    sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT)) {
 		freq = trailblazer_floor_freq[cluster->id];

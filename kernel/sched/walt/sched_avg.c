@@ -20,7 +20,6 @@ static DEFINE_PER_CPU(u64, nr_prod_sum);
 static DEFINE_PER_CPU(u64, last_time);
 static DEFINE_PER_CPU(int, last_time_cpu);
 static DEFINE_PER_CPU(u64, nr_big_prod_sum);
-static DEFINE_PER_CPU(u64, nr_trailblazer_prod_sum);
 static DEFINE_PER_CPU(u64, nr);
 static DEFINE_PER_CPU(u64, nr_max);
 
@@ -62,7 +61,6 @@ unsigned int sched_get_cluster_util_pct(struct walt_sched_cluster *cluster)
 	return cluster_util_pct;
 }
 
-bool trailblazer_state;
 u64 trailblazer_boost_state_ns;
 /**
  * sched_get_nr_running_avg
@@ -81,10 +79,9 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 	int cpu;
 	u64 curr_time = sched_clock();
 	u64 period = curr_time - last_get_time;
-	u64 tmp_nr, tmp_misfit, tmp_trailblazer;
+	u64 tmp_nr, tmp_misfit;
 	bool any_hyst_time = false;
 	struct walt_sched_cluster *cluster;
-	bool trailblazer_cpu = false;
 	bool trailblazer_boost_cpu = false;
 
 	if (unlikely(walt_disabled))
@@ -97,9 +94,8 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 	for_each_possible_cpu(cpu) {
 		unsigned long flags;
 		u64 diff;
-		int nr_trailblazer_tasks = walt_trailblazer_tasks(cpu);
 
-		trailblazer_boost_cpu |= (nr_trailblazer_tasks &&
+		trailblazer_boost_cpu |= (walt_trailblazer_tasks(cpu) &&
 				cpumask_test_cpu(cpu, &cpu_array[0][num_sched_clusters-1]) &&
 				per_cpu(ipc_cnt, cpu) >= TRAILBLAZER_BOOST_THRESH_IPC);
 
@@ -121,10 +117,6 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 		tmp_misfit += walt_big_tasks(cpu) * diff;
 		tmp_misfit = div64_u64((tmp_misfit * 100), period);
 
-		tmp_trailblazer = per_cpu(nr_trailblazer_prod_sum, cpu);
-		tmp_trailblazer += nr_trailblazer_tasks * diff;
-		tmp_trailblazer = div64_u64((tmp_trailblazer * 100), period);
-
 		/*
 		 * NR_THRESHOLD_PCT is to make sure that the task ran
 		 * at least 85% in the last window to compensate any
@@ -134,28 +126,23 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 								100);
 		stats[cpu].nr_misfit = (int)div64_u64((tmp_misfit +
 						NR_THRESHOLD_PCT), 100);
-		trailblazer_cpu |= (int)div64_u64((tmp_trailblazer +
-						NR_THRESHOLD_PCT), 100);
 
 		stats[cpu].nr_max = per_cpu(nr_max, cpu);
 		stats[cpu].nr_scaled = tmp_nr;
 
 		trace_sched_get_nr_running_avg(cpu, stats[cpu].nr,
 				stats[cpu].nr_misfit, stats[cpu].nr_max,
-				stats[cpu].nr_scaled, trailblazer_cpu,
-				trailblazer_boost_cpu);
+				stats[cpu].nr_scaled, trailblazer_boost_cpu);
 
 		per_cpu(last_time, cpu) = curr_time;
 		per_cpu(last_time_cpu, cpu) = raw_smp_processor_id();
 		per_cpu(nr_prod_sum, cpu) = 0;
 		per_cpu(nr_big_prod_sum, cpu) = 0;
-		per_cpu(nr_trailblazer_prod_sum, cpu) = 0;
 		per_cpu(nr_max, cpu) = per_cpu(nr, cpu);
 
 		spin_unlock_irqrestore(&per_cpu(nr_lock, cpu), flags);
 	}
 
-	trailblazer_state = trailblazer_cpu;
 	if (trailblazer_boost_cpu)
 		trailblazer_boost_state_ns = curr_time;
 	/* collect cluster load stats */
@@ -341,7 +328,6 @@ void sched_update_nr_prod(int cpu, int enq)
 
 	per_cpu(nr_prod_sum, cpu) += nr_running * diff;
 	per_cpu(nr_big_prod_sum, cpu) += walt_big_tasks(cpu) * diff;
-	per_cpu(nr_trailblazer_prod_sum, cpu) += (u64) walt_trailblazer_tasks(cpu) * diff;
 	spin_unlock_irqrestore(&per_cpu(nr_lock, cpu), flags);
 }
 
