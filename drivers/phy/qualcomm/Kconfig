@@ -57,7 +57,6 @@ config PHY_QCOM_UFS_V4_CANOE
 	  PHY present on QCOM Canoe chipsets.
 	  This is required to enable UFS on Canoe chipset.
 	  To compile this driver as a module, choose M here.
-	  This is good debug.
 
 config PHY_QCOM_UFS_V4_YUPIK
 	tristate "Qualcomm Technologies, Inc. UFS Yupik Phy Driver"
@@ -67,7 +66,15 @@ config PHY_QCOM_UFS_V4_YUPIK
 	  PHY present on QCOM Yupik chipsets.
 	  This is required to enable UFS on Yupik chipset.
 	  To compile this driver as a module, choose M here.
-	  This is good debug.
+
+config PHY_QCOM_UFS_V4_WAIPIO
+	tristate "Qualcomm Technologies, Inc. UFS Waipio Phy Driver"
+	depends on PHY_QCOM_UFS
+	help
+	  This configuration option adds support for the UFS
+	  PHY present on QCOM Waipio chipsets.
+	  This is required to enable UFS on Waipio chipset.
+	  To compile this driver as a module, choose M here.
 
 endif
 

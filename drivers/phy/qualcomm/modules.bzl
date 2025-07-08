@@ -145,3 +145,19 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v7.h",
         ],
     )
+
+    registry.register(
+        name = "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-waipio",
+        out = "phy-qcom-ufs-qmp-v4-waipio.ko",
+        config = "CONFIG_PHY_QCOM_UFS_V4_WAIPIO",
+        srcs = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-ufs-i.h",
+            "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-waipio.c",
+            "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-waipio.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-ufs",
+        ],
+    )
