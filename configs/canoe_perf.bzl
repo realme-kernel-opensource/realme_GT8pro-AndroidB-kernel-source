@@ -3,6 +3,7 @@ canoe_perf_config = {
     "CONFIG_ARCH_ALOR": "y",
     "CONFIG_ARCH_CANOE": "y",
     "CONFIG_ARCH_CHORA": "y",
+    "CONFIG_ARCH_MALABAR": "y",
     "CONFIG_ARM_QCOM_CPUFREQ_NVMEM": "n",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
