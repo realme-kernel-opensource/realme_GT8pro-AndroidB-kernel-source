@@ -48,6 +48,7 @@ x1p42100_perf_config = {
     "CONFIG_QCOM_PDC": "m",
     "CONFIG_QCOM_PD_MAPPER": "n",
     "CONFIG_QCOM_QMI_HELPERS": "m",
+    "CONFIG_QCOM_RAMDUMP": "m",
     "CONFIG_QCOM_RPMH": "m",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_SMEM": "m",
