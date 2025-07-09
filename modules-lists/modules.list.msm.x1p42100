@@ -28,3 +28,7 @@ minidump.ko
 qcom-dcvs.ko
 memory_dump_v2.ko
 dcc_v2.ko
+debug-regulator.ko
+proxy-consumer.ko
+qti-fixed-regulator.ko
+rpmh-regulator.ko
