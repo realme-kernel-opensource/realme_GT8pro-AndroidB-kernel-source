@@ -148,7 +148,7 @@ ddk_uapi_headers(
     name = "msm_uapi_headers",
     srcs = glob(["include/uapi/**/*.h"]),
     out = "msm_uapi_headers.tar.gz",
-    kernel_build = "//common:kernel_aarch64",
+    kernel_build = ":msm_kernel_build",
     visibility = ["//visibility:public"],
 )
 
@@ -257,6 +257,24 @@ filegroup(
 label_flag(
     name = "msm_kernel_build",
     build_setting_default = "//common:kernel_aarch64",
+    visibility = [
+        "//private/devices/google/aarch64/qcom:__subpackages__",
+        "//private/google-modules/qcom:__subpackages__",
+    ],
+)
+
+label_flag(
+    name = "msm_kernel_build_gki_artifacts",
+    build_setting_default = "//common:kernel_aarch64_gki_artifacts",
+    visibility = [
+        "//private/devices/google/aarch64/qcom:__subpackages__",
+        "//private/google-modules/qcom:__subpackages__",
+    ],
+)
+
+label_flag(
+    name = "msm_kernel_build_images",
+    build_setting_default = "//common:kernel_aarch64_images",
     visibility = [
         "//private/devices/google/aarch64/qcom:__subpackages__",
         "//private/google-modules/qcom:__subpackages__",

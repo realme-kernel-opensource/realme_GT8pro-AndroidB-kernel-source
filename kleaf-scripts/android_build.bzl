@@ -360,7 +360,7 @@ def define_typical_android_build(
         configs = {
             "perf": {
                 "config_fragment": perf_config,
-                "base_kernel": "//common:kernel_aarch64",
+                "base_kernel": ":msm_kernel_build",
                 "build_img_opts": perf_build_img_opts,
                 "ddk_config_deps": [common_info],
             } | perf_kwargs,
