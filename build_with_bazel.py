@@ -292,15 +292,20 @@ class BazelBuilder:
             menuconfig_target = [Target(self.workspace, t, v, menuconfig_label, self.out_dir)]
             self.bazel("run", menuconfig_target, bazel_target_opts=["menuconfig"])
 
-    def build_gbl(self):
-        """Run the exact Bazel GBL command from the BazelBuilder's workspace"""
-        cmdline = [
-            self.bazel_bin,
+    def build_run_gbl(self):
+        """Build the GBL target using the existing Bazel interface"""
+        gbl_target = Target(
+            self.workspace,
+            target="bootloader",
+            variant="gbl",
+            bazel_label="//bootable/libbootloader:gbl_efi_dist"
+        )
+        self.bazel(
             "run",
-            "--config=gbl",
-            "//bootable/libbootloader:gbl_efi_dist"
-        ]
-        subprocess.call(cmdline, cwd=self.workspace)
+            [gbl_target],
+            extra_options=["--config=gbl"],
+        )
+
 
     def write_opts(self, out_dir):
         with open(os.path.join(out_dir, "build_opts.txt"), "w") as opt_file:
@@ -342,6 +347,7 @@ class BazelBuilder:
 
         if not self.dry_run:
             self.run_targets(targets_to_build)
+            self.build_run_gbl()
 
 def build_gvm_image(variant):
     VM_BOOTLOADER_SRC = None
@@ -442,7 +448,6 @@ def main():
             builder.run_menuconfig()
         else:
             builder.build()
-            builder.build_gbl()
     except KeyboardInterrupt:
         logging.info("Received keyboard interrupt... exiting")
         del builder
