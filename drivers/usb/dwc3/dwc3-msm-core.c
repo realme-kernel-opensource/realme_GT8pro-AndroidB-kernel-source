@@ -6857,9 +6857,22 @@ static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
 	dwc3_msm_write_reg(mdwc->base, EXTRA_INP_REG, reg);
 	dwc3_msm_switch_utmi(mdwc, 1);
 
+	/*
+	 * Set Dynamic Powerdown flag to indicate SS PHY driver to not reset
+	 * GDSC ON flags during bus suspend.
+	 */
+	dwc3_msm_set_usbphy_flags(mdwc->ss_phy, PHY_SS_DYNAMIC_POWERDOWN);
+
 	usb_phy_notify_disconnect(mdwc->ss_phy,
 					USB_SPEED_SUPER);
 	usb_phy_set_suspend(mdwc->ss_phy, 1);
+
+	/*
+	 * Clear Dynamic Powerdown flag to allow SS PHY driver to reset GDSC ON
+	 * flags.
+	 */
+	dwc3_msm_clear_usbphy_flags(mdwc->ss_phy, PHY_SS_DYNAMIC_POWERDOWN);
+
 	phy_power_off(mdwc->usb3_phy);
 	phy_exit(mdwc->usb3_phy);
 	mdwc->is_ssphy_powerdown = true;
