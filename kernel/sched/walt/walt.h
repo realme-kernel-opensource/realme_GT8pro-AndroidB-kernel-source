@@ -1649,6 +1649,7 @@ extern bool move_storage_load(struct rq *rq);
 #define FRAME90_WINDOW_NSEC			11111111
 #define FRAME60_WINDOW_NSEC			16666667
 
+extern u64 frame_size_ns;
 extern u8 contiguous_yielding_windows;
 #define NUM_PIPELINE_BUSY_THRES 3
 extern unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
