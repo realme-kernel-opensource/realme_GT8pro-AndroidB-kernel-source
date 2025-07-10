@@ -222,7 +222,6 @@
 #define LINK_UP_CHECK_MAX_COUNT (20)
 #define EP_UP_TIMEOUT_US_MIN (1000)
 #define EP_UP_TIMEOUT_US_MAX (1005)
-#define EP_UP_TIMEOUT_US (1000000)
 #define PHY_STABILIZATION_DELAY_US_MIN (995)
 #define PHY_STABILIZATION_DELAY_US_MAX (1005)
 
@@ -6040,7 +6039,6 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 {
 	int ret = 0;
 	uint32_t val;
-	unsigned long ep_up_timeout = 0;
 	struct resource *dbi = dev->res[MSM_PCIE_RES_DM_CORE].resource;
 	unsigned long cfg0_ecam_base, cfg0_ecam_limit;
 	unsigned long cfg1_ecam_base, cfg1_ecam_limit;
@@ -6167,8 +6165,6 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 		dev->rc_idx);
 	msm_pcie_config_perst(dev, false);
 	usleep_range(dev->perst_delay_us_min, dev->perst_delay_us_max);
-
-	ep_up_timeout = jiffies + usecs_to_jiffies(EP_UP_TIMEOUT_US);
 
 	ret = msm_pcie_link_train(dev);
 	if (ret)
