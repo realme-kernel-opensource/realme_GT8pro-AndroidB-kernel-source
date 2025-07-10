@@ -149,6 +149,7 @@ ddk_uapi_headers(
     srcs = glob(["include/uapi/**/*.h"]),
     out = "msm_uapi_headers.tar.gz",
     kernel_build = "//common:kernel_aarch64",
+    visibility = ["//visibility:public"],
 )
 
 ddk_uapi_headers_cc_library(
