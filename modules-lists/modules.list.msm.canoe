@@ -107,3 +107,5 @@ cqhci.ko
 sdhci-msm.ko
 arm_smmu_pmu.ko
 deferred-free-helper.ko
+i2c-msm-geni.ko
+msm_gpi.ko
