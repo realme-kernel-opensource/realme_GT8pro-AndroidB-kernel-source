@@ -326,6 +326,9 @@ class BazelBuilder:
 
         self.user_opts.append("--incompatible_sandbox_hermetic_tmp=false")
         self.user_opts.append("--noenable_workspace")
+        self.user_opts.append("--override_module=rules_kotlin=%workspace%/build/kernel/kleaf/bzlmod/fake_modules/rules_kotlin")
+        self.user_opts.append("--override_module=protobuf=%workspace%/build/kernel/kleaf/bzlmod/fake_modules/protobuf")
+        self.user_opts.append("--override_module=rules_java=%workspace%/build/kernel/kleaf/bzlmod/fake_modules/rules_java")
 
         if self.dry_run:
             self.user_opts.append("--nobuild")
