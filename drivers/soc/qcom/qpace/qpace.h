@@ -156,6 +156,7 @@ void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep);
  * @er_num: Event ring for which we want process completed event descriptors
  * @success_handler: Callback for processing a successful event
  * @fail_handler: Callback for processing a failed event
+ * @consume: If true, consume the event descriptors, otherwise just iterate over them.
  *
  * Process the completed events in the event ring corresponding to @er_num
  *
@@ -163,7 +164,7 @@ void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep);
  */
 int qpace_consume_er(int er_num,
 		     process_ed_fn success_handler,
-		     process_ed_fn fail_handler);
+		     process_ed_fn fail_handler, bool consume);
 
 /*
  *  is_qpace_enabled() - return true if qpace is enabled
@@ -230,7 +231,7 @@ static inline void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep)
 
 static inline int qpace_consume_er(int er_num,
 				   process_ed_fn success_handler,
-				   process_ed_fn fail_handler)
+				   process_ed_fn fail_handler, bool consume)
 {
 	return 0;
 }

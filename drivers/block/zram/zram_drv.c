@@ -1984,7 +1984,7 @@ static int zram_qpace_comp(void *unused)
 		 */
 		n_entries_consumed = qpace_consume_er(COMPRESS_RING,
 							zram_compress_success_handler,
-							zram_compress_success_handler);
+							zram_compress_success_handler, true);
 
 		/*
 		* Protects comp_control.queue_size and the compression queue itself, if
