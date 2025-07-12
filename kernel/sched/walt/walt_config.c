@@ -136,6 +136,7 @@ void walt_config(void)
 		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
 		soc_sched_lib_name_capacity = 2;
 		soc_feat_unset(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
+		pipeline_swap_util_th = 50;
 
 		sysctl_cluster01_load_sync[0]	= 350;
 		sysctl_cluster01_load_sync[1]	= 100;

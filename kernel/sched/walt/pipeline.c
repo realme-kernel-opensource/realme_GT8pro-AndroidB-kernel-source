@@ -439,7 +439,8 @@ int find_heaviest_topapp(u64 window_start)
 					if (i == 0 && top_wts && top_wts_bias) {
 						if (to_be_placed_wts == top_wts) {
 							if (prime_demand_heavy >
-								prime_demand_to_be)
+								(prime_demand_to_be +
+								pipeline_swap_util_th))
 								top_wts_miss = true;
 							prime_demand_heavy = 0;
 						} else if (heavy_wts[i] == top_wts) {
