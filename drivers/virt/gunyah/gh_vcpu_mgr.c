@@ -360,6 +360,20 @@ static void android_rvh_gh_before_vcpu_run(void *unused, u16 vmid, u32 vcpu_id)
 	}
 }
 
+/*
+ * Freeze the VM watchdog when
+ * 1. Any vCPU thread is re-scheduled while runnable.
+ * 2. Any vCPU thread is blocked on VMMIO.
+ * case (2) may involve returning to user space and has unbound latency, so not
+ * freezing watchdog can result in false alram.
+ */
+static inline bool gh_vcpu_should_freeze_wdog(const struct gunyah_hypercall_vcpu_run_resp *resp)
+{
+	return (resp->state == GUNYAH_VCPU_STATE_READY && need_resched()) ||
+		resp->state == GUNYAH_VCPU_ADDRSPACE_VMMIO_READ ||
+		resp->state == GUNYAH_VCPU_ADDRSPACE_VMMIO_WRITE;
+}
+
 static void android_rvh_gh_after_vcpu_run(void *unused, u16 vmid, u32 vcpu_id, int hcall_ret,
 			const struct gunyah_hypercall_vcpu_run_resp *resp)
 {
@@ -377,12 +391,10 @@ static void android_rvh_gh_after_vcpu_run(void *unused, u16 vmid, u32 vcpu_id, i
 	if (!vcpu)
 		return;
 
-	if (hcall_ret == GH_ERROR_OK && resp->state == GUNYAH_VCPU_STATE_READY) {
-		if (need_resched()) {
-			gh_hcall_wdog_manage(vm->wdog_cap_id,
-					WATCHDOG_MANAGE_OP_FREEZE);
-			vcpu->wdog_frozen = true;
-		}
+	if (hcall_ret == GH_ERROR_OK && gh_vcpu_should_freeze_wdog(resp)) {
+		gh_hcall_wdog_manage(vm->wdog_cap_id,
+				     WATCHDOG_MANAGE_OP_FREEZE);
+		vcpu->wdog_frozen = true;
 	}
 	preempt_enable();
 
