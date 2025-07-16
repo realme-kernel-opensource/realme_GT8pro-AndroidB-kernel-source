@@ -187,7 +187,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_IRQ_STAT": "y",
     "CONFIG_QCOM_LAZY_MAPPING": "m",
     "CONFIG_QCOM_LLCC": "m",
-    "CONFIG_QCOM_LLCC_PERFMON": "m",
+    "CONFIG_QCOM_LLCC_PERFMON": "n",
     "CONFIG_QCOM_LLCC_HEURISTICS": "m",
     "CONFIG_QCOM_LLCC_PMU": "m",
     "CONFIG_QCOM_LOGBUF_BOOTLOG": "m",
