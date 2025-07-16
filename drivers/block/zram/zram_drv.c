@@ -2012,7 +2012,7 @@ static int qpace_zram_submit_bio(struct zram *zram, struct bio *bio,
 	struct bvec_iter iter = bio->bi_iter;
 	struct qpace_request_data zdata;
 	struct qpace_request_meta *zmeta;
-	int ret;
+	int ret = 0;
 
 	zmeta = zdata.zmeta = kmalloc(sizeof(struct qpace_request_meta), GFP_KERNEL);
 	if (!zmeta) {
@@ -2042,7 +2042,8 @@ static int qpace_zram_submit_bio(struct zram *zram, struct bio *bio,
 		if (bv.bv_len != PAGE_SIZE) {
 			pr_err("%s: Offset leads to non-page-sized request\n", __func__);
 			zram_qpace_req_err_handler(zmeta);
-			return -EINVAL;
+			ret = -EINVAL;
+			break;
 		}
 
 		zdata.page = bv.bv_page;
@@ -2051,15 +2052,21 @@ static int qpace_zram_submit_bio(struct zram *zram, struct bio *bio,
 		ret = qpace_control->request_submit(&zdata);
 		if (ret) {
 			zram_qpace_req_err_handler(zmeta);
-			return ret;
+			break;
 		}
 
 		bio_advance_iter_single(bio, &iter, bv.bv_len);
 	} while (iter.bi_size);
 
+	/*
+	 * When we reach here, the num_pages reference counter will be equal to the
+	 * number of pages that were successfully submitted to the QPACE plus one,
+	 * with the additional reference coming from the prior kref_init() call.
+	 * Drop this reference.
+	 */
 	kref_put(&zmeta->num_pages, put_qpace_request_meta);
 
-	return 0;
+	return ret;
 }
 
 /*
