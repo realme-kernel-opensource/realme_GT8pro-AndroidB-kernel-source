@@ -59,6 +59,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/spi/spi-geni-qcom",
+        out = "spi-geni-qcom.ko",
+        config = "CONFIG_SPI_QCOM_GENI",
+        srcs = [
+            # do not sort
+            "drivers/spi/spi-geni-qcom.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/dma/qcom/gpi",
+        ],
+    )
+
+    registry.register(
         name = "drivers/spi/spi-geni-qcom-msm",
         out = "spi-geni-qcom-msm.ko",
         config = "CONFIG_SPI_QCOM_GENI_MSM",
