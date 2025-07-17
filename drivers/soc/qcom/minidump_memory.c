@@ -921,7 +921,7 @@ static void md_dump_slabowner(char *m, size_t dump_size)
 		if (buf.offset == buf.size - 1)
 			return;
 
-		if (IS_ENABLED(CONFIG_SLUB_DEBUG_ON) || (s->flags & SLAB_STORE_USER)) {
+		if (IS_ENABLED(CONFIG_SLUB_DEBUG) && (s->flags & SLAB_STORE_USER)) {
 			ret = get_each_kmemcache_object(s, dump_tracking, &buf);
 			if (ret == -ERANGE)
 				return;
