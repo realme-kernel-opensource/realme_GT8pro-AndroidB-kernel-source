@@ -125,7 +125,6 @@ struct walt_cpu_load {
 	bool		rtgb_active;
 	bool		ed_active;
 	bool		trailblazer_state;
-	bool		trailblazer_boost_state;
 };
 
 #define DECLARE_BITMAP_ARRAY(name, nr, bits) \
@@ -436,9 +435,6 @@ extern unsigned long __read_mostly soc_flags;
 
 #define SCHED_IDLE_ENOUGH_DEFAULT 30
 #define SCHED_CLUSTER_UTIL_THRES_PCT_DEFAULT 40
-
-#define TRAILBLAZER_BOOST_THRESH_IPC 300
-#define TRAILBLAZER_BOOST_THRESH_NS 100000000
 
 extern unsigned int sysctl_sched_idle_enough;
 extern unsigned int sysctl_sched_cluster_util_thres_pct;
@@ -1701,5 +1697,4 @@ extern unsigned long walt_map_util_freq(unsigned long util,
 		struct waltgov_policy *wg_policy, unsigned long cap, int cpu);
 extern void early_walt_config(void);
 extern unsigned int sysctl_topapp_weight_pct;
-extern u64 trailblazer_boost_state_ns;
 #endif /* _WALT_H */

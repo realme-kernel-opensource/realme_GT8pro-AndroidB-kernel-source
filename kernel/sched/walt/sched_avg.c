@@ -63,7 +63,6 @@ unsigned int sched_get_cluster_util_pct(struct walt_sched_cluster *cluster)
 }
 
 bool trailblazer_state;
-u64 trailblazer_boost_state_ns;
 /**
  * sched_get_nr_running_avg
  * @return: Average nr_running, iowait and nr_big_tasks value since last poll.
@@ -85,7 +84,6 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 	bool any_hyst_time = false;
 	struct walt_sched_cluster *cluster;
 	bool trailblazer_cpu = false;
-	bool trailblazer_boost_cpu = false;
 
 	if (unlikely(walt_disabled))
 		return NULL;
@@ -97,11 +95,6 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 	for_each_possible_cpu(cpu) {
 		unsigned long flags;
 		u64 diff;
-		int nr_trailblazer_tasks = walt_trailblazer_tasks(cpu);
-
-		trailblazer_boost_cpu |= (nr_trailblazer_tasks &&
-				cpumask_test_cpu(cpu, &cpu_array[0][num_sched_clusters-1]) &&
-				per_cpu(ipc_cnt, cpu) >= TRAILBLAZER_BOOST_THRESH_IPC);
 
 		spin_lock_irqsave(&per_cpu(nr_lock, cpu), flags);
 		curr_time = sched_clock();
@@ -122,7 +115,7 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 		tmp_misfit = div64_u64((tmp_misfit * 100), period);
 
 		tmp_trailblazer = per_cpu(nr_trailblazer_prod_sum, cpu);
-		tmp_trailblazer += nr_trailblazer_tasks * diff;
+		tmp_trailblazer += walt_trailblazer_tasks(cpu) * diff;
 		tmp_trailblazer = div64_u64((tmp_trailblazer * 100), period);
 
 		/*
@@ -142,8 +135,7 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 
 		trace_sched_get_nr_running_avg(cpu, stats[cpu].nr,
 				stats[cpu].nr_misfit, stats[cpu].nr_max,
-				stats[cpu].nr_scaled, trailblazer_cpu,
-				trailblazer_boost_cpu);
+				stats[cpu].nr_scaled, trailblazer_cpu);
 
 		per_cpu(last_time, cpu) = curr_time;
 		per_cpu(last_time_cpu, cpu) = raw_smp_processor_id();
@@ -156,8 +148,6 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 	}
 
 	trailblazer_state = trailblazer_cpu;
-	if (trailblazer_boost_cpu)
-		trailblazer_boost_state_ns = curr_time;
 	/* collect cluster load stats */
 	for_each_sched_cluster(cluster) {
 		unsigned int num_cpus = cpumask_weight(&cluster->cpus);
