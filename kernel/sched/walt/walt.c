@@ -641,6 +641,7 @@ should_apply_suh_freq_boost(struct walt_sched_cluster *cluster)
 	return is_cluster_hosting_top_app(cluster);
 }
 
+#define HISPEED_BASED_ON_TOPAPP_ONLY 0
 static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
 		bool trace, u64 *non_boosted_load)
 {
@@ -698,7 +699,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
 	}
 
 	*non_boosted_load = load;
-	if (sysctl_walt_feat(WALT_FEAT_TOPAPP_BASED_HISPEED))
+	if (HISPEED_BASED_ON_TOPAPP_ONLY)
 		*non_boosted_load = wrq->grp_time.prev_runnable_sum;
 
 	if (wrq->ed_task) {
