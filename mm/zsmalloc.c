@@ -1,10 +1,8 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /*
  * zsmalloc memory allocator
  *
  * Copyright (C) 2011  Nitin Gupta
  * Copyright (C) 2012, 2013 Minchan Kim
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * This code is released using a dual license strategy: BSD/GPL
  * You can choose the license that better fits your requirements.
@@ -981,13 +979,7 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 		struct page *page;
 
 		page = alloc_page(gfp);
-#if IS_ENABLED(CONFIG_ZSMALLOC_NO_ZONE_NORMAL)
-		if (!page || page_zonenum(page) == ZONE_NORMAL) {
-			if (page)
-				__free_page(page);
-#else
 		if (!page) {
-#endif
 			while (--i >= 0) {
 				dec_zone_page_state(pages[i], NR_ZSPAGES);
 				__ClearPageZsmalloc(pages[i]);
