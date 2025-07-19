@@ -675,7 +675,7 @@ static inline u64 freq_policy_load(struct rq *rq, unsigned int *reason,
 		*reason = CPUFREQ_REASON_FREQ_AGR_BIT;
 	} else {
 		load = wrq->prev_runnable_sum +
-			mult_frac(wrq->grp_time.prev_runnable_sum, sysctl_topapp_weight_pct, 100);
+					wrq->grp_time.prev_runnable_sum;
 	}
 
 	if (cpu_ksoftirqd && READ_ONCE(cpu_ksoftirqd->__state) == TASK_RUNNING) {

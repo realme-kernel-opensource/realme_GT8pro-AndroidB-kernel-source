@@ -1696,5 +1696,4 @@ struct waltgov_policy;
 extern unsigned long walt_map_util_freq(unsigned long util,
 		struct waltgov_policy *wg_policy, unsigned long cap, int cpu);
 extern void early_walt_config(void);
-extern unsigned int sysctl_topapp_weight_pct;
 #endif /* _WALT_H */
