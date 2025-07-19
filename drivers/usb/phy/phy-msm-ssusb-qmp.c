@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -18,6 +18,8 @@
 #include <linux/clk.h>
 #include <linux/extcon.h>
 #include <linux/reset.h>
+#include <linux/pm_domain.h>
+#include <linux/pm_runtime.h>
 
 enum core_ldo_levels {
 	CORE_LEVEL_NONE = 0,
@@ -512,8 +514,18 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 
 	dev_dbg(uphy->dev, "Initializing QMP phy\n");
 
+	/* Turn PHY GDSC ON via GenPD framework */
+	ret = pm_runtime_get_sync(phy->phy.dev);
+	if (ret < 0) {
+		dev_err(phy->phy.dev,
+			"pm_runtime_get_sync failed with %d\n", ret);
+		pm_runtime_put_sync(phy->phy.dev);
+		return ret;
+	}
+
 	if (uphy->flags & PHY_DP_MODE) {
 		dev_info(uphy->dev, "QMP PHY currently in DP mode\n");
+		pm_runtime_put_sync(phy->phy.dev);
 		return -EBUSY;
 	}
 
@@ -522,6 +534,7 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		dev_err(phy->phy.dev,
 		"msm_ssusb_qmp_ldo_enable(1) failed, ret=%d\n",
 		ret);
+		pm_runtime_put_sync(phy->phy.dev);
 		return ret;
 	}
 
@@ -573,6 +586,8 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		goto fail;
 	}
 
+	pm_runtime_put_sync(phy->phy.dev);
+
 	return ret;
 fail:
 	phy->in_suspend = true;
@@ -580,6 +595,7 @@ fail:
 		phy->base + phy->phy_reg[USB3_PHY_POWER_DOWN_CONTROL]);
 	msm_ssphy_qmp_enable_clks(phy, false);
 	msm_ssusb_qmp_ldo_enable(phy, 0);
+	pm_runtime_put_sync(phy->phy.dev);
 
 	return ret;
 }
@@ -729,6 +745,7 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 {
 	struct msm_ssphy_qmp *phy = container_of(uphy, struct msm_ssphy_qmp,
 					phy);
+	int ret = 0;
 
 	dev_dbg(uphy->dev, "QMP PHY set_suspend for %s called with cable %s\n",
 			(suspend ? "suspend" : "resume"),
@@ -759,6 +776,13 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 		msm_ssphy_qmp_enable_clks(phy, false);
 		phy->in_suspend = true;
 		msm_ssphy_power_enable(phy, 0);
+		/* Turn PHY GDSC OFF via GenPD framework */
+		ret = pm_runtime_put_sync(phy->phy.dev);
+		if (ret < 0) {
+			dev_err(phy->phy.dev,
+				"pm_runtime_put_sync failed with %d\n", ret);
+			return ret;
+		}
 		dev_dbg(uphy->dev, "QMP PHY is suspend\n");
 	} else {
 		if (uphy->flags & PHY_DP_MODE) {
@@ -766,6 +790,13 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 			return -EBUSY;
 		}
 
+		/* Turn PHY GDSC ON via GenPD framework */
+		ret = pm_runtime_get_sync(phy->phy.dev);
+		if (ret < 0) {
+			dev_err(phy->phy.dev,
+				"pm_runtime_get_sync failed with %d\n", ret);
+			return ret;
+		}
 		msm_ssphy_power_enable(phy, 1);
 		msm_ssphy_qmp_enable_clks(phy, true);
 		if (!phy->cable_connected) {
@@ -804,6 +835,8 @@ static int msm_ssphy_qmp_notify_disconnect(struct usb_phy *uphy,
 	struct msm_ssphy_qmp *phy = container_of(uphy, struct msm_ssphy_qmp,
 					phy);
 
+	/* Turn PHY GDSC ON before writing to PHY registers */
+	pm_runtime_resume(phy->phy.dev);
 	atomic_notifier_call_chain(&uphy->notifier, 0, uphy);
 	if (phy->phy.flags & PHY_HOST_MODE) {
 		writel_relaxed(0x00,
@@ -814,6 +847,8 @@ static int msm_ssphy_qmp_notify_disconnect(struct usb_phy *uphy,
 	dev_dbg(uphy->dev, "QMP phy disconnect notification\n");
 	dev_dbg(uphy->dev, " cable_connected=%d\n", phy->cable_connected);
 	phy->cable_connected = false;
+	/* Turn PHY GDSC OFF via GenPD framework */
+	pm_runtime_suspend(phy->phy.dev);
 
 	return 0;
 }
@@ -887,26 +922,48 @@ err:
 
 static void msm_ssphy_qmp_enable_clks(struct msm_ssphy_qmp *phy, bool on)
 {
+	int ret = 0;
+
 	dev_dbg(phy->phy.dev, "%s(): clk_enabled:%d on:%d\n", __func__,
 					phy->clk_enabled, on);
 
 	if (!phy->clk_enabled && on) {
-		if (phy->ref_clk_src)
-			clk_prepare_enable(phy->ref_clk_src);
+		if (phy->ref_clk_src) {
+			ret = clk_prepare_enable(phy->ref_clk_src);
+			if (ret < 0)
+				dev_err(phy->phy.dev, "%s: ref_clk_src enable failed\n", __func__);
+		}
 
-		if (phy->ref_clk)
-			clk_prepare_enable(phy->ref_clk);
+		if (phy->ref_clk) {
+			ret = clk_prepare_enable(phy->ref_clk);
+			if (ret < 0)
+				dev_err(phy->phy.dev, "%s: ref_clk enable failed\n", __func__);
+		}
 
-		if (phy->com_aux_clk)
-			clk_prepare_enable(phy->com_aux_clk);
+		if (phy->com_aux_clk) {
+			ret = clk_prepare_enable(phy->com_aux_clk);
+			if (ret < 0)
+				dev_err(phy->phy.dev, "%s: com_aux enable failed\n", __func__);
+		}
 
-		clk_prepare_enable(phy->aux_clk);
-		if (phy->cfg_ahb_clk)
-			clk_prepare_enable(phy->cfg_ahb_clk);
+		ret = clk_prepare_enable(phy->aux_clk);
+		if (ret < 0)
+			dev_err(phy->phy.dev, "%s: aux_clk enable failed\n", __func__);
+
+		if (phy->cfg_ahb_clk) {
+			ret = clk_prepare_enable(phy->cfg_ahb_clk);
+			if (ret < 0)
+				dev_err(phy->phy.dev, "%s: cfg_ahb_clk enable failed\n", __func__);
+		}
 
 		//select PHY pipe clock
-		clk_set_parent(phy->pipe_clk_mux, phy->pipe_clk_ext_src);
-		clk_prepare_enable(phy->pipe_clk);
+		ret = clk_set_parent(phy->pipe_clk_mux, phy->pipe_clk_ext_src);
+		if (ret < 0)
+			dev_err(phy->phy.dev, "%s: pipe_clk set_parent enable failed\n", __func__);
+
+		ret = clk_prepare_enable(phy->pipe_clk);
+		if (ret < 0)
+			dev_err(phy->phy.dev, "%s: pipe_clk enable failed\n", __func__);
 		phy->clk_enabled = true;
 	}
 
@@ -914,7 +971,9 @@ static void msm_ssphy_qmp_enable_clks(struct msm_ssphy_qmp *phy, bool on)
 		clk_disable_unprepare(phy->pipe_clk);
 
 		//select XO instead of PHY pipe clock
-		clk_set_parent(phy->pipe_clk_mux, phy->ref_clk_src);
+		ret = clk_set_parent(phy->pipe_clk_mux, phy->ref_clk_src);
+		if (ret < 0)
+			dev_err(phy->phy.dev, "%s: pipe_clk set_parent disable failed\n", __func__);
 
 		if (phy->cfg_ahb_clk)
 			clk_disable_unprepare(phy->cfg_ahb_clk);
@@ -956,6 +1015,8 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 	ret = msm_ssphy_qmp_get_clks(phy, dev);
 	if (ret)
 		goto err;
+
+	pm_runtime_enable(dev);
 
 	phy->phy_reset = devm_reset_control_get(dev, "phy_reset");
 	if (IS_ERR(phy->phy_reset)) {
@@ -1163,11 +1224,52 @@ static void msm_ssphy_qmp_remove(struct platform_device *pdev)
 	msm_ssusb_qmp_ldo_enable(phy, 0);
 }
 
+static int msm_ssphy_qmp_runtime_suspend(struct device *dev)
+{
+	struct msm_ssphy_qmp *phy = dev_get_drvdata(dev);
+	struct generic_pm_domain *genpd;
+
+	dev_dbg(dev, "msm-ssphy-qmp runtime suspend\n");
+	if (dev->pm_domain) {
+		genpd = pd_to_genpd(dev->pm_domain);
+		/* Keep PHY GDSC ON during bus suspend */
+		if (phy->phy.flags & PHY_HOST_MODE) {
+			genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
+			genpd->flags |= GENPD_FLAG_ALWAYS_ON;
+			dev_dbg(phy->phy.dev, "GDSC flags ON\n");
+		}
+	}
+
+	return 0;
+}
+
+static int msm_ssphy_qmp_runtime_resume(struct device *dev)
+{
+	struct msm_ssphy_qmp *phy = dev_get_drvdata(dev);
+	struct generic_pm_domain *genpd;
+
+	dev_dbg(dev, "msm-ssphy-qmp runtime resume\n");
+	if (dev->pm_domain) {
+		genpd = pd_to_genpd(dev->pm_domain);
+		/* Reset the PHY GDSC flags upon resume for cable plug out */
+		genpd->flags &= ~GENPD_FLAG_ACTIVE_WAKEUP;
+		genpd->flags &= ~GENPD_FLAG_ALWAYS_ON;
+		dev_dbg(phy->phy.dev, "GDSC flags OFF\n");
+	}
+
+	return 0;
+}
+
+static const struct dev_pm_ops msm_ssphy_qmp_dev_pm_ops = {
+	SET_RUNTIME_PM_OPS(msm_ssphy_qmp_runtime_suspend, msm_ssphy_qmp_runtime_resume, NULL)
+};
+
 static struct platform_driver msm_ssphy_qmp_driver = {
 	.probe		= msm_ssphy_qmp_probe,
 	.remove		= msm_ssphy_qmp_remove,
 	.driver = {
 		.name	= "msm-usb-ssphy-qmp",
+		.pm	= &msm_ssphy_qmp_dev_pm_ops,
 		.of_match_table = of_match_ptr(msm_usb_id_table),
 	},
 };
