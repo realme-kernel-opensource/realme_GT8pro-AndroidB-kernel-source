@@ -117,7 +117,7 @@ static const struct qmi_msg_handler handlers[] = {
 		.type = QMI_REQUEST,
 		.msg_id = QMI_LPM_MONITOR_REPORT_STATS_REQ_V01,
 		.ei = lpm_monitor_report_to_apps_req_msg_v01_ei,
-		.decoded_size = sizeof(struct lpm_monitor_report_to_apps_req_msg_v01),
+		.decoded_size = LPM_MONITOR_REPORT_TO_APPS_REQ_MSG_V01_MAX_MSG_LEN,
 		.fn = qlpmm_subsystem_req_cb,
 	},
 	{ },
