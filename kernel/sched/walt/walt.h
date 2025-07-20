@@ -90,9 +90,10 @@ enum freq_caps {
 #define	SOC_ENABLE_SW_CYCLE_COUNTER_BIT			BIT(6)
 #define SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT	BIT(7)
 #define SOC_ENABLE_FT_BOOST_TO_ALL			BIT(8)
-#define SOC_ENABLE_PIPELINE_SWAPPING_BIT		BIT(9)
-#define SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT		BIT(10)
-#define SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING	BIT(11)
+#define SOC_ENABLE_EXPERIMENT3						BIT(9)
+#define SOC_ENABLE_PIPELINE_SWAPPING_BIT		BIT(10)
+#define SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT		BIT(11)
+#define SOC_ENABLE_SINGLE_THREAD_PIPELINE_PINNING	BIT(12)
 
 extern int soc_sched_lib_name_capacity;
 
@@ -100,7 +101,6 @@ extern int soc_sched_lib_name_capacity;
 #define WALT_FEAT_TRAILBLAZER_BIT	BIT_ULL(0)
 #define WALT_FEAT_UCLAMP_FREQ_BIT	BIT_ULL(1)
 #define WALT_FEAT_SYNC_FREQ_CAP_BIT	BIT_ULL(2)
-#define WALT_FEAT_TOPAPP_BASED_HISPEED	BIT_ULL(3)
 
 extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 
@@ -125,7 +125,6 @@ struct walt_cpu_load {
 	bool		rtgb_active;
 	bool		ed_active;
 	bool		trailblazer_state;
-	bool		trailblazer_boost_state;
 };
 
 #define DECLARE_BITMAP_ARRAY(name, nr, bits) \
@@ -436,9 +435,6 @@ extern unsigned long __read_mostly soc_flags;
 
 #define SCHED_IDLE_ENOUGH_DEFAULT 30
 #define SCHED_CLUSTER_UTIL_THRES_PCT_DEFAULT 40
-
-#define TRAILBLAZER_BOOST_THRESH_IPC 300
-#define TRAILBLAZER_BOOST_THRESH_NS 100000000
 
 extern unsigned int sysctl_sched_idle_enough;
 extern unsigned int sysctl_sched_cluster_util_thres_pct;
@@ -1700,6 +1696,4 @@ struct waltgov_policy;
 extern unsigned long walt_map_util_freq(unsigned long util,
 		struct waltgov_policy *wg_policy, unsigned long cap, int cpu);
 extern void early_walt_config(void);
-extern unsigned int sysctl_topapp_weight_pct;
-extern u64 trailblazer_boost_state_ns;
 #endif /* _WALT_H */

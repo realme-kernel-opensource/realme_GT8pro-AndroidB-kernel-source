@@ -1,10 +1,8 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /*
  * zsmalloc memory allocator
  *
  * Copyright (C) 2011  Nitin Gupta
  * Copyright (C) 2012, 2013 Minchan Kim
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * This code is released using a dual license strategy: BSD/GPL
  * You can choose the license that better fits your requirements.
@@ -970,10 +968,6 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 	int i;
 	struct page *pages[ZS_MAX_PAGES_PER_ZSPAGE];
 	struct zspage *zspage = cache_alloc_zspage(pool, gfp);
-#if IS_ENABLED(CONFIG_ZSMALLOC_NO_ZONE_NORMAL)
-	static bool zone_normal_early_alloc;
-	static bool no_zone_normal;
-#endif
 
 	if (!zspage)
 		return NULL;
@@ -985,13 +979,7 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 		struct page *page;
 
 		page = alloc_page(gfp);
-#if IS_ENABLED(CONFIG_ZSMALLOC_NO_ZONE_NORMAL)
-		if (!page || (page_zonenum(page) == ZONE_NORMAL && no_zone_normal)) {
-			if (page)
-				__free_page(page);
-#else
 		if (!page) {
-#endif
 			while (--i >= 0) {
 				dec_zone_page_state(pages[i], NR_ZSPAGES);
 				__ClearPageZsmalloc(pages[i]);
@@ -1004,17 +992,7 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 
 		inc_zone_page_state(page, NR_ZSPAGES);
 		pages[i] = page;
-
-#if IS_ENABLED(CONFIG_ZSMALLOC_NO_ZONE_NORMAL)
-		if (page_zonenum(page) == ZONE_NORMAL)
-			zone_normal_early_alloc = true;
-#endif
 	}
-
-#if IS_ENABLED(CONFIG_ZSMALLOC_NO_ZONE_NORMAL)
-	if (zone_normal_early_alloc)
-		no_zone_normal = true;
-#endif
 
 	create_page_chain(class, zspage, pages);
 	init_zspage(class, zspage);
