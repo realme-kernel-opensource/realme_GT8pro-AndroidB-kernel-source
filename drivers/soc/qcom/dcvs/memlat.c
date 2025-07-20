@@ -243,6 +243,7 @@ struct memlat_dev_data {
 /* CPUCP related struct fields */
 	const struct qcom_scmi_vendor_ops *ops;
 	struct scmi_protocol_handle	*ph;
+	u32				cpucp_sample_ms;
 	bool				subsampling_enabled;
 	u32				cpucp_log_level;
 };
@@ -467,6 +468,8 @@ static int update_cpucp_sample_ms(unsigned int val)
 		return ret;
 	}
 
+	memlat_data->cpucp_sample_ms = val;
+
 	return ret;
 }
 
@@ -500,6 +503,32 @@ static ssize_t show_sample_ms(struct kobject *kobj,
 			struct attribute *attr, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%u\n", memlat_data->sample_ms);
+}
+
+static ssize_t store_cpucp_sample_ms(struct kobject *kobj,
+				     struct attribute *attr, const char *buf,
+				     size_t count)
+{
+	int ret;
+	unsigned int val;
+
+	ret = kstrtouint(buf, 10, &val);
+	if (ret < 0)
+		return ret;
+	val = max(val, MIN_SAMPLE_MS);
+	val = min(val, MAX_SAMPLE_MS);
+
+	ret = update_cpucp_sample_ms(val);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+static ssize_t show_cpucp_sample_ms(struct kobject *kobj,
+				    struct attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", memlat_data->cpucp_sample_ms);
 }
 
 static ssize_t store_cpucp_log_level(struct kobject *kobj,
@@ -699,6 +728,7 @@ show_attr(freq_scale_floor_mhz);
 store_attr(freq_scale_floor_mhz, 0U, 5000U, MEMLAT_FREQ_SCALE_FLOOR_MHZ);
 
 MEMLAT_ATTR_RW(sample_ms);
+MEMLAT_ATTR_RW(cpucp_sample_ms);
 MEMLAT_ATTR_RW(cpucp_log_level);
 MEMLAT_ATTR_RW(flush_cpucp_log);
 MEMLAT_ATTR_RO(hlos_cpucp_offset);
@@ -725,6 +755,7 @@ MEMLAT_ATTR_RW(freq_scale_floor_mhz);
 
 static struct attribute *memlat_settings_attrs[] = {
 	&sample_ms.attr,
+	&cpucp_sample_ms.attr,
 	&cpucp_log_level.attr,
 	&flush_cpucp_log.attr,
 	&hlos_cpucp_offset.attr,
@@ -1663,8 +1694,8 @@ static int cpucp_memlat_init(struct scmi_device *sdev)
 			start_cpucp_timer = true;
 		}
 	}
-	ret = ops->set_param(memlat_data->ph, &memlat_data->sample_ms,
-			MEMLAT_ALGO_STR, MEMLAT_SAMPLE_MS, sizeof(memlat_data->sample_ms));
+	ret = ops->set_param(memlat_data->ph, &memlat_data->cpucp_sample_ms,
+			MEMLAT_ALGO_STR, MEMLAT_SAMPLE_MS, sizeof(memlat_data->cpucp_sample_ms));
 
 	if (ret < 0) {
 		pr_err("failed to set cpucp sample_ms ret = %d\n", ret);
@@ -1714,6 +1745,7 @@ static int memlat_dev_probe(struct platform_device *pdev)
 
 	dev_data->dev = dev;
 	dev_data->sample_ms = 8;
+	dev_data->cpucp_sample_ms = 8;
 
 	dev_data->num_grps = of_get_available_child_count(dev->of_node);
 	if (!dev_data->num_grps) {
