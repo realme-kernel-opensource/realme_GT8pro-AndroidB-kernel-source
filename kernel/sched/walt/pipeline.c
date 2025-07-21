@@ -259,8 +259,6 @@ static inline bool should_pipeline_pin_special(void)
 	return special_pipeline_thres_valid();
 }
 
-#define DEFAULT_PENALTY		10
-#define LOAD_BASED_PENALTY	5
 #define PIPELINE_BIAS_WINDOW_SIZE 5
 int find_heaviest_topapp(u64 window_start)
 {
@@ -346,13 +344,8 @@ int find_heaviest_topapp(u64 window_start)
 
 		atomic_set(&to_be_placed_wts->event_windows, 0);
 
-		/*
-		 * Apply a penalty of DEFAULT_PENALTY to "to_be_placed_wts", assuming it won't
-		 * be selected as a pipeline task.
-		 * If it is later selected as a pipeline task, this penalty will be removed.
-		 */
 		to_be_placed_wts->pipeline_activity_cnt =
-			max((int)to_be_placed_wts->pipeline_activity_cnt - DEFAULT_PENALTY, 0);
+					max((int)to_be_placed_wts->pipeline_activity_cnt - 1, 0);
 
 		/*
 		 * Penalty is applied on the tasks which have less demand(less than 50) and
@@ -360,8 +353,7 @@ int find_heaviest_topapp(u64 window_start)
 		 */
 		if ((gold_demand_to_be < 50) && (win_cnt < 4)) {
 			to_be_placed_wts->pipeline_activity_cnt =
-				max((int)to_be_placed_wts->pipeline_activity_cnt - DEFAULT_PENALTY,
-								0);
+					max((int)to_be_placed_wts->pipeline_activity_cnt - 10, 0);
 
 			if (to_be_placed_wts->pipeline_cpu == -1)
 				continue;
@@ -376,7 +368,7 @@ int find_heaviest_topapp(u64 window_start)
 		 * window count is added to improve it's pipeline selection chances.
 		 *
 		 * If task is small in demand than the least heavy pipeline tasks then
-		 * appply penalty of LOAD_BASED_PENALTY.
+		 * appply penalty of 5.
 		 *
 		 * If task is marked as LST add 10 more to penalty.
 		 */
@@ -384,10 +376,10 @@ int find_heaviest_topapp(u64 window_start)
 		if (delta >= 0)
 			to_be_placed_wts->pipeline_activity_cnt += win_cnt;
 		else
-			penalty = LOAD_BASED_PENALTY;
+			penalty = 5;
 
 		if (to_be_placed_wts->lst)
-			penalty += DEFAULT_PENALTY;
+			penalty += 10;
 
 		to_be_placed_wts->pipeline_activity_cnt =
 				max((int)to_be_placed_wts->pipeline_activity_cnt - penalty, 0);
@@ -447,7 +439,8 @@ int find_heaviest_topapp(u64 window_start)
 					if (i == 0 && top_wts && top_wts_bias) {
 						if (to_be_placed_wts == top_wts) {
 							if (prime_demand_heavy >
-								prime_demand_to_be)
+								(prime_demand_to_be +
+								pipeline_swap_util_th))
 								top_wts_miss = true;
 							prime_demand_heavy = 0;
 						} else if (heavy_wts[i] == top_wts) {
@@ -547,12 +540,7 @@ int find_heaviest_topapp(u64 window_start)
 	for (i = 0; i < MAX_NR_PIPELINE; i++) {
 		if (heavy_wts[i]) {
 			heavy_wts[i]->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
-			/*
-			 * task is selected for pipeline:
-			 * remove penalty for non-slection = +DEFAULT_PENALTY
-			 * add activity count for selection = +5
-			 */
-			heavy_wts[i]->pipeline_activity_cnt += 15;
+			heavy_wts[i]->pipeline_activity_cnt += 3;
 
 			/*
 			 * least_pipeline_demand: tracks smallest pipeline task, this is used

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt) "%s " fmt, KBUILD_MODNAME
 
@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/spinlock.h>
+#include <linux/suspend.h>
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
 
@@ -1417,6 +1418,37 @@ static void crm_set_hw_chn_switch_ctrl(struct crm_drv_top *crm)
 		write_crm_channel(&crm->hw_drvs[i], CHN_BEHAVE, CHN_SWITCH_CTRL);
 }
 
+static int crm_restore_noirq(struct device *dev)
+{
+	struct crm_drv_top *crm = dev_get_drvdata(dev);
+	struct crm_drv *drvs = crm->sw_drvs;
+	struct crm_vcd *vcd;
+	int i, j, k;
+
+	for (i = 0; i < crm->num_sw_drvs; i++) {
+		for (j = 0; j < MAX_VCD_TYPE; j++) {
+			vcd = &drvs[i].vcd[j];
+			for (k = 0; k < vcd->num_resources; k++)
+				write_crm_reg(&drvs[i], IRQ_ENABLE, 0, j, k, IRQ_ENABLE_BIT);
+		}
+	}
+
+	crm_set_chn_behave(crm);
+	crm_set_hw_chn_switch_ctrl(crm);
+
+	return 0;
+}
+
+#if IS_ENABLED(CONFIG_DEEPSLEEP)
+static int crm_resume_noirq(struct device *dev)
+{
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		return crm_restore_noirq(dev);
+
+	return 0;
+}
+#endif
+
 static int crm_probe_get_irqs(struct crm_drv_top *crm)
 {
 	struct crm_drv *drvs = crm->sw_drvs;
@@ -2566,6 +2598,13 @@ static const struct crm_desc disp_crm_desc_v3 = {
 	},
 };
 
+static const struct dev_pm_ops crm_dev_pm_ops = {
+	.restore_noirq = crm_restore_noirq,
+#if IS_ENABLED(CONFIG_DEEPSLEEP)
+	.resume_noirq = crm_resume_noirq,
+#endif
+};
+
 static const struct of_device_id crm_drv_match[] = {
 	{ .compatible = "qcom,cam-crm-v2", .data = &cam_crm_desc_v2},
 	{ .compatible = "qcom,pcie-crm-v2", .data = &pcie_crm_desc_v2},
@@ -2582,6 +2621,7 @@ static struct platform_driver crm_driver = {
 	.driver = {
 		  .name = "crm",
 		  .of_match_table = crm_drv_match,
+		  .pm = &crm_dev_pm_ops,
 		  .suppress_bind_attrs = true,
 	},
 };

@@ -17,6 +17,26 @@ config ARCH_ALOR
 	  chipset. If you do not wish to build a kernel that runs on this
 	  chipset or if you are unsure, say 'N' here.
 
+config ARCH_CHORA
+	bool "Enable support for Qualcomm Technologies, Inc. Chora"
+	depends on ARCH_QCOM
+	help
+	  This enables support for Qualcomm Technologies, Inc. Chora
+	  chipset. It is based on Kryo cores.
+
+	  If you do not wish to build a kernel that runs on this
+	  chipset or if you are unsure, say 'N' here.
+
+config ARCH_MALABAR
+	bool "Enable support for Qualcomm Technologies, Inc. Malabar"
+	depends on ARCH_QCOM
+	help
+	  This enables support for Qualcomm Technologies, Inc. Malabar
+	  chipset.
+
+	  If you do not wish to build a kernel that runs on this
+	  chipset or if you are unsure, say 'N' here.
+
 config ARCH_QTI_VM
        bool "Enable Virtual Machines Support for Qualcomm Technologies, Inc."
        depends on ARCH_QCOM

@@ -265,15 +265,13 @@ static ssize_t slc_mpam_available_gear_show(struct config_item *item,
 				"%d - %s\n", gear_num, gear_index[gear_num]);
 		}
 	} else {
-		for (gear_num = 0, i = 0; gear_num < partid_cap.v1_cap.num_gears; gear_num++, i++) {
+		for (gear_num = 0, i = 0; gear_num < partid_cap.v1_cap.num_gears &&
+				i < sizeof(partid_cap.v1_cap.cap_cfg.gear_flds_bitmap) * 8; i++) {
 			if (((1 << i) & partid_cap.v1_cap.cap_cfg.gear_flds_bitmap) == 0)
 				continue;
 
-			if (gear_num >= partid_cap.v1_cap.num_gears)
-				break;
-
 			len += scnprintf(page + len, PAGE_SIZE - len,
-					"%d - %d\n", gear_num,
+					"%d - %d\n", gear_num++,
 					i * partid_cap.v1_cap.cap_cfg.slc_bitfield_capacity);
 		}
 	}

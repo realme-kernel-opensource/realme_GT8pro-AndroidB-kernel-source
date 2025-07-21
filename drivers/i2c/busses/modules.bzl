@@ -51,3 +51,17 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/i2c/busses/i2c-qcom-geni",
+        out = "i2c-qcom-geni.ko",
+        config = "CONFIG_I2C_QCOM_GENI",
+        srcs = [
+            # do not sort
+            "drivers/i2c/busses/i2c-qcom-geni.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/dma/qcom/gpi",
+        ],
+    )

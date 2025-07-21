@@ -276,6 +276,14 @@ static int msm_ssusb_qmp_ldo_enable(struct msm_ssphy_qmp *phy, int on)
 	if (!on)
 		goto disable_regulators;
 
+	/* Turn PHY GDSC ON via GenPD framework */
+	rc = pm_runtime_get_sync(phy->phy.dev);
+	if (rc < 0) {
+		dev_err(phy->phy.dev,
+			"pm_runtime_get_sync failed with %d\n", rc);
+		goto put_gdsc;
+	}
+
 	rc = msm_ssusb_qmp_gdsc(phy, true);
 	if (rc < 0)
 		return rc;
@@ -360,6 +368,11 @@ put_vdd_lpm:
 		dev_err(phy->phy.dev, "Unable to set LPM of %s\n", "vdd");
 
 put_gdsc:
+	/* Turn PHY GDSC OFF via GenPD framework */
+	rc = pm_runtime_put_sync(phy->phy.dev);
+	if (rc < 0)
+		dev_err(phy->phy.dev,
+			"pm_runtime_put_sync failed with %d\n", rc);
 	rc = msm_ssusb_qmp_gdsc(phy, false);
 	return rc < 0 ? rc : 0;
 }
@@ -514,18 +527,8 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 
 	dev_dbg(uphy->dev, "Initializing QMP phy\n");
 
-	/* Turn PHY GDSC ON via GenPD framework */
-	ret = pm_runtime_get_sync(phy->phy.dev);
-	if (ret < 0) {
-		dev_err(phy->phy.dev,
-			"pm_runtime_get_sync failed with %d\n", ret);
-		pm_runtime_put_sync(phy->phy.dev);
-		return ret;
-	}
-
 	if (uphy->flags & PHY_DP_MODE) {
 		dev_info(uphy->dev, "QMP PHY currently in DP mode\n");
-		pm_runtime_put_sync(phy->phy.dev);
 		return -EBUSY;
 	}
 
@@ -534,7 +537,6 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		dev_err(phy->phy.dev,
 		"msm_ssusb_qmp_ldo_enable(1) failed, ret=%d\n",
 		ret);
-		pm_runtime_put_sync(phy->phy.dev);
 		return ret;
 	}
 
@@ -586,8 +588,6 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		goto fail;
 	}
 
-	pm_runtime_put_sync(phy->phy.dev);
-
 	return ret;
 fail:
 	phy->in_suspend = true;
@@ -595,7 +595,6 @@ fail:
 		phy->base + phy->phy_reg[USB3_PHY_POWER_DOWN_CONTROL]);
 	msm_ssphy_qmp_enable_clks(phy, false);
 	msm_ssusb_qmp_ldo_enable(phy, 0);
-	pm_runtime_put_sync(phy->phy.dev);
 
 	return ret;
 }
@@ -821,6 +820,18 @@ static int msm_ssphy_qmp_notify_connect(struct usb_phy *uphy,
 {
 	struct msm_ssphy_qmp *phy = container_of(uphy, struct msm_ssphy_qmp,
 					phy);
+	struct device *dev = phy->phy.dev;
+	struct generic_pm_domain *genpd;
+
+	if (dev->pm_domain) {
+		genpd = pd_to_genpd(dev->pm_domain);
+		/* Keep PHY GDSC ON during bus suspend */
+		if (phy->phy.flags & PHY_HOST_MODE) {
+			genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
+			genpd->flags |= GENPD_FLAG_ALWAYS_ON;
+			dev_dbg(dev, "GDSC flags ON\n");
+		}
+	}
 
 	dev_dbg(uphy->dev, "QMP phy connect notification\n");
 	phy->cable_connected = true;
@@ -834,9 +845,11 @@ static int msm_ssphy_qmp_notify_disconnect(struct usb_phy *uphy,
 {
 	struct msm_ssphy_qmp *phy = container_of(uphy, struct msm_ssphy_qmp,
 					phy);
+	struct device *dev = phy->phy.dev;
+	struct generic_pm_domain *genpd;
 
 	/* Turn PHY GDSC ON before writing to PHY registers */
-	pm_runtime_resume(phy->phy.dev);
+	pm_runtime_resume(dev);
 	atomic_notifier_call_chain(&uphy->notifier, 0, uphy);
 	if (phy->phy.flags & PHY_HOST_MODE) {
 		writel_relaxed(0x00,
@@ -844,11 +857,19 @@ static int msm_ssphy_qmp_notify_disconnect(struct usb_phy *uphy,
 		readl_relaxed(phy->base + phy->phy_reg[USB3_PHY_POWER_DOWN_CONTROL]);
 	}
 
+	/* Reset the PHY GDSC flags upon resume for cable plug out */
+	if (!(phy->phy.flags & PHY_SS_DYNAMIC_POWERDOWN) && dev->pm_domain) {
+		genpd = pd_to_genpd(dev->pm_domain);
+		genpd->flags &= ~GENPD_FLAG_ACTIVE_WAKEUP;
+		genpd->flags &= ~GENPD_FLAG_ALWAYS_ON;
+		dev_dbg(dev, "GDSC flags OFF\n");
+	}
+
 	dev_dbg(uphy->dev, "QMP phy disconnect notification\n");
 	dev_dbg(uphy->dev, " cable_connected=%d\n", phy->cable_connected);
 	phy->cable_connected = false;
 	/* Turn PHY GDSC OFF via GenPD framework */
-	pm_runtime_suspend(phy->phy.dev);
+	pm_runtime_suspend(dev);
 
 	return 0;
 }
@@ -1206,6 +1227,8 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 	phy->phy.notify_connect		= msm_ssphy_qmp_notify_connect;
 	phy->phy.notify_disconnect	= msm_ssphy_qmp_notify_disconnect;
 
+	phy->in_suspend = true;
+
 	ret = usb_add_phy_dev(&phy->phy);
 
 err:
@@ -1226,36 +1249,14 @@ static void msm_ssphy_qmp_remove(struct platform_device *pdev)
 
 static int msm_ssphy_qmp_runtime_suspend(struct device *dev)
 {
-	struct msm_ssphy_qmp *phy = dev_get_drvdata(dev);
-	struct generic_pm_domain *genpd;
-
 	dev_dbg(dev, "msm-ssphy-qmp runtime suspend\n");
-	if (dev->pm_domain) {
-		genpd = pd_to_genpd(dev->pm_domain);
-		/* Keep PHY GDSC ON during bus suspend */
-		if (phy->phy.flags & PHY_HOST_MODE) {
-			genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
-			genpd->flags |= GENPD_FLAG_ALWAYS_ON;
-			dev_dbg(phy->phy.dev, "GDSC flags ON\n");
-		}
-	}
 
 	return 0;
 }
 
 static int msm_ssphy_qmp_runtime_resume(struct device *dev)
 {
-	struct msm_ssphy_qmp *phy = dev_get_drvdata(dev);
-	struct generic_pm_domain *genpd;
-
 	dev_dbg(dev, "msm-ssphy-qmp runtime resume\n");
-	if (dev->pm_domain) {
-		genpd = pd_to_genpd(dev->pm_domain);
-		/* Reset the PHY GDSC flags upon resume for cable plug out */
-		genpd->flags &= ~GENPD_FLAG_ACTIVE_WAKEUP;
-		genpd->flags &= ~GENPD_FLAG_ALWAYS_ON;
-		dev_dbg(phy->phy.dev, "GDSC flags OFF\n");
-	}
 
 	return 0;
 }

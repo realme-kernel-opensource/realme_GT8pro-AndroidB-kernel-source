@@ -376,10 +376,12 @@ void assign_reasons_counter(struct waltgov_policy *wg_policy)
 		return;
 	}
 
-	/* start from index 1, as index 0 is reserved for CPUFREQ_REASON_LOAD. */
-	for (int i = 1; i < CPUFREQ_REASONS + 1; i++) {
+	/* cpufreq_reasons_counters start from index 1, as index 0 is reserved for
+	 * CPUFREQ_REASON_LOAD.
+	 */
+	for (int i = 0; i < CPUFREQ_REASONS; i++) {
 		if (BIT(i) & reasons)
-			cpufreq_reasons_counters[i][id]++;
+			cpufreq_reasons_counters[i+1][id]++;
 	}
 }
 

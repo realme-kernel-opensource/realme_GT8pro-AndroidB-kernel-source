@@ -38,6 +38,11 @@
 enum {
 	CDSP0,
 	CDSP1,
+	CDSP2,
+	CDSP3,
+	ADSP0,
+	ADSP1,
+	ADSP2,
 	DSP_MAX,
 	DSP_ERR = 0xff
 };
@@ -45,6 +50,11 @@ enum {
 static const char * const to_dsp_str[DSP_MAX] = {
 	[CDSP0] = "cdsp",
 	[CDSP1] = "cdsp1",
+	[CDSP2] = "cdsp2",
+	[CDSP3] = "cdsp3",
+	[ADSP0] = "adsp",
+	[ADSP1] = "adsp1",
+	[ADSP2] = "adsp2",
 };
 
 #define DSP_LABEL_TO_STR(dsp) (((dsp) >= DSP_MAX) ? "INVALID DSP" : to_dsp_str[(dsp)])

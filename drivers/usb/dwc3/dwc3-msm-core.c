@@ -137,6 +137,9 @@
 #define SS_PHY_CTRL_REG		(QSCRATCH_REG_OFFSET + 0x30)
 #define LANE0_PWR_PRESENT	BIT(24)
 
+#define USB_STS_REG		(QSCRATCH_REG_OFFSET + 0xF8)
+#define USB_UTMI_SUSPEND_N	BIT(4)
+
 /* USB DBM Hardware registers */
 #define DBM_REG_OFFSET		0xF8000
 
@@ -3800,6 +3803,13 @@ static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc, bool ignore_p3_state)
 		}
 	}
 
+	/* Read USB_STS register to get UTMI Suspend status */
+	reg = dwc3_msm_read_reg(mdwc->base, USB_STS_REG);
+
+	/* when this bit is low the HSPHY is in suspend, return from here */
+	if (!(reg & USB_UTMI_SUSPEND_N))
+		return 0;
+
 	/* Clear previous L2 events */
 	dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_STAT_REG,
 		PWR_EVNT_LPM_IN_L2_MASK | PWR_EVNT_LPM_OUT_L2_MASK);
@@ -5854,6 +5864,16 @@ int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes)
 	dbg_log_string("Set DP lanes:%d refcnt:%d\n", lanes, mdwc->refcnt_dp_usb);
 
 	if (lanes == 2) {
+		if (!mdwc->in_host_mode) {
+			msleep(20);
+			/*
+			 * There are scenarios where DP driver calls this API before dwc3-msm
+			 * gets the role information, hence return if host mode hasn't started.
+			 * DP Altmode driver has retry mechanism we return -EAGAIN or -EBUSY.
+			 */
+			return -EAGAIN;
+		}
+
 		mutex_lock(&mdwc->role_switch_mutex);
 		mdwc->dp_state = DP_2_LANE;
 		mdwc->refcnt_dp_usb++;
@@ -6136,12 +6156,6 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 		of_node_put(dwc3_node);
 		goto err;
 	}
-
-	/*
-	 * Wait for child's probe completion before retrieving the
-	 * driver data to make sure its populated properly.
-	 */
-	wait_for_device_probe();
 
 	mdwc->dwc3 = of_find_device_by_node(dwc3_node);
 	of_node_put(dwc3_node);
@@ -6845,7 +6859,7 @@ static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
 	u32 reg;
 
 	if (mdwc->is_ssphy_powerdown || mdwc->disable_host_ssphy_powerdown ||
-		dwc3_msm_get_max_speed(mdwc) < USB_SPEED_SUPER)
+		mdwc->dp_state || dwc3_msm_get_max_speed(mdwc) < USB_SPEED_SUPER)
 		return 0;
 
 	reg = dwc3_msm_read_reg(mdwc->base, EXTRA_INP_REG);
@@ -6853,9 +6867,22 @@ static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
 	dwc3_msm_write_reg(mdwc->base, EXTRA_INP_REG, reg);
 	dwc3_msm_switch_utmi(mdwc, 1);
 
+	/*
+	 * Set Dynamic Powerdown flag to indicate SS PHY driver to not reset
+	 * GDSC ON flags during bus suspend.
+	 */
+	dwc3_msm_set_usbphy_flags(mdwc->ss_phy, PHY_SS_DYNAMIC_POWERDOWN);
+
 	usb_phy_notify_disconnect(mdwc->ss_phy,
 					USB_SPEED_SUPER);
 	usb_phy_set_suspend(mdwc->ss_phy, 1);
+
+	/*
+	 * Clear Dynamic Powerdown flag to allow SS PHY driver to reset GDSC ON
+	 * flags.
+	 */
+	dwc3_msm_clear_usbphy_flags(mdwc->ss_phy, PHY_SS_DYNAMIC_POWERDOWN);
+
 	phy_power_off(mdwc->usb3_phy);
 	phy_exit(mdwc->usb3_phy);
 	mdwc->is_ssphy_powerdown = true;
@@ -7459,7 +7486,7 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 		 * or pullup disable), and retry suspend again.
 		 */
 		ret = pm_runtime_put_sync(&mdwc->dwc3->dev);
-		if (ret == -EBUSY) {
+		if (!pm_runtime_suspended(&mdwc->dwc3->dev)) {
 			while (--timeout && dwc->connected)
 				msleep(20);
 			dbg_event(0xFF, "StopGdgt connected", dwc->connected);

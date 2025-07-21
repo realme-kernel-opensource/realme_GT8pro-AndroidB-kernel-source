@@ -517,6 +517,22 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/microdump_collector",
+        out = "microdump_collector.ko",
+        config = "CONFIG_QCOM_MICRODUMP",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/microdump_collector.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/qcom_ramdump",
+            "drivers/remoteproc/rproc_qcom_common",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/minidump",
         out = "minidump.ko",
         config = "CONFIG_QCOM_MINIDUMP",
@@ -1283,6 +1299,19 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/slc_perfmon",
+        out = "slc_perfmon.ko",
+        config = "CONFIG_QCOM_SLC_PERFMON",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slc_perfmon.c",
+        ],
+        deps = [
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/smem",
         out = "smem.ko",
         config = "CONFIG_QCOM_SMEM",
@@ -1431,6 +1460,41 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/fsa4480_i2c",
+        out = "fsa4480_i2c.ko",
+        config = "CONFIG_QCOM_FSA4480_I2C",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/fsa4480-i2c.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/usb/typec/ucsi/ucsi_qti_glink",
+            "drivers/base/regmap/qti-regmap-debugfs",
+            "drivers/soc/qcom/qti_pmic_glink",
+            "drivers/soc/qcom/pdr_interface",
+            "drivers/soc/qcom/qmi_helpers",
+            "drivers/remoteproc/rproc_qcom_common",
+            "drivers/rpmsg/qcom_smd",
+            "drivers/rpmsg/qcom_glink_smem",
+            "drivers/rpmsg/qcom_glink",
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/soc/qcom/minidump",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/debug_symbol",
+            "drivers/dma-buf/heaps/qcom_dma_heaps",
+            "drivers/iommu/msm_dma_iommu_mapping",
+            "drivers/soc/qcom/mem_buf/mem_buf_dev",
+            "drivers/soc/qcom/secure_buffer",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/rename_devices",
         out = "rename_devices.ko",
         config = "CONFIG_RENAME_DEVICES",
@@ -1485,6 +1549,21 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/soc/qcom/qcom-pmic-ecid.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/spmi-pmic-err-debug",
+        out = "spmi-pmic-err-debug.ko",
+        config = "CONFIG_SPMI_PMIC_ERR_DBG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/spmi-pmic-err-debug.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/nvmem/qfprom.c",
         ],
     )
 

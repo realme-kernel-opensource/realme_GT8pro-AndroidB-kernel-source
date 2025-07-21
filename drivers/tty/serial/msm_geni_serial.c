@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/bitmap.h>
@@ -2434,8 +2434,32 @@ static void msm_geni_uart_gsi_cancel_tx(struct work_struct *work)
 	struct msm_geni_serial_port *msm_port = container_of(work,
 			struct msm_geni_serial_port,
 			tx_cancel_work);
+	struct uart_port *uport = &msm_port->uport;
+	struct tty_struct *tty = uport->state->port.tty;
+	int ret;
 
-	dmaengine_terminate_all(msm_port->gsi->tx_c);
+	if (!tty && pm_runtime_enabled(uport->dev)) {
+		ret = pm_runtime_get_sync(uport->dev);
+		if (ret < 0) {
+			UART_LOG_DBG(msm_port->ipc_log_pwr, uport->dev,
+				     "Failed to resume ret=%d\n", ret);
+			pm_runtime_put_noidle(uport->dev);
+			pm_runtime_set_suspended(uport->dev);
+			return;
+		}
+	}
+
+	ret = dmaengine_terminate_all(msm_port->gsi->tx_c);
+	if (ret)
+		UART_LOG_DBG(msm_port->ipc_log_pwr, uport->dev,
+			     "gpi terminate failed ret:%d\n", ret);
+
+	if (!tty && pm_runtime_enabled(uport->dev)) {
+		ret = pm_runtime_put_sync_suspend(uport->dev);
+		if (ret < 0)
+			UART_LOG_DBG(msm_port->ipc_log_pwr, uport->dev,
+				     "Failed to suspend ret=%d\n", ret);
+	}
 }
 
 static void msm_geni_uart_gsi_cancel_rx(struct work_struct *work)
@@ -2889,15 +2913,16 @@ static void stop_tx_sequencer(struct uart_port *uport)
 	unsigned int dma_dbg;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 
-	if (port->xfer_mode == GENI_GPI_DMA) {
-		queue_work(port->tx_wq, &port->tx_cancel_work);
-		return;
-	}
 	geni_status = geni_read_reg(uport->membase, SE_GENI_STATUS);
 
 	/* Possible stop tx is called multiple times. */
 	if (!(geni_status & M_GENI_CMD_ACTIVE))
 		return;
+
+	if (port->xfer_mode == GENI_GPI_DMA) {
+		queue_work(port->tx_wq, &port->tx_cancel_work);
+		return;
+	}
 
 	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 		    "%s: Start GENI: 0x%x\n", __func__, geni_status);
@@ -5663,6 +5688,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	struct uart_driver *drv;
 	const struct of_device_id *id;
 	bool is_console = false;
+	unsigned char prev_line_id;
 
 	id = of_match_device(msm_geni_device_tbl, &pdev->dev);
 	if (!id) {
@@ -5673,6 +5699,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: %s\n", __func__, id->compatible);
 	drv = (struct uart_driver *)id->data;
 
+	prev_line_id = uart_line_id;
 	if (pdev->dev.of_node) {
 		if (drv->cons) {
 			line = of_alias_get_id(pdev->dev.of_node, "serial");
@@ -5799,6 +5826,8 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		pr_info("boot_kpi: M - DRIVER GENI_HS_UART_%d Ready\n", line);
 
 exit_geni_serial_probe:
+	if (ret)
+		uart_line_id = prev_line_id;
 	UART_LOG_DBG(dev_port->ipc_log_misc, &pdev->dev, "%s: ret:%d\n",
 		__func__, ret);
 	return ret;

@@ -63,4 +63,5 @@ blocklist pcie-qcom-ecam
 blocklist qca_cld3_kiwi_v2
 blocklist qca_cld3_qca6390
 blocklist qca_cld3_qca6490
+blocklist qca_cld3_qca6490_cnss2
 blocklist qca_cld3_qcn7605

@@ -135,6 +135,7 @@ def _generate_ddk_target(
     kernel_module_group(
         name = "{}_all_modules".format(target_variant),
         srcs = module_names.values(),
+        visibility = ["//visibility:public"],
     )
 
     kernel_modules_install(

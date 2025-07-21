@@ -51,6 +51,7 @@ void walt_config(void)
 	sysctl_em_inflate_pct = 100;
 	sysctl_em_inflate_thres = 1024;
 	sysctl_max_freq_partial_halt = FREQ_QOS_MAX_DEFAULT_VALUE;
+	sysctl_topapp_weight_pct = 100;
 	asym_cap_sibling_cpus = CPU_MASK_NONE;
 	pipeline_sync_cpus = CPU_MASK_NONE;
 	storage_boost_cpus = CPU_MASK_NONE;
@@ -124,18 +125,18 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
 		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
 		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
-		trailblazer_floor_freq[0] = 1000000;
+		trailblazer_floor_freq[0] = 2500000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 		oscillate_period_ns = 8000000;
-		soc_feat_unset(SOC_ENABLE_EXPERIMENT3);
 		/*G + P*/
 		cpumask_copy(&pipeline_sync_cpus, cpu_possible_mask);
 		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
 		soc_sched_lib_name_capacity = 2;
 		soc_feat_unset(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
+		pipeline_swap_util_th = 50;
 
 		sysctl_cluster01_load_sync[0]	= 350;
 		sysctl_cluster01_load_sync[1]	= 100;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -22,6 +22,7 @@
 #include <linux/msm_gpi.h>
 #include <linux/spi/spi.h>
 #include <linux/spinlock.h>
+#include <linux/suspend.h>
 #include <linux/pinctrl/consumer.h>
 
 #define SPI_NUM_CHIPSELECT	(4)
@@ -290,6 +291,7 @@ struct spi_geni_master {
 	bool qspi_ddr_support;
 	struct spi_split_dma_tre split_tx_dma_tre;
 	u32 geni_init_cfg_revision;
+	bool is_deep_sleep; /* For deep sleep restore the config similar to the probe. */
 };
 
 /**
@@ -2070,7 +2072,7 @@ static void spi_geni_set_sampling_rate(struct spi_geni_master *mas,
 static int spi_verify_proto(struct spi_geni_master *mas)
 {
 	struct spi_controller *spi = dev_get_drvdata(mas->dev);
-	int ret;
+	int ret = 0;
 
 	if (!mas->is_le_vm) {
 		ret = geni_se_resources_on(&mas->spi_rsc);
@@ -2094,8 +2096,7 @@ static int spi_verify_proto(struct spi_geni_master *mas)
 	}
 
 	if (!mas->is_le_vm)
-		geni_se_resources_off(&mas->spi_rsc);
-
+		ret = geni_se_resources_off(&mas->spi_rsc);
 	return ret;
 }
 
@@ -3235,6 +3236,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 		spi->mode_bits = SPI_SUPPORTED_MODES;
 	}
 
+	geni_mas->is_deep_sleep = false;
 	spi->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 32);
 	spi->num_chipselect = SPI_NUM_CHIPSELECT;
 	spi->prepare_transfer_hardware = spi_geni_prepare_transfer_hardware;
@@ -3340,11 +3342,30 @@ static int spi_geni_gpi_pause_resume(struct spi_geni_master *geni_mas, bool is_s
 {
 	int tx_ret = 0;
 
+	/*
+	 * Perform DMA operations only for the TX channel, as the GPI driver internally handles
+	 * the RX channel. Calling for both can cause incorrect channel states due to duplicate
+	 * operations.
+	 */
 	if (geni_mas->tx) {
-		if (is_suspend)
+		if (is_suspend) {
 			tx_ret = dmaengine_pause(geni_mas->tx);
-		else
+		} else {
+			/*
+			 * For deep sleep need to restore the config similar to the probe,
+			 * hence using MSM_GPI_DEEP_SLEEP_INIT flag, in gpi_resume it wil
+			 * do similar to the probe. After this we should set this flag to
+			 * MSM_GPI_DEFAULT, means gpi probe state is restored.
+			 */
+			if (geni_mas->is_deep_sleep)
+				geni_mas->tx_event.cmd = MSM_GPI_DEEP_SLEEP_INIT;
+
 			tx_ret = dmaengine_resume(geni_mas->tx);
+			if (geni_mas->is_deep_sleep) {
+				geni_mas->tx_event.cmd = MSM_GPI_DEFAULT;
+				geni_mas->is_deep_sleep = false;
+			}
+		}
 
 		if (tx_ret) {
 			SPI_LOG_ERR(geni_mas->ipc, true, geni_mas->dev,
@@ -3400,11 +3421,11 @@ static int spi_geni_runtime_suspend(struct device *dev)
 	start_time = geni_capture_start_time(&geni_mas->spi_rsc, geni_mas->ipc_log_kpi, __func__,
 					     geni_mas->spi_kpi);
 
+	SPI_LOG_DBG(geni_mas->ipc, false, geni_mas->dev, "%s: %d\n", __func__, ret);
+
 	disable_irq(geni_mas->irq);
 	if (geni_mas->is_le_vm)
 		return spi_geni_levm_suspend_proc(geni_mas, spi, start_time);
-
-	SPI_LOG_DBG(geni_mas->ipc, false, geni_mas->dev, "%s: %d\n", __func__, ret);
 
 	if (geni_mas->gsi_mode) {
 		ret = spi_geni_gpi_pause_resume(geni_mas, true);
@@ -3609,6 +3630,13 @@ static int spi_geni_suspend(struct device *dev)
 
 	geni_capture_stop_time(&geni_mas->spi_rsc, geni_mas->ipc_log_kpi, __func__,
 			       geni_mas->spi_kpi, start_time, 0, 0);
+
+#ifdef CONFIG_DEEPSLEEP
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+		SPI_LOG_ERR(geni_mas->ipc, true, dev, "%s:DEEP SLEEP EXIT", __func__);
+		geni_mas->is_deep_sleep = true;
+	}
+#endif
 	return ret;
 }
 #else

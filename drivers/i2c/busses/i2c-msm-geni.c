@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -248,6 +248,7 @@ struct geni_i2c_dev {
 	u8 *split_allocated_buf;
 	u8 *split_aligned_buf;
 	int split_msg_cnt;
+	bool is_deep_sleep; /* For deep sleep restore the config similar to the probe. */
 };
 
 static struct geni_i2c_dev *gi2c_dev_dbg[MAX_SE];
@@ -1859,14 +1860,32 @@ static int geni_i2c_stop_on_bus(struct geni_i2c_dev *gi2c)
 static void geni_i2c_check_for_gsi_multi_desc_mode(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[],
 						   int num)
 {
-	u32 i = 0;
+	u32 i, requested_tres = get_gpii_chan_req_tres(gi2c->tx_c);
+
+	if (requested_tres == 0) {
+		I2C_LOG_ERR(gi2c->ipcl, true, gi2c->dev, "%s TRE size is zero, check!\n", __func__);
+		return;
+	}
 
 	if (!gi2c->is_split_tx_dma_tre && num >= MIN_NUM_MSGS_FOR_MULTI_DESC_MODE) {
 		gi2c->gsi_tx.is_multi_descriptor = true;
 		/* assumes multi descriptor supports only for continuous writes */
-		for (i = 0; i < num; i++)
-			if (msgs[i].flags & I2C_M_RD)
+		for (i = 0; i < num; i++) {
+			if (msgs[i].flags & I2C_M_RD) {
 				gi2c->gsi_tx.is_multi_descriptor = false;
+				break;
+			}
+		}
+
+		/*
+		 * Enable multi-descriptor mode if TRE size exceeds default;
+		 * otherwise, use single descriptor
+		 */
+		if (gi2c->gsi_tx.is_multi_descriptor && requested_tres <= DEFAULT_TRE_SIZE) {
+			gi2c->gsi_tx.is_multi_descriptor = false;
+			I2C_LOG_ERR(gi2c->ipcl, true, gi2c->dev,
+				    "TRE size too small. Use >= 2x DEFAULT_TRE_SIZE\n");
+		}
 	} else {
 		gi2c->gsi_tx.is_multi_descriptor = false;
 	}
@@ -3257,9 +3276,8 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	if (of_property_read_u32(pdev->dev.of_node, "qcom,clk-freq-out",
 				&gi2c->clk_freq_out))
 		gi2c->clk_freq_out = KHz(400);
-
-	dev_info(&pdev->dev, "Bus frequency is set to %dHz.\n",
-						gi2c->clk_freq_out);
+	dev_info(&pdev->dev, "Bus frequency is set to %dHz.\n", gi2c->clk_freq_out);
+	gi2c->is_deep_sleep = false;
 
 	ret = geni_i2c_clk_map_idx(gi2c);
 	if (ret) {
@@ -3422,6 +3440,13 @@ static int geni_i2c_resume_early(struct device *device)
 	struct geni_i2c_dev *gi2c = dev_get_drvdata(device);
 
 	I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "%s ret=%d\n", __func__, true);
+
+#ifdef CONFIG_DEEPSLEEP
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+		gi2c->se_mode = UNINITIALIZED;
+		gi2c->is_deep_sleep = true;
+	}
+#endif
 	return 0;
 }
 
@@ -3443,16 +3468,34 @@ static int geni_i2c_gpi_pause_resume(struct geni_i2c_dev *gi2c, bool is_suspend)
 {
 	int tx_ret = 0;
 
+	/*
+	 * Perform DMA operations only for the TX channel, as the GPI driver internally handles
+	 * the RX channel. Calling for both can cause incorrect channel states due to duplicate
+	 * operations.
+	 */
 	if (gi2c->tx_c) {
-		if (is_suspend)
+		if (is_suspend) {
 			tx_ret = dmaengine_pause(gi2c->tx_c);
-		else
+		} else {
+			/*
+			 * For deep sleep need to restore the config similar to the probe,
+			 * hence using MSM_GPI_DEEP_SLEEP_INIT flag, in gpi_resume it will
+			 * do similar to the probe. After this we should set this flag to
+			 * MSM_GPI_DEFAULT, means gpi probe state is restored.
+			 */
+			if (gi2c->is_deep_sleep)
+				gi2c->tx_ev.cmd = MSM_GPI_DEEP_SLEEP_INIT;
+
 			tx_ret = dmaengine_resume(gi2c->tx_c);
+			if (gi2c->is_deep_sleep) {
+				gi2c->tx_ev.cmd = MSM_GPI_DEFAULT;
+				gi2c->is_deep_sleep = false;
+			}
+		}
 
 		if (tx_ret) {
 			I2C_LOG_ERR(gi2c->ipcl, true, gi2c->dev,
-				    "%s failed: tx:%d status:%d\n",
-				    __func__, tx_ret, is_suspend);
+				    "%s failed: tx:%d status:%d\n", __func__, tx_ret, is_suspend);
 			return -EINVAL;
 		}
 	}

@@ -28,6 +28,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/edac/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/firmware/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/gpu/drm/bridge/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/gpu/drm/msm/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/hwmon/Kconfig"
@@ -129,5 +131,7 @@ source "$(KCONFIG_EXT_PREFIX)sound/usb/Kconfig"
 source "$(KCONFIG_EXT_PREFIX)drivers/block/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)Kconfig.qtvm"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/block/zram/Kconfig"
 
 endmenu

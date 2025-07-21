@@ -266,6 +266,7 @@ if (print) { \
 
 #define GSI_MAX_NUM_TRE_MSGS		(448)
 #define GSI_MAX_IMMEDIATE_DMA_LEN	(8)
+#define DEFAULT_TRE_SIZE		(64)
 
 #define QUP_DMA_ADDR_ALIGN_BYTE		(16)
 #define QUP_SPLIT_DMA_TRE_SIZE		(16)
@@ -273,10 +274,12 @@ if (print) { \
 
 /* cmds to perform by using dmaengine_slave_config() */
 enum msm_gpi_ctrl_cmd {
+	MSM_GPI_DEFAULT,
 	MSM_GPI_INIT,
 	MSM_GPI_CMD_UART_SW_STALE,
 	MSM_GPI_CMD_UART_RFR_READY,
 	MSM_GPI_CMD_UART_RFR_NOT_READY,
+	MSM_GPI_DEEP_SLEEP_INIT,
 };
 
 enum msm_gpi_cb_event {
@@ -427,6 +430,15 @@ struct gsi_common {
 	int *protocol_err; /* protocol specific error*/
 	void (*ev_cb_fun)(struct dma_chan *ch, struct msm_gpi_cb const *cb_str, void *ptr);
 };
+
+/**
+ * get_gpii_chan_req_tres() - Retrieve the TRE size (`req_tres`) for
+ *                            the specified GPII channel from the DTSI
+ * @chan: Base address of the DMA channel
+ *
+ * Return: The TRE size of the GPII channel.
+ */
+u32 get_gpii_chan_req_tres(struct dma_chan *chan);
 
 /* Client drivers of the GPI can call this function to dump the GPI registers
  * whenever client met some scenario like timeout, error in GPI transfer mode.

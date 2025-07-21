@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013, 2016-2018, 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/kernel.h>
@@ -1362,6 +1362,22 @@ static int clk_byte2_set_rate_and_parent(struct clk_hw *hw,
 	return clk_byte2_set_rate(hw, rate, parent_rate);
 }
 
+static unsigned long
+clk_byte2_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
+{
+	unsigned long rate = clk_rcg2_recalc_rate(hw, parent_rate);
+	struct clk_regmap *rclk = to_clk_regmap(hw);
+	int vdd_level;
+
+	if (rclk->vdd_data.rate_max) {
+		vdd_level = clk_find_vdd_level(hw, &rclk->vdd_data, rate);
+		if (vdd_level > 0)
+			rclk->vdd_data.vdd_level = vdd_level;
+	}
+
+	return rate;
+}
+
 const struct clk_ops clk_byte2_ops = {
 	.prepare = clk_prepare_regmap,
 	.unprepare = clk_unprepare_regmap,
@@ -1370,7 +1386,7 @@ const struct clk_ops clk_byte2_ops = {
 	.is_enabled = clk_rcg2_is_enabled,
 	.get_parent = clk_rcg2_get_parent,
 	.set_parent = clk_rcg2_set_parent,
-	.recalc_rate = clk_rcg2_recalc_rate,
+	.recalc_rate = clk_byte2_recalc_rate,
 	.set_rate = clk_byte2_set_rate,
 	.set_rate_and_parent = clk_byte2_set_rate_and_parent,
 	.determine_rate = clk_byte2_determine_rate,

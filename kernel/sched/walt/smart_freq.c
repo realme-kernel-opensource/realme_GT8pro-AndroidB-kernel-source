@@ -182,6 +182,78 @@ out:
 	return ret;
 }
 
+int sched_smart_freq_ipc_levels_handler(const struct ctl_table *table, int write,
+				      void __user *buffer, size_t *lenp,
+				      loff_t *ppos)
+{
+	int i;
+	int ret;
+	int cluster_id = -1;
+	int count = 0;
+	unsigned int val[SMART_FMAX_IPC_MAX] = {[0 ... SMART_FMAX_IPC_MAX-1] = UINT_MAX};
+	unsigned int *data = (unsigned int *)table->data;
+	struct ctl_table tmp = {
+		.data	= &val,
+		.maxlen	= sizeof(unsigned int) * SMART_FMAX_IPC_MAX,
+		.mode	= table->mode,
+	};
+
+	if (!smart_freq_init_done)
+		return -EINVAL;
+
+	mutex_lock(&freq_reason_mutex);
+
+	if (!write) {
+		tmp.data = table->data;
+		ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
+		goto unlock;
+	}
+
+	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
+	if (ret)
+		goto unlock;
+
+	ret = -EINVAL;
+
+	if (data == &sysctl_ipc_levels_cluster0[0])
+		cluster_id = 0;
+	if (data == &sysctl_ipc_levels_cluster1[0])
+		cluster_id = 1;
+	if (data == &sysctl_ipc_levels_cluster2[0])
+		cluster_id = 2;
+	if (data == &sysctl_ipc_levels_cluster3[0])
+		cluster_id = 3;
+
+	/*
+	 * Make sure all ipc levels are in increasing order
+	 */
+	count = 1;
+	for (i = 1; i < SMART_FMAX_IPC_MAX; i++) {
+		if (val[i] == UINT_MAX)
+			break;
+		if (val[i] < val[i-1])
+			goto unlock;
+		count++;
+	}
+	if (count != SMART_FMAX_IPC_MAX) {
+		if (default_freq_config[cluster_id].ipc_reason_config[count].ipc < val[count-1])
+			goto unlock;
+	}
+
+	for (i = 0; i < SMART_FMAX_IPC_MAX; i++) {
+		if (val[i] == UINT_MAX)
+			break;
+		default_freq_config[cluster_id].ipc_reason_config[i].ipc = val[i];
+		data[i] = val[i];
+	}
+
+	ret = 0;
+
+unlock:
+	mutex_unlock(&freq_reason_mutex);
+	return ret;
+}
+
 int sched_smart_freq_ipc_handler(const struct ctl_table *table, int write,
 				      void __user *buffer, size_t *lenp,
 				      loff_t *ppos)
@@ -683,11 +755,15 @@ void smart_freq_init(const char *name)
 					BIT(THERMAL_ROTATION_SMART_FREQ);
 
 				/* IPC */
-				cluster->smart_freq_info->ipc_reason_config[0].ipc = 120;
-				cluster->smart_freq_info->ipc_reason_config[1].ipc = 180;
-				cluster->smart_freq_info->ipc_reason_config[2].ipc = 220;
-				cluster->smart_freq_info->ipc_reason_config[3].ipc = 260;
-				cluster->smart_freq_info->ipc_reason_config[4].ipc = 300;
+				sysctl_ipc_levels_cluster0[0] = 120;
+				sysctl_ipc_levels_cluster0[1] = 180;
+				sysctl_ipc_levels_cluster0[2] = 220;
+				sysctl_ipc_levels_cluster0[3] = 260;
+				sysctl_ipc_levels_cluster0[4] = 300;
+				for (i = 0; i < SMART_FMAX_IPC_MAX; i++)
+					cluster->smart_freq_info->ipc_reason_config[i].ipc =
+						sysctl_ipc_levels_cluster0[i];
+
 				cluster->smart_freq_info->smart_freq_ipc_participation_mask =
 					BIT(IPC_A) | BIT(IPC_B) | BIT(IPC_C) | BIT(IPC_D) |
 					BIT(IPC_E);
@@ -714,11 +790,15 @@ void smart_freq_init(const char *name)
 					BIT(THERMAL_ROTATION_SMART_FREQ);
 
 				/* IPC */
-				cluster->smart_freq_info->ipc_reason_config[0].ipc = 220;
-				cluster->smart_freq_info->ipc_reason_config[1].ipc = 260;
-				cluster->smart_freq_info->ipc_reason_config[2].ipc = 280;
-				cluster->smart_freq_info->ipc_reason_config[3].ipc = 320;
-				cluster->smart_freq_info->ipc_reason_config[4].ipc = 400;
+				sysctl_ipc_levels_cluster1[0] = 220;
+				sysctl_ipc_levels_cluster1[1] = 260;
+				sysctl_ipc_levels_cluster1[2] = 280;
+				sysctl_ipc_levels_cluster1[3] = 320;
+				sysctl_ipc_levels_cluster1[4] = 400;
+				for (i = 0; i < SMART_FMAX_IPC_MAX; i++)
+					cluster->smart_freq_info->ipc_reason_config[i].ipc =
+						sysctl_ipc_levels_cluster1[i];
+
 				cluster->smart_freq_info->smart_freq_ipc_participation_mask =
 					BIT(IPC_A) | BIT(IPC_B) | BIT(IPC_C) | BIT(IPC_D) |
 					BIT(IPC_E);

@@ -61,6 +61,7 @@ qcom_logbuf_boot_log.ko
 pinctrl-msm.ko
 pinctrl-alor.ko
 pinctrl-canoe.ko
+pinctrl-chora.ko
 qcom_tsens.ko
 qcom-ipcc.ko
 qcom-reboot-reason.ko
@@ -106,3 +107,5 @@ cqhci.ko
 sdhci-msm.ko
 arm_smmu_pmu.ko
 deferred-free-helper.ko
+i2c-msm-geni.ko
+msm_gpi.ko

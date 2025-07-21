@@ -89,7 +89,7 @@ static inline struct qcom_mpam_msc *qcom_msc_lookup(uint32_t msc_id)
 	return NULL;
 }
 
-static int msc_system_get_mpam_version(uint32_t msc_id, void *arg1)
+static inline int msc_system_get_mpam_version(uint32_t msc_id, void *arg1)
 {
 	return -EINVAL;
 }
@@ -156,7 +156,7 @@ static inline int attach_mpam_msc(struct device *dev, struct qcom_mpam_msc *qcom
 }
 
 static inline void detach_mpam_msc(struct device *dev, struct qcom_mpam_msc *qcom_msc,
-		uint32_t msc_type);
+		uint32_t msc_type)
 {
 }
 

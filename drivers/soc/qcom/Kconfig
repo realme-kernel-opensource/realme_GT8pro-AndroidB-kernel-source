@@ -189,6 +189,14 @@ config QCOM_LLCC_HEURISTICS
 	  enablement from DTB itself. Also Provide the capability to disable,
 	  enable HERISTIC SCID functionality from SYSFS.
 
+config QCOM_SLC_PERFMON
+	tristate "Qualcomm Technologies, Inc. SLC PERFMON Driver"
+	help
+	  This option enables driver to pass the configuration parameters to
+	  SLC Performance Monitoring feature implemented in CPUCP and collect
+	  SLC data traffic dumps from SLC Performance Monitoring Tool.
+	  Configuration and collecting dumps can be done using SYSFS nodes.
+
 config QCOM_MDT_LOADER
 	tristate
 	select QCOM_SCM
@@ -632,6 +640,16 @@ config QCOM_RAMDUMP
 	  userspace. Say 'Y' here to enable this driver. It's safe to say
 	  'N' here if you don't plan on collecting ramdumps.
 
+config QCOM_MICRODUMP
+	tristate "Qualcomm Technologies, Inc. Microdump Support"
+	depends on QCOM_RAMDUMP
+	depends on QCOM_SMEM
+	help
+	 This enables microdump feature. It collects
+	 crash data from SMEM whenever modem subsytem
+	 crashes and stores it under /devcd to expose
+	 to user space.
+
 config QCOM_MINIDUMP
 	tristate "QCOM Minidump Support"
 	depends on QCOM_SMEM || GUNYAH_DRIVERS
@@ -851,6 +869,17 @@ config CMA_BEST_FIT
 
 source "$(KCONFIG_EXT_PREFIX)drivers/soc/qcom/mem_buf/Kconfig"
 
+config QCOM_FSA4480_I2C
+	tristate "Fairchild FSA4480 chip with I2C"
+	select REGMAP_I2C
+	depends on TYPEC
+	depends on I2C
+	help
+	  Support for the Fairchild FSA4480 IC switch chip controlled
+	  using I2C. This driver provides common support
+	  for accessing the device, switching between USB and Audio
+	  modes, changing orientation.
+
 config QCOM_MEM_OFFLINE
 	tristate "Dynamic Memory Region Offline driver"
 	depends on MEMORY_HOTPLUG
@@ -896,6 +925,15 @@ config RENAME_DEVICES
 	  which is needed during android verified boot process and it
 	  also maps to physical partition names on gvm side which help
 	  identify the block and network devices.
+
+config QCOM_SPMI_PMIC_ERR_DBG
+	tristate "Qualcomm SPMI protocol error IRQ handler"
+	depends on QCOM_SCM
+	help
+	  Enabling this option adds SPMI PMIC error debug driver.
+	  It configures SPMI protocol IRQ to be triggered during SPMI HW error
+	  conditions, to collect and dump several PMIC arbiter registers and
+	  optionally some more debug data from test bus registers.
 
 config QTI_PMIC_GLINK
 	tristate "Enable support for PMIC GLINK"

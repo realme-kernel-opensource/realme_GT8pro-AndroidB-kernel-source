@@ -113,6 +113,10 @@ unsigned int sysctl_ipc_freq_levels_cluster0[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster1[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster3[SMART_FMAX_IPC_MAX];
+unsigned int sysctl_ipc_levels_cluster0[SMART_FMAX_IPC_MAX];
+unsigned int sysctl_ipc_levels_cluster1[SMART_FMAX_IPC_MAX];
+unsigned int sysctl_ipc_levels_cluster2[SMART_FMAX_IPC_MAX];
+unsigned int sysctl_ipc_levels_cluster3[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_legacy_freq_levels_cluster0[LEGACY_SMART_FREQ*2];
 unsigned int sysctl_legacy_freq_levels_cluster1[LEGACY_SMART_FREQ*2];
 unsigned int sysctl_legacy_freq_levels_cluster2[LEGACY_SMART_FREQ*2];
@@ -149,6 +153,8 @@ unsigned int sysctl_pipeline_rearrange_delay_ms[2] = {100, 4};
 unsigned int sysctl_single_thread_pipeline;
 unsigned int sysctl_walt_features;
 unsigned int sysctl_pipeline_force_config;
+unsigned int sysctl_topapp_weight_pct;
+
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
 
@@ -1226,6 +1232,54 @@ static int sched_sibling_cluster_handler(const struct ctl_table *table, int writ
 	return ret;
 }
 
+static unsigned int sysctl_frame_rate;
+static int walt_frame_rate_handler(const struct ctl_table *table, int write,
+				       void __user *buffer, size_t *lenp,
+				       loff_t *ppos)
+{
+	int ret = -EACCES;
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (!ret && write) {
+		if (sysctl_frame_rate > 0)
+			frame_size_ns = NSEC_PER_SEC / sysctl_frame_rate;
+		else
+			frame_size_ns = 0;
+	}
+
+	return ret;
+}
+
+unsigned long sysctl_frame_boundary_us;
+static int walt_frame_boundary_handler(const struct ctl_table *table, int write,
+				       void __user *buffer, size_t *lenp,
+				       loff_t *ppos)
+{
+	int ret;
+	unsigned long val;
+	char number[65];
+	struct ctl_table tbl;
+
+	if (write) {
+		tbl.data = number;
+		tbl.maxlen = 64;
+		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
+		if (ret)
+			goto out;
+
+		number[*lenp] = '\0';
+		ret = kstrtoul(tbl.data, 10, &val);
+		if (!ret)
+			sysctl_frame_boundary_us = val;
+	} else {
+		tbl.data = &sysctl_frame_boundary_us;
+		tbl.maxlen = sizeof(unsigned long);
+		ret = proc_doulongvec_minmax(&tbl, write, buffer, lenp, ppos);
+	}
+out:
+	return ret;
+}
+
 static struct ctl_table cluster_0[] = {
 	{
 		.procname	= "sched_topapp_updownmigrate",
@@ -1462,6 +1516,13 @@ static struct ctl_table smart_freq_cluster0[] = {
 		.proc_handler	= sched_smart_freq_ipc_handler,
 	},
 	{
+		.procname	= "ipc_levels",
+		.data		= &sysctl_ipc_levels_cluster0,
+		.maxlen		= SMART_FMAX_IPC_MAX * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_ipc_levels_handler,
+	},
+	{
 		.procname	= "sched_smart_freq_dump_legacy_reason",
 		.data		= &reason_dump,
 		.maxlen		= 1024 * sizeof(char),
@@ -1491,6 +1552,13 @@ static struct ctl_table smart_freq_cluster1[] = {
 		.maxlen		= SMART_FMAX_IPC_MAX * sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= sched_smart_freq_ipc_handler,
+	},
+	{
+		.procname	= "ipc_levels",
+		.data		= &sysctl_ipc_levels_cluster1,
+		.maxlen		= SMART_FMAX_IPC_MAX * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_ipc_levels_handler,
 	},
 	{
 		.procname	= "sched_smart_freq_dump_legacy_reason",
@@ -1524,6 +1592,13 @@ static struct ctl_table smart_freq_cluster2[] = {
 		.proc_handler	= sched_smart_freq_ipc_handler,
 	},
 	{
+		.procname	= "ipc_levels",
+		.data		= &sysctl_ipc_levels_cluster2,
+		.maxlen		= SMART_FMAX_IPC_MAX * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_ipc_levels_handler,
+	},
+	{
 		.procname	= "sched_smart_freq_dump_legacy_reason",
 		.data		= &reason_dump,
 		.maxlen		= 1024 * sizeof(char),
@@ -1553,6 +1628,13 @@ static struct ctl_table smart_freq_cluster3[] = {
 		.maxlen		= SMART_FMAX_IPC_MAX * sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= sched_smart_freq_ipc_handler,
+	},
+	{
+		.procname	= "ipc_levels",
+		.data		= &sysctl_ipc_levels_cluster3,
+		.maxlen		= SMART_FMAX_IPC_MAX * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_ipc_levels_handler,
 	},
 	{
 		.procname	= "sched_smart_freq_dump_legacy_reason",
@@ -2281,6 +2363,21 @@ static struct ctl_table walt_table[] = {
 		.extra2		= SYSCTL_ONE,
 	},
 	{
+		.procname	= "sched_frame_rate",
+		.data		= &sysctl_frame_rate,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= walt_frame_rate_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "walt_frame_boundary_us",
+		.maxlen		= 64,
+		.mode		= 0644,
+		.proc_handler	= walt_frame_boundary_handler,
+	},
+	{
 		.procname       = "sched_walt_features",
 		.data           = &sysctl_walt_features,
 		.maxlen         = sizeof(unsigned int),
@@ -2292,6 +2389,15 @@ static struct ctl_table walt_table[] = {
 	{
 		.procname	= "sched_pipeline_force_config",
 		.data		= &sysctl_pipeline_force_config,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_topapp_weight_pct",
+		.data		= &sysctl_topapp_weight_pct,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,

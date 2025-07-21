@@ -52,3 +52,18 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/dma/qcom/gpi_fixed",
+        out = "gpi.ko",
+        config = "CONFIG_QCOM_GPI_DMA",
+        srcs = [
+            # do not sort
+            "drivers/dma/qcom/gpi_fixed.c",
+            "drivers/dma/dmaengine.h",
+            "drivers/dma/virt-dma.h",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )
