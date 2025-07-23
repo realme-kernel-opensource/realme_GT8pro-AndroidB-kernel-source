@@ -440,6 +440,8 @@ extern unsigned long __read_mostly soc_flags;
 #define TRAILBLAZER_BOOST_THRESH_IPC 300
 #define TRAILBLAZER_BOOST_THRESH_NS 100000000
 
+#define SBT_BOOST_THRESH_NS 40000000
+
 extern unsigned int sysctl_sched_idle_enough;
 extern unsigned int sysctl_sched_cluster_util_thres_pct;
 extern unsigned int sysctl_sched_idle_enough_clust[MAX_CLUSTERS];

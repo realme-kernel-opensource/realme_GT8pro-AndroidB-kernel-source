@@ -128,6 +128,7 @@ void walt_config(void)
 		trailblazer_floor_freq[0] = 2500000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
+		sysctl_walt_features |= WALT_FEAT_TOPAPP_BASED_HISPEED;
 		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 		oscillate_period_ns = 8000000;
