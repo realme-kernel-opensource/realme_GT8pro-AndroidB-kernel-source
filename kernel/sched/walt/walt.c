@@ -757,7 +757,6 @@ __cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load, unsigned int *rea
 			walt_load->ed_active = true;
 		else
 			walt_load->ed_active = false;
-		walt_load->trailblazer_state = trailblazer_state;
 		walt_load->non_boosted_load = non_boosted_load;
 		walt_load->trailblazer_boost_state = trailblazer_boost_state_ns ? true : false;
 	}

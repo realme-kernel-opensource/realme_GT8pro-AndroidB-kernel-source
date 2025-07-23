@@ -588,7 +588,7 @@ void smart_freq_update_reason_common(u64 wallclock, int nr_big, u32 wakeup_ctr_s
 		 * TRAILBLAZER
 		 */
 		if (cluster_participation_mask & BIT(TRAILBLAZER_SMART_FREQ)) {
-			current_state = trailblazer_state;
+			current_state = trailblazer_boost_state_ns ? true : false;
 			if (current_state)
 				cluster_reasons |= BIT(TRAILBLAZER_SMART_FREQ);
 		}
