@@ -2421,7 +2421,7 @@ static void update_history(struct rq *rq, struct task_struct *p,
 		demand = max(avg, runtime);
 	}
 
-	if (walt_fair_task(p))
+	if (walt_fair_task(p) && task_in_related_thread_group(p))
 		update_trailblazer_accounting(p, rq, runtime, runtime_scaled,
 				&demand, &trailblazer_demand);
 	pred_demand_scaled = predict_and_update_buckets(p, runtime_scaled);
