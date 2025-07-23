@@ -179,6 +179,15 @@ config GH_GUEST_POPS
 	    one, it'll emulate a power key press action by sending an input
 	    notification to user-space.
 
+config GH_VIRTIO_PCI_EDGE
+	  tristate "Gunyah virtio-pci interrupts edge module"
+	  depends on QTVM_WITH_AVF
+	  help
+	  The module runs on guest VMs and is responsible for reconfiguring virtio-pci
+	    interrupts to Edge triggered and wakeup capable. The default configuration
+	    is Level triggered which gets auto-cleared can cause missing wakeup issues
+	    while system is entering suspend or suspended.
+
 config GUNYAH_TRACE
 	tristate "Gunyah trace driver"
 	help

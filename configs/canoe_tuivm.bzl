@@ -15,6 +15,7 @@ canoe_tuivm_config = {
     "CONFIG_GH_PANIC_NOTIFIER": "m",
     "CONFIG_GH_RM_DRV": "m",
     "CONFIG_GH_TLMM_VM_MEM_ACCESS": "m",
+    "CONFIG_GH_VIRTIO_PCI_EDGE": "m",
     "CONFIG_GH_VIRT_WATCHDOG": "n",
     "CONFIG_GUNYAH": "m",
     "CONFIG_GUNYAH_DRIVERS": "y",

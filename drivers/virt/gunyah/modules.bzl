@@ -187,6 +187,15 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_rm_drv",
         ],
     )
+    registry.register(
+        name = "drivers/virt/gunyah/gh_virtio_pci_edge",
+        out = "gh_virtio_pci_edge.ko",
+        config = "CONFIG_GH_VIRTIO_PCI_EDGE",
+        srcs = [
+            # do not sort
+            "drivers/virt/gunyah/gh_virtio_pci_edge.c",
+        ],
+    )
 
     registry.register(
         name = "drivers/virt/gunyah/gunyah_loader",
