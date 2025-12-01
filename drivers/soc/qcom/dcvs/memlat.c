@@ -369,6 +369,55 @@ static ssize_t store_##name(struct kobject *kobj,                      \
 		return count;                                                   \
 }
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GEAS_MEMLAT)
+static int update_memlat_freq(int is_max_freq, unsigned int freq, struct memlat_group *memlat_grp, struct memlat_mon *mon, const struct qcom_scmi_vendor_ops *ops)
+{
+	struct scalar_param_msg msg;
+	int ret = 0, set_freq_cmd = is_max_freq ? MEMLAT_SET_MAX_FREQ : MEMLAT_SET_MIN_FREQ;
+	if (is_max_freq)
+		mon->max_freq = min(max(freq, mon->min_freq), memlat_grp->hw_max_freq);
+	else
+		mon->min_freq = min(max(freq, memlat_grp->hw_min_freq), mon->max_freq);
+	if ((mon->type & CPUCP_MON) && ops) {
+		msg.hw_type = memlat_grp->hw_type;
+		msg.mon_idx = mon->index;
+		msg.val = is_max_freq ? mon->max_freq : mon->min_freq;
+		ret = ops->set_param(memlat_data->ph, &msg, MEMLAT_ALGO_STR, set_freq_cmd, sizeof(msg));
+	}
+	pr_err("%s success, is_max_freq: %d, freq = %u, hw_type = %d, ret = %d", __func__, is_max_freq, freq, memlat_grp->hw_type, ret);
+	return ret;
+}
+
+int geas_update_memlat_params(int limin, int limax, int dimin, int dimax)
+{
+	const struct qcom_scmi_vendor_ops *ops =  memlat_data->ops;
+	struct memlat_group *memlat_grp;
+	struct memlat_mon *mon;
+	int i, ret, grp;
+	unsigned int min_freq, max_freq;
+
+	for (grp = 0; grp < MAX_MEMLAT_GRPS; grp++) {
+		memlat_grp = memlat_data->groups[grp];
+		if (!memlat_grp || !(memlat_grp->hw_type == DCVS_DDR || memlat_grp->hw_type == DCVS_LLCC))
+			continue;
+		for (i = 0; i < memlat_grp->num_inited_mons; i++) {
+			mon = &memlat_grp->mons[i];
+			if (!mon)
+				continue;
+			min_freq = memlat_grp->hw_type == DCVS_DDR ? dimin : limin;
+			max_freq = memlat_grp->hw_type == DCVS_DDR ? dimax : limax;
+			if (max_freq >= 0)
+				ret = update_memlat_freq(1, max_freq, memlat_grp, mon, ops);
+			if (min_freq >= 0)
+				ret = update_memlat_freq(0, min_freq, memlat_grp, mon, ops);
+		}
+	}
+	return ret;
+}
+EXPORT_SYMBOL(geas_update_memlat_params);
+#endif
+
+
 static ssize_t store_min_freq(struct kobject *kobj,
 			struct attribute *attr, const char *buf,
 			size_t count)

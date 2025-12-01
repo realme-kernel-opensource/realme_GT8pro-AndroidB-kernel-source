@@ -152,7 +152,9 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+            "//vendor/oplus/kernel/boot:oplus_bsp_bootmode",
         ],
+        local_defines = ["OPLUS_FEATURE_CHG_BASIC"],
     )
 
     registry.register(
@@ -1131,11 +1133,14 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/qcom_wdt_core.c",
         ],
+	local_defines = ["CONFIG_OPLUS_FEATURE_QCOM_WATCHDOG_MODULE"],
         deps = [
             # do not sort
+	    "//vendor/oplus/kernel/boot:oplus_bsp_dfr_qcom_enhance_watchdog",
             "drivers/soc/qcom/minidump",
             "drivers/soc/qcom/smem",
             "drivers/soc/qcom/debug_symbol",
+            "drivers/soc/qcom/qcom_sdei",
             "drivers/dma-buf/heaps/qcom_dma_heaps",
             "drivers/iommu/msm_dma_iommu_mapping",
             "drivers/soc/qcom/mem_buf/mem_buf_dev",
@@ -1328,6 +1333,7 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/soc/qcom/smp2p.c",
+            "drivers/soc/qcom/trace_smp2p.h",
         ],
         deps = [
             # do not sort
@@ -1456,7 +1462,11 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+            # Add for oplus mm feedback, CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+            "//vendor/oplus/kernel/multimedia/feedback/bazel:oplus_mm_kevent_fb",
         ],
+        # Add for oplus config
+        copts = ["-DCONFIG_OPLUS_FEATURE_MM_FEEDBACK"],
     )
 
     registry.register(

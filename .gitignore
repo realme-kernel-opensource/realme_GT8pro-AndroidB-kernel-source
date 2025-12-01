@@ -118,6 +118,8 @@ modules.order
 /include/config/
 /include/generated/
 /arch/*/include/generated/
+include/linux/bwmon_geas.h
+include/linux/geas_ctrl.h
 
 # stgit generated dirs
 patches-*

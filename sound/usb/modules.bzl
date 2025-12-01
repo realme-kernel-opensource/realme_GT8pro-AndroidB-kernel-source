@@ -3,6 +3,7 @@ def register_modules(registry):
         name = "sound/usb/snd-usb-audio-qmi",
         out = "snd-usb-audio-qmi.ko",
         config = "CONFIG_SND_USB_AUDIO_QMI",
+        local_defines = ["OPLUS_FEATURE_CHG_BASIC"],
         srcs = [
             # do not sort
             "sound/usb/usb_audio_qmi_svc.c",

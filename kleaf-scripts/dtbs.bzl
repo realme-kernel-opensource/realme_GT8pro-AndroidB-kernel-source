@@ -1,5 +1,5 @@
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("//build:msm_kernel_extensions.bzl", "get_dtb_list", "get_dtbo_list", "get_dtstree")
+load(":kleaf-scripts/msm_kernel_extensions.bzl", "get_dtb_list", "get_dtbo_list", "get_dtstree")
 load("//build/kernel/kleaf:kernel.bzl", "kernel_build", "kernel_build_config")
 
 def define_qcom_dtb_setup():

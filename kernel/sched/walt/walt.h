@@ -23,6 +23,14 @@
 
 #define MSEC_TO_NSEC (1000 * 1000)
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <sched_assist/sa_fair.h>
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+#include <frame_boost/frame_group.h>
+#endif
+
 #ifdef CONFIG_HZ_300
 /*
  * Tick interval becomes to 3333333 due to
@@ -108,6 +116,7 @@ extern unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 #define WALT_TRAILBLAZER_BIT		BIT(1)
 #define WALT_IDLE_TASK_BIT		BIT(2)
 #define WALT_LRB_PIPELINE_BIT		BIT(3)
+#define WALT_GIANT_BIT			BIT(4)
 
 #define WALT_LOW_LATENCY_PROCFS_BIT	BIT(0)
 #define WALT_LOW_LATENCY_BINDER_BIT	BIT(1)
@@ -132,6 +141,7 @@ struct walt_cpu_load {
 struct walt_sched_stats {
 	int		nr_big_tasks;
 	int		nr_trailblazer_tasks;
+	int		nr_giant_tasks;
 	u64		cumulative_runnable_avg_scaled;
 	u64		pred_demands_sum_scaled;
 	unsigned int	nr_rtg_high_prio_tasks;
@@ -350,6 +360,9 @@ struct waltgov_policy {
 	bool			limits_changed;
 	bool			need_freq_update;
 	bool			thermal_isolated;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	unsigned int		flags;
+#endif
 	bool			rtg_boost_flag;
 	bool			hispeed_flag;
 	bool			conservative_pl_flag;
@@ -391,11 +404,15 @@ extern int cpu_l2_sibling[WALT_NR_CPUS];
 extern void sched_update_nr_prod(int cpu, int enq);
 extern unsigned int walt_big_tasks(int cpu);
 extern int walt_trailblazer_tasks(int cpu);
-extern void walt_rotation_checkpoint(int nr_big);
+extern int walt_giant_tasks(int cpu);
+extern void walt_rotation_checkpoint(u64 window_start, int nr_giant);
 extern void walt_fill_ta_data(struct core_ctl_notif_data *data);
 extern int sched_set_group_id(struct task_struct *p, unsigned int group_id);
 extern unsigned int sched_get_group_id(struct task_struct *p);
 extern void core_ctl_check(u64 wallclock, u32 wakeup_ctr_sum);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+extern bool should_core_ctl(void);
+#endif
 extern int core_ctl_set_cluster_boost(int idx, bool boost);
 extern int sched_set_boost(int enable);
 extern void walt_boost_init(void);
@@ -471,6 +488,11 @@ extern enum sched_boost_policy boost_policy;
 extern unsigned int sysctl_input_boost_ms;
 extern unsigned int sysctl_input_boost_freq[WALT_NR_CPUS];
 extern unsigned int sysctl_sched_boost_on_input;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_CEILING_FREE)
+extern unsigned int sysctl_ceiling_free_enable;
+extern unsigned int sysctl_cb_ceiling_free_enable;
+extern unsigned int sysctl_omrg_ceiling_free_enable;
+#endif
 extern unsigned int sysctl_sched_user_hint;
 extern unsigned int sysctl_sched_conservative_pl;
 extern unsigned int sysctl_sched_hyst_min_coloc_ns;
@@ -653,6 +675,7 @@ struct sched_avg_stats {
 	int nr_misfit;
 	int nr_max;
 	int nr_scaled;
+	int nr_giant;
 };
 
 struct waltgov_callback {
@@ -709,7 +732,7 @@ extern unsigned long cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load
 int waltgov_register(void);
 
 extern void walt_lb_init(void);
-extern unsigned int walt_rotation_enabled;
+extern bool walt_rotation_enabled;
 
 extern bool walt_is_idle_task(struct task_struct *p);
 
@@ -1307,7 +1330,11 @@ static inline void walt_irq_work_queue(struct irq_work *work)
  */
 static inline bool walt_fair_task(struct task_struct *p)
 {
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 	return p->prio >= MAX_RT_PRIO && !walt_is_idle_task(p);
+#else
+	return (p->prio >= MAX_RT_PRIO && !walt_is_idle_task(p)) && !(task_on_scx(p));
+#endif
 }
 
 extern int sched_long_running_rt_task_ms_handler(const struct ctl_table *table, int write,
@@ -1383,6 +1410,16 @@ static inline bool is_state1(void)
 /* determine if this task should be allowed to use a partially halted cpu */
 static inline bool task_reject_partialhalt_cpu(struct task_struct *p, int cpu)
 {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	if (should_ux_task_skip_cpu(p, cpu))
+		return true;
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	if (fbg_skip_migration(p, task_cpu(p), cpu))
+		return true;
+#endif
+
 	if (p->prio < MAX_RT_PRIO)
 		return false;
 
@@ -1460,6 +1497,31 @@ static inline int walt_find_and_choose_cluster_packing_cpu(int start_cpu, struct
 
 	/* the packing cpu can be used, so pack! */
 	return packing_cpu;
+}
+
+
+
+#define LARGE_CPU_THROTTLED_CAP_THRESH 700
+static inline bool is_large_cpu_cap_low(void)
+{
+	struct walt_rq *wrq = &per_cpu(walt_rq,
+			cpumask_first(&cpu_array[0][num_sched_clusters - 1]));
+
+	if (wrq->cpu_capacity_orig < LARGE_CPU_THROTTLED_CAP_THRESH)
+		return true;
+
+	return false;
+}
+
+static inline bool any_large_above_util_threshold(unsigned long util)
+{
+	int cpu;
+
+	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1])
+		if (cpu_util(cpu) > util)
+			return true;
+
+	return false;
 }
 
 extern void update_smart_freq_capacities(void);
@@ -1642,7 +1704,7 @@ extern bool move_storage_load(struct rq *rq);
 #define MAX_YIELD_CNT_PER_TASK_THR		25
 #define	YIELD_INDUCED_SLEEP			BIT(7)
 #define YIELD_CNT_MASK				0x7F
-#define YIELD_WINDOW_SIZE_USEC			(16ULL * USEC_PER_MSEC)
+#define YIELD_WINDOW_SIZE_USEC			(14 * USEC_PER_MSEC)
 #define YIELD_WINDOW_SIZE_NSEC			(YIELD_WINDOW_SIZE_USEC * NSEC_PER_USEC)
 #define	YIELD_GRACE_PERIOD_NSEC			(4ULL * NSEC_PER_MSEC)
 #define YIELD_SLEEP_TIME_USEC			250
@@ -1696,6 +1758,9 @@ extern unsigned int sysctl_pipeline_rearrange_delay_ms[2];
 DECLARE_PER_CPU(unsigned int, walt_yield_to_sleep);
 extern unsigned int walt_sched_yield_counter;
 extern unsigned int sysctl_force_frequent_yielder;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+extern unsigned int sysctl_yielder_disable;
+#endif
 void account_yields(u64 window_start);
 extern void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_demand,
 		     u64 *scaled_prime_demand);
@@ -1711,4 +1776,12 @@ extern unsigned long walt_map_util_freq(unsigned long util,
 extern void early_walt_config(void);
 extern unsigned int sysctl_topapp_weight_pct;
 extern u64 trailblazer_boost_state_ns;
+extern u64 oscillate_ts_ns;
+
+/*
+ * Multiply the pct value by 10 so that division by 100 can be converted
+ * to a simple bit shift operation, ie., divide by 1024 or shift right by 10.
+ */
+#define GIANT_UTIL_THRESH_PCT 700
+extern u64 walt_rotation_stop_hyst_start_ts;
 #endif /* _WALT_H */

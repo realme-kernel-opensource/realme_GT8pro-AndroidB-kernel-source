@@ -55,6 +55,15 @@ struct wcd_usbss_ctxt {
 	bool defer_writes;
 	int req_state;
 	bool usb_sbu_compliance;
+//#ifdef OPLUS_ARCH_EXTENDS
+/* Checking whether the surge occurs */
+	struct workqueue_struct *check_surge_workqueue;
+	struct delayed_work check_surge_delaywork;
+	bool is_standby_support;
+//#endif /* OPLUS_ARCH_EXTENDS */
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+	bool sdam_handler;
+#endif /*CONFIG_OPLUS_FEATURE_MM_FEEDBACK*/
 };
 
 extern struct regmap *wcd_usbss_regmap_init(struct device *dev,

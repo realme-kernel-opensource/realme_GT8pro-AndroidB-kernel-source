@@ -46,6 +46,10 @@
 #include <ufs/ufs_quirks.h>
 #include <ufs/ufshcd-crypto-qti.h>
 
+//#ifdef CONFIG_OPLUS_UFS_DRIVER
+#include <soc/oplus/ufs-oplus-dbg.h>
+//#endif
+
 #define MCQ_QCFGPTR_MASK	GENMASK(7, 0)
 #define MCQ_QCFGPTR_UNIT	0x200
 #define MCQ_SQATTR_OFFSET(c) \
@@ -94,6 +98,8 @@ enum {
 	UFS_QCOM_CMD_SEND,
 	UFS_QCOM_CMD_COMPL,
 };
+
+#define DOORBELL_CLR_TOUT_US	(1000 * 1000) /* 1 sec */
 
 static char android_boot_dev[ANDROID_BOOT_DEV_MAX];
 
@@ -1919,6 +1925,9 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int err = 0;
 
+	//#ifdef CONFIG_OPLUS_UFS_DRIVER
+	ufs_sleep_time_get(hba);
+	//#endif
 	if (status == PRE_CHANGE)
 		return 0;
 
@@ -1966,6 +1975,10 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int err;
+
+	//#ifdef CONFIG_OPLUS_UFS_DRIVER
+	ufs_active_time_get(hba);
+	//#endif
 
 	if (host->vddp_ref_clk && (hba->rpm_lvl > UFS_PM_LVL_3 ||
 				   hba->spm_lvl > UFS_PM_LVL_3))
@@ -2524,7 +2537,7 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 	if (!host->disable_lpm) {
 		hba->caps |= UFSHCD_CAP_CLK_GATING |
 			UFSHCD_CAP_HIBERN8_WITH_CLK_GATING |
-			UFSHCD_CAP_CLK_SCALING |
+			/*UFSHCD_CAP_CLK_SCALING |*/
 			UFSHCD_CAP_AUTO_BKOPS_SUSPEND |
 			UFSHCD_CAP_AGGR_POWER_COLLAPSE |
 			UFSHCD_CAP_WB_WITH_CLK_SCALING;
@@ -4029,6 +4042,10 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 			dev_err(host->hba->dev, "Fail to register UFS panic notifier\n");
 	}
 
+	//#ifdef CONFIG_OPLUS_UFS_DRIVER
+	ufs_init_oplus_dbg(hba);
+        ufs_iostack_init(&host->iostack_work);
+	//#endif
 	return 0;
 
 out_disable_vccq_parent:
@@ -4430,6 +4447,10 @@ static void ufs_qcom_event_notify(struct ufs_hba *hba,
 	struct phy *phy = host->generic_phy;
 	bool ber_th_exceeded = false;
 	bool disable_ber = true;
+
+	//#ifdef CONFIG_OPLUS_UFS_DRIVER
+	recordSignalerr(hba, *(u32 *)data, evt);
+	//#endif
 
 	switch (evt) {
 	case UFS_EVT_PA_ERR:
@@ -5058,6 +5079,12 @@ static void ufs_qcom_config_scaling_param(struct ufs_hba *hba,
 	struct device *dev = hba->dev;
 	struct device_node *np = dev->of_node;
 
+	if (!ufshcd_is_clkscaling_supported(hba)) {
+		p->polling_ms = 0;
+		dev_err(hba->dev, "Unsupported UFS clkscaling, set devfreq_profile as NULL\n");
+		return;
+	}
+
 	p->polling_ms = 60;
 	p->timer = DEVFREQ_TIMER_DELAYED;
 	d->upthreshold = 70;
@@ -5346,6 +5373,121 @@ static int ufs_qcom_config_esi(struct ufs_hba *hba)
 	return ret;
 }
 
+static void ufs_qcom_config_scsi_dev(struct scsi_device *sdev)
+{
+	ufs_oplus_init_sdev(sdev);
+}
+static bool ufs_qcom_power_mode_validate(struct ufs_pa_layer_attr *pwr_mode)
+{
+	if (pwr_mode->gear_rx < UFS_HS_G1 || pwr_mode->gear_rx > UFS_HS_G4 ||
+		pwr_mode->gear_tx < UFS_HS_G1 || pwr_mode->gear_tx > UFS_HS_G4 ||
+		pwr_mode->lane_rx < 1 || pwr_mode->lane_rx > 2 ||
+		pwr_mode->lane_tx < 1 || pwr_mode->lane_tx > 2 ||
+		(pwr_mode->pwr_rx != FAST_MODE &&
+		 pwr_mode->pwr_rx != FASTAUTO_MODE) ||
+		(pwr_mode->pwr_tx != FAST_MODE &&
+		 pwr_mode->pwr_tx != FASTAUTO_MODE)) {
+		return false;
+	}
+
+	return true;
+}
+
+static int ufs_qcom_cfg_pwr_param(struct ufs_hba *hba,
+  				struct ufs_pa_layer_attr *new_pwr,
+  				struct ufs_pa_layer_attr *final_pwr)
+{
+	int ret = 0;
+	bool is_dev_sup_hs = false;
+	bool is_new_pwr_hs = false;
+	int dev_pwm_max_rx_gear;
+	int dev_pwm_max_tx_gear;
+
+	if (!hba->max_pwr_info.is_valid) {
+		dev_err(hba->dev, "%s: device max power is not valid. can't configure power\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	if (hba->max_pwr_info.info.pwr_rx == FAST_MODE)
+		is_dev_sup_hs = true;
+
+	if (new_pwr->pwr_rx == FAST_MODE || new_pwr->pwr_rx == FASTAUTO_MODE)
+		is_new_pwr_hs = true;
+
+	final_pwr->lane_rx = hba->max_pwr_info.info.lane_rx;
+	final_pwr->lane_tx = hba->max_pwr_info.info.lane_tx;
+
+	/* device doesn't support HS but requested power is HS */
+	if (!is_dev_sup_hs && is_new_pwr_hs) {
+		pr_err("%s: device doesn't support HS. requested power is HS\n",
+			__func__);
+		return -ENOTSUPP;
+	} else if ((is_dev_sup_hs && is_new_pwr_hs) ||
+			(!is_dev_sup_hs && !is_new_pwr_hs)) {
+		/*
+			* If device and requested power mode are both HS or both PWM
+			* then dev_max->gear_xx are the gears to be assign to
+			* final_pwr->gear_xx
+			*/
+		final_pwr->gear_rx = hba->max_pwr_info.info.gear_rx;
+		final_pwr->gear_tx = hba->max_pwr_info.info.gear_tx;
+	} else if (is_dev_sup_hs && !is_new_pwr_hs) {
+		/*
+			* If device supports HS but requested power is PWM, then we
+			* need to find out what is the max gear in PWM the device
+			* supports
+			*/
+
+		ufshcd_dme_get(hba, UIC_ARG_MIB(PA_MAXRXPWMGEAR),
+					&dev_pwm_max_rx_gear);
+
+		if (!dev_pwm_max_rx_gear) {
+			pr_err("%s: couldn't get device max pwm rx gear\n",
+				__func__);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		ufshcd_dme_peer_get(hba, UIC_ARG_MIB(PA_MAXRXPWMGEAR),
+					&dev_pwm_max_tx_gear);
+
+		if (!dev_pwm_max_tx_gear) {
+			pr_err("%s: couldn't get device max pwm tx gear\n",
+				__func__);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		final_pwr->gear_rx = dev_pwm_max_rx_gear;
+		final_pwr->gear_tx = dev_pwm_max_tx_gear;
+	}
+
+	if ((new_pwr->gear_rx > final_pwr->gear_rx) ||
+		(new_pwr->gear_tx > final_pwr->gear_tx) ||
+		(new_pwr->lane_rx > final_pwr->lane_rx) ||
+		(new_pwr->lane_tx > final_pwr->lane_tx)) {
+		pr_err("%s: (RX,TX) GG,LL: in PWM/HS new pwr [%d%d,%d%d] exceeds device limitation [%d%d,%d%d]\n",
+			__func__,
+			new_pwr->gear_rx, new_pwr->gear_tx,
+			new_pwr->lane_rx, new_pwr->lane_tx,
+			final_pwr->gear_rx, final_pwr->gear_tx,
+			final_pwr->lane_rx, final_pwr->lane_tx);
+		return -ENOTSUPP;
+	}
+
+	final_pwr->gear_rx = new_pwr->gear_rx;
+	final_pwr->gear_tx = new_pwr->gear_tx;
+	final_pwr->lane_rx = new_pwr->lane_rx;
+	final_pwr->lane_tx = new_pwr->lane_tx;
+	final_pwr->pwr_rx = new_pwr->pwr_rx;
+	final_pwr->pwr_tx = new_pwr->pwr_tx;
+	final_pwr->hs_rate = new_pwr->hs_rate;
+
+out:
+	return ret;
+}
+
 static u32 ufs_qcom_freq_to_gear_speed(struct ufs_hba *hba, unsigned long freq)
 {
 	u32 gear = UFS_HS_DONT_CHANGE;
@@ -5407,6 +5549,7 @@ static const struct ufs_hba_variant_ops ufs_hba_qcom_vops = {
 	.op_runtime_config	= ufs_qcom_op_runtime_config,
 	.get_outstanding_cqs	= ufs_qcom_get_outstanding_cqs,
 	.config_esi		= ufs_qcom_config_esi,
+	.config_scsi_dev	= ufs_qcom_config_scsi_dev,
 	.freq_to_gear_speed	= ufs_qcom_freq_to_gear_speed,
 };
 
@@ -5448,7 +5591,186 @@ static ssize_t power_mode_show(struct device *dev,
 		hba->pwr_info.hs_rate == PA_HS_MODE_B ? 'B' : 'A');
 }
 
-static DEVICE_ATTR_RO(power_mode);
+static int buf_to_pwr_mod(struct ufs_pa_layer_attr *pwr_mode, u32 buf)
+{
+	int pwr_mode_value[6] = {0};
+	int idx = 6;
+
+	while(buf){
+		pwr_mode_value[--idx] = buf%10;
+		buf = buf/10;
+	}
+
+	pwr_mode->gear_rx = pwr_mode_value[idx++];
+	pwr_mode->gear_tx = pwr_mode_value[idx++];
+	pwr_mode->lane_rx = pwr_mode_value[idx++];
+	pwr_mode->lane_tx = pwr_mode_value[idx++];
+	pwr_mode->pwr_rx = pwr_mode_value[idx++];
+	pwr_mode->pwr_tx = pwr_mode_value[idx++];
+
+	if(idx == 6)
+		return false;
+	return true;
+}
+
+static void ufs_qcom_scsi_block_requests(struct ufs_hba *hba)
+{
+  	if (atomic_inc_return(&hba->scsi_block_reqs_cnt) == 1)
+  		scsi_block_requests(hba->host);
+}
+
+static void ufs_qcom_scsi_unblock_requests(struct ufs_hba *hba)
+{
+	if (atomic_dec_and_test(&hba->scsi_block_reqs_cnt))
+		scsi_unblock_requests(hba->host);
+}
+
+static int ufshcd_wait_for_doorbell_clr(struct ufs_hba *hba,
+  					u64 wait_timeout_us)
+{
+  	unsigned long flags;
+  	int ret = 0;
+  	u32 tm_doorbell;
+  	u32 tr_doorbell;
+  	bool timeout = false, do_last_check = false;
+  	ktime_t start;
+
+  	ufshcd_hold(hba);
+  	spin_lock_irqsave(hba->host->host_lock, flags);
+  	/*
+  	 * Wait for all the outstanding tasks/transfer requests.
+  	 * Verify by checking the doorbell registers are clear.
+  	 */
+  	start = ktime_get();
+  	do {
+  		if (hba->ufshcd_state != UFSHCD_STATE_OPERATIONAL) {
+  			ret = -EBUSY;
+  			goto out;
+  		}
+
+  		tm_doorbell = ufshcd_readl(hba, REG_UTP_TASK_REQ_DOOR_BELL);
+  		tr_doorbell = ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
+  		if (!tm_doorbell && !tr_doorbell) {
+  			timeout = false;
+  			break;
+  		} else if (do_last_check) {
+  			break;
+  		}
+
+  		spin_unlock_irqrestore(hba->host->host_lock, flags);
+  		schedule();
+  		if (ktime_to_us(ktime_sub(ktime_get(), start)) >
+  		    wait_timeout_us) {
+  			timeout = true;
+  			/*
+  			 * We might have scheduled out for long time so make
+  			 * sure to check if doorbells are cleared by this time
+  			 * or not.
+  			 */
+  			do_last_check = true;
+  		}
+  		spin_lock_irqsave(hba->host->host_lock, flags);
+  	} while (tm_doorbell || tr_doorbell);
+
+  	if (timeout) {
+  		dev_err(hba->dev,
+  			"%s: timedout waiting for doorbell to clear (tm=0x%x, tr=0x%x)\n",
+  			__func__, tm_doorbell, tr_doorbell);
+  		ret = -EBUSY;
+  	}
+  out:
+  	spin_unlock_irqrestore(hba->host->host_lock, flags);
+  	ufshcd_release(hba);
+  	return ret;
+}
+
+static int ufsdbg_config_pwr_mode(struct ufs_hba *hba,
+  		struct ufs_pa_layer_attr *desired_pwr_mode)
+{
+  	int ret = 0;
+
+  	pm_runtime_get_sync(&hba->ufs_device_wlun->sdev_gendev);
+  	/* let's not get into low power until clock scaling is completed */
+  	// hba->ufs_stats.clk_hold.ctx = DBGFS_CFG_PWR_MODE;
+  	ufshcd_hold(hba);
+  	down_write(&hba->clk_scaling_lock);
+  	ufs_qcom_scsi_block_requests(hba);
+  	if (ufshcd_wait_for_doorbell_clr(hba, DOORBELL_CLR_TOUT_US)) {
+  		ret = -EBUSY;
+  		goto out;
+  	}
+
+  	ret = ufshcd_config_pwr_mode(hba, desired_pwr_mode);
+
+  out:
+  	up_write(&hba->clk_scaling_lock);
+  	ufs_qcom_scsi_unblock_requests(hba);
+  	ufshcd_release(hba);
+  	pm_runtime_put_sync(&hba->ufs_device_wlun->sdev_gendev);
+
+  	return ret;
+}
+
+static ssize_t power_mode_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_pa_layer_attr pwr_mode;
+	struct ufs_pa_layer_attr final_pwr_mode;
+	int ret;
+	u32 value;
+
+	if (kstrtou32(buf, 0, &value))
+		return -EINVAL;
+
+	if (buf_to_pwr_mod(&pwr_mode, value))
+		return -EINVAL;
+
+	dev_err(hba->dev,"%s: input Gear=[%d,%d], Lane=[%d,%d], Mode=[%d,%d]\n", __func__,
+		pwr_mode.gear_tx, pwr_mode.gear_rx,
+		pwr_mode.lane_rx, pwr_mode.lane_tx,
+		pwr_mode.pwr_rx, pwr_mode.pwr_tx);
+
+	/*
+	 * Switching between rates is not currently supported so use the
+	 * current rate.
+	 * TODO: add rate switching if and when it is supported in the future
+	 */
+	pwr_mode.hs_rate = hba->pwr_info.hs_rate;
+
+	/* Validate user input */
+	if (!ufs_qcom_power_mode_validate(&pwr_mode))
+		return -EINVAL;
+
+	pr_err("%s: new power mode requested [RX,TX]: Gear=[%d,%d], Lane=[%d,%d], Mode=[%d,%d]\n",
+		__func__,
+		pwr_mode.gear_rx, pwr_mode.gear_tx, pwr_mode.lane_rx,
+		pwr_mode.lane_tx, pwr_mode.pwr_rx, pwr_mode.pwr_tx);
+
+	ret = ufs_qcom_cfg_pwr_param(hba, &pwr_mode, &final_pwr_mode);
+	if (ret) {
+		dev_err(hba->dev,
+			"%s: failed to configure new power parameters, ret = %d\n",
+			__func__, ret);
+		return count;
+	}
+
+	ret = ufsdbg_config_pwr_mode(hba, &final_pwr_mode);
+ 	if (ret == -EBUSY) {
+  		dev_err(hba->dev,
+  			"%s: ufshcd_config_pwr_mode failed: system is busy, try again,ret:%d\n",
+  			__func__, ret);
+	} else if (ret) {
+  		dev_err(hba->dev,
+  			"%s: ufshcd_config_pwr_mode failed, ret=%d\n",
+  			__func__, ret);
+	}
+
+  	return count;
+}
+
+static DEVICE_ATTR_RW(power_mode);
 
 static ssize_t bus_speed_mode_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
@@ -5601,7 +5923,7 @@ static ssize_t hibern8_count_show(struct device *dev,
 	u32	sw_h8_exit;
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 
-	pm_runtime_get_sync(hba->dev);
+	pm_runtime_get_sync(&hba->ufs_device_wlun->sdev_gendev);
 	ufshcd_hold(hba);
 	hw_h8_enter = ufshcd_readl(hba, REG_UFS_HW_H8_ENTER_CNT);
 	sw_h8_enter = ufshcd_readl(hba, REG_UFS_SW_H8_ENTER_CNT);
@@ -5609,7 +5931,7 @@ static ssize_t hibern8_count_show(struct device *dev,
 	hw_h8_exit = ufshcd_readl(hba, REG_UFS_HW_H8_EXIT_CNT);
 	sw_h8_exit = ufshcd_readl(hba, REG_UFS_SW_H8_EXIT_CNT);
 	ufshcd_release(hba);
-	pm_runtime_put_sync(hba->dev);
+	pm_runtime_put_sync(&hba->ufs_device_wlun->sdev_gendev);
 
 	return scnprintf(buf, PAGE_SIZE,
 			 "%s: %d\n%s: %d\n%s: %d\n%s: %d\n%s: %d\n",
@@ -6200,6 +6522,11 @@ static void ufs_qcom_remove(struct platform_device *pdev)
 		for (i = 0; i < r->num_groups; i++, qcg++)
 			remove_group_qos(qcg);
 	}
+
+	//#ifdef CONFIG_OPLUS_UFS_DRIVER
+	ufs_remove_oplus_dbg();
+	//#endif
+
 	if (msm_minidump_enabled())
 		atomic_notifier_chain_unregister(&panic_notifier_list,
 				&host->ufs_qcom_panic_nb);

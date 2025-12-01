@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 
-load("//build:msm_kernel_extensions.bzl", "define_top_level_rules")
+load(":kleaf-scripts/msm_kernel_extensions.bzl", "define_top_level_rules")
 load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load("//build/kernel/kleaf:kernel.bzl", "ddk_headers", "ddk_uapi_headers")
 load(":common_sources.bzl", "define_common_upstream_files")
@@ -169,6 +169,8 @@ filegroup(
     name = "unsafe_headers_qcom_group",
     srcs = [
         "//common:drivers/android/binder_alloc.h",
+	"//common:kernel/irq/internals.h",
+	"//common:kernel/irq/settings.h",
         "//common:drivers/android/binder_internal.h",
         "//common:drivers/android/binder_trace.h",
         "//common:drivers/android/dbitmap.h",
@@ -226,6 +228,7 @@ filegroup(
         "//common:drivers/usb/typec/ucsi/ucsi.h",
         "//common:drivers/virt/gunyah/rsc_mgr.h",
         "//common:fs/proc/internal.h",
+        "//common:kernel/futex/futex.h",
         "//common:kernel/locking/mutex.h",
         "//common:kernel/power/power.h",
         "//common:kernel/printk/printk_ringbuffer.h",

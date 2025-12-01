@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #define pr_fmt(fmt) "%s " fmt, KBUILD_MODNAME
 
@@ -1125,7 +1125,7 @@ static int crm_send_cmd(struct crm_drv_top *crm, struct crm_drv *drv,
 	spin_lock_irqsave(&drv->lock, flags);
 
 	/* Note: Set BIT(31) for RESP_REQ */
-	if ((vcd_type == BW_VOTE_VCD) && wait)
+	if ((vcd_type != PERF_OL_VCD) && wait)
 		data |= BW_VOTE_RESP_REQ;
 
 	irq_idx = vcd_type == BW_PT_VOTE_VCD ? 0 : resource_idx;

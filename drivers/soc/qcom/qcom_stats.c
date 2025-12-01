@@ -163,6 +163,15 @@ struct stats_drvdata {
 
 static struct stats_drvdata *drv;
 
+#ifdef CONFIG_OPLUS_RPMH_QCOM
+void *get_drvdata(void)
+{
+	return (void *)drv;
+}
+
+EXPORT_SYMBOL_GPL(get_drvdata);
+#endif
+
 struct sleep_stats {
 	u32 stat_type;
 	u32 count;

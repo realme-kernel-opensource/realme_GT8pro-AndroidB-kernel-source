@@ -14,6 +14,9 @@
 #include <linux/iommu.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#include <linux/cpumask.h>
+#endif
 #include <linux/ipc_logging.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -653,6 +656,9 @@ struct gpii {
 	bool dual_ee_sync_flag;
 	bool is_resumed;
 	bool is_multi_desc;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	bool is_use_cpu_affinity;
+#endif
 	int num_msgs;
 };
 
@@ -1062,6 +1068,17 @@ void gpi_dump_for_geni(struct dma_chan *chan)
 }
 EXPORT_SYMBOL_GPL(gpi_dump_for_geni);
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+void gpi_set_cpu_affinity(struct dma_chan *chan)
+{
+	struct gpii_chan *gpii_chan = to_gpii_chan(chan);
+	struct gpii *gpii = gpii_chan->gpii;
+
+	gpii->is_use_cpu_affinity = true;
+}
+EXPORT_SYMBOL_GPL(gpi_set_cpu_affinity);
+#endif
+
 /**
  * gpi_update_multi_desc_flag() - update multi descriptor flag and num of msgs for
  *				   multi descriptor mode handling.
@@ -1160,6 +1177,9 @@ static int gpi_config_interrupts(struct gpii *gpii,
 {
 	int ret;
 	int i;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	struct cpumask cpu_mask;
+#endif
 	const u32 def_type = (GPI_GPII_n_CNTXT_TYPE_IRQ_MSK_GENERAL |
 			      GPI_GPII_n_CNTXT_TYPE_IRQ_MSK_IEOB |
 			      GPI_GPII_n_CNTXT_TYPE_IRQ_MSK_GLOB |
@@ -1272,6 +1292,23 @@ static int gpi_config_interrupts(struct gpii *gpii,
 				    gpii->irq, ret);
 			return ret;
 		}
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if (gpii->is_use_cpu_affinity) {
+			cpumask_clear(&cpu_mask);
+			cpumask_set_cpu(6, &cpu_mask);
+			cpumask_set_cpu(7, &cpu_mask);
+			dev_err(gpii->gpi_dev->dev, "ANL:%s GPII ID:%d irq_no:%d\n",
+				__func__, gpii->gpii_id, gpii->irq);
+			GPII_ERR(gpii, GPI_DBG_COMMON,
+				 "GPII ID:%d irq_no:%d\n", gpii->gpii_id, gpii->irq);
+			if (irq_set_affinity_hint(gpii->irq, &cpu_mask)) {
+				GPII_CRITIC(gpii, GPI_DBG_COMMON,
+					    "fail affinity set irq:%d ret:%d\n", gpii->irq, ret);
+				return -EINVAL;
+			}
+		}
+#endif
 	}
 
 	if (settings == MASK_IEOB_SETTINGS) {

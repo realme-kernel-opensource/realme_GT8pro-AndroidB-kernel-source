@@ -61,7 +61,13 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/socinfo",
             "drivers/soc/qcom/smem",
+            "//vendor/oplus/kernel/cpu:oplus_bsp_sched_assist",
+            "//vendor/oplus/kernel/cpu:oplus_bsp_frame_boost",
+            "//vendor/oplus/kernel/cpu:cpufreq_bouncing",
+            "//vendor/oplus/kernel/cpu:oplus_bsp_task_overload",
         ],
+        # Add for oplus config
+        copts = ["-DCONFIG_OPLUS_FEATURE_SCHED_ASSIST", "-DCONFIG_OPLUS_SCHED_HALT_MASK_PRT", "-DCONFIG_OPLUS_FEATURE_FRAME_BOOST", "-DCONFIG_OPLUS_FEATURE_SCHED_EXT"],
     )
 
     registry.register(

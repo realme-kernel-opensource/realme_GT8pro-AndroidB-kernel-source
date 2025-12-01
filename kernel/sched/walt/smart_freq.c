@@ -763,6 +763,11 @@ void smart_freq_init(const char *name)
 				for (i = 0; i < SMART_FMAX_IPC_MAX; i++)
 					cluster->smart_freq_info->ipc_reason_config[i].ipc =
 						sysctl_ipc_levels_cluster0[i];
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+				cluster->smart_freq_info->ipc_reason_config[4].ipc = 800;
+#else
+				cluster->smart_freq_info->ipc_reason_config[4].ipc = 300;
+#endif
 
 				cluster->smart_freq_info->smart_freq_ipc_participation_mask =
 					BIT(IPC_A) | BIT(IPC_B) | BIT(IPC_C) | BIT(IPC_D) |
@@ -798,6 +803,11 @@ void smart_freq_init(const char *name)
 				for (i = 0; i < SMART_FMAX_IPC_MAX; i++)
 					cluster->smart_freq_info->ipc_reason_config[i].ipc =
 						sysctl_ipc_levels_cluster1[i];
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+				cluster->smart_freq_info->ipc_reason_config[4].ipc = 800;
+#else
+				cluster->smart_freq_info->ipc_reason_config[4].ipc = 400;
+#endif
 
 				cluster->smart_freq_info->smart_freq_ipc_participation_mask =
 					BIT(IPC_A) | BIT(IPC_B) | BIT(IPC_C) | BIT(IPC_D) |

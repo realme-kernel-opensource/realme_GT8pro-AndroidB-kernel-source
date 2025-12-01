@@ -65,6 +65,11 @@ unsigned int sysctl_sched_wake_up_idle[2];
 unsigned int sysctl_input_boost_ms;
 unsigned int sysctl_input_boost_freq[WALT_NR_CPUS];
 unsigned int sysctl_sched_boost_on_input;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_CEILING_FREE)
+unsigned int sysctl_ceiling_free_enable;
+unsigned int sysctl_cb_ceiling_free_enable = 1;
+unsigned int sysctl_omrg_ceiling_free_enable = 1;
+#endif
 unsigned int sysctl_sched_early_up[MAX_MARGIN_LEVELS];
 unsigned int sysctl_sched_early_down[MAX_MARGIN_LEVELS];
 
@@ -145,6 +150,9 @@ unsigned int load_sync_low_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_high_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int load_sync_high_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 unsigned int sysctl_force_frequent_yielder;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+unsigned int sysctl_yielder_disable;
+#endif
 unsigned int sysctl_pipeline_special_task_util_thres;
 unsigned int sysctl_pipeline_non_special_task_util_thres;
 unsigned int sysctl_pipeline_pin_thres_low_pct;
@@ -1687,6 +1695,35 @@ static struct ctl_table input_boost_sysctls[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_INT_MAX,
 	},
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_CEILING_FREE)
+	{
+		.procname	= "ceiling_free_enable",
+		.data		= &sysctl_ceiling_free_enable,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "cb_ceiling_free_enable",
+		.data		= &sysctl_cb_ceiling_free_enable,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "omrg_ceiling_free_enable",
+		.data		= &sysctl_omrg_ceiling_free_enable,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+#endif
 };
 
 static struct ctl_table walt_table[] = {
@@ -2362,6 +2399,17 @@ static struct ctl_table walt_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
 	},
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+	{
+		.procname	= "sched_yielder_disable",
+		.data		= &sysctl_yielder_disable,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+#endif
 	{
 		.procname	= "sched_frame_rate",
 		.data		= &sysctl_frame_rate,

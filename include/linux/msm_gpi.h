@@ -445,6 +445,17 @@ u32 get_gpii_chan_req_tres(struct dma_chan *chan);
  */
 void gpi_dump_for_geni(struct dma_chan *chan);
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/**
+ *  gpi_set_cpu_affinity() -  set cpu affinity
+ *
+ * @chan: Base address of the DMA channel
+ *
+ * Return: None.
+ */
+void gpi_set_cpu_affinity(struct dma_chan *chan);
+#endif
+
 /**
  * gpi_q2spi_terminate_all() - function to stop and restart the channels
  * @chan: gsi dma channel handle

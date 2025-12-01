@@ -9,6 +9,16 @@
 #include <walt.h>
 #include "trace.h"
 
+#ifdef CONFIG_OPLUS_ADD_CORE_CTRL_MASK
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+#include <frame_boost/frame_group.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <sched_assist/sa_common.h>
+#include <sched_assist/sa_fair.h>
+#endif
+#endif
+
 #ifdef CONFIG_HOTPLUG_CPU
 
 enum pause_type {
@@ -383,13 +393,26 @@ static void update_clients(struct cpumask *cpus, bool halt, enum pause_client cl
 {
 	int cpu;
 	struct halt_cpu_state *halt_cpu_state;
-
+#if IS_ENABLED(CONFIG_OPLUS_SCHED_HALT_MASK_PRT)
+	int *pause_client_state;
+#endif
 	for_each_cpu(cpu, cpus) {
 		halt_cpu_state = per_cpu_ptr(&halt_state, cpu);
+#if IS_ENABLED(CONFIG_OPLUS_SCHED_HALT_MASK_PRT)
+		pause_client_state = per_cpu_ptr(oplus_cur_pause_client, cpu);
+		if (halt) {
+			pause_client_state[type] |= client;
+			halt_cpu_state->client_vote_mask[type] |=  client;
+		}else {
+			pause_client_state[type] &= ~client;
+			halt_cpu_state->client_vote_mask[type] &= ~client;
+		}
+#else
 		if (halt)
 			halt_cpu_state->client_vote_mask[type] |=  client;
 		else
 			halt_cpu_state->client_vote_mask[type] &= ~client;
+#endif
 	}
 }
 
@@ -432,6 +455,11 @@ static int walt_halt_cpus(struct cpumask *cpus, enum pause_client client, enum p
 			 cpumask_pr_args(&requested_cpus));
 	else
 		update_clients(&requested_cpus, true, client, type);
+#if IS_ENABLED(CONFIG_OPLUS_SCHED_HALT_MASK_PRT)
+	cpumask_copy(&cur_cpus_halt_mask, cpu_halt_mask);
+	cpumask_copy(&cur_cpus_phalt_mask, cpu_partial_halt_mask);
+	sa_corectl_systrace_c();
+#endif
 unlock:
 	raw_spin_unlock_irqrestore(&halt_lock, flags);
 
@@ -476,7 +504,11 @@ static int walt_start_cpus(struct cpumask *cpus, enum pause_client client, enum 
 		/* restore/increment ref counts in case of error */
 		update_clients(&requested_cpus, true, client, type);
 	}
-
+#if IS_ENABLED(CONFIG_OPLUS_SCHED_HALT_MASK_PRT)
+	cpumask_copy(&cur_cpus_halt_mask, cpu_halt_mask);
+	cpumask_copy(&cur_cpus_phalt_mask, cpu_partial_halt_mask);
+	sa_corectl_systrace_c();
+#endif
 	raw_spin_unlock_irqrestore(&halt_lock, flags);
 
 	return ret;
@@ -651,6 +683,11 @@ static void android_rvh_is_cpu_allowed(void *unused, struct task_struct *p, int 
 	if (unlikely(walt_disabled))
 		return;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+	if (task_on_scx(p))
+		return;
+#endif
+
 	if (cpumask_test_cpu(cpu, cpu_halt_mask)) {
 		cpumask_t cpus_allowed;
 
@@ -704,6 +741,15 @@ void walt_halt_init(void)
 	}
 
 	sched_setscheduler_nocheck(walt_drain_thread, SCHED_FIFO, &param);
+
+#ifdef CONFIG_OPLUS_ADD_CORE_CTRL_MASK
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	init_fbg_halt_mask(&__cpu_halt_mask);
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	init_ux_halt_mask(&__cpu_halt_mask);
+#endif
+#endif /* CONFIG_OPLUS_ADD_CORE_CTRL_MASK */
 
 	register_trace_android_rvh_get_nohz_timer_target(android_rvh_get_nohz_timer_target, NULL);
 	register_trace_android_rvh_set_cpus_allowed_by_task(

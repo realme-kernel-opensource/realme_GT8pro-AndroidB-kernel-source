@@ -248,6 +248,9 @@ struct geni_i2c_dev {
 	u8 *split_allocated_buf;
 	u8 *split_aligned_buf;
 	int split_msg_cnt;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	bool oplus_suspend_delay;
+#endif
 	bool is_deep_sleep; /* For deep sleep restore the config similar to the probe. */
 };
 
@@ -3139,6 +3142,10 @@ static int geni_i2c_resources_init(struct platform_device *pdev, struct geni_i2c
 
 	gi2c->is_high_perf = of_property_read_bool(pdev->dev.of_node,
 						   "qcom,high-perf");
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	gi2c->oplus_suspend_delay = of_property_read_bool(pdev->dev.of_node,
+						   "oplus,suspend_delay");
+#endif
 	/*
 	 * For I2C_HUB, qup-ddr voting not required and
 	 * core clk should be voted explicitly.
@@ -3346,11 +3353,23 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	strscpy(gi2c->adap.name, "Geni-I2C", sizeof(gi2c->adap.name));
 
 	pm_runtime_set_suspended(gi2c->dev);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (!gi2c->is_le_vm && !gi2c->pm_ctrl_client) {
+		if (gi2c->oplus_suspend_delay) {
+			dev_err(&pdev->dev, "reg base: 0x%llx\n", (unsigned long long)res->start);
+			pm_runtime_set_autosuspend_delay(gi2c->dev, 0);
+		} else {
+			pm_runtime_set_autosuspend_delay(gi2c->dev, I2C_AUTO_SUSPEND_DELAY);
+		}
+		pm_runtime_use_autosuspend(gi2c->dev);
+	}
+#else
 	/* for levm and PM control clients skip auto suspend timer */
 	if (!gi2c->is_le_vm && !gi2c->pm_ctrl_client) {
 		pm_runtime_set_autosuspend_delay(gi2c->dev, I2C_AUTO_SUSPEND_DELAY);
 		pm_runtime_use_autosuspend(gi2c->dev);
 	}
+#endif
 	pm_runtime_enable(gi2c->dev);
 	ret = i2c_add_adapter(&gi2c->adap);
 	if (ret) {

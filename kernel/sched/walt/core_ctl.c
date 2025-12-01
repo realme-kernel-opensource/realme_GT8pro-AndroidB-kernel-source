@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt)	"core_ctl: " fmt
@@ -20,7 +20,9 @@
 
 #include "walt.h"
 #include "trace.h"
-
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+#include <sched_assist/sa_pipeline.h>
+#endif
 /* mask of all CPUs with a fully pause claim outstanding */
 cpumask_t cpus_paused_by_us = { CPU_BITS_NONE };
 
@@ -990,6 +992,8 @@ static void update_running_avg(u64 window_start, u32 wakeup_ctr_sum)
 	unsigned int index = 0;
 	unsigned long flags;
 	int big_avg = 0;
+	int giant = 0;
+	int cpu;
 
 	nr_stats = sched_get_nr_running_avg();
 
@@ -1038,12 +1042,15 @@ static void update_running_avg(u64 window_start, u32 wakeup_ctr_sum)
 
 		cluster->nr_big = cluster_real_big_tasks(index);
 		big_avg += cluster->nr_big;
+
+		for_each_cpu(cpu, &cluster->cpu_mask)
+			giant += nr_stats[cpu].nr_giant;
 	}
 	spin_unlock_irqrestore(&state_lock, flags);
 
 	last_nr_big = big_avg;
 
-	walt_rotation_checkpoint(big_avg);
+	walt_rotation_checkpoint(window_start, giant);
 	/* Update the SMART freq configuration for NON-IPC reasons. */
 	smart_freq_update_reason_common(window_start, big_avg, wakeup_ctr_sum);
 }
@@ -1094,8 +1101,17 @@ static unsigned int apply_task_need(const struct cluster_data *cluster)
 static unsigned int apply_limits(const struct cluster_data *cluster,
 				 unsigned int need_cpus)
 {
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 	if (!cluster->enable)
+#else
+	if (!cluster->enable || scx_enabled())
 		return cluster->num_cpus;
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+	if (cluster->boost && oplus_is_pipeline_scene())
+		return cluster->num_cpus;
+#endif
 
 	return min(max(cluster->min_cpus, need_cpus), cluster->max_cpus);
 }
@@ -1137,7 +1153,8 @@ static bool adjustment_possible(const struct cluster_data *cluster,
 						cluster_paused_cpus(cluster)));
 }
 
-static bool eval_need(struct cluster_data *cluster)
+#define GIANT_TASK_OFFLINE_DELAY_NS 300000000
+static bool eval_need(struct cluster_data *cluster, u64 window_start)
 {
 	unsigned long flags;
 	unsigned int need_cpus = 0, last_need;
@@ -1151,7 +1168,10 @@ static bool eval_need(struct cluster_data *cluster)
 
 	spin_lock_irqsave(&state_lock, flags);
 
-	if (cluster->boost || !cluster->enable)
+	if (cluster->boost || !cluster->enable ||
+		(walt_rotation_stop_hyst_start_ts &&
+		 (window_start - walt_rotation_stop_hyst_start_ts <
+		  GIANT_TASK_OFFLINE_DELAY_NS)))
 		need_cpus = cluster->max_cpus;
 	else
 		need_cpus = apply_task_need(cluster);
@@ -1196,7 +1216,9 @@ unlock:
 
 static void sysfs_param_changed(struct cluster_data *cluster)
 {
-	if (eval_need(cluster))
+	u64 now = walt_sched_clock();
+
+	if (eval_need(cluster, now))
 		wake_up_core_ctl_thread();
 }
 
@@ -1368,6 +1390,7 @@ static bool core_ctl_non_large_cpus_below_busy_pct(void)
 	return true;
 }
 
+#define SBT_CPU_BUSY_UTIL_THRESH 200
 bool prev_is_sbt;
 #define SBT_LIMIT 45
 /* is the system in a single-big-thread case? */
@@ -1389,6 +1412,12 @@ static inline bool core_ctl_is_sbt(int prev_is_sbt_windows, u32 wakeup_ctr_sum)
 		goto out;
 
 	if (!core_ctl_non_large_cpus_below_busy_pct())
+		goto out;
+
+	if (!any_large_above_util_threshold(SBT_CPU_BUSY_UTIL_THRESH))
+		goto out;
+
+	if (is_large_cpu_cap_low())
 		goto out;
 
 	ret = true;
@@ -1488,7 +1517,7 @@ void core_ctl_check(u64 window_start, u32 wakeup_ctr_sum)
 	update_running_avg(window_start, wakeup_ctr_sum);
 
 	for_each_cluster(cluster, index)
-		wakeup |= eval_need(cluster);
+		wakeup |= eval_need(cluster, window_start);
 
 	if (wakeup)
 		do_core_ctl();
@@ -1800,9 +1829,32 @@ static void __ref do_core_ctl(void)
 	core_ctl_resume_cpus(&cpus_to_unpause, &cpus_to_part_unpause);
 }
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+bool should_core_ctl(void)
+{
+	struct cluster_data *cluster;
+	unsigned int index = 0;
+
+	if (scx_enabled()){
+		for_each_cluster(cluster, index)
+			if (cluster->active_cpus != cluster->num_cpus)
+				return true;
+
+		return false;
+	}
+
+	return true;
+}
+#endif
+
 static int __ref try_core_ctl(void *data)
 {
 	unsigned long flags;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+	if (!should_core_ctl())
+		return 0;
+#endif
 
 	while (1) {
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -1937,7 +1989,9 @@ int core_ctl_init(void)
 		if (ret)
 			pr_warn("unable to create core ctl group: %d\n", ret);
 	}
-
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+	oplus_core_ctl_set_cluster_boost = core_ctl_set_cluster_boost;
+#endif
 	initialized = true;
 
 	return 0;

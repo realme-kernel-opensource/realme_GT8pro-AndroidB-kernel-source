@@ -32,6 +32,7 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
         ],
+        copts = ["-DCONFIG_OPLUS_FEATURE_GEAS_FDRIVE"],
     )
 
     registry.register(
@@ -98,6 +99,7 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
         ],
+        copts = ["-DCONFIG_OPLUS_FEATURE_GEAS_MEMLAT"],
     )
 
     registry.register(

@@ -56,6 +56,9 @@ static struct memshare_driver *memsh_drv;
 static struct memshare_child *memsh_child[MAX_CLIENTS];
 static struct mem_blocks memblock[MAX_CLIENTS];
 static uint32_t num_clients;
+//#ifdef OPLUS_FEATURE_MDLOG_BUFFERSIZE
+extern int md_buffersize;
+//#endif
 
 static inline bool is_shared_mapping(struct mem_blocks *mb)
 {
@@ -807,6 +810,15 @@ static int memshare_child_probe(struct platform_device *pdev)
 				rc);
 		return rc;
 	}
+
+//#ifdef OPLUS_FEATURE_MDLOG_BUFFERSIZE
+    if(client_id == MDLOG_BUFFER_CLIENT) {
+        printk("md_buffersize = %d\n", md_buffersize);
+        if(md_buffersize > 0) {
+            size = md_buffersize*1024*1024;
+        }
+    }
+//#endif
 
 	memblock[num_clients].guarantee = of_property_read_bool(
 							pdev->dev.of_node,

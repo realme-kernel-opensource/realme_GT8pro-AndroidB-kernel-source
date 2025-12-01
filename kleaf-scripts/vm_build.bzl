@@ -1,5 +1,5 @@
 load(
-    "//build:msm_kernel_extensions.bzl",
+    ":kleaf-scripts/msm_kernel_extensions.bzl",
     "define_extras",
     "get_dtb_list",
     "get_dtbo_list",

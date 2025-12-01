@@ -573,6 +573,7 @@ struct ufs_qcom_host {
 	atomic_t num_reqs_threshold;
 	bool cur_freq_vote;
 	struct delayed_work fwork;
+	struct delayed_work iostack_work;
 	bool cpufreq_dis;
 	struct cpu_freq_info *cpu_info;
 	/* number of CPUs to bump up */
@@ -700,6 +701,8 @@ struct ufs_ioctl_query_data {
 	 * Please check include/uapi/scsi/ufs/ufs.h for the definition of it.
 	 */
 	__u8 idn;
+	/* for string descriptor */
+	__u8 index;
 	/*
 	 * User should specify the size of the buffer (buffer[0] below) where
 	 * it wants to read the query data (attribute/flag/descriptor).

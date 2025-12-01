@@ -138,6 +138,8 @@ static int dynamic_memdump_enable;
 static size_t total_size;
 static phys_addr_t global_mini_phys_addr;
 #endif
+static int dynamic_memdump_enable = 0;
+
 /**
  * reset_sprs_dump_table - reset the sprs dump table
  *

@@ -18,6 +18,9 @@
 #define CHECK	0
 #define FREE	1
 #define MEMSHARE_GUARD_BYTES	(4*1024)
+//#ifdef OPLUS_FEATURE_MDLOG_BUFFERSIZE
+#define MDLOG_BUFFER_CLIENT	1
+//#endif
 
 struct memshare_hyp_mapping {
 	u32 num_vmids;

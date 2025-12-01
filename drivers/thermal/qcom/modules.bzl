@@ -7,6 +7,7 @@ def register_modules(registry):
             # do not sort
             "drivers/thermal/qcom/bcl_pmic5.c",
             "drivers/thermal/qcom/thermal_zone_internal.h",
+            "drivers/thermal/qcom/trace.h",
         ],
         deps = [
             # do not sort

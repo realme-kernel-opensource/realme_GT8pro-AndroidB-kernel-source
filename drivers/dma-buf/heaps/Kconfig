@@ -124,3 +124,20 @@ config QCOM_DMABUF_HEAPS_DEFERRED_FREE
 	  library. It allows the page-zeroing to be done out of the
 	  normal allocation/free path.
 	  If in doubt, say N here.
+
+config OPLUS_FEATURE_MM_BOOSTPOOL
+	bool "Oplus DMA-BUF heaps boost-pool library"
+	depends on QCOM_DMABUF_HEAPS_SYSTEM
+	help
+	  Choose this option to enable the DMA-BUF heaps boost-pool library.
+
+config OPLUS_FEATURE_MM_OSVELTE
+	tristate "osvelte driver"
+	help
+	  This driver used for memory debugging.
+
+config OPLUS_FEATURE_MM_TA_CMA_RSV
+	bool "oplus mm ta_cma_rsv"
+	depends on OPLUS_FEATURE_MM_OSVELTE
+	help
+	  This driver used for reserver cma pages for ta

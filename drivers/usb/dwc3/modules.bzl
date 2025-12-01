@@ -3,6 +3,7 @@ def register_modules(registry):
         name = "drivers/usb/dwc3/dwc3-msm",
         out = "dwc3-msm.ko",
         config = "CONFIG_USB_DWC3_MSM",
+        local_defines = ["OPLUS_FEATURE_CHG_BASIC"],
         srcs = [
             # do not sort
             "drivers/usb/dwc3/debug-ipc.h",

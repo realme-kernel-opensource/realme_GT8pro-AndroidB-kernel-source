@@ -20,7 +20,7 @@ def register_modules(registry):
         ],
         deps = [
             # do not sort
-            "drivers/power/supply/qti_battery_charger",
+            "//vendor/oplus/kernel/charger/bazel:{target_variant}_oplus_chg_v2",
             "drivers/soc/qcom/panel_event_notifier",
             "drivers/soc/qcom/qti_pmic_glink",
             "drivers/soc/qcom/pdr_interface",
@@ -42,5 +42,14 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+    registry.register(
+        name = "drivers/input/misc/qpnp-power-on",
+        out = "qpnp-power-on.ko",
+        config = "CONFIG_INPUT_QPNP_POWER_ON",
+        srcs = [
+            # do not sort
+            "drivers/input/misc/qpnp-power-on.c",
         ],
     )

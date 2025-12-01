@@ -12,7 +12,7 @@ import sys
 import subprocess
 
 HOST_TARGETS = ["dtc", "host"]
-DEFAULT_SKIP_LIST = []
+DEFAULT_SKIP_LIST = ["abl"]
 MSM_EXTENSIONS = "build/msm_kernel_extensions.bzl"
 ABL_EXTENSIONS = "build/abl_extensions.bzl"
 DEFAULT_MSM_EXTENSIONS_SRC = "../soc-repo/kleaf-scripts/msm_kernel_extensions.bzl"
@@ -277,11 +277,17 @@ class BazelBuilder:
                 out_dir = target.get_out_dir("host")
             else:
                 out_dir = target.get_out_dir("dist")
+
+            if "_all_oplus_ddk_modules_dist" not in target.bazel_label:
+                opts = ["--dist_dir", out_dir]
+            else:
+                opts = None
+
             self.bazel(
                 "run",
                 [target],
                 extra_options=self.user_opts,
-                bazel_target_opts=["--dist_dir", out_dir]
+                bazel_target_opts=opts
             )
             self.write_opts(out_dir)
 
@@ -394,7 +400,7 @@ def main():
     parser.add_argument(
         "--log",
         metavar="LEVEL",
-        default="info",
+        default="debug",
         choices=["debug", "info", "warning", "error"],
         help="Log level (debug, info, warning, error)",
     )

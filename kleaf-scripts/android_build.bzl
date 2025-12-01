@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("//build:msm_kernel_extensions.bzl", "define_extras", "get_gki_ramdisk_prebuilt_binary", "get_vendor_ramdisk_binaries")
+load(":kleaf-scripts/msm_kernel_extensions.bzl", "define_extras", "get_gki_ramdisk_prebuilt_binary", "get_vendor_ramdisk_binaries")
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load(
@@ -20,6 +20,7 @@ load(":kleaf-scripts/modules_unprotected.bzl", "get_unprotected_vendor_modules_l
 load(":kleaf-scripts/msm_dtc.bzl", "define_dtc_dist")
 load(":kleaf-scripts/techpack_modules.bzl", "define_techpack_modules")
 load(":qcom_modules.bzl", "registry")
+load("//build/kernel/oplus:oplus_modules.bzl", "define_oplus_ddk_modules")
 
 def define_common_android_rules():
     write_file(
@@ -240,6 +241,7 @@ def define_single_android_build(
 
     dist_data = [
         "{}_gki_artifacts".format(base_kernel),
+        "{}".format(base_kernel),
         ":{}_modules_install".format(stem),
         "{}_dtb_build".format(stem),
         ":{}_images".format(stem),
@@ -300,6 +302,7 @@ def define_single_android_build(
     define_dtc_dist(stem, name, variant)
 
     define_techpack_modules(stem, name, variant)
+    define_oplus_ddk_modules(stem, name, variant)
 
     define_extras(stem, kbuild_config = base_kernel)
 

@@ -8,6 +8,6 @@ def register_modules(registry):
             "drivers/leds/flash/leds-qcom-flash.c",
         ],
         deps = [
-            "drivers/power/supply/qti_battery_charger",
+            "//vendor/oplus/kernel/charger/bazel:{target_variant}_oplus_chg_v2",
         ],
     )

@@ -18,6 +18,8 @@ def register_modules(registry):
             "drivers/dma-buf/heaps/qcom_system_heap.h",
             "drivers/dma-buf/heaps/qcom_system_movable_heap.h",
             "drivers/dma-buf/heaps/deferred-free-helper.h",
+            "drivers/dma-buf/heaps/qcom_dma_trace.h",
+            "drivers/soc/qcom/mem_buf/mem-buf-dev.h"
         ],
         conditional_srcs = {
             "CONFIG_QCOM_DMABUF_HEAPS_SYSTEM": {
@@ -69,6 +71,19 @@ def register_modules(registry):
                     "drivers/dma-buf/heaps/qcom_system_movable_heap.c",
                 ],
             },
+            "CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL": {
+                True: [
+                    # do not sort
+                    "drivers/dma-buf/heaps/mm_boost_pool/oplus_boost_pool.c",
+                    "drivers/dma-buf/heaps/mm_boost_pool/oplus_boost_pool.h",
+                    "drivers/dma-buf/heaps/mm_boost_pool/trace_dma_buf.h",
+                ],
+            },
+            "CONFIG_OPLUS_FEATURE_MM_TA_CMA_RSV": {
+                True: [
+                    "drivers/dma-buf/heaps/mm_boost_pool/oplus_mm_cma_rsv.h",
+                ],
+            },
         },
         deps = [
             # do not sort
@@ -81,6 +96,7 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
             "drivers/dma-buf/heaps/deferred-free-helper",
+            "//vendor/oplus/kernel/mm:oplus_bsp_mm_osvelte",
         ],
     )
     registry.register(

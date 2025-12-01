@@ -37,5 +37,6 @@
 #define RPMH_CXO_PAD_CLK_A			28
 #define RPMH_SLP_CLK2				29
 #define RPMH_SLP_CLK2_A				30
-
+#define RPMH_LN_BB_CLK4				31
+#define RPMH_LN_BB_CLK4_A			32
 #endif

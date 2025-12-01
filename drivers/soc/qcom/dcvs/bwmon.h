@@ -165,6 +165,9 @@ struct hwmon_node {
 	struct kobject		kobj;
 	struct mutex		mon_lock;
 	struct mutex		update_lock;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GEAS_FDRIVE)
+	struct hwmon_node_ext	geas_frame_bw;
+#endif
 };
 
 /* BWMON register offsets */

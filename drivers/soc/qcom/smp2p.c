@@ -24,6 +24,13 @@
 
 #include <linux/ipc_logging.h>
 
+#define OPLUS_FEATURE_SENSOR_WAKEUP_TRACE
+#ifdef OPLUS_FEATURE_SENSOR_WAKEUP_TRACE
+#include <linux/proc_fs.h>
+#define CREATE_TRACE_POINTS
+#include "trace_smp2p.h"
+#endif
+
 /*
  * The Shared Memory Point to Point (SMP2P) protocol facilitates communication
  * of a single 32-bit value between two processors.  Each value has a single
@@ -170,6 +177,67 @@ struct qcom_smp2p {
 	struct list_head inbound;
 	struct list_head outbound;
 };
+
+struct oplus_smp2p_state {
+	struct list_head list;
+	unsigned local_pid;
+	unsigned remote_pid;
+	unsigned val;
+	u32 count;
+};
+
+#ifdef CONFIG_OPLUS_FEATURE_STANDBY_NETLINK_SMP2P
+#define OPLUS_SMP2P_STATE_MAX_SIZE 50
+static LIST_HEAD(oplus_smp2p_state_list);
+bool oplus_smp2p_state_switch = false;
+struct list_head *get_oplus_smp2p_state_list(void) {
+    return &oplus_smp2p_state_list;
+}
+EXPORT_SYMBOL(get_oplus_smp2p_state_list);
+
+void reset_oplus_smp2p_state(int switch_state) {
+	struct oplus_smp2p_state *state, *tmp;
+	list_for_each_entry_safe(state, tmp, &oplus_smp2p_state_list, list) {
+		list_del(&state->list);
+		kfree(state);
+	}
+
+	oplus_smp2p_state_switch = (switch_state > 0);
+}
+EXPORT_SYMBOL(reset_oplus_smp2p_state);
+
+static void update_oplus_smp2p_state(unsigned local_pid, unsigned remote_pid, unsigned val)
+{
+	struct oplus_smp2p_state *state;
+	int len = 0;
+
+	if (!oplus_smp2p_state_switch)
+		return;
+
+	val = (val >> 16) & 0xFFFF;
+	list_for_each_entry(state, &oplus_smp2p_state_list, list) {
+		if (state->local_pid == local_pid && state->remote_pid == remote_pid && state->val == val) {
+			state->count++;
+			return;
+		}
+
+		if (len >= OPLUS_SMP2P_STATE_MAX_SIZE)
+			return;
+	}
+
+	state = kmalloc(sizeof(*state), GFP_KERNEL);
+	if (!state)	{
+		pr_err("oplus_smp2p: failed to allocate memory for oplus_smp2p_state\n");
+		return;
+	}
+
+	state->local_pid = local_pid;
+	state->remote_pid = remote_pid;
+	state->val = val;
+	state->count = 1;
+	list_add_tail(&state->list, &oplus_smp2p_state_list);
+}
+#endif /* CONFIG_OPLUS_FEATURE_STANDBY_NETLINK_SMP2P */
 
 static void *ilc;
 #define SMP2P_LOG_PAGE_CNT 2
@@ -339,6 +407,26 @@ static void qcom_smp2p_notify_in(struct qcom_smp2p *smp2p)
 
 		SMP2P_INFO("%d:\t%s: status:%0lx val:%0x\n",
 			   smp2p->remote_pid, entry->name, status, val);
+		// #ifdef OPLUS_FEATURE_SENSOR_WAKEUP_INFO
+		if (!strcmp(entry->name, "sleepstate_see")) {
+#ifdef OPLUS_FEATURE_SENSOR_WAKEUP_TRACE
+			int sensor_type = (int)((val >> 16) & 0xFFFF);
+			int ap_stat = (int)((val >> 8) & 0xFF);
+			if (ap_stat == 0) {
+				trace_sensor_wakeup_stat(sensor_type);
+			}
+			dev_err(smp2p->dev, "%d:%s: status:%lx sensor_type:%d ap_stat:%d\n",
+					smp2p->remote_pid, entry->name, status, sensor_type, ap_stat);
+#else
+			dev_err(smp2p->dev, "%d:\t%s: status:%0lx val:%0x\n",
+					smp2p->remote_pid, entry->name, status, val);
+#endif
+		}
+		// #endif // OPLUS_FEATURE_SENSOR_WAKEUP_INFO
+
+#ifdef CONFIG_OPLUS_FEATURE_STANDBY_NETLINK_SMP2P
+		update_oplus_smp2p_state(smp2p->local_pid, smp2p->remote_pid, val);
+#endif // CONFIG_OPLUS_FEATURE_STANDBY_NETLINK_SMP2P
 
 		/* No changes of this entry? */
 		if (!status)

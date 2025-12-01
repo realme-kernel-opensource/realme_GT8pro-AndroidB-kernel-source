@@ -26,13 +26,25 @@
 
 #include "qcom_cma_heap.h"
 #include "qcom_sg_ops.h"
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_TA_CMA_RSV)
+#include "mm_osvelte/mm-config.h"
+#include "mm_osvelte/mm-utils.h"
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTEV */
 
 struct cma_heap {
 	struct cma *cma;
 	/* max_align is in units of page_order, similar to CONFIG_CMA_ALIGNMENT */
 	u32 max_align;
 	bool uncached;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_TA_CMA_RSV)
+	struct config_cma_rsv *cma_rsv;
+#endif /* CONFIG_OPLUS_FEATURE_MM_TA_CMA_RSV */
 };
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_TA_CMA_RSV)
+/* include oplus function */
+#include "mm_boost_pool/oplus_mm_cma_rsv.h"
+#endif /* CONFIG_OPLUS_FEATURE_MM_TA_CMA_RSV */
 
 static void cma_heap_free(struct qcom_sg_buffer *buffer)
 {
@@ -80,7 +92,11 @@ struct dma_buf *cma_heap_allocate(struct dma_heap *heap,
 	helper_buffer->uncached = cma_heap->uncached;
 	helper_buffer->free = cma_heap_free;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_TA_CMA_RSV)
+	cma_pages = cma_alloc_or_rsv(cma_heap, nr_pages, align, len);
+#else /* CONFIG_OPLUS_FEATURE_MM_TA_CMA_RSV */
 	cma_pages = cma_alloc(cma_heap->cma, nr_pages, align, false);
+#endif /* CONFIG_OPLUS_FEATURE_MM_TA_CMA_RSV */
 	if (!cma_pages)
 		goto free_buf;
 
@@ -185,6 +201,9 @@ static int __add_cma_heap(struct platform_heap *heap_data, void *data)
 		kfree(cma_heap);
 		return ret;
 	}
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_TA_CMA_RSV)
+	probe_ta_cma_rsv(cma_heap);
+#endif /* CONFIG_OPLUS_FEATURE_MM_TA_CMA_RSV */
 
 	if (cma_heap->uncached)
 		dma_coerce_mask_and_coherent(dma_heap_get_dev(heap),

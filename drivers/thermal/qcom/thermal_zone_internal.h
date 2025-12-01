@@ -23,6 +23,8 @@ static inline __maybe_unused int qti_tz_change_mode(struct thermal_zone_device *
 	tz->temperature = THERMAL_TEMP_INVALID;
 	tz->prev_low_trip = -INT_MAX;
 	tz->prev_high_trip = INT_MAX;
+	if (mode == THERMAL_DEVICE_DISABLED && tz->ops.set_trips)
+		tz->ops.set_trips(tz, -INT_MAX, INT_MAX);
 	for_each_trip_desc(tz, td) {
 		list_for_each_entry(instance, &td->thermal_instances, trip_node) {
 			instance->initialized = false;

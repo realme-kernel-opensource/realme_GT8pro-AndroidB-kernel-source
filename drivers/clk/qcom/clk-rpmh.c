@@ -436,6 +436,7 @@ DEFINE_CLK_RPMH_VRM(c5a_e0, _div2, "C5A_E0", 2);
 DEFINE_CLK_RPMH_VRM(c6a_e0, _div2, "C6A_E0", 2);
 DEFINE_CLK_RPMH_VRM(c7a_e0, _div2, "C7A_E0", 2);
 DEFINE_CLK_RPMH_VRM(c8a_e0, _div2, "C8A_E0", 2);
+DEFINE_CLK_RPMH_VRM(c9a_e0, _div2, "C9A_E0", 2);
 DEFINE_CLK_RPMH_VRM(c11a_e0, _div4, "C11A_E0", 4);
 
 DEFINE_CLK_RPMH_BCM(ce, "CE0");
@@ -904,12 +905,15 @@ static struct clk_hw *canoe_rpmh_clocks[] = {
 	[RPMH_CXO_CLK]          = &pineapple_bi_tcxo.hw,
 	[RPMH_CXO_CLK_A]        = &pineapple_bi_tcxo_ao.hw,
 	[RPMH_DIV_CLK1]		= &clk_rpmh_c11a_e0_div4.hw,
+	[RPMH_DIV_CLK1_A] 	= &clk_rpmh_c11a_e0_div4_ao.hw,
 	[RPMH_LN_BB_CLK1]	= &clk_rpmh_c6a_e0_div2.hw,
 	[RPMH_LN_BB_CLK1_A]	= &clk_rpmh_c6a_e0_div2_ao.hw,
 	[RPMH_LN_BB_CLK2]	= &clk_rpmh_c7a_e0_div2.hw,
 	[RPMH_LN_BB_CLK2_A]	= &clk_rpmh_c7a_e0_div2_ao.hw,
 	[RPMH_LN_BB_CLK3]	= &clk_rpmh_c8a_e0_div2.hw,
 	[RPMH_LN_BB_CLK3_A]	= &clk_rpmh_c8a_e0_div2_ao.hw,
+	[RPMH_LN_BB_CLK4]	= &clk_rpmh_c9a_e0_div2.hw,
+	[RPMH_LN_BB_CLK4_A]	= &clk_rpmh_c9a_e0_div2_ao.hw,
 	[RPMH_RF_CLK1]		= &clk_rpmh_c1a_e0_div1.hw,
 	[RPMH_RF_CLK1_A]	= &clk_rpmh_c1a_e0_div1_ao.hw,
 	[RPMH_RF_CLK2]		= &clk_rpmh_c2a_e0_div1.hw,

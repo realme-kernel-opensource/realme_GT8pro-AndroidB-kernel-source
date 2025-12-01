@@ -15,6 +15,10 @@
 #include <linux/slab.h>
 #include <linux/soc/qcom/qti_pmic_glink.h>
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#include <soc/oplus/system/boot_mode.h>
+#endif
+
 #define MSG_OWNER_CHG_ULOG		32778
 #define MSG_TYPE_REQ_RESP		1
 #define GET_CHG_ULOG_REQ		0x18
@@ -60,6 +64,9 @@ struct chg_ulog_glink_dev {
 	u32				log_time_ms;
 	bool				log_enable;
 	bool				init_log_enable;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	bool				enable_log_print;
+#endif
 };
 
 #define WAIT_TIME_MS			1000
@@ -150,11 +157,27 @@ static void ulog_store(struct chg_ulog_glink_dev *cd, void *ipc_ctxt,
 	if (len >= MAX_MSG_SIZE) {
 		do {
 			token = strsep((char **)&buf, "\n");
-			if (token)
+			if (token) {
+#ifndef OPLUS_FEATURE_CHG_BASIC
 				ipc_log_string(ipc_ctxt, "%s", token);
+#else
+				if (cd->enable_log_print)
+					pr_info("%s", token);
+				else
+					ipc_log_string(ipc_ctxt, "%s", token);
+#endif
+			}
 		} while (token);
 	} else {
 		ipc_log_string(ipc_ctxt, "%s", buf);
+#ifndef OPLUS_FEATURE_CHG_BASIC
+		ipc_log_string(ipc_ctxt, "%s", buf);
+#else
+		if (cd->enable_log_print)
+			pr_info("%s", buf);
+		else
+			ipc_log_string(ipc_ctxt, "%s", buf);
+#endif
 	}
 }
 
@@ -384,6 +407,9 @@ static int chg_ulog_probe(struct platform_device *pdev)
 	struct chg_ulog_glink_dev *cd;
 	struct pmic_glink_client_data client_data = { };
 	int rc;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	int boot_mode;
+#endif
 
 	cd = devm_kzalloc(&pdev->dev, sizeof(*cd), GFP_KERNEL);
 	if (!cd)
@@ -428,6 +454,17 @@ static int chg_ulog_probe(struct platform_device *pdev)
 		return dev_err_probe(cd->dev, -ENODEV, "Error in creating charger_ulog_init\n");
 	}
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	boot_mode = get_boot_mode();
+	if (boot_mode == MSM_BOOT_MODE__RF ||
+	    boot_mode == MSM_BOOT_MODE__WLAN ||
+	    boot_mode == MSM_BOOT_MODE__FACTORY) {
+		cd->enable_log_print = true;
+		ulog_en_set(cd, 1);
+	} else {
+		cd->enable_log_print = false;
+	}
+#endif
 	return 0;
 }
 

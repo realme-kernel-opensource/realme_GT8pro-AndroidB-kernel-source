@@ -1,4 +1,4 @@
-load("//build:msm_kernel_extensions.bzl", "define_combined_vm_image", "define_extras", "get_dtb_list")
+load(":kleaf-scripts/msm_kernel_extensions.bzl", "define_combined_vm_image", "define_extras", "get_dtb_list")
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load(":kleaf-scripts/image_opts.bzl", "vm_image_opts")
 load(":kleaf-scripts/msm_common.bzl", "get_out_dir")

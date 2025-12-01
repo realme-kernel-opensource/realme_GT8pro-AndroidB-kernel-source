@@ -42,6 +42,9 @@ def register_modules(registry):
         ],
         deps = [
             # do not sort
+#ifdef OPLUS_FEATURE_CHG_BASIC
+            "drivers/dma/qcom/msm_gpi",
+#endif
             "kernel/trace/qcom_ipc_logging",
             "drivers/soc/qcom/minidump",
             "drivers/soc/qcom/smem",

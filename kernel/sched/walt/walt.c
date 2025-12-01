@@ -25,7 +25,24 @@
 #include "walt.h"
 #include "trace.h"
 #include "sysctl_walt_stats.h"
-
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+#include <frame_boost/frame_group.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <sched_assist/sa_common.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GKI_CPUFREQ_BOUNCING)
+#include <linux/cpufreq_bouncing.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
+#include <sched_assist/sa_group.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+#include <sched_assist/sa_pipeline.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG)
+#include <linux/task_overload.h>
+#endif
 const char *task_event_names[] = {
 	"PUT_PREV_TASK",
 	"PICK_NEXT_TASK",
@@ -59,6 +76,7 @@ DEFINE_SPINLOCK(enforce_high_irq_cpu_lock);
 DEFINE_PER_CPU(int, enforce_high_irq_cpus_refcount);
 
 DEFINE_PER_CPU(struct walt_rq, walt_rq);
+EXPORT_PER_CPU_SYMBOL_GPL(walt_rq);
 unsigned int sysctl_sched_user_hint;
 static u64 sched_clock_last;
 static bool walt_clock_suspended;
@@ -70,7 +88,8 @@ static u64 walt_load_reported_window;
 
 struct irq_work walt_cpufreq_irq_work;
 struct irq_work walt_migration_irq_work;
-unsigned int walt_rotation_enabled;
+bool walt_rotation_enabled;
+bool plenty_giant_tasks;
 
 unsigned int __read_mostly sched_ravg_window = 20000000;
 int min_possible_cluster_id;
@@ -380,19 +399,64 @@ fixup_cumulative_runnable_avg(struct rq *rq,
 	stats->pred_demands_sum_scaled = (u64)pred_demands_sum_scaled;
 }
 
+static inline void
+fixup_nr_giant(struct rq *rq, struct task_struct *p, struct walt_sched_stats *stats,
+		u16 updated_demand_scaled)
+{
+	bool is_prev_giant_task = walt_flag_test(p, WALT_GIANT_BIT);
+	int cap;
+
+	if (num_sched_clusters >= 2)
+		cap = arch_scale_cpu_capacity(cpumask_first(&cpu_array[0][num_sched_clusters - 2]));
+	else
+		cap = arch_scale_cpu_capacity(cpumask_first(&cpu_array[0][num_sched_clusters - 1]));
+
+	if (updated_demand_scaled > ((GIANT_UTIL_THRESH_PCT * cap) >> SCHED_CAPACITY_SHIFT)) {
+		if (!is_prev_giant_task) {
+			walt_flag_set(p, WALT_GIANT_BIT, 1);
+			stats->nr_giant_tasks++;
+		}
+	} else {
+		if (is_prev_giant_task) {
+			walt_flag_set(p, WALT_GIANT_BIT, 0);
+			stats->nr_giant_tasks--;
+			if (stats->nr_giant_tasks < 0)
+				stats->nr_giant_tasks = 0;
+		}
+	}
+}
+
+
 static void fixup_walt_sched_stats_common(struct rq *rq, struct task_struct *p,
 				   u16 updated_demand_scaled,
 				   u16 updated_pred_demand_scaled)
 {
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	s64 task_load_delta = (s64)updated_demand_scaled -
 			      wts->demand_scaled;
 	s64 pred_demand_delta = (s64)updated_pred_demand_scaled -
 				wts->pred_demand_scaled;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
+#else
+	struct walt_task_struct *wts;
+	s64 task_load_delta;
+	s64 pred_demand_delta;
+	struct walt_rq *wrq;
+
+	if (task_on_scx(p))
+		return;
+	wts = (struct walt_task_struct *)android_task_vendor_data(p);
+	task_load_delta = (s64)updated_demand_scaled - wts->demand_scaled;
+	pred_demand_delta = (s64)updated_pred_demand_scaled - wts->pred_demand_scaled;
+	wrq = &per_cpu(walt_rq, cpu_of(rq));
+#endif
 
 	fixup_cumulative_runnable_avg(rq, p, &wrq->walt_stats, task_load_delta,
 				      pred_demand_delta);
+
+	if (walt_fair_task(p))
+		fixup_nr_giant(rq, p, &wrq->walt_stats, updated_demand_scaled);
 }
 
 static void rollover_cpu_window(struct rq *rq, bool full_window);
@@ -568,6 +632,13 @@ int walt_trailblazer_tasks(int cpu)
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
 
 	return wrq->walt_stats.nr_trailblazer_tasks;
+}
+
+int walt_giant_tasks(int cpu)
+{
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
+
+	return wrq->walt_stats.nr_giant_tasks;
 }
 
 bool trailblazer_on_prime(void)
@@ -2244,7 +2315,7 @@ static inline u32 scale_util_to_time(u16 util)
 	return util * walt_scale_demand_divisor;
 }
 
-#define PIPELINE_IDLE_MS 3000000000
+#define PIPELINE_IDLE_NS 3000000000
 static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 		u32 runtime, u16 runtime_scaled, u32 *demand, u16 *trailblazer_demand)
 {
@@ -2254,7 +2325,7 @@ static void update_trailblazer_accounting(struct task_struct *p, struct rq *rq,
 	u64 trailblazer_capacity;
 
 	if (sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
-		((wts->mark_start + PIPELINE_IDLE_MS) <  walt_rq_clock(rq)))
+		((wts->mark_start + PIPELINE_IDLE_NS) <  walt_rq_clock(rq)))
 		wts->high_util_history = 0;
 
 	if (!pipeline_in_progress() && sysctl_walt_feat(WALT_FEAT_TRAILBLAZER_BIT) &&
@@ -2361,6 +2432,7 @@ static void update_lst(struct walt_task_struct *wts, u64 wallclock,
 
 }
 
+static void update_obet_task(struct task_struct *p, struct rq *rq, u32 demand);
 /*
  * Called when new window is starting for a task, to record cpu usage over
  * recently concluded window(s). Normally 'samples' should be 1. It can be > 1
@@ -2424,6 +2496,8 @@ static void update_history(struct rq *rq, struct task_struct *p,
 	if (walt_fair_task(p) && task_in_related_thread_group(p))
 		update_trailblazer_accounting(p, rq, runtime, runtime_scaled,
 				&demand, &trailblazer_demand);
+	if (walt_fair_task(p))
+		update_obet_task(p, rq, demand);
 	pred_demand_scaled = predict_and_update_buckets(p, runtime_scaled);
 	demand_scaled = scale_time_to_util(demand);
 
@@ -2576,8 +2650,10 @@ static u64 update_task_demand(struct task_struct *p, struct rq *rq,
 	update_history(rq, p, wts->sum, 1, event);
 	if (nr_full_windows) {
 		u64 scaled_window = scale_exec_time(window_size, rq, wts);
-
-		update_history(rq, p, scaled_window, nr_full_windows, event);
+		int window_counts = nr_full_windows;
+		if (nr_full_windows > RAVG_HIST_SIZE)
+			window_counts = RAVG_HIST_SIZE;
+		update_history(rq, p, scaled_window, window_counts, event);
 		runtime += nr_full_windows * scaled_window;
 	}
 
@@ -2875,6 +2951,11 @@ static void walt_update_task_ravg(struct task_struct *p, struct rq *rq, int even
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+	if (task_on_scx(p))
+		return;
+#endif
+
 	if (!wrq->window_start || wts->mark_start == wallclock)
 		return;
 
@@ -3022,6 +3103,7 @@ static void init_new_task_load(struct task_struct *p)
 
 	walt_flag_set(p, WALT_INIT_BIT, 1);
 	walt_flag_set(p, WALT_TRAILBLAZER_BIT, 0);
+	walt_flag_set(p, WALT_GIANT_BIT, 0);
 }
 
 int remove_heavy(struct walt_task_struct *wts);
@@ -3254,6 +3336,9 @@ static void update_all_clusters_stats(void)
 			min_possible_cluster_id = cluster_id;
 		}
 	}
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG)
+	walt_update_cluster_id(min_possible_cluster_id, max_possible_cluster_id);
+#endif /* #OPLUS_FEATURE_ABNORMAL_FLAG */
 	walt_update_group_thresholds();
 }
 
@@ -3553,6 +3638,11 @@ static void _set_preferred_cluster(struct walt_related_thread_group *grp, u64 wa
 
 	list_for_each_entry(wts, &grp->tasks, grp_list) {
 		p = wts_to_ts(wts);
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+		if (task_on_scx(p))
+			continue;
+#endif
 		if (task_boost_policy(p) == SCHED_BOOST_ON_BIG) {
 			group_boost = true;
 			break;
@@ -3660,7 +3750,12 @@ static void remove_task_from_group(struct task_struct *p)
 
 	rq = __task_rq_lock(p, &rf);
 	wallclock = walt_sched_clock();
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 	transfer_busy_time(rq, wts->grp, p, REM_TASK, wallclock);
+#else
+	if (!task_on_scx(p))
+		transfer_busy_time(rq, wts->grp, p, REM_TASK, wallclock);
+#endif
 	list_del_init(&wts->grp_list);
 	rcu_assign_pointer(wts->grp, NULL);
 	__task_rq_unlock(rq, &rf);
@@ -3697,7 +3792,12 @@ add_task_to_group(struct task_struct *p, struct walt_related_thread_group *grp)
 	 */
 	rq = __task_rq_lock(p, &rf);
 	wallclock = walt_sched_clock();
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 	transfer_busy_time(rq, grp, p, ADD_TASK, wallclock);
+#else
+	if (!task_on_scx(p))
+		transfer_busy_time(rq, grp, p, ADD_TASK, wallclock);
+#endif
 	list_add(&wts->grp_list, &grp->tasks);
 	rcu_assign_pointer(wts->grp, grp);
 	__task_rq_unlock(rq, &rf);
@@ -3899,6 +3999,10 @@ static void android_rvh_cpu_cgroup_online(void *unused, struct cgroup_subsys_sta
 		return;
 
 	walt_update_tg_pointer(css);
+
+#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
+	oplus_update_tg_map(css, false);
+#endif
 }
 
 static void android_rvh_cpu_cgroup_attach(void *unused,
@@ -4200,6 +4304,7 @@ static void walt_update_irqload(struct rq *rq)
 		wrq->high_irqload = false;
 }
 
+u64 walt_rotation_stop_hyst_start_ts;
 /**
  * __walt_irq_work_locked() - common function to process work
  * @is_migration: if true, performing migration work, else rollover
@@ -4237,7 +4342,11 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 		for_each_cpu(cpu, &cluster->cpus) {
 			rq = cpu_rq(cpu);
 			wrq = &per_cpu(walt_rq, cpu_of(rq));
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 			if (rq->curr) {
+#else
+			if (rq->curr && !task_on_scx(rq->curr)) {
+#endif
 				/* only update ravg for locked cpus */
 				if (cpumask_intersects(lock_cpus, &cluster->cpus)) {
 					if (unlikely(!raw_spin_is_locked(&rq->__lock))) {
@@ -4342,17 +4451,35 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 	 * not rolled over properly as mark_start > window_start.
 	 */
 	if (!is_migration) {
+		u64 temp_sched_ravg_window;
 		spin_lock_irqsave(&sched_ravg_window_lock, flags);
+		if (plenty_giant_tasks || walt_rotation_stop_hyst_start_ts)
+			temp_sched_ravg_window = mult_frac(2, NSEC_PER_SEC, HZ);
+		else
+			temp_sched_ravg_window = new_sched_ravg_window;
 		wrq = &per_cpu(walt_rq, cpu_of(this_rq()));
-		if ((sched_ravg_window != new_sched_ravg_window) &&
-		    (wc < wrq->window_start + new_sched_ravg_window)) {
+		if ((sched_ravg_window != temp_sched_ravg_window) &&
+		    (wc < wrq->window_start + temp_sched_ravg_window)) {
+			struct walt_rq *other_wrq;
+
+			for_each_sched_cluster(cluster) {
+				for_each_cpu(cpu, &cluster->cpus) {
+					if (cpu == cpu_of(this_rq()))
+						continue;
+
+					other_wrq = &per_cpu(walt_rq, cpu);
+					if (wrq->window_start != other_wrq->window_start)
+						goto out;
+				}
+			}
 			sched_ravg_window_change_time = walt_sched_clock();
 			trace_sched_ravg_window_change(sched_ravg_window,
-					new_sched_ravg_window,
+					temp_sched_ravg_window,
 					sched_ravg_window_change_time);
-			sched_ravg_window = new_sched_ravg_window;
+			sched_ravg_window = temp_sched_ravg_window;
 			walt_tunables_fixup();
 		}
+out:
 		spin_unlock_irqrestore(&sched_ravg_window_lock, flags);
 	}
 
@@ -4458,6 +4585,24 @@ static void android_rvh_update_cpu_capacity(void *unused, int cpu, unsigned long
 DEFINE_PER_CPU(pid_t, big_task_pid);
 bool is_obet;
 
+/* Indicates that a task possibly grew up in size on a prime cpu while it remains
+ * on prime, i.e. no enqueue after growing big. This needs reeval of big_task_pid
+ * on that cpu during window rollover.
+ */
+DEFINE_PER_CPU(bool, force_big_task_pid_eval);
+
+static void update_obet_task(struct task_struct *p, struct rq *rq, u32 demand)
+{
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
+	int cpu = task_cpu(p);
+
+	if (is_max_possible_cluster_cpu(cpu) &&
+		per_cpu(big_task_pid, cpu) == 0 &&
+		task_is_runnable(p) &&
+		wts->demand < demand)
+		per_cpu(force_big_task_pid_eval, cpu) = true;
+}
+
 /*
  * check_obet() needs to be called with all the rq locks held.
  * It resets per cpu big_task_pid and does cpu checks on a
@@ -4496,7 +4641,7 @@ static void check_obet(void)
 	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
 		pid_t pid = per_cpu(big_task_pid, cpu);
 
-		if (pid) {
+		if (pid || per_cpu(force_big_task_pid_eval, cpu)) {
 			int task_count = 0;
 			int big_task_count = 0;
 
@@ -4521,6 +4666,8 @@ static void check_obet(void)
 			else
 				per_cpu(big_task_pid, cpu) = -1;
 		}
+		per_cpu(force_big_task_pid_eval, cpu) = false;
+		trace_walt_obet(cpu, per_cpu(big_task_pid, cpu));
 	}
 }
 
@@ -4578,7 +4725,18 @@ static void walt_irq_work(struct irq_work *irq_work)
 	bool is_migration = false, is_asym_migration = false, is_pipeline_sync_migration = false;
 	u32 wakeup_ctr_sum = 0;
 	struct walt_sched_cluster *cluster;
+#if !IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
 	int need_assign_heavy;
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GKI_CPUFREQ_BOUNCING)
+	for_each_sched_cluster(cluster) {
+		int cpu = cpumask_first(&cluster->cpus);
+		struct cpufreq_policy *pol = cpufreq_cpu_get_raw(cpu);
+
+		if (pol)
+			cb_update(pol, walt_sched_clock());
+	}
+#endif
 
 	if (irq_work == &walt_migration_irq_work)
 		is_migration = true;
@@ -4635,9 +4793,20 @@ static void walt_irq_work(struct irq_work *irq_work)
 
 	if (!is_migration) {
 		wrq = &per_cpu(walt_rq, cpu_of(this_rq()));
+#if !IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
 		need_assign_heavy = pipeline_check(wrq);
+#else
+		qcom_rearrange_pipeline_preferred_cpus(walt_scale_demand_divisor);
+#endif
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 		core_ctl_check(wrq->window_start, wakeup_ctr_sum);
+#else
+		if (should_core_ctl())
+			core_ctl_check(wrq->window_start, wakeup_ctr_sum);
+#endif
+#if !IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
 		pipeline_rearrange(wrq, need_assign_heavy);
+#endif
 		for_each_sched_cluster(cluster) {
 			update_smart_freq_legacy_reason_hyst_time(cluster);
 		}
@@ -4654,28 +4823,55 @@ static void walt_irq_work(struct irq_work *irq_work)
 	}
 }
 
-void walt_rotation_checkpoint(int nr_big)
-{
+#define HIGH_PERF_CAP_HYST_SEC 10 /*10 seconds of suppression */
+void walt_rotation_checkpoint(u64 window_start, int nr_giant)
+ {
 	int i;
-	bool prev = walt_rotation_enabled;
+	static u64 high_perf_state_hyst_start_ts;
+	bool prev = plenty_giant_tasks;
 
 	if (!hmp_capable())
 		return;
 
-	if (!sysctl_sched_walt_rotate_big_tasks || sched_boost_type != NO_BOOST) {
+	if (!sysctl_sched_walt_rotate_big_tasks || sched_boost_type != NO_BOOST)
 		walt_rotation_enabled = 0;
-		return;
+	else
+		walt_rotation_enabled = plenty_giant_tasks;
+
+	if (plenty_giant_tasks && !prev) {
+		walt_rotation_stop_hyst_start_ts = 0;
+	} else if (!plenty_giant_tasks && prev) {
+		walt_rotation_stop_hyst_start_ts = window_start;
+	} else {
+		if (walt_rotation_stop_hyst_start_ts &&
+				(window_start - walt_rotation_stop_hyst_start_ts >=
+					HIGH_PERF_CAP_HYST_SEC * (u64)NSEC_PER_SEC))
+			walt_rotation_stop_hyst_start_ts = 0;
 	}
 
-	walt_rotation_enabled = nr_big >= num_possible_cpus();
-
-	for (i = 0; i < num_sched_clusters; i++) {
-		if (walt_rotation_enabled && !prev)
-			freq_cap[HIGH_PERF_CAP][i] = high_perf_cluster_freq_cap[i];
-		else if (!walt_rotation_enabled && prev)
+	if (sched_boost_type != NO_BOOST) {
+		for (i = 0; i < num_sched_clusters; i++)
 			freq_cap[HIGH_PERF_CAP][i] = FREQ_QOS_MAX_DEFAULT_VALUE;
+		high_perf_state_hyst_start_ts = 0;
+		goto adjust_smart_freq_capacities;
 	}
 
+	if (plenty_giant_tasks && !prev) {
+		for (i = 0; i < num_sched_clusters; i++)
+			freq_cap[HIGH_PERF_CAP][i] = high_perf_cluster_freq_cap[i];
+		high_perf_state_hyst_start_ts = 0;
+	} else if (!plenty_giant_tasks && prev) {
+		high_perf_state_hyst_start_ts = window_start;
+	} else {
+		if (high_perf_state_hyst_start_ts &&
+				(window_start - high_perf_state_hyst_start_ts
+					>= HIGH_PERF_CAP_HYST_SEC * (u64)NSEC_PER_SEC)) {
+			for (i = 0; i < num_sched_clusters; i++)
+				freq_cap[HIGH_PERF_CAP][i] = FREQ_QOS_MAX_DEFAULT_VALUE;
+			high_perf_state_hyst_start_ts = 0;
+		}
+	}
+adjust_smart_freq_capacities:
 	update_smart_freq_capacities();
 }
 
@@ -4700,6 +4896,11 @@ void walt_fill_ta_data(struct core_ctl_notif_data *data)
 	wallclock = walt_sched_clock();
 
 	list_for_each_entry(wts, &grp->tasks, grp_list) {
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+		if (task_on_scx(wts_to_ts(wts)))
+			continue;
+#endif
 		if (wts->mark_start < wallclock -
 		    (sched_ravg_window * RAVG_HIST_SIZE))
 			continue;
@@ -4772,6 +4973,7 @@ static void walt_sched_init_rq(struct rq *rq)
 	wrq->window_start = 0;
 	wrq->walt_stats.nr_big_tasks = 0;
 	wrq->walt_stats.nr_trailblazer_tasks = 0;
+	wrq->walt_stats.nr_giant_tasks = 0;
 	wrq->walt_flags = 0;
 	wrq->avg_irqload = 0;
 	wrq->prev_irq_time = 0;
@@ -4882,6 +5084,11 @@ static void android_rvh_sched_cpu_dying(void *unused, int cpu)
 
 static void android_rvh_set_task_cpu(void *unused, struct task_struct *p, unsigned int new_cpu)
 {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+	if (task_on_scx(p))
+		return;
+#endif
+
 	if (unlikely(walt_disabled))
 		return;
 
@@ -4891,16 +5098,25 @@ static void android_rvh_set_task_cpu(void *unused, struct task_struct *p, unsign
 		WALT_BUG(WALT_BUG_WALT, p, "selecting unaffined cpu=%d comm=%s(%d) affinity=0x%lx",
 			 new_cpu, p->comm, p->pid, (*(cpumask_bits(p->cpus_ptr))));
 
-	if (!p->in_execve &&
-	    is_compat_thread(task_thread_info(p)) &&
-	    !cpumask_test_cpu(new_cpu, system_32bit_el0_cpumask()))
-		WALT_BUG(WALT_BUG_WALT, p,
-			 "selecting non 32 bit cpu=%d comm=%s(%d) 32bit_cpus=0x%lx",
-			 new_cpu, p->comm, p->pid, (*(cpumask_bits(system_32bit_el0_cpumask()))));
+	if (!cpumask_empty(system_32bit_el0_cpumask())) {
+		if (!p->in_execve &&
+			is_compat_thread(task_thread_info(p)) &&
+			!cpumask_test_cpu(new_cpu, system_32bit_el0_cpumask()))
+			WALT_BUG(WALT_BUG_WALT, p,
+				"selecting non 32 bit cpu=%d comm=%s(%d) 32bit_cpus=0x%lx",
+				new_cpu, p->comm, p->pid, (*(cpumask_bits(system_32bit_el0_cpumask()))));
+	}
 }
 
 static void android_rvh_new_task_stats(void *unused, struct task_struct *p)
 {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+	if (task_on_scx(p))
+		return;
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	update_wake_up(p);
+#endif
 	if (unlikely(walt_disabled))
 		return;
 	mark_task_starting(p);
@@ -4912,6 +5128,11 @@ static void android_rvh_account_irq(void *unused, struct task_struct *curr, int 
 	struct rq *rq;
 	unsigned long flags;
 	struct walt_rq *wrq;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+	if (task_on_scx(curr))
+		return;
+#endif
 
 	if (unlikely(walt_disabled))
 		return;
@@ -4955,6 +5176,11 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 	bool double_enqueue = false;
 	int mid_cluster_cpu;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+	if (task_on_scx(p))
+		return;
+#endif
+
 	if (unlikely(walt_disabled))
 		return;
 
@@ -4993,7 +5219,12 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 	wallclock = walt_rq_clock(rq);
 	if (wts->enqueue_after_migration != 0) {
 		wallclock = walt_sched_clock();
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 		migrate_busy_time_addition(p, cpu_of(rq), wallclock);
+#else
+		if (!task_on_scx(p))
+			migrate_busy_time_addition(p, cpu_of(rq), wallclock);
+#endif
 		wts->enqueue_after_migration = 0;
 	}
 
@@ -5010,7 +5241,11 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 		walt_cfs_enqueue_task(rq, p);
 	}
 
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 	if (!double_enqueue)
+#else
+	if (!double_enqueue && !task_on_scx(p))
+#endif
 		walt_inc_cumulative_runnable_avg(rq, p);
 
 
@@ -5044,7 +5279,8 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 		}
 	}
 
-	trace_sched_enq_deq_task(p, 1, cpumask_bits(p->cpus_ptr)[0], is_mvp(wts));
+	trace_sched_enq_deq_task(p, 1, cpumask_bits(p->cpus_ptr)[0], is_mvp(wts),
+			per_cpu(big_task_pid, rq->cpu));
 }
 
 static void android_rvh_dequeue_task(void *unused, struct rq *rq,
@@ -5053,6 +5289,11 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	bool double_dequeue = false;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+	if (task_on_scx(p))
+		return;
+#endif
 
 	if (unlikely(walt_disabled))
 		return;
@@ -5101,7 +5342,11 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 		walt_cfs_dequeue_task(rq, p);
 	}
 
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 	if (!double_dequeue)
+#else
+	if (!double_dequeue && !task_on_scx(p))
+#endif
 		walt_dec_cumulative_runnable_avg(rq, p);
 
 	if (walt_feat(WALT_FEAT_UCLAMP_FREQ_BIT)) {
@@ -5116,7 +5361,8 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 			waltgov_run_callback(rq, WALT_CPUFREQ_UCLAMP_BIT);
 		}
 	}
-	trace_sched_enq_deq_task(p, 0, cpumask_bits(p->cpus_ptr)[0], is_mvp(wts));
+	trace_sched_enq_deq_task(p, 0, cpumask_bits(p->cpus_ptr)[0], is_mvp(wts),
+			per_cpu(big_task_pid, rq->cpu));
 }
 
 static void android_rvh_update_misfit_status(void *unused, struct task_struct *p,
@@ -5165,6 +5411,15 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 	u64 wallclock;
 	unsigned int old_load;
 	struct walt_related_thread_group *grp = NULL;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+	if (task_on_scx(p))
+		return;
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	update_wake_up(p);
+#endif
 
 	if (unlikely(walt_disabled))
 		return;
@@ -5236,13 +5491,19 @@ static void android_rvh_tick_entry(void *unused, struct rq *rq)
 {
 	u64 wallclock;
 
+
 	if (unlikely(walt_disabled))
 		return;
 
 	walt_lockdep_assert_rq(rq, NULL);
 	wallclock = walt_rq_clock(rq);
 
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 	walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
+#else
+	if (!task_on_scx(rq->curr))
+		walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
+#endif
 
 	if (is_ed_task_present(rq, wallclock, NULL))
 		waltgov_run_callback(rq, WALT_CPUFREQ_EARLY_DET_BIT);
@@ -5253,10 +5514,12 @@ bool is_sbt_or_oscillate(void)
 	return now_is_sbt || (oscillate_cpu != -1);
 }
 
+#define OSCILLATE_HYSTERESIS_NS 16000000
 bool should_boost_bus_dcvs(void)
 {
 	bool trailblazer_boost_active = false;
 	bool sbt_boost_active = false;
+	bool oscillate_boost_active = false;
 	u64 now = walt_sched_clock();
 
 	if (trailblazer_boost_state_ns + TRAILBLAZER_BOOST_THRESH_NS >= now)
@@ -5265,9 +5528,13 @@ bool should_boost_bus_dcvs(void)
 	if (sbt_boost_ns + SBT_BOOST_THRESH_NS >= now)
 		sbt_boost_active = true;
 
-	trace_sched_boost_bus_dcvs(oscillate_cpu, trailblazer_boost_active, sbt_boost_active);
+	if (oscillate_ts_ns + OSCILLATE_HYSTERESIS_NS >= now)
+		oscillate_boost_active = true;
 
-	return (oscillate_cpu != -1) || is_storage_boost() || trailblazer_boost_active ||
+	trace_sched_boost_bus_dcvs(oscillate_boost_active, trailblazer_boost_active,
+			sbt_boost_active);
+
+	return oscillate_boost_active || is_storage_boost() || trailblazer_boost_active ||
 		sbt_boost_active;
 }
 EXPORT_SYMBOL_GPL(should_boost_bus_dcvs);
@@ -5342,12 +5609,23 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 	if (unlikely(walt_disabled))
 		return;
 
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 	old_load = task_load(rq->curr);
 	rcu_read_lock();
 	grp = task_related_thread_group(rq->curr);
 	if (should_update_preferred_cluster(grp, rq->curr, old_load, true, rq->clock))
 		set_preferred_cluster(grp, rq->clock);
 	rcu_read_unlock();
+#else
+	if (!task_on_scx(rq->curr)) {
+		old_load = task_load(rq->curr);
+		rcu_read_lock();
+		grp = task_related_thread_group(rq->curr);
+		if (should_update_preferred_cluster(grp, rq->curr, old_load, true, rq->clock))
+			set_preferred_cluster(grp, rq->clock);
+		rcu_read_unlock();
+	}
+#endif
 
 	walt_lb_tick(rq);
 
@@ -5407,6 +5685,11 @@ static void android_rvh_schedule(void *unused, struct task_struct *prev,
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(prev);
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+	if (task_on_scx(prev) && task_on_scx(next))
+		return;
+#endif
+
 	if (unlikely(walt_disabled))
 		return;
 
@@ -5421,10 +5704,21 @@ static void android_rvh_schedule(void *unused, struct task_struct *prev,
 		wrq->mvp_arrival_time = 0;
 
 	if (likely(prev != next)) {
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT))
 		if (!task_is_runnable(prev))
 			wts->last_sleep_ts = wallclock;
 		walt_update_task_ravg(prev, rq, PUT_PREV_TASK, wallclock, 0);
 		walt_update_task_ravg(next, rq, PICK_NEXT_TASK, wallclock, 0);
+#else
+		if (!task_on_scx(prev)) {
+			if (!task_is_runnable(prev))
+				wts->last_sleep_ts = wallclock;
+			walt_update_task_ravg(prev, rq, PUT_PREV_TASK, wallclock, 0);
+		}
+
+		if (!task_on_scx(next))
+			walt_update_task_ravg(next, rq, PICK_NEXT_TASK, wallclock, 0);
+#endif
 	} else {
 		walt_update_task_ravg(prev, rq, TASK_UPDATE, wallclock, 0);
 	}
@@ -5505,6 +5799,20 @@ static void android_vh_dup_task_struct(void *unused, struct task_struct *tsk,
 
 	memset(wts, 0, sizeof(struct walt_task_struct));
 }
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+static void android_vh_switching_to_scx(void *unused, struct rq *rq, struct task_struct *tsk)
+{
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(tsk);
+
+	wts->curr_window = 0;
+	wts->prev_window = 0;
+
+	memset(wts->curr_window_cpu, 0, sizeof(u32) * WALT_NR_CPUS);
+	memset(wts->prev_window_cpu, 0, sizeof(u32) * WALT_NR_CPUS);
+	wts->enqueue_after_migration = 0;
+}
+#endif
 
 unsigned int walt_sched_yield_counter;
 static void walt_do_sched_yield(void *unused, struct rq *rq)
@@ -5689,6 +5997,9 @@ static void register_walt_hooks(void)
 	register_trace_android_vh_freq_qos_add_request(android_vh_freq_qos_add_request, NULL);
 	register_trace_android_vh_freq_qos_update_request(android_vh_freq_qos_update_request, NULL);
 	register_trace_android_vh_freq_qos_remove_request(android_vh_freq_qos_remove_request, NULL);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_EXT)
+	register_trace_android_vh_switching_to_scx(android_vh_switching_to_scx, NULL);
+#endif
 }
 
 atomic64_t walt_irq_work_lastq_ws;
@@ -5753,9 +6064,17 @@ static void walt_init_tg_pointers(void)
 	struct cgroup_subsys_state *css = &root_task_group.css;
 	struct cgroup_subsys_state *top_css = css;
 
+#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
+	oplus_update_tg_map(top_css, true);
+#endif
+
 	rcu_read_lock();
-	css_for_each_child(css, top_css)
+	css_for_each_child(css, top_css) {
 		walt_update_tg_pointer(css);
+#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
+		oplus_update_tg_map(css, true);
+#endif
+	}
 	rcu_read_unlock();
 }
 

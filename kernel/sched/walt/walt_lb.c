@@ -9,7 +9,18 @@
 #include "walt.h"
 #include "trace.h"
 #include "sysctl_walt_stats.h"
-
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+#include <frame_boost/frame_group.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_LOADBALANCE)
+#include <sched_assist/sa_balance.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+#include <sched_assist/sa_pipeline.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG)
+#include <linux/task_overload.h>
+#endif
 inline unsigned long walt_lb_cpu_util(int cpu)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
@@ -196,6 +207,10 @@ static void walt_lb_check_for_rotation(struct rq *src_rq)
 		if (rq->nr_running > 1)
 			continue;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+		if (fbg_skip_migration(rq->curr, i, src_cpu))
+			continue;
+#endif
 		wts = (struct walt_task_struct *)android_task_vendor_data(rq->curr);
 		run = wc - wts->last_enqueued_ts;
 
@@ -275,6 +290,11 @@ static inline bool _walt_can_migrate_task(struct task_struct *p, int dst_cpu,
 	/* Don't detach task if dest cpu is halted */
 	if (cpu_halted(dst_cpu))
 		return false;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+	if (oplus_pipeline_task_skip_cpu(p, dst_cpu))
+		return false;
+#endif
 
 	return true;
 }
@@ -702,6 +722,18 @@ void walt_lb_tick(struct rq *rq)
 	struct walt_rq *prev_wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	bool need_up_migrate = false;
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_LOADBALANCE)
+	if (__oplus_tick_balance(NULL, rq))
+		return;
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	if (fbg_need_up_migration(p, rq))
+		need_up_migrate = true;
+#endif
+
 	raw_spin_lock(&rq->__lock);
 	if (available_idle_cpu(prev_cpu) && is_reserved(prev_cpu) && !rq->active_balance)
 		clear_reserved(prev_cpu);
@@ -722,7 +754,15 @@ void walt_lb_tick(struct rq *rq)
 
 	walt_cfs_tick(rq);
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG)
+	test_task_overload(p);
+#endif /* #OPLUS_FEATURE_ABNORMAL_FLAG */
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	if (!rq->misfit_task_load && !need_up_migrate)
+#else
 	if (!rq->misfit_task_load || storage_balance)
+#endif
 		return;
 
 	if (READ_ONCE(p->__state) != TASK_RUNNING || p->nr_cpus_allowed == 1)
@@ -804,6 +844,11 @@ static bool walt_balance_rt(struct rq *this_rq)
 	if (sched_rt_runnable(this_rq))
 		return false;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+	if (oplus_pipeline_rt_skip_prime_cpu(this_cpu))
+		return false;
+#endif
+
 	/* check if any CPU has a pushable RT task */
 	for_each_possible_cpu(i) {
 		struct rq *rq = cpu_rq(i);
@@ -845,6 +890,11 @@ static bool walt_balance_rt(struct rq *this_rq)
 	if (wallclock > wts->last_wake_ts &&
 			wallclock - wts->last_wake_ts < WALT_RT_PULL_THRESHOLD_NS)
 		goto unlock;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	if (!fbg_rt_task_fits_capacity(p, this_cpu))
+		goto unlock;
+#endif
 
 	pulled = true;
 	deactivate_task(src_rq, p, 0);
@@ -890,6 +940,10 @@ static void walt_newidle_balance(struct rq *this_rq,
 	int i;
 	struct task_struct *pulled_task_struct = NULL;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_LOADBALANCE)
+	if (__oplus_newidle_balance(NULL, this_rq, rf, pulled_task, done))
+		return;
+#endif
 	if (unlikely(walt_disabled))
 		return;
 
@@ -1158,6 +1212,7 @@ static void walt_sched_newidle_balance(void *unused, struct rq *this_rq,
 		walt_newidle_balance(this_rq, rf, pulled_task, done, false);
 }
 
+u64 oscillate_ts_ns;
 void sched_walt_oscillate(unsigned int busy_cpu)
 {
 	struct rq *src_rq;
@@ -1220,6 +1275,13 @@ void sched_walt_oscillate(unsigned int busy_cpu)
 			goto out_fail;
 		} else {
 			wake_up_if_idle(dst_cpu);
+			/* This api is called from the FAST interrupt
+			 * to initiate oscillation - use the irqtime
+			 * start for timestamp instead of reading
+			 * from the clock hw.
+			 */
+			oscillate_ts_ns = (per_cpu(cpu_irqtime,
+						raw_smp_processor_id())).irq_start_time;
 		}
 		goto out;
 	} else {
@@ -1239,11 +1301,17 @@ static void walt_find_new_ilb(void *unused, struct cpumask *nohz_idle_cpus_mask,
 		int *ilb)
 {
 	int cpu, i;
+	bool cluster_loaded = false, paused = false;
+	unsigned long total_util = 0, total_capacity = 0;
 
 	if (unlikely(walt_disabled))
 		return;
 
-	*ilb = nr_cpu_ids;
+	/*
+	 * if WALT doesn't find any target cpu return -1 this ensures
+	 * scheduler core skips in further cpu selections.
+	 */
+	*ilb = -1;
 	for (i = 0; i < num_sched_clusters - 1; i++) {
 		for_each_cpu_and(cpu, nohz_idle_cpus_mask, &cpu_array[0][i]) {
 			if (cpu == smp_processor_id())
@@ -1255,8 +1323,54 @@ static void walt_find_new_ilb(void *unused, struct cpumask *nohz_idle_cpus_mask,
 		}
 	}
 
+	/*
+	 * scan all idle cpus in non-prime clusters in second pass
+	 * misfit task will move to prime as part of either active
+	 * load balance or through wakeup path.
+	 */
 	for (i = 0; i < num_sched_clusters - 1; i++) {
+		total_util = 0;
+		total_capacity = 0;
+		paused = false;
 		for_each_cpu(cpu, &cpu_array[0][i]) {
+			//TODO: shall we check only gold, currently it doesn't matter
+			if (!paused) {
+				paused = cpu_halted(cpu) || cpu_partial_halted(cpu);
+				total_util += walt_lb_cpu_util(cpu);
+				total_capacity += capacity_orig_of(cpu);
+			}
+
+			if (cpu == smp_processor_id())
+				continue;
+			if (available_idle_cpu(cpu) && cpu_online(cpu)) {
+				*ilb = cpu;
+				return;
+			}
+
+		}
+
+		/*
+		 * if none of the cpus are paused and cluster is loaded beyond 80% then
+		 * then continue with prime cluster.
+		 */
+		if (!paused && ((total_capacity * 80) < (total_util * 100)))
+			cluster_loaded = true;
+	}
+
+
+	//Find max cap cpus as there is no cpu in lower cluster and cluster is busy
+	if (cluster_loaded) {
+		for_each_cpu_and(cpu, nohz_idle_cpus_mask, &cpu_array[0][num_sched_clusters - 1]) {
+			if (cpu == smp_processor_id())
+				continue;
+			if (available_idle_cpu(cpu) && cpu_online(cpu)) {
+				*ilb = cpu;
+				return;
+			}
+		}
+
+		for_each_cpu_andnot(cpu, &cpu_array[0][num_sched_clusters - 1],
+									nohz_idle_cpus_mask) {
 			if (cpu == smp_processor_id())
 				continue;
 			if (available_idle_cpu(cpu) && cpu_online(cpu)) {

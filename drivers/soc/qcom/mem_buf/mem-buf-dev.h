@@ -22,6 +22,33 @@ extern unsigned char mem_buf_capability;
 extern struct device *mem_buf_dev;
 extern struct dentry *mem_buf_debugfs_root;
 
+/*
+ * @kref - A refcount for @sgt and @sgt's private data, which
+ *	is expected to contain a 'struct mem_buf_vmperm'
+ * @rcu - Usage based off of mm/shrinker.c
+ */
+struct mem_buf_vmperm {
+	struct list_head list;
+	u32 flags;
+	int current_vm_perms;
+	u32 mapcount;
+	int *vmids;
+	int *perms;
+	unsigned int nr_acl_entries;
+	unsigned int max_acl_entries;
+	struct dma_buf *dmabuf;
+	struct sg_table *sgt;
+	size_t size;
+	gh_memparcel_handle_t memparcel_hdl;
+	struct mutex lock;
+	mem_buf_dma_buf_destructor dtor;
+	void *dtor_data;
+	void (*kref_release)(struct kref *kref);
+	struct kref *kref;
+	struct rcu_head rcu;
+};
+
+
 int mem_buf_dma_buf_init(void);
 
 /* Hypervisor Interface */

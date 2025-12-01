@@ -3,7 +3,7 @@
  * Copyright (c) 2015, Sony Mobile Communications Inc.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
  * Copyright (c) 2020, Linaro Ltd.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "qrtr: %s(): " fmt, __func__
@@ -108,6 +108,32 @@ int qrtr_get_service_id(unsigned int node_id, unsigned int port_id)
 	struct qrtr_server *srv;
 	struct qrtr_node *node;
 	unsigned long index;
+	unsigned int svc_id;
+
+	node = xa_load(&nodes, node_id);
+	if (!node)
+		return -EINVAL;
+
+	xa_lock(&node->servers);
+	xa_for_each(&node->servers, index, srv) {
+		if (srv->node == node_id && srv->port == port_id) {
+			svc_id = srv->service;
+			xa_unlock(&node->servers);
+			return svc_id;
+		}
+	}
+	xa_unlock(&node->servers);
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(qrtr_get_service_id);
+
+#ifdef CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG
+int qrtr_get_service_instance_id(unsigned int node_id, unsigned int port_id)
+{
+	struct qrtr_server *srv;
+	struct qrtr_node *node;
+	unsigned long index;
 
 	node = xa_load(&nodes, node_id);
 	if (!node)
@@ -115,12 +141,13 @@ int qrtr_get_service_id(unsigned int node_id, unsigned int port_id)
 
 	xa_for_each(&node->servers, index, srv) {
 		if (srv->node == node_id && srv->port == port_id)
-			return srv->service;
+			return srv->instance;
 	}
 
 	return -EINVAL;
 }
-EXPORT_SYMBOL_GPL(qrtr_get_service_id);
+EXPORT_SYMBOL(qrtr_get_service_instance_id);
+#endif
 
 static int server_match(const struct qrtr_server *srv,
 			const struct qrtr_server_filter *f)
@@ -315,7 +342,7 @@ static int server_del(struct qrtr_node *node, unsigned int port, bool bcast)
 	if (!srv)
 		return 0;
 
-	xa_erase(&node->servers, port);
+	xa_erase_irq(&node->servers, port);
 
 	/* Broadcast the removal of local servers */
 	if (srv->node == qrtr_ns.local_node && bcast)
@@ -332,7 +359,9 @@ static int server_del(struct qrtr_node *node, unsigned int port, bool bcast)
 		lookup_notify(&lookup->sq, srv, false);
 	}
 
+	xa_lock_irq(&node->servers);
 	kfree(srv);
+	xa_unlock_irq(&node->servers);
 
 	return 0;
 }

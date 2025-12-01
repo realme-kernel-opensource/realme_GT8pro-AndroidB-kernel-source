@@ -15,7 +15,7 @@ def register_modules(registry):
         ],
         deps = [
             # do not sort
-            "drivers/power/supply/qti_battery_charger",
+            "//vendor/oplus/kernel/charger/bazel:{target_variant}_oplus_chg_v2",
             "drivers/soc/qcom/panel_event_notifier",
             "drivers/soc/qcom/qti_pmic_glink",
             "drivers/soc/qcom/pdr_interface",
